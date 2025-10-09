@@ -58,7 +58,7 @@ export const mockOrders: Order[] = [
         stampType: 'CLASICO',
         notes: 'Urgente para lanzamiento',
         itemValue: 15000,
-        fabricationState: 'SIN_HACER',
+        fabricationState: 'HECHO',
         saleState: 'SEÑADO',
         shippingState: 'SIN_ENVIO',
         depositValueItem: 5000,
@@ -444,7 +444,6 @@ export const mockOrders: Order[] = [
 // Función para obtener contadores por estado de fabricación
 export const getFabricationCounts = (orders: Order[]) => {
   const counts = {
-    SIN_HACER: 0,
     HACIENDO: 0,
     VERIFICAR: 0,
     HECHO: 0,

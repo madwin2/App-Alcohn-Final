@@ -7,7 +7,6 @@ export type ShippingServiceDest = 'DOMICILIO' | 'SUCURSAL';
 export type ShippingOriginMethod = 'RETIRO_EN_ORIGEN' | 'ENTREGA_EN_SUCURSAL';
 export type StampType = '3MM' | 'ALIMENTO' | 'CLASICO' | 'ABC' | 'LACRE';
 export type ProgressStep = 
-  | 'SIN_HACER'
   | 'HECHO'
   | 'FOTO'
   | 'TRANSFERIDO'

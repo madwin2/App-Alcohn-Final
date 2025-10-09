@@ -2,7 +2,6 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 
 export type ProgressStep = 
-  | 'SIN_HACER'
   | 'HECHO'
   | 'FOTO'
   | 'TRANSFERIDO'
@@ -17,15 +16,14 @@ export interface ProgressIndicatorProps {
   className?: string;
 }
 
-const PROGRESS_STEPS: { key: ProgressStep; label: string; shortLabel: string }[] = [
-  { key: 'SIN_HACER', label: 'Sin hacer', shortLabel: 'Sin hacer' },
-  { key: 'HECHO', label: 'Hecho', shortLabel: 'Hecho' },
-  { key: 'FOTO', label: 'Foto', shortLabel: 'Foto' },
-  { key: 'TRANSFERIDO', label: 'Transferido', shortLabel: 'Transferido' },
-  { key: 'HACER_ETIQUETA', label: 'Hacer Etiqueta', shortLabel: 'Etiqueta' },
-  { key: 'ETIQUETA_LISTA', label: 'Etiqueta Lista', shortLabel: 'Lista' },
-  { key: 'DESPACHADO', label: 'Despachado', shortLabel: 'Despachado' },
-  { key: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado', shortLabel: 'Enviado' }
+const PROGRESS_STEPS: { key: ProgressStep; label: string; shortLabel: string; abbreviation: string }[] = [
+  { key: 'HECHO', label: 'Hecho', shortLabel: 'Hecho', abbreviation: 'H' },
+  { key: 'FOTO', label: 'Foto', shortLabel: 'Foto', abbreviation: 'F' },
+  { key: 'TRANSFERIDO', label: 'Transferido', shortLabel: 'Transferido', abbreviation: 'T' },
+  { key: 'HACER_ETIQUETA', label: 'Hacer Etiqueta', shortLabel: 'Etiqueta', abbreviation: 'HE' },
+  { key: 'ETIQUETA_LISTA', label: 'Etiqueta Lista', shortLabel: 'Lista', abbreviation: 'EL' },
+  { key: 'DESPACHADO', label: 'Despachado', shortLabel: 'Despachado', abbreviation: 'D' },
+  { key: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado', shortLabel: 'Enviado', abbreviation: 'SE' }
 ];
 
 export function ProgressIndicator({ 
@@ -36,43 +34,62 @@ export function ProgressIndicator({
   const currentIndex = PROGRESS_STEPS.findIndex(step => step.key === currentStep);
   
   return (
-    <div className={cn("flex items-center gap-1", className)}>
+    <div className={cn("flex items-center relative", className)}>
+      {/* Continuous line below all states */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-600 rounded-full" />
+      
       {PROGRESS_STEPS.map((step, index) => {
         const isCompleted = index < currentIndex;
         const isCurrent = index === currentIndex;
-        const isUpcoming = index > currentIndex;
+        const isNext = index === currentIndex + 1;
+        const isFuture = index > currentIndex + 1;
         
         return (
           <React.Fragment key={step.key}>
-            {/* Step Circle */}
-            <button
-              onClick={() => onStepChange?.(step.key)}
-              className={cn(
-                "relative flex items-center justify-center w-6 h-6 rounded-full border-2 transition-all duration-200 hover:scale-105",
-                isCompleted && "bg-primary border-primary text-primary-foreground",
-                isCurrent && "bg-background border-primary text-primary ring-2 ring-primary/20",
-                isUpcoming && "bg-muted border-muted-foreground/30 text-muted-foreground/50 hover:border-muted-foreground/60"
+            {/* Step Indicator */}
+            <div className="relative flex items-center">
+              <button
+                onClick={() => onStepChange?.(step.key)}
+                className={cn(
+                  "relative z-10 flex items-center justify-center transition-all duration-200 hover:scale-105",
+                  isCompleted && "text-white font-bold text-sm",
+                  isCurrent && "text-black font-bold text-sm min-w-fit px-3 py-1",
+                  isNext && "text-red-600 font-bold text-sm",
+                  isFuture && "text-gray-400 font-bold text-sm"
+                )}
+                title={step.label}
+              >
+                <span className="whitespace-nowrap">{step.abbreviation}</span>
+              </button>
+              
+              {/* Current State Background with Tail */}
+              {isCurrent && (
+                <div className="absolute inset-0 pointer-events-none">
+                  <div 
+                    className="bg-white"
+                    style={{
+                      clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 30%, -15% 50%, 0% 70%)',
+                      borderRadius: '8px',
+                      width: '110%',
+                      left: '-5%',
+                      height: '32px'
+                    }}
+                  />
+                </div>
               )}
-              title={step.label}
-            >
-              {isCompleted ? (
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              ) : isCurrent ? (
-                <div className="w-2 h-2 bg-primary rounded-full" />
-              ) : (
-                <div className="w-1.5 h-1.5 bg-muted-foreground/30 rounded-full" />
-              )}
-            </button>
+            </div>
             
-            {/* Connecting Line */}
-            {index < PROGRESS_STEPS.length - 1 && (
-              <div className={cn(
-                "h-0.5 w-4 transition-colors duration-200",
-                isCompleted ? "bg-primary" : "bg-muted-foreground/20"
-              )} />
-            )}
+            {/* Colored line segments */}
+            <div className={cn(
+              "absolute bottom-0 h-1 transition-colors duration-200",
+              isCompleted && "bg-white",
+              isCurrent && "bg-white", 
+              isNext && "bg-red-600",
+              isFuture && "bg-gray-600"
+            )} style={{
+              left: `${index * (100 / PROGRESS_STEPS.length)}%`,
+              width: `${100 / PROGRESS_STEPS.length}%`
+            }} />
           </React.Fragment>
         );
       })}
@@ -89,43 +106,62 @@ export function CompactProgressIndicator({
   const currentIndex = PROGRESS_STEPS.findIndex(step => step.key === currentStep);
   
   return (
-    <div className={cn("flex items-center gap-0.5", className)}>
+    <div className={cn("flex items-center relative", className)}>
+      {/* Continuous line below all states */}
+      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-600 rounded-full" />
+      
       {PROGRESS_STEPS.map((step, index) => {
         const isCompleted = index < currentIndex;
         const isCurrent = index === currentIndex;
-        const isUpcoming = index > currentIndex;
+        const isNext = index === currentIndex + 1;
+        const isFuture = index > currentIndex + 1;
         
         return (
           <React.Fragment key={step.key}>
-            {/* Step Circle - Más pequeño */}
-            <button
-              onClick={() => onStepChange?.(step.key)}
-              className={cn(
-                "relative flex items-center justify-center w-4 h-4 rounded-full border transition-all duration-200 hover:scale-110",
-                isCompleted && "bg-primary border-primary text-primary-foreground",
-                isCurrent && "bg-background border-primary text-primary ring-1 ring-primary/30",
-                isUpcoming && "bg-muted border-muted-foreground/20 text-muted-foreground/40 hover:border-muted-foreground/40"
+            {/* Step Indicator - Más pequeño */}
+            <div className="relative flex items-center">
+              <button
+                onClick={() => onStepChange?.(step.key)}
+                className={cn(
+                  "relative z-10 flex items-center justify-center transition-all duration-200 hover:scale-110",
+                  isCompleted && "text-white font-bold text-xs",
+                  isCurrent && "text-black font-bold text-xs min-w-fit px-2 py-0.5",
+                  isNext && "text-red-600 font-bold text-xs",
+                  isFuture && "text-gray-400 font-bold text-xs"
+                )}
+                title={step.label}
+              >
+                <span className="whitespace-nowrap">{step.abbreviation}</span>
+              </button>
+              
+              {/* Current State Background with Tail */}
+              {isCurrent && (
+                <div className="absolute inset-0 pointer-events-none">
+                  <div 
+                    className="bg-white"
+                    style={{
+                      clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 30%, -15% 50%, 0% 70%)',
+                      borderRadius: '6px',
+                      width: '110%',
+                      left: '-5%',
+                      height: '24px'
+                    }}
+                  />
+                </div>
               )}
-              title={step.label}
-            >
-              {isCompleted ? (
-                <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-              ) : isCurrent ? (
-                <div className="w-1 h-1 bg-primary rounded-full" />
-              ) : (
-                <div className="w-0.5 h-0.5 bg-muted-foreground/30 rounded-full" />
-              )}
-            </button>
+            </div>
             
-            {/* Connecting Line - Más delgada */}
-            {index < PROGRESS_STEPS.length - 1 && (
-              <div className={cn(
-                "h-px w-2 transition-colors duration-200",
-                isCompleted ? "bg-primary" : "bg-muted-foreground/15"
-              )} />
-            )}
+            {/* Colored line segments */}
+            <div className={cn(
+              "absolute bottom-0 h-0.5 transition-colors duration-200",
+              isCompleted && "bg-white",
+              isCurrent && "bg-white", 
+              isNext && "bg-red-600",
+              isFuture && "bg-gray-600"
+            )} style={{
+              left: `${index * (100 / PROGRESS_STEPS.length)}%`,
+              width: `${100 / PROGRESS_STEPS.length}%`
+            }} />
           </React.Fragment>
         );
       })}

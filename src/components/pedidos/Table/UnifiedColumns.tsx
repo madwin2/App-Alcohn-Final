@@ -233,7 +233,7 @@ export function createUnifiedColumns({
     estado: ({ row }) => (
       <div className="flex justify-center">
         <CompactProgressIndicator
-          currentStep={row.original.progressStep || 'SIN_HACER'}
+          currentStep={row.original.progressStep || 'HECHO'}
           onStepChange={(step) => onProgressChange?.(row.original.id, step)}
         />
       </div>
