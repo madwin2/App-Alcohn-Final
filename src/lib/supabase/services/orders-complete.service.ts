@@ -46,7 +46,10 @@ export class OrdersCompleteService {
   // Crear un pedido completo (cliente + orden + sello)
   static async createCompleteOrder(data: CreateOrderData) {
     try {
+      console.log('Creating complete order with data:', data);
+      
       // 1. Crear cliente
+      console.log('Creating cliente...');
       const cliente = await ClientsService.create({
         nombre: data.cliente.nombre,
         apellido: data.cliente.apellido,
@@ -55,8 +58,10 @@ export class OrdersCompleteService {
         medio_contacto: data.cliente.medio_contacto || null,
         dni: data.cliente.dni || null
       });
+      console.log('Cliente created:', cliente);
 
       // 2. Crear orden
+      console.log('Creating orden...');
       const orden = await OrdersService.create({
         cliente_id: cliente.id,
         empresa_envio: data.orden.empresa_envio || null,
@@ -66,8 +71,10 @@ export class OrdersCompleteService {
         seguimiento: data.orden.seguimiento || null,
         fecha: new Date().toISOString().split('T')[0]
       });
+      console.log('Orden created:', orden);
 
       // 3. Crear sello
+      console.log('Creating sello...');
       const sello = await SellosService.create({
         orden_id: orden.id,
         tipo: data.sello.tipo,
@@ -86,6 +93,7 @@ export class OrdersCompleteService {
         largo_real: data.sello.largo_real || null,
         ancho_real: data.sello.ancho_real || null
       });
+      console.log('Sello created:', sello);
 
       return {
         cliente,
@@ -94,6 +102,14 @@ export class OrdersCompleteService {
       };
     } catch (error) {
       console.error('Error creating complete order:', error);
+      
+      // Proporcionar más información sobre el error
+      if (error && typeof error === 'object' && 'code' in error) {
+        if (error.code === '42501') {
+          throw new Error('Error de permisos: Las políticas de seguridad están bloqueando la inserción. Ejecuta el script fix_rls_policies.sql en Supabase.');
+        }
+      }
+      
       throw error;
     }
   }
