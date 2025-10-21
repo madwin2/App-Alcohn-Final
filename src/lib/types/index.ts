@@ -113,6 +113,42 @@ export interface SortState {
   criteria: SortCriteria[];
 }
 
+// Production Types
+export type ProductionState = 'PENDIENTE' | 'EN_PROGRESO' | 'COMPLETADO' | 'REVISAR' | 'REHACER';
+export type VectorizationState = 'PENDIENTE' | 'COMPLETADO' | 'NO_REQUERIDO';
+export type ProgramType = 'ILLUSTRATOR' | 'PHOTOSHOP' | 'COREL' | 'AUTOCAD' | 'OTRO';
+
+export interface ProductionTask {
+  id: string;
+  orderId: string;
+  title: string;
+  description?: string;
+  dueDate?: string;
+  status: ProductionState;
+  createdAt: string;
+  completedAt?: string;
+  assignedTo?: string;
+}
+
+export interface ProductionItem {
+  id: string;
+  orderId: string;
+  designName: string;
+  requestedWidthMm: number;
+  requestedHeightMm: number;
+  stampType: StampType;
+  productionState: ProductionState;
+  vectorizationState: VectorizationState;
+  program: ProgramType;
+  notes?: string;
+  files?: {
+    baseUrl?: string;
+    vectorUrl?: string;
+    photoUrl?: string;
+  };
+  tasks?: ProductionTask[];
+}
+
 // Form Types
 export interface NewOrderFormData {
   customer: {

@@ -11,7 +11,7 @@ const shippingLabels: Record<ShippingState, string> = {
   'SIN_ENVIO': 'Sin Envío',
   'HACER_ETIQUETA': 'Hacer Etiqueta',
   'ETIQUETA_LISTA': 'Etiqueta Lista',
-  'DESPACHADO': 'Despachado',
+  'DESPACHADO': 'D',
   'SEGUIMIENTO_ENVIADO': 'Seguimiento Enviado'
 };
 

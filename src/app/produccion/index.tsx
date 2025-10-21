@@ -1,21 +1,21 @@
 import { useState } from 'react';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
-import { OrdersHeader } from '@/components/pedidos/Header/OrdersHeader';
-import { OrdersTable } from '@/components/pedidos/Table/OrdersTable';
-import { FiltersDialog } from '@/components/pedidos/Filters/FiltersDialog';
-import { SorterDialog } from '@/components/pedidos/Sorter/SorterDialog';
-import { NewOrderDialog } from '@/components/pedidos/NewOrder/NewOrderDialog';
+import { ProductionHeader } from '@/components/produccion/Header/ProductionHeader';
+import { ProductionTable } from '@/components/produccion/Table/ProductionTable';
+import { ProductionFiltersDialog } from '@/components/produccion/Filters/ProductionFiltersDialog';
+import { ProductionSorterDialog } from '@/components/produccion/Sorter/ProductionSorterDialog';
+import { NewTaskDialog } from '@/components/produccion/NewTask/NewTaskDialog';
 import { Toaster } from '@/components/ui/toaster';
-import { mockOrders } from '@/lib/mocks/orders.mock';
-import { FabricationState } from '@/lib/types/index';
+import { mockProductionItems } from '@/lib/mocks/production.mock';
+import { ProductionState } from '@/lib/types/index';
 
-export default function PedidosPage() {
+export default function ProduccionPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showSorter, setShowSorter] = useState(false);
-  const [showNewOrder, setShowNewOrder] = useState(false);
-  const [activeStates, setActiveStates] = useState<FabricationState[]>([]);
+  const [showNewTask, setShowNewTask] = useState(false);
+  const [activeStates, setActiveStates] = useState<ProductionState[]>([]);
 
-  const handleStateFilter = (state: FabricationState) => {
+  const handleStateFilter = (state: ProductionState) => {
     setActiveStates(prev => 
       prev.includes(state) 
         ? prev.filter(s => s !== state)
@@ -32,8 +32,8 @@ export default function PedidosPage() {
       <div className="flex-1 flex flex-col ml-20">
         {/* Header */}
         <div className="border-b bg-background p-6">
-          <OrdersHeader
-            onNewOrder={() => setShowNewOrder(true)}
+          <ProductionHeader
+            onNewTask={() => setShowNewTask(true)}
             onFilters={() => setShowFilters(true)}
             onSort={() => setShowSorter(true)}
             onStateFilter={handleStateFilter}
@@ -43,24 +43,24 @@ export default function PedidosPage() {
 
         {/* Table */}
         <div className="flex-1 p-6 overflow-hidden">
-          <OrdersTable orders={mockOrders} />
+          <ProductionTable items={mockProductionItems} />
         </div>
       </div>
 
       {/* Dialogs */}
-      <FiltersDialog
+      <ProductionFiltersDialog
         open={showFilters}
         onOpenChange={setShowFilters}
       />
       
-      <SorterDialog
+      <ProductionSorterDialog
         open={showSorter}
         onOpenChange={setShowSorter}
       />
       
-      <NewOrderDialog
-        open={showNewOrder}
-        onOpenChange={setShowNewOrder}
+      <NewTaskDialog
+        open={showNewTask}
+        onOpenChange={setShowNewTask}
       />
 
       {/* Toast notifications */}

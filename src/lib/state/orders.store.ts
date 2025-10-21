@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { Filters, SortState, FabricationState, SaleState, ShippingState } from '../types/index';
 import { getColumnsForViewMode } from '../utils/columnConfig';
+import { OrdersService, SellosService } from '../supabase/services';
+import type { Orden, Sello } from '../supabase/types';
 
 export interface ColumnState {
   id: string;
@@ -11,6 +13,7 @@ export interface ColumnState {
 interface OrdersStore {
   // Estado de UI
   sidebarExpanded: boolean;
+  sidebarHovered: boolean;
   showPreviews: boolean;
   searchQuery: string;
   editingRowId: string | null;
@@ -25,16 +28,29 @@ interface OrdersStore {
   // Ordenamiento
   sort: SortState;
   
+  // Estado de datos
+  orders: Orden[];
+  sellos: Sello[];
+  loading: boolean;
+  error: string | null;
+  
   // Acciones de UI
   setSidebarExpanded: (expanded: boolean) => void;
+  setSidebarHovered: (hovered: boolean) => void;
   setShowPreviews: (show: boolean) => void;
   setSearchQuery: (query: string) => void;
   setEditingRow: (id: string | null) => void;
   setViewMode: (mode: 'items' | 'orders') => void;
 
-  // Mutaciones de datos (mock)
-  updateOrder: (orderId: string, patch: any) => void;
-  deleteOrder: (orderId: string) => void;
+  // Acciones de datos
+  fetchOrders: () => Promise<void>;
+  fetchSellos: (ordenId?: string) => Promise<void>;
+  createOrder: (order: any) => Promise<void>;
+  updateOrder: (orderId: string, patch: any) => Promise<void>;
+  deleteOrder: (orderId: string) => Promise<void>;
+  createSello: (sello: any) => Promise<void>;
+  updateSello: (selloId: string, patch: any) => Promise<void>;
+  deleteSello: (selloId: string) => Promise<void>;
   
   // Acciones de filtros
   setFilters: (filters: Partial<Filters>) => void;
@@ -72,7 +88,8 @@ function createInitialColumns(viewMode: 'items' | 'orders'): ColumnState[] {
 
 export const useOrdersStore = create<OrdersStore>((set, get) => ({
   // Estado inicial
-  sidebarExpanded: true,
+  sidebarExpanded: false,
+  sidebarHovered: false,
   showPreviews: true,
   searchQuery: '',
   editingRowId: null,
@@ -80,9 +97,14 @@ export const useOrdersStore = create<OrdersStore>((set, get) => ({
   columns: createInitialColumns('items'),
   filters: initialFilters,
   sort: initialSort,
+  orders: [],
+  sellos: [],
+  loading: false,
+  error: null,
   
   // Acciones de UI
   setSidebarExpanded: (expanded) => set({ sidebarExpanded: expanded }),
+  setSidebarHovered: (hovered) => set({ sidebarHovered: hovered }),
   setShowPreviews: (show) => set({ showPreviews: show }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setEditingRow: (id) => set({ editingRowId: id }),
@@ -127,9 +149,110 @@ export const useOrdersStore = create<OrdersStore>((set, get) => ({
     }
   })),
 
-  // Mutaciones mock (sin persistencia, solo UI)
-  updateOrder: (_orderId, _patch) => {},
-  deleteOrder: (_orderId) => {},
+  // Acciones de datos
+  fetchOrders: async () => {
+    set({ loading: true, error: null });
+    try {
+      const orders = await OrdersService.getAll();
+      set({ orders, loading: false });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error al cargar órdenes', loading: false });
+    }
+  },
+  
+  fetchSellos: async (ordenId?: string) => {
+    set({ loading: true, error: null });
+    try {
+      const sellos = ordenId 
+        ? await SellosService.getByOrdenId(ordenId)
+        : await SellosService.getByEstadoFabricacion('Sin Hacer');
+      set({ sellos, loading: false });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error al cargar sellos', loading: false });
+    }
+  },
+  
+  createOrder: async (order) => {
+    set({ loading: true, error: null });
+    try {
+      const newOrder = await OrdersService.create(order);
+      set((state) => ({ 
+        orders: [newOrder, ...state.orders], 
+        loading: false 
+      }));
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error al crear orden', loading: false });
+    }
+  },
+  
+  updateOrder: async (orderId, patch) => {
+    set({ loading: true, error: null });
+    try {
+      const updatedOrder = await OrdersService.update(orderId, patch);
+      set((state) => ({
+        orders: state.orders.map(order => 
+          order.id === orderId ? updatedOrder : order
+        ),
+        loading: false
+      }));
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error al actualizar orden', loading: false });
+    }
+  },
+  
+  deleteOrder: async (orderId) => {
+    set({ loading: true, error: null });
+    try {
+      await OrdersService.delete(orderId);
+      set((state) => ({
+        orders: state.orders.filter(order => order.id !== orderId),
+        loading: false
+      }));
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error al eliminar orden', loading: false });
+    }
+  },
+  
+  createSello: async (sello) => {
+    set({ loading: true, error: null });
+    try {
+      const newSello = await SellosService.create(sello);
+      set((state) => ({ 
+        sellos: [newSello, ...state.sellos], 
+        loading: false 
+      }));
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error al crear sello', loading: false });
+    }
+  },
+  
+  updateSello: async (selloId, patch) => {
+    set({ loading: true, error: null });
+    try {
+      const updatedSello = await SellosService.update(selloId, patch);
+      set((state) => ({
+        sellos: state.sellos.map(sello => 
+          sello.id === selloId ? updatedSello : sello
+        ),
+        loading: false
+      }));
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error al actualizar sello', loading: false });
+    }
+  },
+  
+  deleteSello: async (selloId) => {
+    set({ loading: true, error: null });
+    try {
+      await SellosService.delete(selloId);
+      set((state) => ({
+        sellos: state.sellos.filter(sello => sello.id !== selloId),
+        loading: false
+      }));
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Error al eliminar sello', loading: false });
+    }
+  },
   
   // Acciones de columnas
   setColumnSize: (columnId, size) => set((state) => ({

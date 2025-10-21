@@ -239,7 +239,7 @@ export const getShippingLabel = (state: string): string => {
     'SIN_ENVIO': 'Sin Envío',
     'HACER_ETIQUETA': 'Hacer Et.',
     'ETIQUETA_LISTA': 'Et. Lista',
-    'DESPACHADO': 'Despachado',
+    'DESPACHADO': 'Desp.',
     'SEGUIMIENTO_ENVIADO': 'Seg. Env.'
   };
   return labels[state] || state;

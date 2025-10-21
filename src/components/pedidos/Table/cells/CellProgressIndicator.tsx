@@ -34,65 +34,71 @@ export function ProgressIndicator({
   const currentIndex = PROGRESS_STEPS.findIndex(step => step.key === currentStep);
   
   return (
-    <div className={cn("flex items-center relative", className)}>
-      {/* Continuous line below all states */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-600 rounded-full" />
-      
-      {PROGRESS_STEPS.map((step, index) => {
-        const isCompleted = index < currentIndex;
-        const isCurrent = index === currentIndex;
-        const isNext = index === currentIndex + 1;
-        const isFuture = index > currentIndex + 1;
-        
-        return (
-          <React.Fragment key={step.key}>
-            {/* Step Indicator */}
-            <div className="relative flex items-center">
-              <button
-                onClick={() => onStepChange?.(step.key)}
-                className={cn(
-                  "relative z-10 flex items-center justify-center transition-all duration-200 hover:scale-105",
-                  isCompleted && "text-white font-bold text-sm",
-                  isCurrent && "text-black font-bold text-sm min-w-fit px-3 py-1",
-                  isNext && "text-red-600 font-bold text-sm",
-                  isFuture && "text-gray-400 font-bold text-sm"
-                )}
-                title={step.label}
-              >
-                <span className="whitespace-nowrap">{step.abbreviation}</span>
-              </button>
-              
-              {/* Current State Background with Tail */}
+    <div className={cn("flex flex-col items-center gap-2", className)}>
+      {/* Letters row - uniform spacing for all states including 2-letter ones */}
+      <div className="flex items-center">
+        {PROGRESS_STEPS.map((step, index) => {
+          const isCompleted = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const isNext = index === currentIndex + 1;
+          const isFuture = index > currentIndex + 1;
+          
+          return (
+            <button
+              key={step.key}
+              onClick={() => onStepChange?.(step.key)}
+              className={cn(
+                "relative flex items-center justify-center transition-all duration-200 hover:scale-105",
+                isCompleted && "text-white font-bold text-xs",
+                isCurrent && "text-black font-bold text-xs",
+                isNext && "text-red-600 font-bold text-xs",
+                isFuture && "text-gray-400 font-bold text-xs"
+              )}
+              title={step.label}
+              style={{
+                width: '40px', // Reduced width for more compact design
+                height: '24px'
+              }}
+            >
+              {/* Current State Background - Simple white circle */}
               {isCurrent && (
                 <div className="absolute inset-0 pointer-events-none">
-                  <div 
-                    className="bg-white"
-                    style={{
-                      clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 30%, -15% 50%, 0% 70%)',
-                      borderRadius: '8px',
-                      width: '110%',
-                      left: '-5%',
-                      height: '32px'
-                    }}
-                  />
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-white rounded-full" />
                 </div>
               )}
-            </div>
-            
-            {/* Colored line segments */}
-            <div className={cn(
-              "absolute bottom-0 h-1 transition-colors duration-200",
-              isCompleted && "bg-white",
-              isCurrent && "bg-white", 
-              isNext && "bg-red-600",
-              isFuture && "bg-gray-600"
-            )} style={{
-              left: `${index * (100 / PROGRESS_STEPS.length)}%`,
-              width: `${100 / PROGRESS_STEPS.length}%`
-            }} />
-          </React.Fragment>
-        );
-      })}
+              
+              <span className="relative z-10 whitespace-nowrap">{step.abbreviation}</span>
+            </button>
+          );
+        })}
+      </div>
+      
+      {/* Progress bar below letters - perfectly aligned with each letter */}
+      <div className="relative w-full h-1 bg-gray-600 rounded-full">
+        {PROGRESS_STEPS.map((step, index) => {
+          const isCompleted = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const isNext = index === currentIndex + 1;
+          const isFuture = index > currentIndex + 1;
+          
+          return (
+            <div
+              key={step.key}
+              className={cn(
+                "absolute top-0 h-1 transition-colors duration-200 rounded-full",
+                isCompleted && "bg-white",
+                isCurrent && "bg-white", 
+                isNext && "bg-red-600",
+                isFuture && "bg-gray-600"
+              )}
+              style={{
+                left: `${index * (100 / PROGRESS_STEPS.length)}%`,
+                width: `${100 / PROGRESS_STEPS.length}%`
+              }}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -106,65 +112,71 @@ export function CompactProgressIndicator({
   const currentIndex = PROGRESS_STEPS.findIndex(step => step.key === currentStep);
   
   return (
-    <div className={cn("flex items-center relative", className)}>
-      {/* Continuous line below all states */}
-      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gray-600 rounded-full" />
-      
-      {PROGRESS_STEPS.map((step, index) => {
-        const isCompleted = index < currentIndex;
-        const isCurrent = index === currentIndex;
-        const isNext = index === currentIndex + 1;
-        const isFuture = index > currentIndex + 1;
-        
-        return (
-          <React.Fragment key={step.key}>
-            {/* Step Indicator - Más pequeño */}
-            <div className="relative flex items-center">
-              <button
-                onClick={() => onStepChange?.(step.key)}
-                className={cn(
-                  "relative z-10 flex items-center justify-center transition-all duration-200 hover:scale-110",
-                  isCompleted && "text-white font-bold text-xs",
-                  isCurrent && "text-black font-bold text-xs min-w-fit px-2 py-0.5",
-                  isNext && "text-red-600 font-bold text-xs",
-                  isFuture && "text-gray-400 font-bold text-xs"
-                )}
-                title={step.label}
-              >
-                <span className="whitespace-nowrap">{step.abbreviation}</span>
-              </button>
-              
-              {/* Current State Background with Tail */}
+    <div className={cn("flex flex-col items-center gap-1", className)}>
+      {/* Letters row - uniform spacing for all states including 2-letter ones */}
+      <div className="flex items-center">
+        {PROGRESS_STEPS.map((step, index) => {
+          const isCompleted = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const isNext = index === currentIndex + 1;
+          const isFuture = index > currentIndex + 1;
+          
+          return (
+            <button
+              key={step.key}
+              onClick={() => onStepChange?.(step.key)}
+              className={cn(
+                "relative flex items-center justify-center transition-all duration-200 hover:scale-110",
+                isCompleted && "text-white font-bold text-[10px]",
+                isCurrent && "text-black font-bold text-[10px]",
+                isNext && "text-red-600 font-bold text-[10px]",
+                isFuture && "text-gray-400 font-bold text-[10px]"
+              )}
+              title={step.label}
+              style={{
+                width: '28px', // Reduced width for more compact design
+                height: '16px'
+              }}
+            >
+              {/* Current State Background - Simple white circle */}
               {isCurrent && (
                 <div className="absolute inset-0 pointer-events-none">
-                  <div 
-                    className="bg-white"
-                    style={{
-                      clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 30%, -15% 50%, 0% 70%)',
-                      borderRadius: '6px',
-                      width: '110%',
-                      left: '-5%',
-                      height: '24px'
-                    }}
-                  />
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full" />
                 </div>
               )}
-            </div>
-            
-            {/* Colored line segments */}
-            <div className={cn(
-              "absolute bottom-0 h-0.5 transition-colors duration-200",
-              isCompleted && "bg-white",
-              isCurrent && "bg-white", 
-              isNext && "bg-red-600",
-              isFuture && "bg-gray-600"
-            )} style={{
-              left: `${index * (100 / PROGRESS_STEPS.length)}%`,
-              width: `${100 / PROGRESS_STEPS.length}%`
-            }} />
-          </React.Fragment>
-        );
-      })}
+              
+              <span className="relative z-10 whitespace-nowrap">{step.abbreviation}</span>
+            </button>
+          );
+        })}
+      </div>
+      
+      {/* Progress bar below letters - perfectly aligned with each letter */}
+      <div className="relative w-full h-0.5 bg-gray-600 rounded-full">
+        {PROGRESS_STEPS.map((step, index) => {
+          const isCompleted = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const isNext = index === currentIndex + 1;
+          const isFuture = index > currentIndex + 1;
+          
+          return (
+            <div
+              key={step.key}
+              className={cn(
+                "absolute top-0 h-0.5 transition-colors duration-200 rounded-full",
+                isCompleted && "bg-white",
+                isCurrent && "bg-white", 
+                isNext && "bg-red-600",
+                isFuture && "bg-gray-600"
+              )}
+              style={{
+                left: `${index * (100 / PROGRESS_STEPS.length)}%`,
+                width: `${100 / PROGRESS_STEPS.length}%`
+              }}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
