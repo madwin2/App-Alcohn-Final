@@ -1,27 +1,27 @@
 import { formatPhone, getChannelIcon } from '@/lib/utils/format';
-import { Order } from '@/lib/types/index';
 import { SvgIcon } from '@/components/ui/SvgIcon';
+import type { Orden } from '@/lib/supabase/types';
 
 interface CellContactoProps {
-  order: Order;
+  order: Orden;
 }
 
 export function CellContacto({ order }: CellContactoProps) {
-  const { customer, items } = order;
-  const contact = items[0]?.contact; // Asumiendo que todos los items tienen el mismo contacto
+  // Acceder a los datos del cliente desde la relación de Supabase
+  const cliente = (order as any).clientes;
   
-  if (!contact) return null;
+  if (!cliente) return null;
 
   return (
     <div className="flex items-center gap-2 min-w-0">
       <SvgIcon 
-        name={getChannelIcon(contact.channel)} 
+        name={getChannelIcon(cliente.medio_contacto || 'WHATSAPP')} 
         size={20}
         className="flex-shrink-0"
-        title={contact.channel}
+        title={cliente.medio_contacto}
       />
       <span className="text-xs text-gray-400 truncate">
-        {formatPhone(contact.phoneE164)}
+        {formatPhone(cliente.telefono)}
       </span>
     </div>
   );

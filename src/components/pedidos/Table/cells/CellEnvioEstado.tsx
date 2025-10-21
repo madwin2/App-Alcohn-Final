@@ -1,39 +1,39 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Order, ShippingState } from '@/lib/types/index';
+import type { Orden } from '@/lib/supabase/types';
 import { getShippingStateColor, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
 
 interface CellEnvioEstadoProps {
-  order: Order;
-  onEnvioEstadoChange?: (orderId: string, newState: ShippingState) => void;
+  order: Orden;
+  onEnvioEstadoChange?: (orderId: string, newState: string) => void;
 }
 
-const shippingLabels: Record<ShippingState, string> = {
-  'SIN_ENVIO': 'Sin Envío',
-  'HACER_ETIQUETA': 'Hacer Etiqueta',
-  'ETIQUETA_LISTA': 'Etiqueta Lista',
-  'DESPACHADO': 'D',
-  'SEGUIMIENTO_ENVIADO': 'Seguimiento Enviado'
+const shippingLabels: Record<string, string> = {
+  'Sin envio': 'Sin Envío',
+  'Hacer Etiqueta': 'Hacer Etiqueta',
+  'Etiqueta Lista': 'Etiqueta Lista',
+  'Despachado': 'Despachado',
+  'Seguimiento Enviado': 'Seguimiento Enviado'
 };
 
 export function CellEnvioEstado({ order, onEnvioEstadoChange }: CellEnvioEstadoProps) {
-  const item = order.items[0];
+  const shippingState = order.estado_envio;
   
-  if (!item) return null;
+  if (!shippingState) return null;
 
   const handleValueChange = (value: string) => {
-    onEnvioEstadoChange?.(order.id, value as ShippingState);
+    onEnvioEstadoChange?.(order.id, value);
   };
 
   return (
-    <Select value={item.shippingState} onValueChange={handleValueChange}>
+    <Select value={shippingState} onValueChange={handleValueChange}>
       <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
         <SelectValue>
           {(() => {
-            const visual = getShippingChipVisual(item.shippingState);
+            const visual = getShippingChipVisual(shippingState);
             return (
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
                 style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}>
-                {getShippingLabel(item.shippingState)}
+                {getShippingLabel(shippingState)}
               </span>
             );
           })()}

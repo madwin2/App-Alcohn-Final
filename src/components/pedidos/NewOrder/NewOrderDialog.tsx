@@ -8,13 +8,16 @@ import { useState } from 'react';
 
 // Funciones de mapeo para convertir valores del formulario a valores de Supabase
 const mapChannelToSupabase = (channel: string | undefined) => {
+  console.log('mapChannelToSupabase input:', channel);
   const mapping: Record<string, string> = {
     'WHATSAPP': 'Whatsapp',
     'INSTAGRAM': 'Instagram', 
     'FACEBOOK': 'Facebook',
     'MAIL': 'Mail'
   };
-  return channel ? mapping[channel] || null : null;
+  const result = channel ? mapping[channel] || null : null;
+  console.log('mapChannelToSupabase output:', result);
+  return result;
 };
 
 const mapCarrierToSupabase = (carrier: string | undefined) => {
