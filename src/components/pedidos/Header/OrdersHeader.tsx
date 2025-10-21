@@ -4,7 +4,6 @@ import { Input } from '@/components/ui/input';
 import { StateChips } from './StateChips';
 import { ViewToggle } from './ViewToggle';
 import { useOrdersStore } from '@/lib/state/orders.store';
-import { mockOrders, getFabricationCounts } from '@/lib/mocks/orders.mock';
 import { FabricationState } from '@/lib/types/index';
 
 interface OrdersHeaderProps {
@@ -22,9 +21,11 @@ export function OrdersHeader({
   onStateFilter,
   activeStates 
 }: OrdersHeaderProps) {
-  const { searchQuery, setSearchQuery } = useOrdersStore();
+  const { searchQuery, setSearchQuery, orders } = useOrdersStore();
   
-  const activeOrdersCount = mockOrders.length;
+  const activeOrdersCount = orders.length;
+  const sinHacerCount = orders.filter(order => order.estado_orden === 'Señado').length;
+  const hechoCount = orders.filter(order => order.estado_orden === 'Hecho').length;
 
   return (
     <div className="space-y-4">
@@ -35,7 +36,7 @@ export function OrdersHeader({
             Pedidos
           </h1>
           <p className="text-xs text-gray-400">
-            Total: {activeOrdersCount} • Sin hacer: {getFabricationCounts(mockOrders)['SIN_HACER']} • Hecho: {getFabricationCounts(mockOrders)['HECHO']}
+            Total: {activeOrdersCount} • Sin hacer: {sinHacerCount} • Hecho: {hechoCount}
           </p>
         </div>
         

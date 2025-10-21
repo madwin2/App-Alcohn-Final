@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { ProductionState } from '@/lib/types/index';
-import { mockProductionItems } from '@/lib/mocks/production.mock';
+import { useProductionStore } from '@/lib/state/production.store';
 import { cn } from '@/lib/utils/cn';
 
 interface ProductionStateChipsProps {
@@ -30,8 +30,13 @@ const stateActiveBg: Record<ProductionState, string> = {
 };
 
 export function ProductionStateChips({ onStateClick, activeStates = [] }: ProductionStateChipsProps) {
-  const counts = mockProductionItems.reduce((acc, item) => {
-    acc[item.productionState] = (acc[item.productionState] || 0) + 1;
+  const { sellos } = useProductionStore();
+  
+  const counts = sellos.reduce((acc, item) => {
+    const state = item.estado_fabricacion as ProductionState;
+    if (state) {
+      acc[state] = (acc[state] || 0) + 1;
+    }
     return acc;
   }, {} as Record<ProductionState, number>);
 

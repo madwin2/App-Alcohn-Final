@@ -1,7 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { FabricationState } from '@/lib/types/index';
-import { getFabricationCounts } from '@/lib/mocks/orders.mock';
-import { mockOrders } from '@/lib/mocks/orders.mock';
+import { useOrdersStore } from '@/lib/state/orders.store';
 import { cn } from '@/lib/utils/cn';
 
 interface StateChipsProps {
@@ -35,7 +34,15 @@ const stateActiveBg: Record<FabricationState, string> = {
 };
 
 export function StateChips({ onStateClick, activeStates = [] }: StateChipsProps) {
-  const counts = getFabricationCounts(mockOrders);
+  const { orders } = useOrdersStore();
+  
+  const counts = orders.reduce((acc, order) => {
+    const state = order.estado_orden as FabricationState;
+    if (state) {
+      acc[state] = (acc[state] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<FabricationState, number>);
 
   return (
     <div className="flex flex-wrap gap-2">

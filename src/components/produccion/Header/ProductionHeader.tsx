@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ProductionStateChips } from './ProductionStateChips';
 import { useProductionStore } from '@/lib/state/production.store';
-import { mockProductionItems } from '@/lib/mocks/production.mock';
 import { ProductionState } from '@/lib/types/index';
 
 interface ProductionHeaderProps {
@@ -21,11 +20,11 @@ export function ProductionHeader({
   onStateFilter,
   activeStates 
 }: ProductionHeaderProps) {
-  const { searchQuery, setSearchQuery, showPreviews, setShowPreviews } = useProductionStore();
+  const { searchQuery, setSearchQuery, showPreviews, setShowPreviews, sellos } = useProductionStore();
   
-  const activeItemsCount = mockProductionItems.length;
-  const pendingCount = mockProductionItems.filter(item => item.productionState === 'PENDIENTE').length;
-  const completedCount = mockProductionItems.filter(item => item.productionState === 'COMPLETADO').length;
+  const activeItemsCount = sellos.length;
+  const pendingCount = sellos.filter(item => item.estado_fabricacion === 'Sin Hacer').length;
+  const completedCount = sellos.filter(item => item.estado_fabricacion === 'Hecho').length;
 
   return (
     <div className="space-y-4">
