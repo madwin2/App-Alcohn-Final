@@ -1,33 +1,41 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Order, FabricationState } from '@/lib/types/index';
+import type { Orden } from '@/lib/supabase/types';
 import { getFabricationStateColor, getFabricationChipVisual, getFabricationLabel } from '@/lib/utils/format';
 
 interface CellFabricacionProps {
-  order: Order;
-  onFabricacionChange?: (orderId: string, newState: FabricationState) => void;
+  order: Orden;
+  onFabricacionChange?: (orderId: string, newState: string) => void;
 }
 
-const fabricationLabels: Record<FabricationState, string> = {
-  'SIN_HACER': 'Sin Hacer',
-  'HACIENDO': 'Haciendo',
-  'VERIFICAR': 'Verificar',
-  'HECHO': 'Hecho',
-  'REHACER': 'Rehacer',
-  'PRIORIDAD': 'Prioridad',
-  'RETOCAR': 'Retocar'
+const fabricationLabels: Record<string, string> = {
+  'Sin Hacer': 'Sin Hacer',
+  'Haciendo': 'Haciendo',
+  'Verificar': 'Verificar',
+  'Hecho': 'Hecho',
+  'Rehacer': 'Rehacer',
+  'Prioridad': 'Prioridad',
+  'Retocar': 'Retocar'
 };
 
 export function CellFabricacion({ order, onFabricacionChange }: CellFabricacionProps) {
-  const item = order.items[0];
+  // Obtener el primer sello de la orden
+  const sellos = (order as any).sellos;
+  const sello = sellos && sellos.length > 0 ? sellos[0] : null;
   
-  if (!item) return null;
+  if (!sello) {
+    return (
+      <div className="text-xs text-gray-400">
+        Sin sello
+      </div>
+    );
+  }
 
   const handleValueChange = (value: string) => {
-    onFabricacionChange?.(order.id, value as FabricationState);
+    onFabricacionChange?.(order.id, value);
   };
 
   return (
-    <Select value={item.fabricationState} onValueChange={handleValueChange}>
+    <Select value={sello.estado_fabricacion} onValueChange={handleValueChange}>
       <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
         <SelectValue>
           {(() => {

@@ -1,35 +1,35 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Order, ShippingCarrier } from '@/lib/types/index';
+import type { Orden } from '@/lib/supabase/types';
 import { getCarrierIcon } from '@/lib/utils/format';
 import { SvgIcon } from '@/components/ui/SvgIcon';
 
 interface CellEnvioProps {
-  order: Order;
-  onEnvioChange?: (orderId: string, newCarrier: ShippingCarrier) => void;
+  order: Orden;
+  onEnvioChange?: (orderId: string, newCarrier: string) => void;
 }
 
-const carrierOptions: { value: ShippingCarrier; iconName: string; label: string }[] = [
-  { value: 'ANDREANI', iconName: 'ANDREANI DOMICILIO', label: 'Andreani' },
-  { value: 'CORREO_ARGENTINO', iconName: 'CORREO ARGENTINO DOMICILIO', label: 'Correo Argentino' },
-  { value: 'VIA_CARGO', iconName: 'VIA CARGO DOMICILIO', label: 'Vía Cargo' },
-  { value: 'OTRO', iconName: 'ANDREANI DOMICILIO', label: 'Otro' }
+const carrierOptions: { value: string; iconName: string; label: string }[] = [
+  { value: 'Andreani', iconName: 'ANDREANI DOMICILIO', label: 'Andreani' },
+  { value: 'Correo Argentino', iconName: 'CORREO ARGENTINO DOMICILIO', label: 'Correo Argentino' },
+  { value: 'Via Cargo', iconName: 'VIA CARGO DOMICILIO', label: 'Vía Cargo' },
+  { value: 'Retiro', iconName: 'ANDREANI DOMICILIO', label: 'Retiro' }
 ];
 
 export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
-  const { shipping } = order;
+  const empresaEnvio = order.empresa_envio;
   
   const handleValueChange = (value: string) => {
-    onEnvioChange?.(order.id, value as ShippingCarrier);
+    onEnvioChange?.(order.id, value);
   };
 
   return (
     <div className="flex justify-center items-center w-full">
-      <Select value={shipping.carrier} onValueChange={handleValueChange}>
+      <Select value={empresaEnvio || ''} onValueChange={handleValueChange}>
         <SelectTrigger className="w-auto h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors flex justify-center items-center px-2">
           <SelectValue>
             <span className="flex items-center justify-center">
               <SvgIcon 
-                name={getCarrierIcon(shipping.carrier)} 
+                name={getCarrierIcon(empresaEnvio || '')} 
                 size={20}
                 className="flex-shrink-0"
               />
