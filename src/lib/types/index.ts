@@ -149,6 +149,24 @@ export interface ProductionItem {
   tasks?: ProductionTask[];
 }
 
+// Program Types
+export type ProgramStatus = 'active' | 'inactive';
+export type ProgramCategory = 'PRODUCTION' | 'DESIGN' | 'ADMINISTRATION' | 'QUALITY' | 'OTHER';
+
+export interface Program {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  status: ProgramStatus;
+  category: ProgramCategory;
+  createdAt: string;
+  lastUpdated: string;
+  createdBy: string;
+  tags?: string[];
+  settings?: Record<string, any>;
+}
+
 // Form Types
 export interface NewOrderFormData {
   customer: {

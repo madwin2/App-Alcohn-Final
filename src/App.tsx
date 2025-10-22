@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import PedidosPage from './app/pedidos/index'
 import ProduccionPage from './app/produccion/index'
+import ProgramasPage from './app/programas/index'
 
 function App() {
   return (
@@ -10,6 +11,7 @@ function App() {
           <Route path="/" element={<PedidosPage />} />
           <Route path="/pedidos" element={<PedidosPage />} />
           <Route path="/produccion" element={<ProduccionPage />} />
+          <Route path="/programas" element={<ProgramasPage />} />
         </Routes>
       </div>
     </Router>
