@@ -109,21 +109,22 @@ export function ProgramCard({ program }: ProgramCardProps) {
       </CardHeader>
       
       <CardContent className="pt-0">
-        {/* Estado de fabricación y verificación */}
-        <div className="flex items-center gap-2 mb-3">
+        {/* Estado de fabricación (abajo a la izquierda, alineado con el nombre) */}
+        <div className="flex justify-between items-end">
           <Badge 
-            className={`text-xs px-2 py-1 ${getFabricationStateColor(program.fabricationState)}`}
+            className={`text-xs px-3 py-1 font-medium ${getFabricationStateColor(program.fabricationState)}`}
           >
             {program.fabricationState}
           </Badge>
           
+          {/* Botón de verificación (esquina inferior derecha) */}
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className={`p-1 h-6 w-6 ${
+            className={`h-8 w-8 p-0 ${
               program.isVerified 
-                ? 'text-green-600 hover:text-green-700' 
-                : 'text-gray-400 hover:text-gray-600'
+                ? 'border-green-500 text-green-600 hover:bg-green-50' 
+                : 'border-gray-300 text-gray-400 hover:bg-gray-50'
             }`}
             onClick={(e) => {
               e.stopPropagation();
