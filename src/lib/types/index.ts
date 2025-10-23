@@ -152,14 +152,33 @@ export interface ProductionItem {
 // Program Types
 export type ProgramStatus = 'active' | 'inactive';
 export type ProgramCategory = 'PRODUCTION' | 'DESIGN' | 'ADMINISTRATION' | 'QUALITY' | 'OTHER';
+export type MachineType = 'C' | 'G' | 'XL' | 'ABC';
+export type StampSize = 63 | 38 | 25 | 19 | 12;
+
+export interface ProgramStamp {
+  id: string;
+  designName: string;
+  widthMm: number;
+  heightMm: number;
+  stampType: StampType;
+  previewUrl?: string;
+}
 
 export interface Program {
   id: string;
-  name: string;
+  name: string; // Formato: "DD MM x(CANTIDAD) y(MÁQUINA)"
   description: string;
   version: string;
   status: ProgramStatus;
   category: ProgramCategory;
+  machine: MachineType;
+  stampCount: number;
+  productionDate: string; // Fecha en que se hace
+  notes?: string;
+  fabricationState: FabricationState;
+  isVerified: boolean;
+  stamps: ProgramStamp[];
+  lengthUsed: StampSize;
   createdAt: string;
   lastUpdated: string;
   createdBy: string;

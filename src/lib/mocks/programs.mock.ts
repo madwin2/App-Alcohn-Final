@@ -4,104 +4,184 @@ import { Program } from '@/lib/types/index';
 export const mockPrograms: Program[] = [
   {
     id: '1',
-    name: 'Sistema de Gestión de Pedidos',
-    description: 'Programa principal para la gestión completa de pedidos, desde la creación hasta el seguimiento de envíos.',
+    name: '15 ENE x12 yC',
+    description: 'Programa para sellos de cuero con diseño personalizado',
     version: 'v2.1.0',
     status: 'active',
-    category: 'ADMINISTRATION',
+    category: 'PRODUCTION',
+    machine: 'C',
+    stampCount: 12,
+    productionDate: '2024-01-15',
+    notes: 'Sellos para cliente premium - alta calidad requerida',
+    fabricationState: 'HACIENDO',
+    isVerified: true,
+    stamps: [
+      {
+        id: 's1',
+        designName: 'Logo Empresa',
+        widthMm: 25,
+        heightMm: 25,
+        stampType: 'CLASICO',
+        previewUrl: '/preview/stamp1.jpg'
+      },
+      {
+        id: 's2',
+        designName: 'Texto Personalizado',
+        widthMm: 38,
+        heightMm: 12,
+        stampType: 'ABC',
+        previewUrl: '/preview/stamp2.jpg'
+      }
+    ],
+    lengthUsed: 63,
     createdAt: '2024-01-15T10:00:00Z',
     lastUpdated: '2024-01-20T14:30:00Z',
     createdBy: 'admin',
-    tags: ['pedidos', 'gestión', 'sistema'],
-    settings: {
-      autoSave: true,
-      notifications: true,
-      theme: 'dark'
-    }
+    tags: ['cuero', 'premium', 'personalizado']
   },
   {
     id: '2',
-    name: 'Herramientas de Diseño Vectorial',
-    description: 'Conjunto de herramientas para diseño y vectorización de sellos personalizados.',
+    name: '20 ENE x8 yG',
+    description: 'Programa para sellos de madera con grabado profundo',
     version: 'v1.5.2',
     status: 'active',
-    category: 'DESIGN',
-    createdAt: '2024-01-10T09:00:00Z',
-    lastUpdated: '2024-01-18T16:45:00Z',
-    createdBy: 'designer',
-    tags: ['diseño', 'vector', 'herramientas'],
-    settings: {
-      autoSave: false,
-      gridSnap: true,
-      precision: 'high'
-    }
+    category: 'PRODUCTION',
+    machine: 'G',
+    stampCount: 8,
+    productionDate: '2024-01-20',
+    notes: 'Grabado profundo - verificar calidad antes de continuar',
+    fabricationState: 'VERIFICAR',
+    isVerified: false,
+    stamps: [
+      {
+        id: 's3',
+        designName: 'Escudo Familiar',
+        widthMm: 19,
+        heightMm: 19,
+        stampType: '3MM',
+        previewUrl: '/preview/stamp3.jpg'
+      }
+    ],
+    lengthUsed: 38,
+    createdAt: '2024-01-20T09:00:00Z',
+    lastUpdated: '2024-01-22T16:45:00Z',
+    createdBy: 'production',
+    tags: ['madera', 'grabado', 'profundo']
   },
   {
     id: '3',
-    name: 'Control de Calidad',
-    description: 'Sistema para verificar y controlar la calidad de los productos antes del envío.',
+    name: '25 ENE x15 yXL',
+    description: 'Programa para sellos grandes de metal',
     version: 'v1.0.1',
     status: 'active',
-    category: 'QUALITY',
-    createdAt: '2024-01-05T11:30:00Z',
-    lastUpdated: '2024-01-15T12:20:00Z',
-    createdBy: 'quality',
-    tags: ['calidad', 'verificación', 'control'],
-    settings: {
-      autoCheck: true,
-      strictMode: true,
-      reports: true
-    }
+    category: 'PRODUCTION',
+    machine: 'XL',
+    stampCount: 15,
+    productionDate: '2024-01-25',
+    notes: 'Sellos grandes - usar material resistente',
+    fabricationState: 'SIN_HACER',
+    isVerified: false,
+    stamps: [
+      {
+        id: 's4',
+        designName: 'Logo Corporativo',
+        widthMm: 63,
+        heightMm: 25,
+        stampType: 'LACRE',
+        previewUrl: '/preview/stamp4.jpg'
+      }
+    ],
+    lengthUsed: 63,
+    createdAt: '2024-01-25T11:30:00Z',
+    lastUpdated: '2024-01-25T12:20:00Z',
+    createdBy: 'production',
+    tags: ['metal', 'grande', 'corporativo']
   },
   {
     id: '4',
-    name: 'Línea de Producción Automatizada',
-    description: 'Programa para automatizar y optimizar los procesos de la línea de producción.',
+    name: '28 ENE x6 yABC',
+    description: 'Programa para sellos pequeños de precisión',
     version: 'v3.0.0',
     status: 'active',
     category: 'PRODUCTION',
-    createdAt: '2024-01-01T08:00:00Z',
-    lastUpdated: '2024-01-22T10:15:00Z',
+    machine: 'ABC',
+    stampCount: 6,
+    productionDate: '2024-01-28',
+    notes: 'Precisión alta - verificar medidas exactas',
+    fabricationState: 'HECHO',
+    isVerified: true,
+    stamps: [
+      {
+        id: 's5',
+        designName: 'Código QR',
+        widthMm: 12,
+        heightMm: 12,
+        stampType: 'ABC',
+        previewUrl: '/preview/stamp5.jpg'
+      }
+    ],
+    lengthUsed: 12,
+    createdAt: '2024-01-28T08:00:00Z',
+    lastUpdated: '2024-01-30T10:15:00Z',
     createdBy: 'production',
-    tags: ['producción', 'automatización', 'optimización'],
-    settings: {
-      autoStart: true,
-      monitoring: true,
-      alerts: true
-    }
+    tags: ['pequeño', 'precisión', 'qr']
   },
   {
     id: '5',
-    name: 'Sistema de Inventario Legacy',
-    description: 'Sistema heredado para gestión de inventario. En proceso de migración.',
+    name: '30 ENE x4 yC',
+    description: 'Programa para sellos de prueba',
     version: 'v0.9.8',
     status: 'inactive',
-    category: 'ADMINISTRATION',
-    createdAt: '2023-12-20T14:00:00Z',
-    lastUpdated: '2024-01-10T09:30:00Z',
-    createdBy: 'legacy',
-    tags: ['inventario', 'legacy', 'migración'],
-    settings: {
-      autoSave: false,
-      compatibility: 'legacy',
-      migration: 'pending'
-    }
+    category: 'PRODUCTION',
+    machine: 'C',
+    stampCount: 4,
+    productionDate: '2024-01-30',
+    notes: 'Sellos de prueba - no entregar al cliente',
+    fabricationState: 'REHACER',
+    isVerified: false,
+    stamps: [
+      {
+        id: 's6',
+        designName: 'Test Pattern',
+        widthMm: 25,
+        heightMm: 25,
+        stampType: 'CLASICO',
+        previewUrl: '/preview/stamp6.jpg'
+      }
+    ],
+    lengthUsed: 25,
+    createdAt: '2024-01-30T14:00:00Z',
+    lastUpdated: '2024-01-30T15:30:00Z',
+    createdBy: 'test',
+    tags: ['prueba', 'test', 'no-entregar']
   },
   {
     id: '6',
-    name: 'Herramientas de Análisis',
-    description: 'Conjunto de herramientas para análisis de datos y generación de reportes.',
+    name: '02 FEB x20 yG',
+    description: 'Programa para sellos de lote grande',
     version: 'v2.0.3',
     status: 'active',
-    category: 'OTHER',
-    createdAt: '2024-01-12T13:45:00Z',
-    lastUpdated: '2024-01-19T15:10:00Z',
-    createdBy: 'analyst',
-    tags: ['análisis', 'reportes', 'datos'],
-    settings: {
-      autoRefresh: true,
-      exportFormats: ['pdf', 'excel', 'csv'],
-      scheduledReports: true
-    }
+    category: 'PRODUCTION',
+    machine: 'G',
+    stampCount: 20,
+    productionDate: '2024-02-02',
+    notes: 'Lote grande - optimizar tiempo de producción',
+    fabricationState: 'PRIORIDAD',
+    isVerified: true,
+    stamps: [
+      {
+        id: 's7',
+        designName: 'Marca Registrada',
+        widthMm: 38,
+        heightMm: 19,
+        stampType: 'ALIMENTO',
+        previewUrl: '/preview/stamp7.jpg'
+      }
+    ],
+    lengthUsed: 38,
+    createdAt: '2024-02-02T13:45:00Z',
+    lastUpdated: '2024-02-03T15:10:00Z',
+    createdBy: 'production',
+    tags: ['lote', 'grande', 'optimización']
   }
 ];
