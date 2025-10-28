@@ -22,7 +22,6 @@ const fabricationToProductionMap: Record<string, ProductionState> = {
   'HECHO': 'COMPLETADO',
   'VERIFICAR': 'REVISAR',
   'REHACER': 'REHACER',
-  'PRIORIDAD': 'PENDIENTE', // Mapear a pendiente
   'RETOCAR': 'REVISAR' // Mapear a revisar
 };
 
@@ -39,13 +38,13 @@ export function CellFabricacion({ item, onFabricacionChange }: CellFabricacionPr
       <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
         <SelectValue>
           {(() => {
-            const visual = getFabricationChipVisual(fabricationState);
+            const visual = getFabricationChipVisual(fabricationState, item.isPriority);
             return (
               <span
                 className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
                 style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}
               >
-                {getFabricationLabel(fabricationState)}
+                {getFabricationLabel(fabricationState, item.isPriority)}
               </span>
             );
           })()}

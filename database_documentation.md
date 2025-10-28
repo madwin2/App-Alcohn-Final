@@ -158,3 +158,6 @@ Se implementarán triggers para mantener actualizados los campos calculados auto
 5. `idx_sellos_programa_id` en `sellos(programa_id)`
 6. `idx_direcciones_cliente_id` en `direcciones(cliente_id)`
 
+
+
+

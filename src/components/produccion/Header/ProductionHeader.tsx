@@ -1,30 +1,23 @@
-import { Search, Filter, ArrowUpDown, Plus, Eye, EyeOff } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ProductionStateChips } from './ProductionStateChips';
 import { useProductionStore } from '@/lib/state/production.store';
-import { ProductionState } from '@/lib/types/index';
+import { mockProductionItems } from '@/lib/mocks/production.mock';
 
 interface ProductionHeaderProps {
-  onNewTask: () => void;
   onFilters: () => void;
   onSort: () => void;
-  onStateFilter: (state: ProductionState) => void;
-  activeStates: ProductionState[];
 }
 
 export function ProductionHeader({ 
-  onNewTask, 
   onFilters, 
-  onSort, 
-  onStateFilter,
-  activeStates 
+  onSort
 }: ProductionHeaderProps) {
-  const { searchQuery, setSearchQuery, showPreviews, setShowPreviews, sellos } = useProductionStore();
+  const { searchQuery, setSearchQuery, showPreviews, setShowPreviews } = useProductionStore();
   
-  const activeItemsCount = sellos.length;
-  const pendingCount = sellos.filter(item => item.estado_fabricacion === 'Sin Hacer').length;
-  const completedCount = sellos.filter(item => item.estado_fabricacion === 'Hecho').length;
+  const activeItemsCount = mockProductionItems.length;
+  const pendingCount = mockProductionItems.filter(item => item.productionState === 'PENDIENTE').length;
+  const completedCount = mockProductionItems.filter(item => item.productionState === 'COMPLETADO').length;
 
   return (
     <div className="space-y-4">
@@ -84,22 +77,9 @@ export function ProductionHeader({
             {showPreviews ? 'Ocultar' : 'Mostrar'}
           </Button>
 
-          {/* Nueva Tarea */}
-          <Button
-            onClick={onNewTask}
-            className="gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Nueva Tarea
-          </Button>
         </div>
       </div>
 
-      {/* Chips de estado */}
-      <ProductionStateChips 
-        onStateClick={onStateFilter}
-        activeStates={activeStates}
-      />
     </div>
   );
 }

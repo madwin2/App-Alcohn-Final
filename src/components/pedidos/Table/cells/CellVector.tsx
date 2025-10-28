@@ -13,6 +13,20 @@ export function CellVector({ order }: CellVectorProps) {
   if (!item) return null;
 
   const hasFile = item.files?.vectorUrl;
+  
+  // Si es un archivo resumido (para pedidos con múltiples items)
+  if (hasFile === 'summary') {
+    const totalItems = order.items.length;
+    const itemsWithFiles = order.items.filter(item => item.files?.vectorUrl).length;
+    
+    return (
+      <div className="flex items-center justify-center w-10 h-10 border-2 border-solid border-purple-500 rounded bg-purple-50 dark:bg-purple-900/20">
+        <span className="text-xs font-medium text-purple-600 dark:text-purple-400">
+          {itemsWithFiles}/{totalItems}
+        </span>
+      </div>
+    );
+  }
 
   if (!showPreviews || !hasFile) {
     return (

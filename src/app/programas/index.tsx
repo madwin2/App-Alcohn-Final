@@ -3,11 +3,15 @@ import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { ProgramsHeader } from '@/components/programas/Header/ProgramsHeader';
 import { ProgramsGrid } from '@/components/programas/Grid/ProgramsGrid';
 import { NewProgramDialog } from '@/components/programas/NewProgram/NewProgramDialog';
+import { ProgramsFiltersDialog } from '@/components/programas/Filters/ProgramsFiltersDialog';
+import { ProgramsSorterDialog } from '@/components/programas/Sorter/ProgramsSorterDialog';
 import { Toaster } from '@/components/ui/toaster';
 import { mockPrograms } from '@/lib/mocks/programs.mock';
+import { useProgramsStore } from '@/lib/state/programs.store';
 
 export default function ProgramasPage() {
   const [showNewProgram, setShowNewProgram] = useState(false);
+  const { showFilters, showSorter, setShowFilters, setShowSorter } = useProgramsStore();
 
   return (
     <div className="min-h-screen bg-background">
@@ -20,6 +24,8 @@ export default function ProgramasPage() {
         <div className="border-b bg-background p-6">
           <ProgramsHeader
             onNewProgram={() => setShowNewProgram(true)}
+            onFilters={() => setShowFilters(true)}
+            onSort={() => setShowSorter(true)}
           />
         </div>
 
@@ -33,6 +39,14 @@ export default function ProgramasPage() {
       <NewProgramDialog
         open={showNewProgram}
         onOpenChange={setShowNewProgram}
+      />
+      <ProgramsFiltersDialog
+        open={showFilters}
+        onOpenChange={setShowFilters}
+      />
+      <ProgramsSorterDialog
+        open={showSorter}
+        onOpenChange={setShowSorter}
       />
 
       {/* Toast notifications */}

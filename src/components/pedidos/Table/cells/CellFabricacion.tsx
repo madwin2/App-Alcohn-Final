@@ -1,51 +1,45 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { Orden } from '@/lib/supabase/types';
+import { Order, FabricationState } from '@/lib/types/index';
 import { getFabricationStateColor, getFabricationChipVisual, getFabricationLabel } from '@/lib/utils/format';
 
 interface CellFabricacionProps {
-  order: Orden;
-  onFabricacionChange?: (orderId: string, newState: string) => void;
+  order: Order;
+  onFabricacionChange?: (orderId: string, newState: FabricationState) => void;
 }
 
-const fabricationLabels: Record<string, string> = {
-  'Sin Hacer': 'Sin Hacer',
-  'Haciendo': 'Haciendo',
-  'Verificar': 'Verificar',
-  'Hecho': 'Hecho',
-  'Rehacer': 'Rehacer',
-  'Prioridad': 'Prioridad',
-  'Retocar': 'Retocar'
+const fabricationLabels: Record<FabricationState | 'MULTIPLE', string> = {
+  'SIN_HACER': 'Sin Hacer',
+  'HACIENDO': 'Haciendo',
+  'VERIFICAR': 'Verificar',
+  'HECHO': 'Hecho',
+  'REHACER': 'Rehacer',
+  'RETOCAR': 'Retocar',
+  'MULTIPLE': 'Múltiple'
 };
 
 export function CellFabricacion({ order, onFabricacionChange }: CellFabricacionProps) {
-  // Obtener el primer sello de la orden
-  const sellos = (order as any).sellos;
-  const sello = sellos && sellos.length > 0 ? sellos[0] : null;
+  const item = order.items[0];
   
-  if (!sello) {
-    return (
-      <div className="text-xs text-gray-400">
-        Sin sello
-      </div>
-    );
-  }
+  if (!item) return null;
 
+  const fabricationState = item.fabricationState as FabricationState;
+  
   const handleValueChange = (value: string) => {
-    onFabricacionChange?.(order.id, value);
+    onFabricacionChange?.(order.id, value as FabricationState);
   };
 
   return (
-    <Select value={sello.estado_fabricacion} onValueChange={handleValueChange}>
+    <Select value={item.fabricationState} onValueChange={handleValueChange}>
       <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
         <SelectValue>
           {(() => {
-            const visual = getFabricationChipVisual(item.fabricationState);
+            const visual = getFabricationChipVisual(item.fabricationState, item.isPriority);
             return (
               <span
                 className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
                 style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}
               >
-                {getFabricationLabel(item.fabricationState)}
+                {getFabricationLabel(item.fabricationState, item.isPriority)}
               </span>
             );
           })()}

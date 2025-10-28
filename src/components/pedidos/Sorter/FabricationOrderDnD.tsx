@@ -16,7 +16,6 @@ const fabricationLabels: Record<FabricationState, string> = {
   'VERIFICAR': 'Verificar',
   'HECHO': 'Hecho',
   'REHACER': 'Rehacer',
-  'PRIORIDAD': 'Prioridad',
   'RETOCAR': 'Retocar'
 };
 

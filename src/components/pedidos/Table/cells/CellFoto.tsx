@@ -13,6 +13,20 @@ export function CellFoto({ order }: CellFotoProps) {
   if (!item) return null;
 
   const hasFile = item.files?.photoUrl;
+  
+  // Si es un archivo resumido (para pedidos con múltiples items)
+  if (hasFile === 'summary') {
+    const totalItems = order.items.length;
+    const itemsWithFiles = order.items.filter(item => item.files?.photoUrl).length;
+    
+    return (
+      <div className="flex items-center justify-center w-10 h-10 border-2 border-solid border-green-500 rounded bg-green-50 dark:bg-green-900/20">
+        <span className="text-xs font-medium text-green-600 dark:text-green-400">
+          {itemsWithFiles}/{totalItems}
+        </span>
+      </div>
+    );
+  }
 
   if (!showPreviews || !hasFile) {
     return (

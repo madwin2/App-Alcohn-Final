@@ -19,6 +19,7 @@ import { CellBase } from './cells/CellBase';
 import { CellVector } from './cells/CellVector';
 import { CellTasks } from './cells/CellTasks';
 import { CellDeadline } from './cells/CellDeadline';
+import { CellPrioridad } from './cells/CellPrioridad';
 import { CompactProgressIndicator } from './cells/CellProgressIndicator';
 
 interface UnifiedColumnsProps {
@@ -35,7 +36,7 @@ interface UnifiedColumnsProps {
   onProgressChange?: (orderId: string, newStep: any) => void;
   editingRowId?: string | null;
   onUpdate?: (orderId: string, updates: any) => void;
-  viewMode: 'items' | 'orders';
+  onExpand?: (orderId: string) => void;
 }
 
 export function createUnifiedColumns({
@@ -52,9 +53,9 @@ export function createUnifiedColumns({
   onProgressChange,
   editingRowId,
   onUpdate,
-  viewMode,
+  onExpand
 }: UnifiedColumnsProps): ColumnDef<Order>[] {
-  const columnConfigs = getColumnsForViewMode(viewMode);
+  const columnConfigs = getColumnsForViewMode('items');
   
   const cellRenderers: Record<string, (props: any) => React.ReactNode> = {
     // Indicadores
@@ -82,22 +83,13 @@ export function createUnifiedColumns({
       />
     ),
     
-    // Cliente (solo vista items)
+    // Cliente
     cliente: ({ row }) => (
       <CellCliente
         order={row.original}
         onUpdate={onUpdate}
         editingRowId={editingRowId}
       />
-    ),
-    
-    // Nombre (solo vista orders)
-    nombre: ({ row }) => (
-      <div className="min-w-0">
-        <p className="text-sm font-medium truncate">
-          {row.original.customer.firstName} {row.original.customer.lastName}
-        </p>
-      </div>
     ),
     
     // Contacto
@@ -109,14 +101,7 @@ export function createUnifiedColumns({
       />
     ),
     
-    // Cantidad (solo vista orders)
-    cantidad: ({ row }) => (
-      <div className="text-center text-sm">
-        {row.original.items?.length || 0}
-      </div>
-    ),
-    
-    // Tipo (solo vista items)
+    // Tipo
     tipo: ({ row }) => (
       <CellTipo
         order={row.original}
@@ -128,9 +113,8 @@ export function createUnifiedColumns({
     disenio: ({ row }) => (
       <CellDisenio
         order={row.original}
-        onUpdate={onUpdate}
-        editingRowId={editingRowId}
-        showNotes={viewMode === 'items'}
+        showNotes={true}
+        onExpand={() => onExpand?.(row.original.id)}
       />
     ),
     
@@ -169,7 +153,12 @@ export function createUnifiedColumns({
       />
     ),
     
-    // Fabricación (solo vista items)
+    // Prioridad
+    prioridad: ({ row }) => (
+      <CellPrioridad order={row.original} />
+    ),
+    
+    // Fabricación
     fabricacion: ({ row }) => (
       <CellFabricacion
         order={row.original}
@@ -177,7 +166,7 @@ export function createUnifiedColumns({
       />
     ),
     
-    // Venta (solo vista items)
+    // Venta
     venta: ({ row }) => (
       <CellVenta
         order={row.original}
@@ -185,7 +174,7 @@ export function createUnifiedColumns({
       />
     ),
     
-    // Envío Estado (solo vista items)
+    // Envío Estado
     envioEstado: ({ row }) => (
       <CellEnvioEstado
         order={row.original}
@@ -202,7 +191,7 @@ export function createUnifiedColumns({
       />
     ),
     
-    // Base (solo vista items)
+    // Base
     base: ({ row }) => (
       <CellBase
         order={row.original}
@@ -211,7 +200,7 @@ export function createUnifiedColumns({
       />
     ),
     
-    // Vector (solo vista items)
+    // Vector
     vector: ({ row }) => (
       <CellVector
         order={row.original}
@@ -227,16 +216,6 @@ export function createUnifiedColumns({
         onUpdate={onUpdate}
         editingRowId={editingRowId}
       />
-    ),
-    
-    // Estado (solo vista orders)
-    estado: ({ row }) => (
-      <div className="flex justify-center">
-        <CompactProgressIndicator
-          currentStep={row.original.progressStep || 'HECHO'}
-          onStepChange={(step) => onProgressChange?.(row.original.id, step)}
-        />
-      </div>
     ),
   };
 

@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import React from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -15,24 +16,32 @@ import { useToast } from '@/components/ui/use-toast';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { DndTableContainer } from './DndTableContainer';
 import { ResizableHeader } from './ResizableHeader';
+import { useExpandableRows } from './useExpandableRows';
+import { OrderSummaryRow } from './OrderSummaryRow';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { CellSummary } from './cells/CellSummary';
 
 interface OrdersTableProps {
   orders: Order[];
 }
 
 export function OrdersTable({ orders }: OrdersTableProps) {
+  // Debug: verificar qué datos están llegando
+  console.log('OrdersTable - Total orders:', orders.length);
+  console.log('OrdersTable - Order 9:', orders.find(o => o.id === '9'));
+  
   const { 
     searchQuery, 
     setEditingRow, 
     editingRowId, 
     columns, 
     setColumnSize, 
-    reorderColumns,
-    viewMode 
+    reorderColumns
   } = useOrdersStore();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState[]>([] as any);
   const { toast } = useToast();
+  const { toggleRow, isExpanded } = useExpandableRows();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -120,28 +129,31 @@ export function OrdersTable({ orders }: OrdersTableProps) {
     toast({ title: 'Envío', description: `Estado cambiado a ${newState} para ${orderId}` });
   };
 
+  const handleEnvioChange = (orderId: string, newCarrier: any) => {
+    toast({ title: 'Envío', description: `Carrier cambiado a ${newCarrier} para ${orderId}` });
+  };
+
   const handleProgressChange = (orderId: string, newStep: any) => {
     toast({ title: 'Progreso', description: `Estado cambiado a ${newStep} para ${orderId}` });
   };
 
   const tableColumns = useMemo(() => {
     return createUnifiedColumns({
-      onTipoChange: viewMode === 'orders' ? handleOrderTipoChange : handleTipoChange,
-      onFabricacionChange: viewMode === 'orders' ? handleOrderFabricacionChange : handleFabricacionChange,
-      onVentaChange: viewMode === 'orders' ? handleOrderVentaChange : handleVentaChange,
-      onEnvioEstadoChange: viewMode === 'orders' ? handleOrderEnvioEstadoChange : handleEnvioEstadoChange,
-      onEnvioChange: undefined,
+      onTipoChange: handleTipoChange,
+      onFabricacionChange: handleFabricacionChange,
+      onVentaChange: handleVentaChange,
+      onEnvioEstadoChange: handleEnvioEstadoChange,
+      onEnvioChange: handleEnvioChange,
       onDateChange: handleDateChange,
       onDeadlineChange: handleDeadlineChange,
       onTaskCreate: handleTaskCreate,
       onTaskUpdate: handleTaskUpdate,
       onTaskDelete: handleTaskDelete,
-      onProgressChange: handleProgressChange,
       editingRowId,
       onUpdate,
-      viewMode,
+      onExpand: toggleRow
     });
-  }, [editingRowId, viewMode]);
+  }, [editingRowId, toggleRow]);
 
   // Sistema unificado de columnas con redimensionamiento y reordenamiento
   const sortedColumns = useMemo(() => {
@@ -210,39 +222,200 @@ export function OrdersTable({ orders }: OrdersTableProps) {
               ))}
             </thead>
           <tbody className="divide-y divide-border">
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <ContextMenu key={row.id}>
+            {filteredOrders.map((order) => {
+              const hasMultipleItems = order.items.length > 1;
+              const isExpandedState = isExpanded(order.id);
+              
+              if (!hasMultipleItems) {
+                // Si solo tiene un item, mostrar la fila normal
+                return (
+                  <ContextMenu key={order.id}>
                   <ContextMenuTrigger asChild>
-                    <tr data-row onDoubleClick={() => handleRowDoubleClick(row.original.id)} className={`hover:bg-muted/50 transition-colors ${editingRowId === row.original.id ? 'ring-1 ring-primary/40' : ''}`}>
-                      {row.getVisibleCells().map((cell) => {
-                            const columnState = columns.find(col => col.id === cell.column.id);
-                            const align = (cell.column.columnDef.meta as any)?.align || 'left';
-                        const isContacto = cell.column.id === 'contacto';
-                        const isRestante = cell.column.id === 'restante';
-                        const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(cell.column.id);
+                      <tr 
+                        data-row 
+                        onDoubleClick={() => handleRowDoubleClick(order.id)} 
+                        className={`hover:bg-muted/50 transition-colors ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''}`}
+                      >
+                        {tableColumns.map((column) => {
+                          if (!column.id) return null;
+                          const columnState = columns.find(col => col.id === column.id);
+                          const align = (column.meta as any)?.align || 'left';
+                          const isContacto = column.id === 'contacto';
+                          const isRestante = column.id === 'restante';
+                          const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
                         const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                          
+                          // Crear un objeto row mock para compatibilidad con las celdas existentes
+                          const mockRow = {
+                            original: order, // Pasar el pedido completo con todos los items
+                            id: `${order.id}-${order.items[0].id}`,
+                            getVisibleCells: () => []
+                          } as any;
                         
                         return (
-                          <td key={cell.id} className={`${paddingClass} py-3 h-12 align-middle whitespace-nowrap overflow-hidden text-ellipsis text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} style={{ width: `${columnState?.size || 100}px` }}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            <td 
+                              key={`${order.id}-${order.items[0].id}-${column.id}`} 
+                              className={`${paddingClass} py-3 h-12 align-middle whitespace-nowrap overflow-hidden text-ellipsis text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} 
+                              style={{ width: `${columnState?.size || 100}px` }}
+                            >
+                              {typeof column.cell === 'function' 
+                                ? column.cell({ row: mockRow }) 
+                                : column.cell ? React.createElement(column.cell as any, { row: mockRow }) : null}
                           </td>
                         );
                       })}
                     </tr>
                   </ContextMenuTrigger>
                   <ContextMenuContent>
-                    <ContextMenuItem onSelect={() => setEditingRow(row.original.id)}>Editar pedido</ContextMenuItem>
+                      <ContextMenuItem onSelect={() => setEditingRow(order.id)}>Editar pedido</ContextMenuItem>
                     <ContextMenuSeparator />
-                    <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(row.original.id)}>Eliminar pedido</ContextMenuItem>
+                      <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(order.id)}>Eliminar pedido</ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={columns.length} className="h-24 text-center text-muted-foreground">No se encontraron pedidos.</td>
+                );
+              }
+              
+              // Si tiene múltiples items, mostrar fila expandible
+              return (
+                <React.Fragment key={order.id}>
+                  {/* Fila resumen */}
+                  <tr className="border-b hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 transition-all duration-300 ease-in-out cursor-pointer group">
+                    {tableColumns.map((column, index) => {
+                      if (!column.id) return null;
+                      const columnState = columns.find(col => col.id === column.id);
+                      const align = (column.meta as any)?.align || 'left';
+                      const isContacto = column.id === 'contacto';
+                      const isRestante = column.id === 'restante';
+                      const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
+                      const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                      
+                      // Crear un objeto row mock que contenga datos resumidos para cada columna
+                      // IMPORTANTE: Mantener el array de items completo para que CellDisenio pueda detectar múltiples items
+                      const summaryOrder = {
+                        ...order,
+                        items: order.items.map((item, idx) => idx === 0 ? {
+                          ...item, // Usar el primer item como base
+                          // No modificar designName aquí, CellDisenio se encarga de eso
+                          itemValue: order.items.reduce((sum, item) => sum + (item.itemValue || 0), 0),
+                          depositValueItem: order.items.reduce((sum, item) => sum + (item.depositValueItem || 0), 0),
+                          restPaidAmountItem: order.items.reduce((sum, item) => sum + (item.restPaidAmountItem || 0), 0),
+                          // Determinar el estado más representativo para cada tipo
+                          fabricationState: (() => {
+                            const states = [...new Set(order.items.map(item => item.fabricationState))];
+                            if (states.length === 1) return states[0];
+                            // Si hay múltiples estados, usar el más avanzado o el más común
+                            const priorityOrder = ['HECHO', 'VERIFICAR', 'HACIENDO', 'RETOCAR', 'REHACER', 'SIN_HACER'];
+                            return priorityOrder.find(state => states.includes(state)) || states[0];
+                          })(),
+                          saleState: (() => {
+                            const states = [...new Set(order.items.map(item => item.saleState))];
+                            if (states.length === 1) return states[0];
+                            // Si hay múltiples estados, usar el más avanzado
+                            const priorityOrder = ['TRANSFERIDO', 'FOTO_ENVIADA', 'SEÑADO', 'DEUDOR'];
+                            return priorityOrder.find(state => states.includes(state)) || states[0];
+                          })(),
+                          shippingState: (() => {
+                            const states = [...new Set(order.items.map(item => item.shippingState))];
+                            if (states.length === 1) return states[0];
+                            // Si hay múltiples estados, usar el más avanzado
+                            const priorityOrder = ['SEGUIMIENTO_ENVIADO', 'DESPACHADO', 'ETIQUETA_LISTA', 'HACER_ETIQUETA', 'SIN_ENVIO'];
+                            return priorityOrder.find(state => states.includes(state)) || states[0];
+                          })(),
+                          // Para la fila resumen, no usar isPriority para evitar efectos visuales incorrectos
+                          isPriority: false,
+                          files: {
+                            baseUrl: order.items.filter(item => item.files?.baseUrl).length > 0 ? 'summary' : undefined,
+                            vectorUrl: order.items.filter(item => item.files?.vectorUrl).length > 0 ? 'summary' : undefined,
+                            photoUrl: order.items.filter(item => item.files?.photoUrl).length > 0 ? 'summary' : undefined
+                          }
+                        } : item) // Mantener los demás items sin modificar
+                      };
+                      
+                      const mockRow = {
+                        original: summaryOrder,
+                        id: `${order.id}-summary`,
+                        getVisibleCells: () => []
+                      } as any;
+                      
+                      return (
+                        <td 
+                          key={`${order.id}-summary-${column.id}`} 
+                          className={`${paddingClass} py-3 h-12 align-middle whitespace-nowrap overflow-hidden text-ellipsis text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} 
+                          style={{ width: `${columnState?.size || 100}px` }}
+                        >
+                          {/* Usar el mismo componente de celda que las filas individuales */}
+                          {typeof column.cell === 'function' 
+                            ? column.cell({ row: mockRow }) 
+                            : column.cell ? React.createElement(column.cell as any, { row: mockRow }) : null}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  
+                  {/* Filas expandidas */}
+                  {isExpandedState && order.items.map((item, index) => (
+                    <ContextMenu key={`${order.id}-${item.id}`}>
+                      <ContextMenuTrigger asChild>
+                         <tr 
+                           data-row 
+                           onDoubleClick={() => handleRowDoubleClick(order.id)} 
+                           className={`hover:bg-muted/30 transition-all duration-300 ease-in-out bg-gradient-to-r from-muted/10 to-muted/5 shadow-sm animate-in slide-in-from-top-2 fade-in relative ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''}`}
+                           style={{
+                             animationDelay: `${index * 100}ms`,
+                             marginBottom: index < order.items.length - 1 ? '2px' : '0px',
+                             borderLeft: '2px solid #d1d5db',
+                           }}
+                         >
+                          {tableColumns.map((column) => {
+                            if (!column.id) return null;
+                            
+                            // Columnas que deben estar vacías en las filas expandidas
+                            const columnsToHideInExpandedView = ['fecha', 'cliente', 'contacto', 'envio', 'seguimiento'];
+                            const shouldHideColumn = columnsToHideInExpandedView.includes(column.id);
+                            const columnState = columns.find(col => col.id === column.id);
+                            const align = (column.meta as any)?.align || 'left';
+                            const isContacto = column.id === 'contacto';
+                            const isRestante = column.id === 'restante';
+                            const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
+                            const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                            
+                            // Crear un objeto row mock para compatibilidad con las celdas existentes
+                            const mockRow = {
+                              original: { ...order, items: [item] }, // Solo el item actual para filas expandidas
+                              id: `${order.id}-${item.id}`,
+                              getVisibleCells: () => []
+                            } as any;
+                            
+                            return (
+                              <td 
+                                key={`${order.id}-${item.id}-${column.id}`} 
+                                className={`${paddingClass} py-3 h-12 align-middle whitespace-nowrap overflow-hidden text-ellipsis text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} 
+                                style={{ width: `${columnState?.size || 100}px` }}
+                              >
+                                {shouldHideColumn ? (
+                                  // Mostrar celda vacía para columnas ocultas en filas expandidas
+                                  <span className="text-muted-foreground/60 text-xs">—</span>
+                                ) : (
+                                  // Mostrar contenido normal para otras columnas
+                                  typeof column.cell === 'function' 
+                                    ? column.cell({ row: mockRow }) 
+                                    : column.cell ? React.createElement(column.cell as any, { row: mockRow }) : null
+                                )}
+                              </td>
+                            );
+                          })}
               </tr>
-            )}
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onSelect={() => setEditingRow(order.id)}>Editar pedido</ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(order.id)}>Eliminar pedido</ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  ))}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

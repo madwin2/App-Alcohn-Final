@@ -17,6 +17,7 @@ import { CellSeguimiento } from './cells/CellSeguimiento';
 import { CellBase } from './cells/CellBase';
 import { CellVector } from './cells/CellVector';
 import { CellFoto } from './cells/CellFoto';
+import { CellPrioridad } from './cells/CellPrioridad';
 import { CellTasks } from './cells/CellTasks';
 import { CellDeadline } from './cells/CellDeadline';
 
@@ -220,6 +221,13 @@ export const createColumns = ({
     cell: ({ row }) => <CellRestante order={row.original} />,
     size: 80,
     meta: { align: 'left' }
+  },
+  {
+    id: 'prioridad',
+    header: 'Prioridad',
+    cell: ({ row }) => <CellPrioridad order={row.original} />,
+    size: 28,
+    meta: { align: 'center' }
   },
   {
     id: 'fabricacion',

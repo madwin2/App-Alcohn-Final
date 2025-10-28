@@ -26,11 +26,13 @@ export function CellTipo({ item, onTipoChange }: CellTipoProps) {
         <SelectTrigger className="w-full h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors">
           <SelectValue>
             <span className="flex items-center justify-center">
-              <SvgIcon 
-                name={getStampTypeIcon(item.stampType)} 
-                size={20}
-                className="flex-shrink-0"
-              />
+              {item.stampType !== 'CLASICO' && (
+                <SvgIcon 
+                  name={getStampTypeIcon(item.stampType)} 
+                  size={20}
+                  className="flex-shrink-0"
+                />
+              )}
             </span>
           </SelectValue>
         </SelectTrigger>
@@ -38,11 +40,13 @@ export function CellTipo({ item, onTipoChange }: CellTipoProps) {
         {tipoOptions.map((option) => (
           <SelectItem key={option.value} value={option.value} className="text-xs">
             <span className="flex items-center gap-2">
-              <SvgIcon 
-                name={option.iconName} 
-                size={16}
-                className="flex-shrink-0"
-              />
+              {option.value !== 'CLASICO' && (
+                <SvgIcon 
+                  name={option.iconName} 
+                  size={16}
+                  className="flex-shrink-0"
+                />
+              )}
               <span>{option.label}</span>
             </span>
           </SelectItem>

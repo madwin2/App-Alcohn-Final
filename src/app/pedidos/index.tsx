@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { OrdersHeader } from '@/components/pedidos/Header/OrdersHeader';
 import { OrdersTable } from '@/components/pedidos/Table/OrdersTable';
@@ -6,7 +6,7 @@ import { FiltersDialog } from '@/components/pedidos/Filters/FiltersDialog';
 import { SorterDialog } from '@/components/pedidos/Sorter/SorterDialog';
 import { NewOrderDialog } from '@/components/pedidos/NewOrder/NewOrderDialog';
 import { Toaster } from '@/components/ui/toaster';
-import { useOrdersStore } from '@/lib/state/orders.store';
+import { mockOrders } from '@/lib/mocks/orders.mock';
 import { FabricationState } from '@/lib/types/index';
 
 export default function PedidosPage() {
@@ -14,14 +14,6 @@ export default function PedidosPage() {
   const [showSorter, setShowSorter] = useState(false);
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [activeStates, setActiveStates] = useState<FabricationState[]>([]);
-
-  // Usar el store de Supabase
-  const { orders, loading, error, fetchOrders } = useOrdersStore();
-
-  // Cargar datos al montar el componente
-  useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
 
   const handleStateFilter = (state: FabricationState) => {
     setActiveStates(prev => 
@@ -51,17 +43,7 @@ export default function PedidosPage() {
 
         {/* Table */}
         <div className="flex-1 p-6 overflow-hidden">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="text-lg">Cargando órdenes...</div>
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="text-red-500">Error: {error}</div>
-            </div>
-          ) : (
-            <OrdersTable orders={orders} />
-          )}
+          <OrdersTable orders={mockOrders} />
         </div>
       </div>
 

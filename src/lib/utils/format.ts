@@ -73,25 +73,32 @@ export const getSaleStateColor = (state: string): string => {
   }
 };
 
-export const getFabricationStateColor = (state: string): string => {
-  switch (state) {
-    case 'SIN_HACER':
-      return 'bg-muted/30 text-muted-foreground border-border/40'; // Estilo oscuro
-    case 'HACIENDO':
-      return 'bg-blue-500 text-black border-blue-500';
-    case 'VERIFICAR':
-      return 'bg-orange-500 text-black border-orange-500';
-    case 'HECHO':
-      return 'bg-green-500 text-black border-green-500';
-    case 'PRIORIDAD':
-      return 'bg-red-600 text-black border-red-600 font-semibold';
-    case 'RETOCAR':
-      return 'bg-yellow-500 text-black border-yellow-500';
-    case 'REHACER':
-      return 'bg-red-500 text-black border-red-500';
-    default:
-      return 'bg-muted/30 text-muted-foreground border-border/40';
+export const getFabricationStateColor = (state: string, isPriority: boolean = false): string => {
+  const baseColor = (() => {
+    switch (state) {
+      case 'SIN_HACER':
+        return 'bg-muted/30 text-muted-foreground border-border/40'; // Estilo oscuro
+      case 'HACIENDO':
+        return 'bg-blue-500 text-black border-blue-500';
+      case 'VERIFICAR':
+        return 'bg-orange-500 text-black border-orange-500';
+      case 'HECHO':
+        return 'bg-green-500 text-black border-green-500';
+      case 'RETOCAR':
+        return 'bg-yellow-500 text-black border-yellow-500';
+      case 'REHACER':
+        return 'bg-red-500 text-black border-red-500';
+      default:
+        return 'bg-muted/30 text-muted-foreground border-border/40';
+    }
+  })();
+  
+  // Si es prioritario, agregar estilo especial
+  if (isPriority) {
+    return baseColor + ' ring-2 ring-red-500 ring-opacity-50 font-semibold';
   }
+  
+  return baseColor;
 };
 
 export const getChannelIcon = (channel: string): string => {
@@ -211,17 +218,17 @@ const buildVisual = (
 };
 
 // Abreviaturas para nombres largos
-export const getFabricationLabel = (state: string): string => {
+export const getFabricationLabel = (state: string, _isPriority: boolean = false): string => {
   const labels: Record<string, string> = {
     'SIN_HACER': 'Sin Hacer',
     'HACIENDO': 'Haciendo',
     'VERIFICAR': 'Verificar',
     'HECHO': 'Hecho',
-    'PRIORIDAD': 'Prioridad',
     'RETOCAR': 'Retocar',
     'REHACER': 'Rehacer'
   };
-  return labels[state] || state;
+  const baseLabel = labels[state] || state;
+  return baseLabel;
 };
 
 export const getSaleLabel = (state: string): string => {
@@ -246,25 +253,38 @@ export const getShippingLabel = (state: string): string => {
 };
 
 // Fabricación
-export const getFabricationChipVisual = (state: string): ChipVisual => {
-  switch (state) {
-    case 'SIN_HACER':
-      return buildVisual('75,85,99', '31,41,55', '107,114,128', true); // grises
-    case 'HACIENDO':
-      return buildVisual('59,130,246', '37,99,235', '59,130,246'); // azules
-    case 'VERIFICAR':
-      return buildVisual('249,115,22', '245,158,11', '249,115,22'); // naranjas
-    case 'HECHO':
-      return buildVisual('34,197,94', '22,163,74', '34,197,94'); // verdes
-    case 'PRIORIDAD':
-      return buildVisual('239,68,68', '220,38,38', '239,68,68'); // rojos
-    case 'RETOCAR':
-      return buildVisual('234,179,8', '202,138,4', '234,179,8'); // amarillos
-    case 'REHACER':
-      return buildVisual('248,113,113', '239,68,68', '248,113,113'); // rojo claro
-    default:
-      return buildVisual('75,85,99', '31,41,55', '107,114,128', true);
+export const getFabricationChipVisual = (state: string, isPriority: boolean = false): ChipVisual => {
+  const baseVisual = (() => {
+    switch (state) {
+      case 'SIN_HACER':
+        return buildVisual('75,85,99', '31,41,55', '107,114,128', true); // grises
+      case 'HACIENDO':
+        return buildVisual('59,130,246', '37,99,235', '59,130,246'); // azules
+      case 'VERIFICAR':
+        return buildVisual('249,115,22', '245,158,11', '249,115,22'); // naranjas
+      case 'HECHO':
+        return buildVisual('34,197,94', '22,163,74', '34,197,94'); // verdes
+      case 'RETOCAR':
+        return buildVisual('234,179,8', '202,138,4', '234,179,8'); // amarillos
+      case 'REHACER':
+        return buildVisual('248,113,113', '239,68,68', '248,113,113'); // rojo claro
+      default:
+        return buildVisual('75,85,99', '31,41,55', '107,114,128', true);
+    }
+  })();
+  
+  // Si es prioritario, agregar efecto especial
+  if (isPriority) {
+    return {
+      ...baseVisual,
+      backgroundColor: '239,68,68', // rojo para prioridad
+      borderColor: '220,38,38',
+      textColor: '255,255,255',
+      boxShadow: '0 0 8px rgba(239,68,68,0.4)',
+    };
   }
+  
+  return baseVisual;
 };
 
 // Venta

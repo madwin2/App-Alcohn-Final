@@ -166,7 +166,7 @@ export const mockPrograms: Program[] = [
     stampCount: 20,
     productionDate: '2024-02-02',
     notes: 'Lote grande - optimizar tiempo de producción',
-    fabricationState: 'PRIORIDAD',
+    fabricationState: 'SIN_HACER',
     isVerified: true,
     stamps: [
       {

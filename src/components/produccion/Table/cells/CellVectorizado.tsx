@@ -19,7 +19,6 @@ const fabricationToVectorizationMap: Record<string, VectorizationState> = {
   'SIN_HACER': 'PENDIENTE',
   'VERIFICAR': 'PENDIENTE',
   'REHACER': 'PENDIENTE',
-  'PRIORIDAD': 'PENDIENTE',
   'RETOCAR': 'PENDIENTE'
 };
 

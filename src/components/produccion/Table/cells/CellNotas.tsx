@@ -10,7 +10,7 @@ export function CellNotas({ item }: CellNotasProps) {
   }
 
   return (
-    <div className="text-sm">
+    <div className="text-sm text-gray-400">
       {item.notes}
     </div>
   );

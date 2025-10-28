@@ -1,45 +1,37 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { Orden } from '@/lib/supabase/types';
+import { Order, StampType } from '@/lib/types/index';
 import { getStampTypeIcon } from '@/lib/utils/format';
 import { SvgIcon } from '@/components/ui/SvgIcon';
 
 interface CellTipoProps {
-  order: Orden;
-  onTipoChange?: (orderId: string, newTipo: string) => void;
+  order: Order;
+  onTipoChange?: (orderId: string, newTipo: StampType) => void;
 }
 
-const tipoOptions: { value: string; iconName: string; label: string }[] = [
-  { value: '3mm', iconName: '3mm', label: '3MM' },
-  { value: 'Alimento', iconName: 'Hamburguesa', label: 'Alimento' },
-  { value: 'Clasico', iconName: 'CLASICO', label: 'Clásico' },
+const tipoOptions: { value: StampType; iconName: string; label: string }[] = [
+  { value: '3MM', iconName: '3mm', label: '3MM' },
+  { value: 'ALIMENTO', iconName: 'Hamburguesa', label: 'Alimento' },
+  { value: 'CLASICO', iconName: 'CLASICO', label: 'Clásico' },
   { value: 'ABC', iconName: 'ABC', label: 'ABC' },
-  { value: 'Lacre', iconName: 'LACRE', label: 'Lacre' }
+  { value: 'LACRE', iconName: 'LACRE', label: 'Lacre' }
 ];
 
 export function CellTipo({ order, onTipoChange }: CellTipoProps) {
-  // Obtener el primer sello de la orden
-  const sellos = (order as any).sellos;
-  const sello = sellos && sellos.length > 0 ? sellos[0] : null;
+  const item = order.items[0];
   
-  if (!sello) {
-    return (
-      <div className="text-xs text-gray-400">
-        Sin sello
-      </div>
-    );
-  }
+  if (!item) return null;
 
   const handleValueChange = (value: string) => {
-    onTipoChange?.(order.id, value);
+    onTipoChange?.(order.id, value as StampType);
   };
 
   return (
-    <Select value={sello.tipo} onValueChange={handleValueChange}>
+    <Select value={item.stampType} onValueChange={handleValueChange}>
         <SelectTrigger className="w-full h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors">
           <SelectValue>
             <span className="flex items-center justify-center">
               <SvgIcon 
-                name={getStampTypeIcon(sello.tipo)} 
+                name={getStampTypeIcon(item.stampType)} 
                 size={20}
                 className="flex-shrink-0"
               />

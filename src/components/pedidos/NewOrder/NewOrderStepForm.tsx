@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { NewOrderFormData, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, StampType } from '@/lib/types/index';
 import { useState } from 'react';
@@ -37,7 +38,8 @@ const orderSchema = z.object({
     carrier: z.enum(['ANDREANI', 'CORREO_ARGENTINO', 'VIA_CARGO', 'OTRO']),
   }),
   states: z.object({
-    fabrication: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'PRIORIDAD', 'RETOCAR']),
+    fabrication: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR']),
+    isPriority: z.boolean(),
   }),
 });
 
@@ -92,7 +94,6 @@ const fabricationOptions = [
   { value: 'VERIFICAR', label: 'Verificar' },
   { value: 'HECHO', label: 'Hecho' },
   { value: 'REHACER', label: 'Rehacer' },
-  { value: 'PRIORIDAD', label: 'Prioridad' },
   { value: 'RETOCAR', label: 'Retocar' },
 ];
 
@@ -146,6 +147,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
       },
       states: {
         fabrication: 'SIN_HACER',
+        isPriority: false,
         ...initialData.states,
       },
     },
@@ -186,11 +188,11 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
 
   if (currentStep === 1) {
     return (
-      <form onSubmit={customerForm.handleSubmit(handleCustomerSubmit)} className="space-y-6">
-        <div className="space-y-4">
+      <form onSubmit={customerForm.handleSubmit(handleCustomerSubmit)} className="space-y-8">
+        <div className="space-y-6">
           <h3 className="text-lg font-medium">Información del contacto</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
               <Label htmlFor="firstName">Nombre *</Label>
               <Input
                 id="firstName"
@@ -201,7 +203,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 <p className="text-xs text-red-500 mt-1">{customerForm.formState.errors.customer.firstName.message}</p>
               )}
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="lastName">Apellido *</Label>
               <Input
                 id="lastName"
@@ -212,7 +214,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 <p className="text-xs text-red-500 mt-1">{customerForm.formState.errors.customer.lastName.message}</p>
               )}
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="phoneE164">Teléfono *</Label>
               <Input
                 id="phoneE164"
@@ -224,7 +226,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 <p className="text-xs text-red-500 mt-1">{customerForm.formState.errors.customer.phoneE164.message}</p>
               )}
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
@@ -236,7 +238,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 <p className="text-xs text-red-500 mt-1">{customerForm.formState.errors.customer.email.message}</p>
               )}
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="channel">Canal de contacto</Label>
               <Select onValueChange={(value) => customerForm.setValue('customer.channel', value as any)}>
                 <SelectTrigger>
@@ -254,7 +256,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <div className="flex justify-end gap-4 pt-6 border-t">
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancelar
           </Button>
@@ -267,11 +269,11 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   }
 
   return (
-    <form onSubmit={orderForm.handleSubmit(handleOrderSubmit)} className="space-y-4">
+    <form onSubmit={orderForm.handleSubmit(handleOrderSubmit)} className="space-y-8">
       {/* Diseño */}
-      <div className="space-y-3">
-        <h3 className="text-base font-medium">Diseño</h3>
-        <div className="grid grid-cols-6 gap-3">
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">Diseño</h3>
+        <div className="grid grid-cols-6 gap-4">
           <div className="col-span-2">
             <Input
               id="designName"
@@ -321,9 +323,9 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
       </div>
 
       {/* Valores */}
-      <div className="space-y-3">
-        <h3 className="text-base font-medium">Valores</h3>
-        <div className="grid grid-cols-6 gap-3">
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">Valores</h3>
+        <div className="grid grid-cols-6 gap-4">
           <div className="col-span-2">
             <Input
               id="totalValue"
@@ -360,9 +362,9 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
       </div>
 
       {/* Transportista y Estado de Fabricación */}
-      <div className="space-y-3">
-        <h3 className="text-base font-medium">Transportista y Estado</h3>
-        <div className="grid grid-cols-6 gap-3">
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">Transportista y Estado</h3>
+        <div className="grid grid-cols-6 gap-4">
           <div className="col-span-3">
             <Select onValueChange={(value) => orderForm.setValue('shipping.carrier', value as ShippingCarrier)}>
               <SelectTrigger>
@@ -391,19 +393,31 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
               </SelectContent>
             </Select>
           </div>
+          <div className="col-span-6">
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="isPriority" 
+                checked={orderForm.watch('states.isPriority')}
+                onCheckedChange={(checked) => orderForm.setValue('states.isPriority', !!checked)}
+              />
+              <Label htmlFor="isPriority" className="text-sm font-medium">
+                🔥 Pedido Prioritario
+              </Label>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Archivos */}
-      <div className="space-y-3">
-        <h3 className="text-base font-medium">Archivos</h3>
-        <div className="grid grid-cols-6 gap-3">
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">Archivos</h3>
+        <div className="grid grid-cols-6 gap-4">
           {(['base', 'vector'] as const).map((type) => (
             <div key={type} className="col-span-3 space-y-2">
               <Label className="capitalize">
                 {type === 'base' ? 'Archivo Base' : 'Archivo Vector'}
               </Label>
-              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-3 text-center">
+              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4 text-center">
                 {files[type] ? (
                   <div className="space-y-2">
                     <p className="text-sm font-medium truncate">{files[type]?.name}</p>
@@ -448,11 +462,11 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
       </div>
 
       {/* Botones */}
-      <div className="flex justify-between pt-4 border-t">
+      <div className="flex justify-between pt-6 border-t">
         <Button type="button" variant="outline" onClick={onBack}>
           Atrás
         </Button>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <Button type="button" variant="secondary" onClick={handleAddDesign}>
             Agregar Diseño
           </Button>
@@ -467,14 +481,14 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   // Paso 3: Agregar Diseño (igual al paso 2 pero para diseños adicionales)
   if (currentStep === 3) {
     return (
-      <form onSubmit={orderForm.handleSubmit(handleOrderSubmit)} className="space-y-6">
-        <div className="space-y-4">
+      <form onSubmit={orderForm.handleSubmit(handleOrderSubmit)} className="space-y-8">
+        <div className="space-y-6">
           <h3 className="text-lg font-medium">Agregar Diseño</h3>
           
           {/* Diseño */}
-          <div className="space-y-3">
-            <h3 className="text-base font-medium">Diseño</h3>
-            <div className="grid grid-cols-6 gap-3">
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Diseño</h3>
+            <div className="grid grid-cols-6 gap-4">
               <div className="col-span-2">
                 <Input
                   id="designName"
@@ -524,9 +538,9 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
           </div>
 
           {/* Valores */}
-          <div className="space-y-3">
-            <h3 className="text-base font-medium">Valores</h3>
-            <div className="grid grid-cols-6 gap-3">
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Valores</h3>
+            <div className="grid grid-cols-6 gap-4">
               <div className="col-span-2">
                 <Input
                   id="totalValue"
@@ -563,9 +577,9 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
           </div>
 
           {/* Transportista y Estado */}
-          <div className="space-y-3">
-            <h3 className="text-base font-medium">Transportista y Estado</h3>
-            <div className="grid grid-cols-6 gap-3">
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Transportista y Estado</h3>
+            <div className="grid grid-cols-6 gap-4">
               <div className="col-span-3">
                 <Select onValueChange={(value) => orderForm.setValue('shipping.carrier', value as ShippingCarrier)}>
                   <SelectTrigger>
@@ -594,16 +608,28 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                   </SelectContent>
                 </Select>
               </div>
+              <div className="col-span-6">
+                <div className="flex items-center space-x-2">
+                  <Checkbox 
+                    id="isPriority-step3" 
+                    checked={orderForm.watch('states.isPriority')}
+                    onCheckedChange={(checked) => orderForm.setValue('states.isPriority', !!checked)}
+                  />
+                  <Label htmlFor="isPriority-step3" className="text-sm font-medium">
+                    🔥 Pedido Prioritario
+                  </Label>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Archivos */}
-          <div className="space-y-3">
-            <h3 className="text-base font-medium">Archivos</h3>
-            <div className="grid grid-cols-6 gap-3">
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Archivos</h3>
+            <div className="grid grid-cols-6 gap-4">
               {(['base', 'vector'] as const).map((type) => (
                 <div key={type} className="col-span-3 space-y-2">
-                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-3 text-center">
+                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4 text-center">
                     {files[type] ? (
                       <div className="space-y-2">
                         <p className="text-sm font-medium truncate">{files[type]?.name}</p>
@@ -649,11 +675,11 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         </div>
 
         {/* Botones */}
-        <div className="flex justify-between pt-4 border-t">
+        <div className="flex justify-between pt-6 border-t">
           <Button type="button" variant="outline" onClick={onBack}>
             Atrás
           </Button>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <Button type="button" variant="secondary" onClick={onAddDesign}>
               Agregar Otro Diseño
             </Button>

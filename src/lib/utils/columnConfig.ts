@@ -12,7 +12,6 @@ export interface ColumnConfig {
 }
 
 export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
-  // Columnas para vista "Por Item"
   {
     id: 'indicadores',
     header: '',
@@ -29,7 +28,7 @@ export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
     align: 'left',
     resizable: true,
     sortable: true,
-    viewModes: ['items', 'orders']
+    viewModes: ['items']
   },
   {
     id: 'cliente',
@@ -41,31 +40,13 @@ export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
     viewModes: ['items']
   },
   {
-    id: 'nombre',
-    header: 'Nombre',
-    size: 120,
-    align: 'left',
-    resizable: true,
-    sortable: true,
-    viewModes: ['orders']
-  },
-  {
     id: 'contacto',
     header: 'Contacto',
     size: 80,
     align: 'left',
     resizable: true,
     sortable: true,
-    viewModes: ['items', 'orders']
-  },
-  {
-    id: 'cantidad',
-    header: 'Cantidad',
-    size: 80,
-    align: 'center',
-    resizable: true,
-    sortable: true,
-    viewModes: ['orders']
+    viewModes: ['items']
   },
   {
     id: 'tipo',
@@ -83,7 +64,7 @@ export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
     align: 'left',
     resizable: true,
     sortable: true,
-    viewModes: ['items', 'orders']
+    viewModes: ['items']
   },
   {
     id: 'envio',
@@ -92,7 +73,7 @@ export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
     align: 'left',
     resizable: true,
     sortable: true,
-    viewModes: ['items', 'orders']
+    viewModes: ['items']
   },
   {
     id: 'sena',
@@ -101,7 +82,7 @@ export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
     align: 'left',
     resizable: true,
     sortable: true,
-    viewModes: ['items', 'orders']
+    viewModes: ['items']
   },
   {
     id: 'valor',
@@ -110,7 +91,7 @@ export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
     align: 'left',
     resizable: true,
     sortable: true,
-    viewModes: ['items', 'orders']
+    viewModes: ['items']
   },
   {
     id: 'restante',
@@ -119,7 +100,16 @@ export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
     align: 'left',
     resizable: true,
     sortable: true,
-    viewModes: ['items', 'orders']
+    viewModes: ['items']
+  },
+  {
+    id: 'prioridad',
+    header: 'Prioridad',
+    size: 28,
+    align: 'center',
+    resizable: true,
+    sortable: true,
+    viewModes: ['items']
   },
   {
     id: 'fabricacion',
@@ -155,7 +145,7 @@ export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
     align: 'left',
     resizable: true,
     sortable: true,
-    viewModes: ['items', 'orders']
+    viewModes: ['items']
   },
   {
     id: 'base',
@@ -182,16 +172,7 @@ export const ORDER_COLUMNS_CONFIG: ColumnConfig[] = [
     align: 'center',
     resizable: true,
     sortable: true,
-    viewModes: ['items', 'orders']
-  },
-  {
-    id: 'estado',
-    header: 'Estado',
-    size: 100,
-    align: 'center',
-    resizable: true,
-    sortable: true,
-    viewModes: ['orders']
+    viewModes: ['items']
   }
 ];
 

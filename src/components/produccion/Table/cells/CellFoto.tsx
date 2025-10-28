@@ -26,3 +26,6 @@ export function CellFoto({ item }: CellFotoProps) {
 
 
 
+
+
+

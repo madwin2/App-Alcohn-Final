@@ -1,30 +1,19 @@
-import type { Orden } from '@/lib/supabase/types';
+import { Order } from '@/lib/types/index';
 
 interface CellClienteProps {
-  order: Orden;
+  order: Order;
 }
 
 export function CellCliente({ order }: CellClienteProps) {
-  // Acceder a los datos del cliente desde la relación de Supabase
-  const cliente = (order as any).clientes;
-  
-  if (!cliente) {
-    return (
-      <div className="min-w-0">
-        <p className="text-sm font-medium truncate text-gray-400">
-          Sin cliente
-        </p>
-      </div>
-    );
-  }
+  const { customer } = order;
   
   return (
     <div className="min-w-0">
       <p className="text-sm font-medium truncate">
-        {cliente.nombre}
+        {customer.firstName}
       </p>
       <p className="text-xs text-muted-foreground truncate">
-        {cliente.apellido}
+        {customer.lastName}
       </p>
     </div>
   );

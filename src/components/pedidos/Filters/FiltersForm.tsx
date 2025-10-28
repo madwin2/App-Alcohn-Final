@@ -21,7 +21,6 @@ const filtersSchema = z.object({
         'VERIFICAR',
         'HECHO',
         'REHACER',
-        'PRIORIDAD',
         'RETOCAR',
       ])
     )
@@ -61,7 +60,6 @@ const fabricationOptions: { value: FabricationState; label: string }[] = [
   { value: 'VERIFICAR', label: 'Verificar' },
   { value: 'HECHO', label: 'Hecho' },
   { value: 'REHACER', label: 'Rehacer' },
-  { value: 'PRIORIDAD', label: 'Prioridad' },
   { value: 'RETOCAR', label: 'Retocar' },
 ];
 

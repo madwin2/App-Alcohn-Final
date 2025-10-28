@@ -2,8 +2,8 @@ import { Search, Filter, ArrowUpDown, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StateChips } from './StateChips';
-import { ViewToggle } from './ViewToggle';
 import { useOrdersStore } from '@/lib/state/orders.store';
+import { mockOrders, getFabricationCounts } from '@/lib/mocks/orders.mock';
 import { FabricationState } from '@/lib/types/index';
 
 interface OrdersHeaderProps {
@@ -21,11 +21,9 @@ export function OrdersHeader({
   onStateFilter,
   activeStates 
 }: OrdersHeaderProps) {
-  const { searchQuery, setSearchQuery, orders } = useOrdersStore();
+  const { searchQuery, setSearchQuery } = useOrdersStore();
   
-  const activeOrdersCount = orders.length;
-  const sinHacerCount = orders.filter(order => order.estado_orden === 'Señado').length;
-  const hechoCount = orders.filter(order => order.estado_orden === 'Hecho').length;
+  const activeOrdersCount = mockOrders.length;
 
   return (
     <div className="space-y-4">
@@ -36,14 +34,11 @@ export function OrdersHeader({
             Pedidos
           </h1>
           <p className="text-xs text-gray-400">
-            Total: {activeOrdersCount} • Sin hacer: {sinHacerCount} • Hecho: {hechoCount}
+            Total: {activeOrdersCount} • Sin hacer: {getFabricationCounts(mockOrders)['SIN_HACER']} • Hecho: {getFabricationCounts(mockOrders)['HECHO']}
           </p>
         </div>
         
         <div className="flex items-center gap-2">
-          {/* Toggle de Vista */}
-          <ViewToggle />
-          
           {/* Buscador */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />

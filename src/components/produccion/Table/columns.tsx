@@ -12,6 +12,7 @@ import { CellVectorizado } from './cells/CellVectorizado';
 import { CellPrograma } from './cells/CellPrograma';
 import { CellArchivoBase } from './cells/CellArchivoBase';
 import { CellVector } from './cells/CellVector';
+import { CellPrioridad } from './cells/CellPrioridad';
 import { CellFoto } from './cells/CellFoto';
 
 interface ProductionTableProps {
@@ -98,6 +99,13 @@ export const createProductionColumns = ({
     cell: ({ row }) => <CellNotas item={row.original} />,
     size: 100,
     meta: { align: 'left' }
+  },
+  {
+    id: 'prioridad',
+    header: 'Prioridad',
+    cell: ({ row }) => <CellPrioridad item={row.original} />,
+    size: 28,
+    meta: { align: 'center' }
   },
   {
     id: 'fabricacion',

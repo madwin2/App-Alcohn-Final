@@ -35,9 +35,10 @@ const newOrderSchema = z.object({
     origin: z.enum(['RETIRO_EN_ORIGEN', 'ENTREGA_EN_SUCURSAL']),
   }),
   states: z.object({
-    fabrication: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'PRIORIDAD', 'RETOCAR']),
+    fabrication: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR']),
     sale: z.enum(['SEÑADO', 'FOTO_ENVIADA', 'TRANSFERIDO', 'DEUDOR']),
     shipping: z.enum(['SIN_ENVIO', 'HACER_ETIQUETA', 'ETIQUETA_LISTA', 'DESPACHADO', 'SEGUIMIENTO_ENVIADO']),
+    isPriority: z.boolean(),
   }),
 });
 
@@ -86,7 +87,6 @@ const fabricationOptions = [
   { value: 'VERIFICAR', label: 'Verificar' },
   { value: 'HECHO', label: 'Hecho' },
   { value: 'REHACER', label: 'Rehacer' },
-  { value: 'PRIORIDAD', label: 'Prioridad' },
   { value: 'RETOCAR', label: 'Retocar' },
 ];
 
@@ -128,6 +128,7 @@ export function NewOrderForm({ onSubmit }: NewOrderFormProps) {
         fabrication: 'SIN_HACER',
         sale: 'SEÑADO',
         shipping: 'SIN_ENVIO',
+        isPriority: false,
       },
     },
   });
@@ -427,6 +428,18 @@ export function NewOrderForm({ onSubmit }: NewOrderFormProps) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="col-span-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="isPriority-full" 
+                checked={watch('states.isPriority')}
+                onCheckedChange={(checked) => setValue('states.isPriority', !!checked)}
+              />
+              <Label htmlFor="isPriority-full" className="text-sm font-medium">
+                🔥 Pedido Prioritario
+              </Label>
+            </div>
           </div>
         </div>
       </div>

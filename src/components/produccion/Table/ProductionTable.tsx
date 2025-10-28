@@ -77,6 +77,32 @@ export function ProductionTable({ items }: ProductionTableProps) {
   const handleVectorizadoChange = (itemId: string, newState: VectorizationState) => {
     toast({ title: 'Vectorizado', description: `Estado cambiado a ${newState} para ${itemId}` });
   };
+
+  const handleDownloadBase = (item: ProductionItem) => {
+    if (item.files?.baseUrl) {
+      // Crear un enlace temporal para descargar el archivo
+      const link = document.createElement('a');
+      link.href = item.files.baseUrl;
+      link.download = `${item.designName}_archivo_base`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: 'Descarga iniciada', description: 'Archivo base descargándose...' });
+    }
+  };
+
+  const handleDownloadVector = (item: ProductionItem) => {
+    if (item.files?.vectorUrl) {
+      // Crear un enlace temporal para descargar el archivo
+      const link = document.createElement('a');
+      link.href = item.files.vectorUrl;
+      link.download = `${item.designName}_vector`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: 'Descarga iniciada', description: 'Vector descargándose...' });
+    }
+  };
   const handleProgramaChange = (itemId: string, newProgram: ProgramType) => {
     toast({ title: 'Programa', description: `Programa cambiado a ${newProgram} para ${itemId}` });
   };
@@ -216,6 +242,21 @@ export function ProductionTable({ items }: ProductionTableProps) {
                   </ContextMenuTrigger>
                   <ContextMenuContent>
                     <ContextMenuItem onSelect={() => setEditingRow(row.original.id)}>Editar item</ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem 
+                      onSelect={() => handleDownloadBase(row.original)}
+                      disabled={!row.original.files?.baseUrl}
+                      className={!row.original.files?.baseUrl ? 'text-muted-foreground' : ''}
+                    >
+                      Descargar archivo base
+                    </ContextMenuItem>
+                    <ContextMenuItem 
+                      onSelect={() => handleDownloadVector(row.original)}
+                      disabled={!row.original.files?.vectorUrl}
+                      className={!row.original.files?.vectorUrl ? 'text-muted-foreground' : ''}
+                    >
+                      Descargar vector
+                    </ContextMenuItem>
                     <ContextMenuSeparator />
                     <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(row.original.id)}>Eliminar item</ContextMenuItem>
                   </ContextMenuContent>

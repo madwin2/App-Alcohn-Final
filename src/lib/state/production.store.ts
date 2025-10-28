@@ -1,7 +1,5 @@
 import { create } from 'zustand';
 import { ProductionState, VectorizationState, ProgramType } from '../types/index';
-import { ProductionService } from '../supabase/services';
-import type { Programa, Sello } from '../supabase/types';
 
 export interface ProductionFilters {
   dateRange?: {
@@ -46,12 +44,6 @@ interface ProductionStore {
   // Ordenamiento
   sort: ProductionSortState;
   
-  // Estado de datos
-  programas: Programa[];
-  sellos: Sello[];
-  loading: boolean;
-  error: string | null;
-  
   // Acciones de UI
   setSidebarExpanded: (expanded: boolean) => void;
   setSidebarHovered: (hovered: boolean) => void;
@@ -59,14 +51,9 @@ interface ProductionStore {
   setSearchQuery: (query: string) => void;
   setEditingRow: (id: string | null) => void;
 
-  // Acciones de datos
-  fetchProgramas: () => Promise<void>;
-  fetchSellos: (programaId?: string) => Promise<void>;
-  createPrograma: (programa: any) => Promise<void>;
-  updatePrograma: (programaId: string, patch: any) => Promise<void>;
-  deletePrograma: (programaId: string) => Promise<void>;
-  asignarSelloAPrograma: (selloId: string, programaId: string) => Promise<void>;
-  removerSelloDePrograma: (selloId: string) => Promise<void>;
+  // Mutaciones de datos (mock)
+  updateProductionItem: (itemId: string, patch: any) => void;
+  deleteProductionItem: (itemId: string) => void;
   
   // Acciones de filtros
   setFilters: (filters: Partial<ProductionFilters>) => void;
@@ -101,11 +88,12 @@ const initialColumns: ProductionColumnState[] = [
   { id: 'disenio', size: 150, order: 4 },
   { id: 'medida', size: 80, order: 5 },
   { id: 'notas', size: 100, order: 6 },
-  { id: 'fabricacion', size: 20, order: 7 },
-  { id: 'vectorizado', size: 20, order: 8 },
-  { id: 'programa', size: 20, order: 9 },
-  { id: 'archivoBase', size: 60, order: 10 },
-  { id: 'vector', size: 60, order: 11 }
+  { id: 'prioridad', size: 28, order: 7 },
+  { id: 'fabricacion', size: 20, order: 8 },
+  { id: 'vectorizado', size: 20, order: 9 },
+  { id: 'programa', size: 20, order: 10 },
+  { id: 'archivoBase', size: 60, order: 11 },
+  { id: 'vector', size: 60, order: 12 }
 ];
 
 export const useProductionStore = create<ProductionStore>((set, get) => ({
@@ -118,10 +106,6 @@ export const useProductionStore = create<ProductionStore>((set, get) => ({
   columns: initialColumns,
   filters: initialFilters,
   sort: initialSort,
-  programas: [],
-  sellos: [],
-  loading: false,
-  error: null,
   
   // Acciones de UI
   setSidebarExpanded: (expanded) => set({ sidebarExpanded: expanded }),
@@ -162,89 +146,9 @@ export const useProductionStore = create<ProductionStore>((set, get) => ({
     }
   })),
 
-  // Acciones de datos
-  fetchProgramas: async () => {
-    set({ loading: true, error: null });
-    try {
-      const programas = await ProductionService.getAll();
-      set({ programas, loading: false });
-    } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error al cargar programas', loading: false });
-    }
-  },
-  
-  fetchSellos: async (programaId?: string) => {
-    set({ loading: true, error: null });
-    try {
-      const sellos = programaId 
-        ? await ProductionService.getSellosByPrograma(programaId)
-        : await ProductionService.getSellosByPrograma('');
-      set({ sellos, loading: false });
-    } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error al cargar sellos', loading: false });
-    }
-  },
-  
-  createPrograma: async (programa) => {
-    set({ loading: true, error: null });
-    try {
-      const newPrograma = await ProductionService.create(programa);
-      set((state) => ({ 
-        programas: [newPrograma, ...state.programas], 
-        loading: false 
-      }));
-    } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error al crear programa', loading: false });
-    }
-  },
-  
-  updatePrograma: async (programaId, patch) => {
-    set({ loading: true, error: null });
-    try {
-      const updatedPrograma = await ProductionService.update(programaId, patch);
-      set((state) => ({
-        programas: state.programas.map(programa => 
-          programa.id === programaId ? updatedPrograma : programa
-        ),
-        loading: false
-      }));
-    } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error al actualizar programa', loading: false });
-    }
-  },
-  
-  deletePrograma: async (programaId) => {
-    set({ loading: true, error: null });
-    try {
-      await ProductionService.delete(programaId);
-      set((state) => ({
-        programas: state.programas.filter(programa => programa.id !== programaId),
-        loading: false
-      }));
-    } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error al eliminar programa', loading: false });
-    }
-  },
-  
-  asignarSelloAPrograma: async (selloId, programaId) => {
-    set({ loading: true, error: null });
-    try {
-      await ProductionService.asignarSelloAPrograma(selloId, programaId);
-      set({ loading: false });
-    } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error al asignar sello al programa', loading: false });
-    }
-  },
-  
-  removerSelloDePrograma: async (selloId) => {
-    set({ loading: true, error: null });
-    try {
-      await ProductionService.removerSelloDePrograma(selloId);
-      set({ loading: false });
-    } catch (error) {
-      set({ error: error instanceof Error ? error.message : 'Error al remover sello del programa', loading: false });
-    }
-  },
+  // Mutaciones mock (sin persistencia, solo UI)
+  updateProductionItem: (_itemId, _patch) => {},
+  deleteProductionItem: (_itemId) => {},
   
   // Acciones de columnas
   setColumnSize: (columnId, size) => set((state) => ({

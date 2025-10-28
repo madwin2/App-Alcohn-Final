@@ -59,6 +59,7 @@ export const mockOrders: Order[] = [
         notes: 'Urgente para lanzamiento',
         itemValue: 15000,
         fabricationState: 'HECHO',
+        isPriority: false,
         saleState: 'SEÑADO',
         shippingState: 'SIN_ENVIO',
         depositValueItem: 5000,
@@ -113,6 +114,7 @@ export const mockOrders: Order[] = [
         notes: 'Con fecha de vencimiento',
         itemValue: 8500,
         fabricationState: 'HECHO',
+        isPriority: false,
         saleState: 'TRANSFERIDO',
         shippingState: 'DESPACHADO',
         depositValueItem: 8500,
@@ -165,6 +167,7 @@ export const mockOrders: Order[] = [
         stampType: 'ALIMENTO',
         itemValue: 12000,
         fabricationState: 'HACIENDO',
+        isPriority: false,
         saleState: 'FOTO_ENVIADA',
         shippingState: 'HACER_ETIQUETA',
         depositValueItem: 6000,
@@ -214,7 +217,8 @@ export const mockOrders: Order[] = [
         requestedHeightMm: 40,
         stampType: 'ABC',
         itemValue: 20000,
-        fabricationState: 'PRIORIDAD',
+        fabricationState: 'SIN_HACER',
+        isPriority: true,
         saleState: 'DEUDOR',
         shippingState: 'SIN_ENVIO',
         depositValueItem: 0,
@@ -266,6 +270,7 @@ export const mockOrders: Order[] = [
         stampType: 'LACRE',
         itemValue: 7500,
         fabricationState: 'VERIFICAR',
+        isPriority: false,
         saleState: 'TRANSFERIDO',
         shippingState: 'ETIQUETA_LISTA',
         depositValueItem: 7500,
@@ -319,6 +324,7 @@ export const mockOrders: Order[] = [
         stampType: 'CLASICO',
         itemValue: 18000,
         fabricationState: 'RETOCAR',
+        isPriority: false,
         saleState: 'SEÑADO',
         shippingState: 'SIN_ENVIO',
         depositValueItem: 9000,
@@ -369,6 +375,7 @@ export const mockOrders: Order[] = [
         stampType: '3MM',
         itemValue: 9500,
         fabricationState: 'HECHO',
+        isPriority: false,
         saleState: 'TRANSFERIDO',
         shippingState: 'SEGUIMIENTO_ENVIADO',
         depositValueItem: 9500,
@@ -422,6 +429,7 @@ export const mockOrders: Order[] = [
         stampType: 'ALIMENTO',
         itemValue: 14000,
         fabricationState: 'REHACER',
+        isPriority: false,
         saleState: 'FOTO_ENVIADA',
         shippingState: 'HACER_ETIQUETA',
         depositValueItem: 7000,
@@ -438,17 +446,130 @@ export const mockOrders: Order[] = [
         }
       }
     ]
+  },
+  {
+    id: '9',
+    customer: {
+      id: 'c9',
+      firstName: 'Carlos',
+      lastName: 'Rodríguez',
+      phoneE164: '+5491123456797',
+      email: 'carlos.rodriguez@email.com',
+      dni: '87654321'
+    },
+    orderDate: '2024-01-20T14:15:00Z',
+    takenBy: { id: 'u2', name: 'Ana López' },
+    totalValue: 25000,
+    depositValueOrder: 10000,
+    restPaidAmountOrder: 15000,
+    saleStateOrder: 'SEÑADO',
+    saleStateOrderChangedAt: '2024-01-20T14:15:00Z',
+    deadlineAt: '2024-01-30T18:00:00Z',
+    paidAmountCached: 10000,
+    balanceAmountCached: 15000,
+    tasks: [
+      {
+        id: 't9',
+        orderId: '9',
+        title: 'Diseño corporativo completo',
+        description: 'Crear identidad visual para empresa',
+        status: 'PENDING',
+        createdAt: '2024-01-20T14:15:00Z'
+      }
+    ],
+    progressStep: 'HECHO' as ProgressStep,
+    shipping: {
+      carrier: 'CORREO_ARGENTINO',
+      service: 'SUCURSAL',
+      origin: 'RETIRO_EN_ORIGEN'
+    },
+    items: [
+      {
+        id: 'i9a',
+        orderId: '9',
+        designName: 'Logo Principal',
+        requestedWidthMm: 60,
+        requestedHeightMm: 35,
+        stampType: 'CLASICO',
+        itemValue: 12000,
+        fabricationState: 'HACIENDO',
+        isPriority: true,
+        saleState: 'SEÑADO',
+        shippingState: 'SIN_ENVIO',
+        depositValueItem: 6000,
+        restPaidAmountItem: 6000,
+        paidAmountItemCached: 6000,
+        balanceItemCached: 6000,
+        files: {
+          baseUrl: 'https://via.placeholder.com/40x40/059669/FFFFFF?text=L1',
+          vectorUrl: 'https://via.placeholder.com/40x40/7C3AED/FFFFFF?text=V1'
+        },
+        contact: {
+          channel: 'WHATSAPP',
+          phoneE164: '+5491123456797'
+        }
+      },
+      {
+        id: 'i9b',
+        orderId: '9',
+        designName: 'Logo Secundario',
+        requestedWidthMm: 40,
+        requestedHeightMm: 25,
+        stampType: 'ABC',
+        itemValue: 8000,
+        fabricationState: 'VERIFICAR',
+        isPriority: false,
+        saleState: 'SEÑADO',
+        shippingState: 'SIN_ENVIO',
+        depositValueItem: 4000,
+        restPaidAmountItem: 4000,
+        paidAmountItemCached: 4000,
+        balanceItemCached: 4000,
+        files: {
+          baseUrl: 'https://via.placeholder.com/40x40/DC2626/FFFFFF?text=L2',
+          photoUrl: 'https://via.placeholder.com/40x40/EA580C/FFFFFF?text=P2'
+        },
+        contact: {
+          channel: 'WHATSAPP',
+          phoneE164: '+5491123456797'
+        }
+      },
+      {
+        id: 'i9c',
+        orderId: '9',
+        designName: 'Sello de Calidad',
+        requestedWidthMm: 30,
+        requestedHeightMm: 20,
+        stampType: 'LACRE',
+        itemValue: 5000,
+        fabricationState: 'SIN_HACER',
+        isPriority: false,
+        saleState: 'SEÑADO',
+        shippingState: 'SIN_ENVIO',
+        depositValueItem: 0,
+        restPaidAmountItem: 5000,
+        paidAmountItemCached: 0,
+        balanceItemCached: 5000,
+        files: {
+          baseUrl: 'https://via.placeholder.com/40x40/0891B2/FFFFFF?text=S'
+        },
+        contact: {
+          channel: 'WHATSAPP',
+          phoneE164: '+5491123456797'
+        }
+      }
+    ]
   }
 ];
 
 // Función para obtener contadores por estado de fabricación
 export const getFabricationCounts = (orders: Order[]) => {
   const counts = {
+    SIN_HACER: 0,
     HACIENDO: 0,
     VERIFICAR: 0,
     HECHO: 0,
     REHACER: 0,
-    PRIORIDAD: 0,
     RETOCAR: 0
   };
 

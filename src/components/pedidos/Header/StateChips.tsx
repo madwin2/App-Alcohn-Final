@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { FabricationState } from '@/lib/types/index';
-import { useOrdersStore } from '@/lib/state/orders.store';
+import { getFabricationCounts } from '@/lib/mocks/orders.mock';
+import { mockOrders } from '@/lib/mocks/orders.mock';
 import { cn } from '@/lib/utils/cn';
 
 interface StateChipsProps {
@@ -14,7 +15,6 @@ const stateLabels: Record<FabricationState, string> = {
   VERIFICAR: 'Verificar',
   HECHO: 'Hecho',
   REHACER: 'Rehacer',
-  PRIORIDAD: 'Prioridad',
   RETOCAR: 'Retocar'
 };
 
@@ -29,20 +29,11 @@ const stateActiveBg: Record<FabricationState, string> = {
   VERIFICAR: 'bg-orange-500 text-black',
   HECHO: 'bg-green-500 text-black',
   REHACER: 'bg-red-500 text-white',
-  PRIORIDAD: 'bg-red-600 text-white',
   RETOCAR: 'bg-yellow-400 text-black'
 };
 
 export function StateChips({ onStateClick, activeStates = [] }: StateChipsProps) {
-  const { orders } = useOrdersStore();
-  
-  const counts = orders.reduce((acc, order) => {
-    const state = order.estado_orden as FabricationState;
-    if (state) {
-      acc[state] = (acc[state] || 0) + 1;
-    }
-    return acc;
-  }, {} as Record<FabricationState, number>);
+  const counts = getFabricationCounts(mockOrders);
 
   return (
     <div className="flex flex-wrap gap-2">

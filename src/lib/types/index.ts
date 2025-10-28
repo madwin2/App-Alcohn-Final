@@ -1,5 +1,5 @@
 // Enums
-export type FabricationState = 'SIN_HACER' | 'HACIENDO' | 'VERIFICAR' | 'HECHO' | 'REHACER' | 'PRIORIDAD' | 'RETOCAR';
+export type FabricationState = 'SIN_HACER' | 'HACIENDO' | 'VERIFICAR' | 'HECHO' | 'REHACER' | 'RETOCAR';
 export type SaleState = 'SEÑADO' | 'FOTO_ENVIADA' | 'TRANSFERIDO' | 'DEUDOR';
 export type ShippingState = 'SIN_ENVIO' | 'HACER_ETIQUETA' | 'ETIQUETA_LISTA' | 'DESPACHADO' | 'SEGUIMIENTO_ENVIADO';
 export type ShippingCarrier = 'ANDREANI' | 'CORREO_ARGENTINO' | 'VIA_CARGO' | 'OTRO';
@@ -69,6 +69,7 @@ export interface OrderItem {
   stampType: StampType;
   itemValue?: number | null;
   fabricationState: FabricationState;
+  isPriority: boolean;
   saleState: SaleState;
   shippingState: ShippingState;
   depositValueItem?: number | null;
@@ -138,6 +139,7 @@ export interface ProductionItem {
   requestedHeightMm: number;
   stampType: StampType;
   productionState: ProductionState;
+  isPriority: boolean;
   vectorizationState: VectorizationState;
   program: ProgramType;
   notes?: string;
@@ -220,5 +222,6 @@ export interface NewOrderFormData {
     fabrication: FabricationState;
     sale: SaleState;
     shipping: ShippingState;
+    isPriority: boolean;
   };
 }

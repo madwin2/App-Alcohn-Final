@@ -1,39 +1,42 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { Orden } from '@/lib/supabase/types';
+import { Order, ShippingState } from '@/lib/types/index';
 import { getShippingStateColor, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
 
 interface CellEnvioEstadoProps {
-  order: Orden;
-  onEnvioEstadoChange?: (orderId: string, newState: string) => void;
+  order: Order;
+  onEnvioEstadoChange?: (orderId: string, newState: ShippingState) => void;
 }
 
-const shippingLabels: Record<string, string> = {
-  'Sin envio': 'Sin Envío',
-  'Hacer Etiqueta': 'Hacer Etiqueta',
-  'Etiqueta Lista': 'Etiqueta Lista',
-  'Despachado': 'Despachado',
-  'Seguimiento Enviado': 'Seguimiento Enviado'
+const shippingLabels: Record<ShippingState | 'MULTIPLE', string> = {
+  'SIN_ENVIO': 'Sin Envío',
+  'HACER_ETIQUETA': 'Hacer Etiqueta',
+  'ETIQUETA_LISTA': 'Etiqueta Lista',
+  'DESPACHADO': 'D',
+  'SEGUIMIENTO_ENVIADO': 'Seguimiento Enviado',
+  'MULTIPLE': 'Múltiple'
 };
 
 export function CellEnvioEstado({ order, onEnvioEstadoChange }: CellEnvioEstadoProps) {
-  const shippingState = order.estado_envio;
+  const item = order.items[0];
   
-  if (!shippingState) return null;
+  if (!item) return null;
 
+  const shippingState = item.shippingState as ShippingState;
+  
   const handleValueChange = (value: string) => {
-    onEnvioEstadoChange?.(order.id, value);
+    onEnvioEstadoChange?.(order.id, value as ShippingState);
   };
 
   return (
-    <Select value={shippingState} onValueChange={handleValueChange}>
+    <Select value={item.shippingState} onValueChange={handleValueChange}>
       <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
         <SelectValue>
           {(() => {
-            const visual = getShippingChipVisual(shippingState);
+            const visual = getShippingChipVisual(item.shippingState);
             return (
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
                 style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}>
-                {getShippingLabel(shippingState)}
+                {getShippingLabel(item.shippingState)}
               </span>
             );
           })()}

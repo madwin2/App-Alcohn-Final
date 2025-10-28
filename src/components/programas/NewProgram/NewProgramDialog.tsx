@@ -19,3 +19,4 @@ export function NewProgramDialog({ open, onOpenChange }: NewProgramDialogProps) 
     </Dialog>
   );
 }
+

@@ -6,7 +6,7 @@ interface CellMedidaProps {
 
 export function CellMedida({ item }: CellMedidaProps) {
   return (
-    <div className="text-sm text-left">
+    <div className="text-sm text-left text-gray-400">
       {item.requestedWidthMm}×{item.requestedHeightMm}mm
     </div>
   );
