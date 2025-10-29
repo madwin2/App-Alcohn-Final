@@ -46,7 +46,7 @@ export const mockProductionItems: ProductionItem[] = [
     stampType: 'CLASICO',
     productionState: 'EN_PROGRESO',
     isPriority: false,
-    vectorizationState: 'PENDIENTE',
+    vectorizationState: 'BASE',
     program: 'ILLUSTRATOR',
     notes: 'Revisar colores corporativos',
     files: {
@@ -65,7 +65,7 @@ export const mockProductionItems: ProductionItem[] = [
     stampType: 'ALIMENTO',
     productionState: 'COMPLETADO',
     isPriority: false,
-    vectorizationState: 'COMPLETADO',
+    vectorizationState: 'VECTORIZADO',
     program: 'PHOTOSHOP',
     notes: 'Aprobado por cliente',
     files: {
@@ -84,7 +84,7 @@ export const mockProductionItems: ProductionItem[] = [
     stampType: '3MM',
     productionState: 'PENDIENTE',
     isPriority: true,
-    vectorizationState: 'NO_REQUERIDO',
+    vectorizationState: 'EN_PROCESO',
     program: 'COREL',
     notes: 'Esperando aprobación de diseño',
     files: {
@@ -101,7 +101,7 @@ export const mockProductionItems: ProductionItem[] = [
     stampType: 'LACRE',
     productionState: 'REVISAR',
     isPriority: false,
-    vectorizationState: 'COMPLETADO',
+    vectorizationState: 'DESCARGADO',
     program: 'AUTOCAD',
     notes: 'Revisar texto médico',
     files: {
@@ -120,7 +120,7 @@ export const mockProductionItems: ProductionItem[] = [
     stampType: 'ABC',
     productionState: 'REHACER',
     isPriority: false,
-    vectorizationState: 'PENDIENTE',
+    vectorizationState: 'BASE',
     program: 'ILLUSTRATOR',
     notes: 'Cliente pidió cambios en el diseño',
     files: {

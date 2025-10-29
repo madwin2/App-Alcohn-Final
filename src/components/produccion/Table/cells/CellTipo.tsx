@@ -22,8 +22,9 @@ export function CellTipo({ item, onTipoChange }: CellTipoProps) {
   };
 
   return (
-    <Select value={item.stampType} onValueChange={handleValueChange}>
-        <SelectTrigger className="w-full h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors">
+    <div className="w-full h-12 flex items-center justify-center">
+      <Select value={item.stampType} onValueChange={handleValueChange}>
+        <SelectTrigger className="w-full h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors flex items-center justify-center">
           <SelectValue>
             <span className="flex items-center justify-center">
               {item.stampType !== 'CLASICO' && (
@@ -36,22 +37,23 @@ export function CellTipo({ item, onTipoChange }: CellTipoProps) {
             </span>
           </SelectValue>
         </SelectTrigger>
-      <SelectContent>
-        {tipoOptions.map((option) => (
-          <SelectItem key={option.value} value={option.value} className="text-xs">
-            <span className="flex items-center gap-2">
-              {option.value !== 'CLASICO' && (
-                <SvgIcon 
-                  name={option.iconName} 
-                  size={16}
-                  className="flex-shrink-0"
-                />
-              )}
-              <span>{option.label}</span>
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+        <SelectContent>
+          {tipoOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value} className="text-xs">
+              <span className="flex items-center gap-2">
+                {option.value !== 'CLASICO' && (
+                  <SvgIcon 
+                    name={option.iconName} 
+                    size={16}
+                    className="flex-shrink-0"
+                  />
+                )}
+                <span>{option.label}</span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

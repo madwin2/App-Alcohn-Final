@@ -5,10 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProductionSortState, ProductionSortCriteria } from '@/lib/state/production.store';
-import { ProductionState } from '@/lib/types/index';
+import { FabricationState } from '@/lib/types/index';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from 'lucide-react';
 
 const sortSchema = z.object({
-  productionPriority: z.array(z.enum(['PENDIENTE', 'EN_PROGRESO', 'COMPLETADO', 'REVISAR', 'REHACER'])),
+  productionPriority: z.array(z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR'])),
   criteria: z.array(z.object({
     field: z.enum(['fecha', 'tarea', 'tipo', 'disenio', 'medida', 'fabricacion', 'vectorizado', 'programa']),
     dir: z.enum(['asc', 'desc'])
@@ -22,6 +27,47 @@ interface ProductionSortFormProps {
   initialData: ProductionSortState;
 }
 
+// Componente para elementos arrastrables
+function SortableProductionState({ state, index }: { state: FabricationState; index: number }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: state });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center justify-between p-3 bg-muted rounded-lg border ${
+        isDragging ? 'opacity-50 shadow-lg' : ''
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 hover:bg-muted-foreground/20 rounded"
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <span className="text-sm font-medium">{state.replace('_', ' ')}</span>
+      </div>
+      <span className="text-xs text-muted-foreground bg-background px-2 py-1 rounded">
+        #{index + 1}
+      </span>
+    </div>
+  );
+}
+
 export function ProductionSortForm({ onSubmit, initialData }: ProductionSortFormProps) {
   const { register, handleSubmit, watch, setValue, reset } = useForm<SortFormData>({
     resolver: zodResolver(sortSchema),
@@ -32,6 +78,26 @@ export function ProductionSortForm({ onSubmit, initialData }: ProductionSortForm
   });
 
   const watchedCriteria = watch('criteria') || [];
+  const watchedPriority = watch('productionPriority') || [];
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+
+    if (active.id !== over.id) {
+      const oldIndex = watchedPriority.indexOf(active.id);
+      const newIndex = watchedPriority.indexOf(over.id);
+      
+      const newPriority = arrayMove(watchedPriority, oldIndex, newIndex);
+      setValue('productionPriority', newPriority);
+    }
+  };
 
   const addCriteria = () => {
     const current = watchedCriteria;
@@ -63,16 +129,28 @@ export function ProductionSortForm({ onSubmit, initialData }: ProductionSortForm
       <div className="space-y-2">
         <Label className="text-sm font-medium">Prioridad de estados de producción</Label>
         <div className="text-xs text-muted-foreground">
-          Arrastra para reordenar (implementar drag & drop)
+          Arrastra para reordenar los estados según su prioridad
         </div>
-        <div className="space-y-2">
-          {initialData.productionPriority.map((state, index) => (
-            <div key={state} className="flex items-center justify-between p-2 bg-muted rounded">
-              <span className="text-sm">{state.replace('_', ' ')}</span>
-              <span className="text-xs text-muted-foreground">#{index + 1}</span>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={watchedPriority}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-2">
+              {watchedPriority.map((state, index) => (
+                <SortableProductionState
+                  key={state}
+                  state={state}
+                  index={index}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
       </div>
 
       {/* Criterios de ordenamiento */}

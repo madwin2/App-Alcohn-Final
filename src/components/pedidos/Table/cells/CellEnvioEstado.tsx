@@ -1,22 +1,23 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Order, ShippingState } from '@/lib/types/index';
 import { getShippingStateColor, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
+import { useSound } from '@/lib/hooks/useSound';
 
 interface CellEnvioEstadoProps {
   order: Order;
   onEnvioEstadoChange?: (orderId: string, newState: ShippingState) => void;
 }
 
-const shippingLabels: Record<ShippingState | 'MULTIPLE', string> = {
+const shippingLabels: Record<ShippingState, string> = {
   'SIN_ENVIO': 'Sin Envío',
   'HACER_ETIQUETA': 'Hacer Etiqueta',
   'ETIQUETA_LISTA': 'Etiqueta Lista',
   'DESPACHADO': 'D',
-  'SEGUIMIENTO_ENVIADO': 'Seguimiento Enviado',
-  'MULTIPLE': 'Múltiple'
+  'SEGUIMIENTO_ENVIADO': 'Seguimiento Enviado'
 };
 
 export function CellEnvioEstado({ order, onEnvioEstadoChange }: CellEnvioEstadoProps) {
+  const { playSound } = useSound();
   const item = order.items[0];
   
   if (!item) return null;
@@ -24,12 +25,19 @@ export function CellEnvioEstado({ order, onEnvioEstadoChange }: CellEnvioEstadoP
   const shippingState = item.shippingState as ShippingState;
   
   const handleValueChange = (value: string) => {
-    onEnvioEstadoChange?.(order.id, value as ShippingState);
+    const newState = value as ShippingState;
+    
+    // Reproducir sonido cuando se marca como "Despachado"
+    if (newState === 'DESPACHADO') {
+      playSound('notification');
+    }
+    
+    onEnvioEstadoChange?.(order.id, newState);
   };
 
   return (
     <Select value={item.shippingState} onValueChange={handleValueChange}>
-      <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
+      <SelectTrigger className="w-full h-14 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
         <SelectValue>
           {(() => {
             const visual = getShippingChipVisual(item.shippingState);

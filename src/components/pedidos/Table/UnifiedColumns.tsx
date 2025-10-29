@@ -33,6 +33,7 @@ interface UnifiedColumnsProps {
   onTaskCreate?: (orderId: string, title: string, description?: string, dueDate?: Date) => void;
   onTaskUpdate?: (taskId: string, updates: any) => void;
   onTaskDelete?: (taskId: string) => void;
+  isSubitem?: boolean;
   onProgressChange?: (orderId: string, newStep: any) => void;
   editingRowId?: string | null;
   onUpdate?: (orderId: string, updates: any) => void;
@@ -53,7 +54,8 @@ export function createUnifiedColumns({
   onProgressChange,
   editingRowId,
   onUpdate,
-  onExpand
+  onExpand,
+  isSubitem = false
 }: UnifiedColumnsProps): ColumnDef<Order>[] {
   const columnConfigs = getColumnsForViewMode('items');
   
@@ -171,6 +173,7 @@ export function createUnifiedColumns({
       <CellVenta
         order={row.original}
         onVentaChange={onVentaChange}
+        isSubitem={isSubitem}
       />
     ),
     

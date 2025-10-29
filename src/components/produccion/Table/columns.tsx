@@ -74,7 +74,7 @@ export const createProductionColumns = ({
   },
   {
     id: 'tipo',
-    header: 'Tipo',
+    header: 'TIPO',
     cell: ({ row }) => <CellTipo item={row.original} onTipoChange={onTipoChange} />,
     size: 50,
     meta: { align: 'center' }
@@ -102,14 +102,14 @@ export const createProductionColumns = ({
   },
   {
     id: 'prioridad',
-    header: 'Prioridad',
+    header: 'PRIORIDAD',
     cell: ({ row }) => <CellPrioridad item={row.original} />,
     size: 28,
     meta: { align: 'center' }
   },
   {
     id: 'fabricacion',
-    header: 'Fabricación',
+    header: 'FABRICACIÓN',
     cell: ({ row }) => (
       <CellFabricacion item={row.original} onFabricacionChange={onFabricacionChange} />
     ),
@@ -118,7 +118,7 @@ export const createProductionColumns = ({
   },
   {
     id: 'vectorizado',
-    header: 'Vectorizado',
+    header: 'VECTORIZADO',
     cell: ({ row }) => (
       <CellVectorizado item={row.original} onVectorizadoChange={onVectorizadoChange} />
     ),
@@ -136,14 +136,14 @@ export const createProductionColumns = ({
   },
   {
     id: 'archivoBase',
-    header: 'Archivo Base',
+    header: 'ARCHIVO BASE',
     cell: ({ row }) => <CellArchivoBase item={row.original} />,
     size: 60,
     meta: { align: 'center' }
   },
   {
     id: 'vector',
-    header: 'Vector',
+    header: 'VECTOR',
     cell: ({ row }) => <CellVector item={row.original} />,
     size: 60,
     meta: { align: 'center' }

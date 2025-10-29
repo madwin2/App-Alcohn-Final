@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { NewOrderStepForm } from './NewOrderStepForm';
 import { NewOrderFormData } from '@/lib/types/index';
 import { useToast } from '@/components/ui/use-toast';
+import { useSound } from '@/lib/hooks/useSound';
 import { useState } from 'react';
 
 interface NewOrderDialogProps {
@@ -11,6 +12,7 @@ interface NewOrderDialogProps {
 
 export function NewOrderDialog({ open, onOpenChange }: NewOrderDialogProps) {
   const { toast } = useToast();
+  const { playSound } = useSound();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<Partial<NewOrderFormData>>({});
 
@@ -29,6 +31,9 @@ export function NewOrderDialog({ open, onOpenChange }: NewOrderDialogProps) {
   const handleFinalSubmit = (data: NewOrderFormData) => {
     // Aquí iría la lógica para crear el pedido
     console.log('Creando pedido:', data);
+    
+    // Reproducir sonido de éxito
+    playSound('success');
     
     toast({
       title: "¡Pedido creado!",

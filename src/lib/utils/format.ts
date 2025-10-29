@@ -93,9 +93,9 @@ export const getFabricationStateColor = (state: string, isPriority: boolean = fa
     }
   })();
   
-  // Si es prioritario, agregar estilo especial
+  // Si es prioritario, solo agregar font-semibold (sin glow rojo)
   if (isPriority) {
-    return baseColor + ' ring-2 ring-red-500 ring-opacity-50 font-semibold';
+    return baseColor + ' font-semibold';
   }
   
   return baseColor;
@@ -273,14 +273,11 @@ export const getFabricationChipVisual = (state: string, isPriority: boolean = fa
     }
   })();
   
-  // Si es prioritario, agregar efecto especial
+  // Si es prioritario, solo agregar font-semibold (mantener colores originales)
   if (isPriority) {
     return {
       ...baseVisual,
-      backgroundColor: '239,68,68', // rojo para prioridad
-      borderColor: '220,38,38',
-      textColor: '255,255,255',
-      boxShadow: '0 0 8px rgba(239,68,68,0.4)',
+      textClass: baseVisual.textClass + ' font-semibold', // Solo agregar negrita
     };
   }
   

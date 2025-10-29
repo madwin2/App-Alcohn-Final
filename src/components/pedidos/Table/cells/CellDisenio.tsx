@@ -45,7 +45,7 @@ export function CellDisenio({ order, showNotes = true, onExpand }: CellDisenioPr
           <span>{formatDimensions(item.requestedWidthMm, item.requestedHeightMm)}</span>
           {showNotes && item.notes && (
             <span className="text-blue-400 truncate" title={item.notes}>
-              • {truncateText(item.notes, 15)}
+              • {item.notes}
             </span>
           )}
         </div>

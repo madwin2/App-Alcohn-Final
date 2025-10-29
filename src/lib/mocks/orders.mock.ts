@@ -459,9 +459,9 @@ export const mockOrders: Order[] = [
     },
     orderDate: '2024-01-20T14:15:00Z',
     takenBy: { id: 'u2', name: 'Ana López' },
-    totalValue: 25000,
-    depositValueOrder: 10000,
-    restPaidAmountOrder: 15000,
+    totalValue: 25000, // Total: 12000 + 8000 + 5000
+    depositValueOrder: 10000, // Total: 6000 + 4000 + 0
+    restPaidAmountOrder: 15000, // Total: 25000 - 10000
     saleStateOrder: 'SEÑADO',
     saleStateOrderChangedAt: '2024-01-20T14:15:00Z',
     deadlineAt: '2024-01-30T18:00:00Z',
@@ -556,6 +556,109 @@ export const mockOrders: Order[] = [
         contact: {
           channel: 'WHATSAPP',
           phoneE164: '+5491123456797'
+        }
+      }
+    ]
+  },
+  // Pedido de prueba con múltiples items - valores claros
+  {
+    id: '10',
+    customer: {
+      id: 'c10',
+      firstName: 'Test',
+      lastName: 'Usuario',
+      phoneE164: '+5491123456798',
+      email: 'test@email.com',
+      dni: '12345678'
+    },
+    orderDate: '2024-01-21T10:00:00Z',
+    takenBy: { id: 'u1', name: 'Juan Pérez' },
+    totalValue: 30000, // Total claro: 10000 + 10000 + 10000
+    depositValueOrder: 15000, // Total claro: 5000 + 5000 + 5000
+    restPaidAmountOrder: 15000, // Total claro: 30000 - 15000
+    saleStateOrder: 'SEÑADO',
+    saleStateOrderChangedAt: '2024-01-21T10:00:00Z',
+    deadlineAt: '2024-01-31T18:00:00Z',
+    paidAmountCached: 15000,
+    balanceAmountCached: 15000,
+    tasks: [],
+    progressStep: 'HECHO' as ProgressStep,
+    shipping: {
+      carrier: 'ANDREANI',
+      service: 'DOMICILIO',
+      origin: 'ENTREGA_EN_SUCURSAL'
+    },
+    items: [
+      {
+        id: 'i10a',
+        orderId: '10',
+        designName: 'Item 1',
+        requestedWidthMm: 50,
+        requestedHeightMm: 30,
+        stampType: 'CLASICO',
+        itemValue: 10000,
+        fabricationState: 'HECHO',
+        isPriority: false,
+        saleState: 'SEÑADO',
+        shippingState: 'SIN_ENVIO',
+        depositValueItem: 5000,
+        restPaidAmountItem: 5000,
+        paidAmountItemCached: 5000,
+        balanceItemCached: 5000,
+        files: {
+          baseUrl: 'https://via.placeholder.com/40x40/4F46E5/FFFFFF?text=1'
+        },
+        contact: {
+          channel: 'WHATSAPP',
+          phoneE164: '+5491123456798'
+        }
+      },
+      {
+        id: 'i10b',
+        orderId: '10',
+        designName: 'Item 2',
+        requestedWidthMm: 40,
+        requestedHeightMm: 25,
+        stampType: 'ABC',
+        itemValue: 10000,
+        fabricationState: 'HECHO',
+        isPriority: false,
+        saleState: 'SEÑADO',
+        shippingState: 'SIN_ENVIO',
+        depositValueItem: 5000,
+        restPaidAmountItem: 5000,
+        paidAmountItemCached: 5000,
+        balanceItemCached: 5000,
+        files: {
+          baseUrl: 'https://via.placeholder.com/40x40/059669/FFFFFF?text=2'
+        },
+        contact: {
+          channel: 'WHATSAPP',
+          phoneE164: '+5491123456798'
+        }
+      },
+      {
+        id: 'i10c',
+        orderId: '10',
+        designName: 'Item 3',
+        requestedWidthMm: 30,
+        requestedHeightMm: 20,
+        stampType: 'LACRE',
+        itemValue: 10000,
+        fabricationState: 'HECHO',
+        isPriority: false,
+        saleState: 'SEÑADO',
+        shippingState: 'SIN_ENVIO',
+        depositValueItem: 5000,
+        restPaidAmountItem: 5000,
+        paidAmountItemCached: 5000,
+        balanceItemCached: 5000,
+        files: {
+          baseUrl: 'https://via.placeholder.com/40x40/DC2626/FFFFFF?text=3'
+        },
+        contact: {
+          channel: 'WHATSAPP',
+          phoneE164: '+5491123456798'
         }
       }
     ]

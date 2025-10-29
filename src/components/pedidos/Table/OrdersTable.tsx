@@ -17,6 +17,7 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, C
 import { DndTableContainer } from './DndTableContainer';
 import { ResizableHeader } from './ResizableHeader';
 import { useExpandableRows } from './useExpandableRows';
+import './expand-animations.css';
 import { OrderSummaryRow } from './OrderSummaryRow';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { CellSummary } from './cells/CellSummary';
@@ -41,7 +42,7 @@ export function OrdersTable({ orders }: OrdersTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState[]>([] as any);
   const { toast } = useToast();
-  const { toggleRow, isExpanded } = useExpandableRows();
+  const { toggleRow, isExpanded, isCollapsing, isExpanding } = useExpandableRows();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -151,7 +152,27 @@ export function OrdersTable({ orders }: OrdersTableProps) {
       onTaskDelete: handleTaskDelete,
       editingRowId,
       onUpdate,
-      onExpand: toggleRow
+      onExpand: toggleRow,
+      isSubitem: false
+    });
+  }, [editingRowId, toggleRow]);
+
+  const subitemColumns = useMemo(() => {
+    return createUnifiedColumns({
+      onTipoChange: handleTipoChange,
+      onFabricacionChange: handleFabricacionChange,
+      onVentaChange: handleVentaChange,
+      onEnvioEstadoChange: handleEnvioEstadoChange,
+      onEnvioChange: handleEnvioChange,
+      onDateChange: handleDateChange,
+      onDeadlineChange: handleDeadlineChange,
+      onTaskCreate: handleTaskCreate,
+      onTaskUpdate: handleTaskUpdate,
+      onTaskDelete: handleTaskDelete,
+      editingRowId,
+      onUpdate,
+      onExpand: toggleRow,
+      isSubitem: true
     });
   }, [editingRowId, toggleRow]);
 
@@ -165,6 +186,16 @@ export function OrdersTable({ orders }: OrdersTableProps) {
       })
       .filter((col): col is NonNullable<typeof col> => col !== null);
   }, [columns, tableColumns]);
+
+  const sortedSubitemColumns = useMemo(() => {
+    return columns
+      .sort((a, b) => a.order - b.order)
+      .map(col => {
+        const tableCol = subitemColumns.find(tc => tc.id === col.id);
+        return tableCol ? { ...tableCol, size: col.size } : null;
+      })
+      .filter((col): col is NonNullable<typeof col> => col !== null);
+  }, [columns, subitemColumns]);
 
   const columnIds = columns.map(col => col.id);
 
@@ -236,14 +267,17 @@ export function OrdersTable({ orders }: OrdersTableProps) {
                         onDoubleClick={() => handleRowDoubleClick(order.id)} 
                         className={`hover:bg-muted/50 transition-colors ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''}`}
                       >
-                        {tableColumns.map((column) => {
+                        {sortedColumns.map((column) => {
                           if (!column.id) return null;
                           const columnState = columns.find(col => col.id === column.id);
                           const align = (column.meta as any)?.align || 'left';
                           const isContacto = column.id === 'contacto';
                           const isRestante = column.id === 'restante';
                           const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
-                        const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                          const isTextColumn = ['cliente', 'contacto'].includes(column.id);
+                          const isDisenioColumn = column.id === 'disenio';
+                          const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                          const textOverflowClass = isTextColumn ? 'overflow-hidden' : isDisenioColumn ? 'overflow-hidden' : 'overflow-hidden text-ellipsis whitespace-nowrap';
                           
                           // Crear un objeto row mock para compatibilidad con las celdas existentes
                           const mockRow = {
@@ -255,7 +289,7 @@ export function OrdersTable({ orders }: OrdersTableProps) {
                         return (
                             <td 
                               key={`${order.id}-${order.items[0].id}-${column.id}`} 
-                              className={`${paddingClass} py-3 h-12 align-middle whitespace-nowrap overflow-hidden text-ellipsis text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} 
+                              className={`${paddingClass} py-2 h-14 align-middle ${textOverflowClass} text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} 
                               style={{ width: `${columnState?.size || 100}px` }}
                             >
                               {typeof column.cell === 'function' 
@@ -278,61 +312,24 @@ export function OrdersTable({ orders }: OrdersTableProps) {
               // Si tiene múltiples items, mostrar fila expandible
               return (
                 <React.Fragment key={order.id}>
-                  {/* Fila resumen */}
-                  <tr className="border-b hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 transition-all duration-300 ease-in-out cursor-pointer group">
-                    {tableColumns.map((column, index) => {
+                  {/* Fila resumen con animación mejorada */}
+                  <tr className={`border-b hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 transition-all duration-200 ease-out cursor-pointer group ${isExpandedState ? 'summary-row-expanded' : ''} ${isCollapsing(order.id) ? 'summary-row-collapsing' : ''} ${isExpanding(order.id) ? 'summary-row-expanding' : ''}`}>
+                    {sortedColumns.map((column, index) => {
                       if (!column.id) return null;
                       const columnState = columns.find(col => col.id === column.id);
                       const align = (column.meta as any)?.align || 'left';
                       const isContacto = column.id === 'contacto';
                       const isRestante = column.id === 'restante';
                       const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
+                      const isTextColumn = ['cliente', 'contacto'].includes(column.id);
+                      const isDisenioColumn = column.id === 'disenio';
                       const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                      const textOverflowClass = isTextColumn ? 'overflow-hidden' : isDisenioColumn ? 'overflow-hidden' : 'overflow-hidden text-ellipsis whitespace-nowrap';
                       
-                      // Crear un objeto row mock que contenga datos resumidos para cada columna
-                      // IMPORTANTE: Mantener el array de items completo para que CellDisenio pueda detectar múltiples items
-                      const summaryOrder = {
-                        ...order,
-                        items: order.items.map((item, idx) => idx === 0 ? {
-                          ...item, // Usar el primer item como base
-                          // No modificar designName aquí, CellDisenio se encarga de eso
-                          itemValue: order.items.reduce((sum, item) => sum + (item.itemValue || 0), 0),
-                          depositValueItem: order.items.reduce((sum, item) => sum + (item.depositValueItem || 0), 0),
-                          restPaidAmountItem: order.items.reduce((sum, item) => sum + (item.restPaidAmountItem || 0), 0),
-                          // Determinar el estado más representativo para cada tipo
-                          fabricationState: (() => {
-                            const states = [...new Set(order.items.map(item => item.fabricationState))];
-                            if (states.length === 1) return states[0];
-                            // Si hay múltiples estados, usar el más avanzado o el más común
-                            const priorityOrder = ['HECHO', 'VERIFICAR', 'HACIENDO', 'RETOCAR', 'REHACER', 'SIN_HACER'];
-                            return priorityOrder.find(state => states.includes(state)) || states[0];
-                          })(),
-                          saleState: (() => {
-                            const states = [...new Set(order.items.map(item => item.saleState))];
-                            if (states.length === 1) return states[0];
-                            // Si hay múltiples estados, usar el más avanzado
-                            const priorityOrder = ['TRANSFERIDO', 'FOTO_ENVIADA', 'SEÑADO', 'DEUDOR'];
-                            return priorityOrder.find(state => states.includes(state)) || states[0];
-                          })(),
-                          shippingState: (() => {
-                            const states = [...new Set(order.items.map(item => item.shippingState))];
-                            if (states.length === 1) return states[0];
-                            // Si hay múltiples estados, usar el más avanzado
-                            const priorityOrder = ['SEGUIMIENTO_ENVIADO', 'DESPACHADO', 'ETIQUETA_LISTA', 'HACER_ETIQUETA', 'SIN_ENVIO'];
-                            return priorityOrder.find(state => states.includes(state)) || states[0];
-                          })(),
-                          // Para la fila resumen, no usar isPriority para evitar efectos visuales incorrectos
-                          isPriority: false,
-                          files: {
-                            baseUrl: order.items.filter(item => item.files?.baseUrl).length > 0 ? 'summary' : undefined,
-                            vectorUrl: order.items.filter(item => item.files?.vectorUrl).length > 0 ? 'summary' : undefined,
-                            photoUrl: order.items.filter(item => item.files?.photoUrl).length > 0 ? 'summary' : undefined
-                          }
-                        } : item) // Mantener los demás items sin modificar
-                      };
-                      
+                      // Para la fila resumen, usar el pedido completo sin modificar
+                      // Las celdas individuales se encargan de calcular los totales correctamente
                       const mockRow = {
-                        original: summaryOrder,
+                        original: order, // Usar el pedido completo
                         id: `${order.id}-summary`,
                         getVisibleCells: () => []
                       } as any;
@@ -340,7 +337,7 @@ export function OrdersTable({ orders }: OrdersTableProps) {
                       return (
                         <td 
                           key={`${order.id}-summary-${column.id}`} 
-                          className={`${paddingClass} py-3 h-12 align-middle whitespace-nowrap overflow-hidden text-ellipsis text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} 
+                          className={`${paddingClass} py-3 h-12 align-middle ${textOverflowClass} text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} 
                           style={{ width: `${columnState?.size || 100}px` }}
                         >
                           {/* Usar el mismo componente de celda que las filas individuales */}
@@ -359,25 +356,28 @@ export function OrdersTable({ orders }: OrdersTableProps) {
                          <tr 
                            data-row 
                            onDoubleClick={() => handleRowDoubleClick(order.id)} 
-                           className={`hover:bg-muted/30 transition-all duration-300 ease-in-out bg-gradient-to-r from-muted/10 to-muted/5 shadow-sm animate-in slide-in-from-top-2 fade-in relative ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''}`}
+                           className={`hover:bg-muted/30 transition-all duration-300 ease-in-out bg-gradient-to-r from-muted/10 to-muted/5 shadow-sm animate-in slide-in-from-top-2 fade-in relative ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''} ${isCollapsing(order.id) ? 'expandable-item-exit' : 'expandable-item-enter'}`}
                            style={{
                              animationDelay: `${index * 100}ms`,
                              marginBottom: index < order.items.length - 1 ? '2px' : '0px',
                              borderLeft: '2px solid #d1d5db',
                            }}
                          >
-                          {tableColumns.map((column) => {
+                          {sortedSubitemColumns.map((column) => {
                             if (!column.id) return null;
                             
                             // Columnas que deben estar vacías en las filas expandidas
-                            const columnsToHideInExpandedView = ['fecha', 'cliente', 'contacto', 'envio', 'seguimiento'];
+                            const columnsToHideInExpandedView = ['fecha', 'cliente', 'contacto', 'envio', 'envioEstado', 'seguimiento'];
                             const shouldHideColumn = columnsToHideInExpandedView.includes(column.id);
                             const columnState = columns.find(col => col.id === column.id);
                             const align = (column.meta as any)?.align || 'left';
                             const isContacto = column.id === 'contacto';
                             const isRestante = column.id === 'restante';
                             const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
+                            const isTextColumn = ['cliente', 'contacto'].includes(column.id);
+                            const isDisenioColumn = column.id === 'disenio';
                             const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                            const textOverflowClass = isTextColumn ? 'overflow-hidden' : isDisenioColumn ? 'overflow-hidden' : 'overflow-hidden text-ellipsis whitespace-nowrap';
                             
                             // Crear un objeto row mock para compatibilidad con las celdas existentes
                             const mockRow = {
@@ -389,7 +389,7 @@ export function OrdersTable({ orders }: OrdersTableProps) {
                             return (
                               <td 
                                 key={`${order.id}-${item.id}-${column.id}`} 
-                                className={`${paddingClass} py-3 h-12 align-middle whitespace-nowrap overflow-hidden text-ellipsis text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} 
+                                className={`${paddingClass} py-2 h-14 align-middle ${textOverflowClass} text-sm relative ${isContacto ? 'border-r border-border/30' : ''} ${isRestante ? 'border-r border-border/30' : ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`} 
                                 style={{ width: `${columnState?.size || 100}px` }}
                               >
                                 {shouldHideColumn ? (
@@ -404,7 +404,7 @@ export function OrdersTable({ orders }: OrdersTableProps) {
                               </td>
                             );
                           })}
-              </tr>
+                        </tr>
                       </ContextMenuTrigger>
                       <ContextMenuContent>
                         <ContextMenuItem onSelect={() => setEditingRow(order.id)}>Editar pedido</ContextMenuItem>

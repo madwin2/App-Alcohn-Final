@@ -60,6 +60,14 @@ export function ResizableHeader({
     document.addEventListener('mouseup', handleMouseUp);
   };
 
+  // Extraer la clase de alineación del className
+  const isCenter = className?.includes('text-center');
+  const isRight = className?.includes('text-right');
+  const justifyClass = isCenter ? 'justify-center' : isRight ? 'justify-end' : 'justify-start';
+
+  // Debug: mostrar qué clase se está aplicando
+  console.log(`Header ${id}: className="${className}", isCenter=${isCenter}, justifyClass="${justifyClass}"`);
+
   return (
     <th
       ref={setNodeRef}
@@ -73,7 +81,7 @@ export function ResizableHeader({
         className
       )}
     >
-      <div className="flex items-center justify-between h-full px-2">
+      <div className={`flex items-center h-full px-2 ${justifyClass}`} style={{ justifyContent: isCenter ? 'center' : isRight ? 'flex-end' : 'flex-start' }}>
         {children}
       </div>
       
@@ -86,7 +94,8 @@ export function ResizableHeader({
       
       {/* Drag area - Solo en el centro del header, excluyendo el área de resize */}
       <div 
-        className="absolute inset-0 flex items-center justify-center cursor-move pr-6"
+        className="absolute inset-0 flex items-center cursor-move pr-6"
+        style={{ justifyContent: isCenter ? 'center' : isRight ? 'flex-end' : 'flex-start' }}
         {...attributes}
         {...listeners}
         title="Arrastra para reordenar"

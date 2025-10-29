@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
+import { DatePicker } from '@/components/ui/date-picker';
 import { NewOrderFormData, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, StampType } from '@/lib/types/index';
 import { useState } from 'react';
 import { Upload, X } from 'lucide-react';
@@ -40,6 +41,7 @@ const orderSchema = z.object({
   states: z.object({
     fabrication: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR']),
     isPriority: z.boolean(),
+    deadline: z.date().optional(),
   }),
 });
 
@@ -148,6 +150,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
       states: {
         fabrication: 'SIN_HACER',
         isPriority: false,
+        deadline: undefined,
         ...initialData.states,
       },
     },
@@ -394,15 +397,27 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             </Select>
           </div>
           <div className="col-span-6">
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="isPriority" 
-                checked={orderForm.watch('states.isPriority')}
-                onCheckedChange={(checked) => orderForm.setValue('states.isPriority', !!checked)}
-              />
-              <Label htmlFor="isPriority" className="text-sm font-medium">
-                🔥 Pedido Prioritario
-              </Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="isPriority" 
+                  checked={orderForm.watch('states.isPriority')}
+                  onCheckedChange={(checked) => orderForm.setValue('states.isPriority', !!checked)}
+                />
+                <Label htmlFor="isPriority" className="text-sm font-medium">
+                  🔥 Pedido Prioritario
+                </Label>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="deadline" className="text-sm font-medium">
+                  📅 Fecha Límite
+                </Label>
+                <DatePicker
+                  date={orderForm.watch('states.deadline')}
+                  onDateChange={(date) => orderForm.setValue('states.deadline', date)}
+                  placeholder="Seleccionar fecha límite"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -609,15 +624,27 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 </Select>
               </div>
               <div className="col-span-6">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="isPriority-step3" 
-                    checked={orderForm.watch('states.isPriority')}
-                    onCheckedChange={(checked) => orderForm.setValue('states.isPriority', !!checked)}
-                  />
-                  <Label htmlFor="isPriority-step3" className="text-sm font-medium">
-                    🔥 Pedido Prioritario
-                  </Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="isPriority-step3" 
+                      checked={orderForm.watch('states.isPriority')}
+                      onCheckedChange={(checked) => orderForm.setValue('states.isPriority', !!checked)}
+                    />
+                    <Label htmlFor="isPriority-step3" className="text-sm font-medium">
+                      🔥 Pedido Prioritario
+                    </Label>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="deadline-step3" className="text-sm font-medium">
+                      📅 Fecha Límite
+                    </Label>
+                    <DatePicker
+                      date={orderForm.watch('states.deadline')}
+                      onDateChange={(date) => orderForm.setValue('states.deadline', date)}
+                      placeholder="Seleccionar fecha límite"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

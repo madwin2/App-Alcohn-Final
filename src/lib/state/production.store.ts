@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import { ProductionState, VectorizationState, ProgramType } from '../types/index';
+import { FabricationState, VectorizationState, ProgramType } from '../types/index';
 
 export interface ProductionFilters {
   dateRange?: {
     from: string;
     to: string;
   };
-  production?: ProductionState[];
+  production?: FabricationState[];
   vectorization?: VectorizationState[];
   program?: ProgramType[];
 }
@@ -17,7 +17,7 @@ export interface ProductionSortCriteria {
 }
 
 export interface ProductionSortState {
-  productionPriority: ProductionState[];
+  productionPriority: FabricationState[];
   criteria: ProductionSortCriteria[];
 }
 
@@ -61,7 +61,7 @@ interface ProductionStore {
   
   // Acciones de ordenamiento
   setSort: (sort: Partial<ProductionSortState>) => void;
-  setProductionPriority: (priority: ProductionState[]) => void;
+  setProductionPriority: (priority: FabricationState[]) => void;
   addSortCriteria: (criteria: { field: string; dir: 'asc' | 'desc' }) => void;
   removeSortCriteria: (index: number) => void;
   updateSortCriteria: (index: number, criteria: { field: string; dir: 'asc' | 'desc' }) => void;
@@ -75,7 +75,7 @@ interface ProductionStore {
 const initialFilters: ProductionFilters = {};
 
 const initialSort: ProductionSortState = {
-  productionPriority: ['PENDIENTE', 'EN_PROGRESO', 'REVISAR', 'COMPLETADO', 'REHACER'],
+  productionPriority: ['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR'],
   criteria: []
 };
 

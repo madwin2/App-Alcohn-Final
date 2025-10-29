@@ -2,21 +2,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Order, SaleState } from '@/lib/types/index';
 import { getSaleStateColor, getSaleChipVisual, getSaleLabel } from '@/lib/utils/format';
+import { useSound } from '@/lib/hooks/useSound';
 
 interface CellVentaProps {
   order: Order;
   onVentaChange?: (orderId: string, newState: SaleState) => void;
+  isSubitem?: boolean;
 }
 
-const saleLabels: Record<SaleState | 'MULTIPLE', string> = {
+const saleLabels: Record<SaleState, string> = {
   'SEÑADO': 'Señado',
   'FOTO_ENVIADA': 'Foto Enviada',
   'TRANSFERIDO': 'Transferido',
-  'DEUDOR': 'Deudor',
-  'MULTIPLE': 'Múltiple'
+  'DEUDOR': 'Deudor'
 };
 
-export function CellVenta({ order, onVentaChange }: CellVentaProps) {
+export function CellVenta({ order, onVentaChange, isSubitem = false }: CellVentaProps) {
+  const { playSound } = useSound();
   const item = order.items[0];
   
   if (!item) return null;
@@ -24,12 +26,24 @@ export function CellVenta({ order, onVentaChange }: CellVentaProps) {
   const saleState = item.saleState as SaleState;
   
   const handleValueChange = (value: string) => {
-    onVentaChange?.(order.id, value as SaleState);
+    const newState = value as SaleState;
+    
+    // Reproducir sonido cuando se marca como "Transferido"
+    if (newState === 'TRANSFERIDO') {
+      playSound('complete');
+    }
+    
+    onVentaChange?.(order.id, newState);
   };
+
+  // Para subitems, solo mostrar opciones limitadas
+  const availableOptions = isSubitem 
+    ? { 'SEÑADO': 'Señado', 'FOTO_ENVIADA': 'Foto Enviada' }
+    : saleLabels;
 
   return (
     <Select value={item.saleState} onValueChange={handleValueChange}>
-      <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
+      <SelectTrigger className="w-full h-14 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
         <SelectValue>
           {(() => {
             const visual = getSaleChipVisual(item.saleState);
@@ -45,7 +59,7 @@ export function CellVenta({ order, onVentaChange }: CellVentaProps) {
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {Object.entries(saleLabels).map(([value, label]) => (
+        {Object.entries(availableOptions).map(([value, label]) => (
           <SelectItem key={value} value={value} className="text-xs">
             {(() => {
               const visual = getSaleChipVisual(value);

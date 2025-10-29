@@ -7,14 +7,13 @@ interface CellFabricacionProps {
   onFabricacionChange?: (orderId: string, newState: FabricationState) => void;
 }
 
-const fabricationLabels: Record<FabricationState | 'MULTIPLE', string> = {
+const fabricationLabels: Record<FabricationState, string> = {
   'SIN_HACER': 'Sin Hacer',
   'HACIENDO': 'Haciendo',
   'VERIFICAR': 'Verificar',
   'HECHO': 'Hecho',
   'REHACER': 'Rehacer',
-  'RETOCAR': 'Retocar',
-  'MULTIPLE': 'Múltiple'
+  'RETOCAR': 'Retocar'
 };
 
 export function CellFabricacion({ order, onFabricacionChange }: CellFabricacionProps) {
@@ -30,7 +29,7 @@ export function CellFabricacion({ order, onFabricacionChange }: CellFabricacionP
 
   return (
     <Select value={item.fabricationState} onValueChange={handleValueChange}>
-      <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
+      <SelectTrigger className="w-full h-14 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
         <SelectValue>
           {(() => {
             const visual = getFabricationChipVisual(item.fabricationState, item.isPriority);

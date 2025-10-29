@@ -116,7 +116,7 @@ export interface SortState {
 
 // Production Types
 export type ProductionState = 'PENDIENTE' | 'EN_PROGRESO' | 'COMPLETADO' | 'REVISAR' | 'REHACER';
-export type VectorizationState = 'PENDIENTE' | 'COMPLETADO' | 'NO_REQUERIDO';
+export type VectorizationState = 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO';
 export type ProgramType = 'ILLUSTRATOR' | 'PHOTOSHOP' | 'COREL' | 'AUTOCAD' | 'OTRO';
 
 export interface ProductionTask {
@@ -164,6 +164,8 @@ export interface ProgramStamp {
   heightMm: number;
   stampType: StampType;
   previewUrl?: string;
+  isPriority?: boolean;
+  deadlineAt?: string;
 }
 
 export interface Program {
