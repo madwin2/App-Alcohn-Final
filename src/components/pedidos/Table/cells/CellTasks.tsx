@@ -3,6 +3,7 @@ import { Order, Task } from '@/lib/types/index';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CheckCircle, Circle, Clock, Trash2, Plus, Calendar } from 'lucide-react';
@@ -47,6 +48,17 @@ export function CellTasks({ order, onTaskUpdate, onTaskDelete, onTaskCreate }: C
         return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
       default:
         return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
+    }
+  };
+
+  const getStatusLabel = (status: Task['status']) => {
+    switch (status) {
+      case 'COMPLETED':
+        return 'Completada';
+      case 'IN_PROGRESS':
+        return 'En progreso';
+      default:
+        return 'Pendiente';
     }
   };
 
@@ -116,13 +128,19 @@ export function CellTasks({ order, onTaskUpdate, onTaskDelete, onTaskCreate }: C
                     <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
                   )}
                   <div className="flex items-center gap-2 mt-2">
-                    <Badge
-                      variant="outline"
-                      className={`text-xs ${getStatusColor(task.status)}`}
+                    <Select
+                      value={task.status}
+                      onValueChange={(value: Task['status']) => handleTaskStatusChange(task.id, value)}
                     >
-                      {task.status === 'COMPLETED' ? 'Completada' :
-                       task.status === 'IN_PROGRESS' ? 'En progreso' : 'Pendiente'}
-                    </Badge>
+                      <SelectTrigger className={`h-6 text-xs w-auto min-w-[120px] border rounded-md px-2 py-1 ${getStatusColor(task.status)}`}>
+                        <SelectValue placeholder={getStatusLabel(task.status)} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PENDING">Pendiente</SelectItem>
+                        <SelectItem value="IN_PROGRESS">En progreso</SelectItem>
+                        <SelectItem value="COMPLETED">Completada</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <span className="text-xs text-muted-foreground">
                       {format(new Date(task.createdAt), 'dd/MM/yy', { locale: es })}
                     </span>

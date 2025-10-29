@@ -92,7 +92,7 @@ export function CellSummary({ order, columnId }: CellSummaryProps) {
     case 'prioridad':
       return hasPriority ? (
         <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-600 text-white">
-          PRIO
+          Prioridad
         </span>
       ) : (
         <span className="text-muted-foreground/60 text-xs">—</span>

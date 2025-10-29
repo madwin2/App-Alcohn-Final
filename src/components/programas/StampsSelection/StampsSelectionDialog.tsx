@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, X, Plus, Clock, AlertCircle } from 'lucide-react';
+import { Search, Plus, Clock, AlertCircle, Calendar } from 'lucide-react';
 import { ProgramStamp, StampType } from '@/lib/types/index';
 import { StampTypeIcon } from '@/components/ui/StampTypeIcon';
 
@@ -24,7 +23,8 @@ const availableStamps: ProgramStamp[] = [
     heightMm: 25,
     stampType: 'CLASICO',
     previewUrl: '/icons/CLASICO.svg',
-    isPriority: false
+    isPriority: false,
+    createdAt: '2024-01-15T10:30:00Z'
   },
   {
     id: 'stamp-2',
@@ -34,7 +34,8 @@ const availableStamps: ProgramStamp[] = [
     stampType: '3MM',
     previewUrl: '/icons/3mm.svg',
     isPriority: true,
-    deadlineAt: '2024-02-15T18:00:00Z'
+    deadlineAt: '2024-02-15T18:00:00Z',
+    createdAt: '2024-02-01T14:20:00Z'
   },
   {
     id: 'stamp-3',
@@ -44,7 +45,8 @@ const availableStamps: ProgramStamp[] = [
     stampType: 'ALIMENTO',
     previewUrl: '/icons/ABC.svg',
     isPriority: false,
-    deadlineAt: '2024-02-20T12:00:00Z'
+    deadlineAt: '2024-02-20T12:00:00Z',
+    createdAt: '2024-02-05T09:15:00Z'
   },
   {
     id: 'stamp-4',
@@ -53,7 +55,8 @@ const availableStamps: ProgramStamp[] = [
     heightMm: 12,
     stampType: 'ABC',
     previewUrl: '/icons/ABC.svg',
-    isPriority: true
+    isPriority: true,
+    createdAt: '2024-02-08T16:45:00Z'
   },
   {
     id: 'stamp-5',
@@ -62,7 +65,8 @@ const availableStamps: ProgramStamp[] = [
     heightMm: 25,
     stampType: 'LACRE',
     previewUrl: '/icons/LACRE.svg',
-    isPriority: false
+    isPriority: false,
+    createdAt: '2024-01-22T11:00:00Z'
   },
   {
     id: 'stamp-6',
@@ -71,7 +75,8 @@ const availableStamps: ProgramStamp[] = [
     heightMm: 25,
     stampType: 'CLASICO',
     previewUrl: '/icons/CLASICO.svg',
-    isPriority: false
+    isPriority: false,
+    createdAt: '2024-01-18T13:30:00Z'
   },
   {
     id: 'stamp-7',
@@ -81,7 +86,8 @@ const availableStamps: ProgramStamp[] = [
     stampType: '3MM',
     previewUrl: '/icons/3mm.svg',
     isPriority: true,
-    deadlineAt: '2024-02-10T16:30:00Z'
+    deadlineAt: '2024-02-10T16:30:00Z',
+    createdAt: '2024-02-03T08:20:00Z'
   },
   {
     id: 'stamp-8',
@@ -90,7 +96,8 @@ const availableStamps: ProgramStamp[] = [
     heightMm: 38,
     stampType: 'ALIMENTO',
     previewUrl: '/icons/ABC.svg',
-    isPriority: false
+    isPriority: false,
+    createdAt: '2024-02-12T15:10:00Z'
   }
 ];
 
@@ -106,23 +113,16 @@ const formatDeadline = (deadlineAt: string): string => {
   });
 };
 
-// Función para obtener el color del tipo de sello
-const getStampTypeColor = (stampType: StampType): string => {
-  switch (stampType) {
-    case 'CLASICO':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
-    case '3MM':
-      return 'bg-green-100 text-green-800 border-green-200';
-    case 'ALIMENTO':
-      return 'bg-orange-100 text-orange-800 border-orange-200';
-    case 'ABC':
-      return 'bg-purple-100 text-purple-800 border-purple-200';
-    case 'LACRE':
-      return 'bg-gray-100 text-gray-800 border-gray-200';
-    default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
-  }
+// Función para formatear fecha de creación/subida
+const formatCreatedAt = (createdAt: string): string => {
+  const date = new Date(createdAt);
+  return date.toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
 };
+
 
 // Modal para seleccionar sellos disponibles y agregarlos al programa
 export function StampsSelectionDialog({ 
@@ -220,60 +220,57 @@ export function StampsSelectionDialog({
                       checked={selectedStamps.includes(stamp.id)}
                       onChange={() => handleStampToggle(stamp.id)}
                       className="mt-1"
+                      onClick={(e) => e.stopPropagation()}
                     />
                     
+                    {/* Preview del diseño del sello - pequeño a la izquierda */}
+                    <div className="w-16 h-16 border border-border rounded bg-muted/30 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {stamp.previewUrl ? (
+                        <img 
+                          src={stamp.previewUrl} 
+                          alt={`Diseño de ${stamp.designName}`}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <div className="text-xs text-muted-foreground text-center">
+                          {stamp.widthMm}×{stamp.heightMm}mm
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Información del sello - a la derecha */}
                     <div className="flex-1 min-w-0">
-                      {/* Header con nombre, tipo e icono */}
-                      <div className="flex items-center gap-2 mb-2">
+                      {/* Header con icono de prioridad, nombre e icono del tipo */}
+                      <div className="flex items-center gap-1.5 mb-1">
+                        {stamp.isPriority && (
+                          <AlertCircle className="w-3.5 h-3.5 text-orange-600 flex-shrink-0" />
+                        )}
                         <h4 className="font-medium text-sm truncate">
                           {stamp.designName}
                         </h4>
-                        <div className="flex items-center gap-1">
-                          <StampTypeIcon stampType={stamp.stampType} className="w-3 h-3" />
-                          <Badge 
-                            variant="outline" 
-                            className={`text-xs ${getStampTypeColor(stamp.stampType)}`}
-                          >
-                            {stamp.stampType}
-                          </Badge>
-                        </div>
+                        <StampTypeIcon stampType={stamp.stampType} className="w-4 h-4 flex-shrink-0 opacity-80" />
                       </div>
                       
                       {/* Medidas */}
-                      <div className="text-xs text-muted-foreground mb-2">
+                      <div className="text-xs text-muted-foreground mb-1">
                         {stamp.widthMm}mm × {stamp.heightMm}mm
                       </div>
                       
-                      {/* Indicadores de prioridad y fecha límite */}
-                      <div className="flex items-center gap-2 mb-2">
-                        {stamp.isPriority && (
-                          <div className="flex items-center gap-1 text-xs text-orange-600">
-                            <AlertCircle className="w-3 h-3" />
-                            <span>Prioritario</span>
-                          </div>
-                        )}
-                        {stamp.deadlineAt && (
-                          <div className="flex items-center gap-1 text-xs text-red-600">
-                            <Clock className="w-3 h-3" />
-                            <span>{formatDeadline(stamp.deadlineAt)}</span>
-                          </div>
-                        )}
-                      </div>
+                      {/* Fecha de creación/subida */}
+                      {stamp.createdAt && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                          <Calendar className="w-3 h-3" />
+                          <span>{formatCreatedAt(stamp.createdAt)}</span>
+                        </div>
+                      )}
                       
-                      {/* Preview del sello */}
-                      <div className="w-12 h-12 border border-border rounded bg-muted/20 flex items-center justify-center">
-                        {stamp.previewUrl ? (
-                          <img 
-                            src={stamp.previewUrl} 
-                            alt={stamp.designName}
-                            className="w-8 h-8 object-contain"
-                          />
-                        ) : (
-                          <div className="text-xs text-muted-foreground">
-                            {stamp.widthMm}×{stamp.heightMm}
-                          </div>
-                        )}
-                      </div>
+                      {/* Fecha límite */}
+                      {stamp.deadlineAt && (
+                        <div className="flex items-center gap-1 text-xs text-red-600">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatDeadline(stamp.deadlineAt)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -306,4 +303,6 @@ export function StampsSelectionDialog({
     </Dialog>
   );
 }
+
+
 

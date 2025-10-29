@@ -95,7 +95,7 @@ export function OrderSummaryRow({ order }: OrderSummaryRowProps) {
       <div className="w-7 px-2 text-center">
         {hasPriority && (
           <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-red-600 text-white border border-red-500">
-            PRIO
+            Prioridad
           </span>
         )}
       </div>

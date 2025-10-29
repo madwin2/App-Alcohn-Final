@@ -12,7 +12,20 @@ export function StampTypeIcon({ stampType, className = "w-4 h-4" }: StampTypeIco
     return null;
   }
 
-  const iconPath = `/icons/${stampType}.svg`;
+  // Mapeo de tipos de sellos a sus iconos
+  const iconMap: Record<StampType, string> = {
+    '3MM': '/icons/3mm.svg',
+    'ABC': '/icons/ABC.svg',
+    'LACRE': '/icons/LACRE.svg',
+    'ALIMENTO': '/icons/ABC.svg', // ALIMENTO usa el mismo icono que ABC
+    'CLASICO': '' // No se mostrará, pero necesario para el tipo
+  };
+
+  const iconPath = iconMap[stampType];
+
+  if (!iconPath) {
+    return null;
+  }
 
   return (
     <img 

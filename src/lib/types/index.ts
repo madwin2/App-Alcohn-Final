@@ -166,6 +166,7 @@ export interface ProgramStamp {
   previewUrl?: string;
   isPriority?: boolean;
   deadlineAt?: string;
+  createdAt?: string;
 }
 
 export interface Program {

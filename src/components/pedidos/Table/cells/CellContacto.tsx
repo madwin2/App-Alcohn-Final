@@ -1,15 +1,29 @@
 import { formatPhone, getChannelIcon } from '@/lib/utils/format';
 import { Order } from '@/lib/types/index';
 import { SvgIcon } from '@/components/ui/SvgIcon';
+import { EditableInline } from './EditableInline';
 
 interface CellContactoProps {
   order: Order;
+  editingRowId?: string | null;
+  onUpdate?: (orderId: string, updates: any) => void;
 }
 
-export function CellContacto({ order }: CellContactoProps) {
-  const { customer, items } = order;
-  const contact = items[0]?.contact; // Asumiendo que todos los items tienen el mismo contacto
+export function CellContacto({ order, editingRowId, onUpdate }: CellContactoProps) {
+  const { customer } = order;
+  const isEditing = editingRowId === order.id;
   
+  if (isEditing) {
+    return (
+      <EditableInline 
+        value={customer.phoneE164 || ''} 
+        onCommit={(v) => onUpdate?.(order.id, { customer: { ...customer, phoneE164: v } })} 
+        className="text-xs text-gray-400"
+      />
+    );
+  }
+  
+  const contact = order.items[0]?.contact;
   if (!contact) return null;
 
   return (

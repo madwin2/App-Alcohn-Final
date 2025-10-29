@@ -117,6 +117,8 @@ export function createUnifiedColumns({
         order={row.original}
         showNotes={true}
         onExpand={() => onExpand?.(row.original.id)}
+        editingRowId={editingRowId}
+        onUpdate={onUpdate}
       />
     ),
     

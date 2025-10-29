@@ -18,7 +18,7 @@ export function CellPrioridad({ order }: CellPrioridadProps) {
       aria-label="Pedido prioritario"
       className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium bg-red-600 text-white border border-red-500"
     >
-      PRIO
+      Prioridad
     </span>
   );
 }

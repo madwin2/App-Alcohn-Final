@@ -1,15 +1,19 @@
 import { formatDimensions, truncateText } from '@/lib/utils/format';
 import { Order } from '@/lib/types/index';
+import { EditableInline } from './EditableInline';
 
 interface CellDisenioProps {
   order: Order;
   showNotes?: boolean;
   onExpand?: () => void;
+  editingRowId?: string | null;
+  onUpdate?: (orderId: string, updates: any) => void;
 }
 
-export function CellDisenio({ order, showNotes = true, onExpand }: CellDisenioProps) {
+export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, onUpdate }: CellDisenioProps) {
   const item = order.items[0]; // Mostrar el primer item
   const hasMultipleItems = order.items.length > 1;
+  const isEditing = editingRowId === order.id;
   
   // Debug: mostrar información en consola
   console.log('CellDisenio - Order ID:', order.id, 'Items count:', order.items.length, 'HasMultiple:', hasMultipleItems);
@@ -17,6 +21,37 @@ export function CellDisenio({ order, showNotes = true, onExpand }: CellDisenioPr
   console.log('CellDisenio - Items array:', order.items);
   
   if (!item) return null;
+
+  if (isEditing && !hasMultipleItems) {
+    return (
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <EditableInline 
+          value={item.designName || ''} 
+          onCommit={(v) => onUpdate?.(order.id, { items: [{ ...item, designName: v }] })} 
+          className="text-sm font-medium"
+        />
+        <EditableInline 
+          value={`${item.requestedWidthMm || 0}×${item.requestedHeightMm || 0}mm`} 
+          onCommit={(v) => {
+            const match = v.match(/(\d+)×(\d+)/);
+            if (match) {
+              const width = parseInt(match[1]);
+              const height = parseInt(match[2]);
+              onUpdate?.(order.id, { items: [{ ...item, requestedWidthMm: width, requestedHeightMm: height }] });
+            }
+          }} 
+          className="text-xs text-muted-foreground"
+        />
+        {showNotes && (
+          <EditableInline 
+            value={item.notes || ''} 
+            onCommit={(v) => onUpdate?.(order.id, { items: [{ ...item, notes: v }] })} 
+            className="text-xs text-blue-400"
+          />
+        )}
+      </div>
+    );
+  }
 
   const handleClick = () => {
     console.log('CellDisenio clicked - hasMultipleItems:', hasMultipleItems, 'onExpand:', !!onExpand);
