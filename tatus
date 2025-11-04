@@ -1,0 +1,49 @@
+[33mcommit 647b962920dba09427ff81eb2be7464a169df4bc[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: madwin2 <madwin2@gmail.com>
+Date:   Wed Oct 29 11:20:21 2025 -0300
+
+    feat: mejoras en página de pedidos - edición inline, ajustes de UI y funcionalidades
+    
+    - Cambiar texto 'PRIO' a 'Prioridad' en botones de prioridad
+    - Implementar select editable para estados de tareas (pendiente, en progreso, completada)
+    - Ocultar SVG para tipo de sello 'Clásico' en la tabla (mantener visible en dropdown)
+    - Implementar modo de edición completo para pedidos:
+      * Edición inline de nombre y apellido del cliente
+      * Edición inline de teléfono de contacto
+      * Edición inline de diseño, medidas y notas
+      * Edición inline de valores (seña y valor del item)
+      * Componente EditableInline reutilizable para edición sin cambiar layout
+    - Mejorar manejo de estados de edición en todas las celdas editables
+
+ database_documentation.md                          |   3 [32m+[m
+ src/components/pedidos/Table/OrderSummaryRow.tsx   |   2 [32m+[m[31m-[m
+ src/components/pedidos/Table/UnifiedColumns.tsx    |   2 [32m+[m
+ src/components/pedidos/Table/cells/CellCliente.tsx |  23 [32m++[m[31m-[m
+ .../pedidos/Table/cells/CellContacto.tsx           |  20 [32m++[m[31m-[m
+ src/components/pedidos/Table/cells/CellDisenio.tsx |  37 [32m++++[m[31m-[m
+ .../pedidos/Table/cells/CellPrioridad.tsx          |   2 [32m+[m[31m-[m
+ src/components/pedidos/Table/cells/CellSena.tsx    |  26 [32m+++[m[31m-[m
+ src/components/pedidos/Table/cells/CellSummary.tsx |   2 [32m+[m[31m-[m
+ src/components/pedidos/Table/cells/CellTasks.tsx   |  30 [32m+++[m[31m-[m
+ src/components/pedidos/Table/cells/CellTipo.tsx    |  12 [32m+[m[31m-[m
+ src/components/pedidos/Table/cells/CellValor.tsx   |  28 [32m+++[m[31m-[m
+ .../pedidos/Table/cells/EditableInline.tsx         |  46 [32m++++++[m
+ .../produccion/Filters/ProductionFiltersDialog.tsx |   3 [32m+[m
+ .../produccion/Filters/ProductionFiltersForm.tsx   |   3 [32m+[m
+ .../produccion/NewTask/NewTaskDialog.tsx           |   3 [32m+[m
+ src/components/produccion/NewTask/NewTaskForm.tsx  |   3 [32m+[m
+ .../produccion/Sorter/ProductionSortForm.tsx       |   3 [32m+[m
+ .../produccion/Sorter/ProductionSorterDialog.tsx   |   3 [32m+[m
+ .../produccion/Table/DndTableContainer.tsx         |   3 [32m+[m
+ .../produccion/Table/ResizableHeader.tsx           |   3 [32m+[m
+ src/components/produccion/Table/cells/CellFoto.tsx |   3 [32m+[m
+ .../produccion/Table/cells/CellPrograma.tsx        |   3 [32m+[m
+ .../programas/Filters/ProgramsFiltersDialog.tsx    |   3 [32m+[m
+ .../programas/NewProgram/NewProgramDialog.tsx      |   3 [32m+[m
+ .../programas/NewProgram/NewProgramForm.tsx        | 159 [32m++++++++++++++++[m[31m-----[m
+ .../programas/Sorter/ProgramsSorterDialog.tsx      |   3 [32m+[m
+ .../StampsSelection/StampsSelectionDialog.tsx      | 133 [32m+++++++++[m[31m--------[m
+ src/components/ui/StampTypeIcon.tsx                |  15 [32m+[m[31m-[m
+ src/components/ui/card.tsx                         |   3 [32m+[m
+ src/lib/types/index.ts                             |   1 [32m+[m
+ 31 files changed, 457 insertions(+), 126 deletions(-)
