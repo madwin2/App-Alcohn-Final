@@ -6,7 +6,7 @@ import { useSound } from '@/lib/hooks/useSound';
 
 interface CellVentaProps {
   order: Order;
-  onVentaChange?: (orderId: string, newState: SaleState) => void;
+  onVentaChange?: (orderId: string, newState: SaleState, itemId?: string) => void;
   isSubitem?: boolean;
 }
 
@@ -24,16 +24,22 @@ export function CellVenta({ order, onVentaChange, isSubitem = false }: CellVenta
   if (!item) return null;
 
   const saleState = item.saleState as SaleState;
+  const isEnabled = item.fabricationState === 'HECHO';
   
   const handleValueChange = (value: string) => {
+    if (!isEnabled) return; // No permitir cambios si está deshabilitado
+    
     const newState = value as SaleState;
     
-    // Reproducir sonido cuando se marca como "Transferido"
+    // Reproducir sonido satisfactorio cuando se marca como "Transferido"
     if (newState === 'TRANSFERIDO') {
-      playSound('complete');
+      playSound('transfer');
     }
     
-    onVentaChange?.(order.id, newState);
+    // Si es subitem (fila expandida), pasar el itemId para actualizar solo ese sello
+    // Si NO es subitem (fila resumen), pasar undefined para actualizar todos los sellos del pedido
+    const itemId = isSubitem ? item.id : undefined;
+    onVentaChange?.(order.id, newState, itemId);
   };
 
   // Para subitems, solo mostrar opciones limitadas
@@ -41,40 +47,53 @@ export function CellVenta({ order, onVentaChange, isSubitem = false }: CellVenta
     ? { 'SEÑADO': 'Señado', 'FOTO_ENVIADA': 'Foto Enviada' }
     : saleLabels;
 
+  const visual = getSaleChipVisual(item.saleState);
+  const disabledStyle = !isEnabled ? {
+    backgroundColor: '#111827', // gris más oscuro
+    color: '#6b7280', // gris medio para texto
+    borderColor: '#1f2937',
+    cursor: 'not-allowed',
+  } : {};
+
   return (
-    <Select value={item.saleState} onValueChange={handleValueChange}>
-      <SelectTrigger className="w-full h-14 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent">
+    <Select value={item.saleState} onValueChange={handleValueChange} disabled={!isEnabled}>
+      <SelectTrigger className={`w-full h-14 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center [&:hover]:bg-transparent ${!isEnabled ? 'cursor-not-allowed' : ''}`}>
         <SelectValue>
-          {(() => {
-            const visual = getSaleChipVisual(item.saleState);
-            return (
-              <span 
-                className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
-                style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}
-              >
-                {getSaleLabel(item.saleState)}
-              </span>
-            );
-          })()}
+          <span 
+            className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
+            style={!isEnabled ? disabledStyle : { 
+              backgroundImage: visual.backgroundImage,
+              backgroundColor: visual.backgroundColor,
+              boxShadow: visual.boxShadow,
+              borderColor: visual.borderColor,
+              backdropFilter: 'saturate(140%) blur(3px)',
+              color: visual.textColor,
+              width: visual.width 
+            }}
+          >
+            {getSaleLabel(item.saleState)}
+          </span>
         </SelectValue>
       </SelectTrigger>
-      <SelectContent>
-        {Object.entries(availableOptions).map(([value, label]) => (
-          <SelectItem key={value} value={value} className="text-xs">
-            {(() => {
-              const visual = getSaleChipVisual(value);
-              return (
-                <span 
-                  className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
-                  style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}
-                >
-                  {getSaleLabel(value)}
-                </span>
-              );
-            })()}
-          </SelectItem>
-        ))}
-      </SelectContent>
+      {isEnabled && (
+        <SelectContent>
+          {Object.entries(availableOptions).map(([value, label]) => (
+            <SelectItem key={value} value={value} className="text-xs">
+              {(() => {
+                const visual = getSaleChipVisual(value);
+                return (
+                  <span 
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
+                    style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}
+                  >
+                    {getSaleLabel(value)}
+                  </span>
+                );
+              })()}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      )}
     </Select>
   );
 }

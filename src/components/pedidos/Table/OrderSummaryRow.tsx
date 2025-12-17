@@ -15,9 +15,10 @@ interface OrderSummaryRowProps {
 
 export function OrderSummaryRow({ order }: OrderSummaryRowProps) {
   const totalItems = order.items.length;
-  const totalValue = order.items.reduce((sum, item) => sum + (item.itemValue || 0), 0);
-  const totalDeposit = order.items.reduce((sum, item) => sum + (item.depositValueItem || 0), 0);
-  const totalRemaining = totalValue - totalDeposit;
+  // Usar valores calculados automáticamente por Supabase
+  const totalValue = order.totalValue || 0;
+  const totalDeposit = order.depositValueOrder || 0;
+  const totalRemaining = order.restPaidAmountOrder || 0;
   
   // Verificar si algún item es prioritario
   const hasPriority = order.items.some(item => item.isPriority);

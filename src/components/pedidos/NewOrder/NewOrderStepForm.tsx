@@ -9,8 +9,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { NewOrderFormData, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, StampType } from '@/lib/types/index';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Upload, X } from 'lucide-react';
+import { findCustomerByPhone } from '@/lib/supabase/services/orders.service';
 
 // Schema para el paso 1 (Información del cliente)
 const customerSchema = z.object({
@@ -28,6 +29,7 @@ const orderSchema = z.object({
   order: z.object({
     designName: z.string().min(1, 'El nombre del diseño es requerido'),
     requestedWidthMm: z.number().min(1, 'La medida debe ser mayor a 0'),
+    requestedHeightMm: z.number().min(1, 'La medida debe ser mayor a 0').optional(),
     stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
     notes: z.string().optional(),
   }),
@@ -39,7 +41,7 @@ const orderSchema = z.object({
     carrier: z.enum(['ANDREANI', 'CORREO_ARGENTINO', 'VIA_CARGO', 'OTRO']),
   }),
   states: z.object({
-    fabrication: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR']),
+    fabrication: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR', 'PROGRAMADO']),
     isPriority: z.boolean(),
     deadline: z.date().optional(),
   }),
@@ -50,11 +52,14 @@ type OrderFormData = z.infer<typeof orderSchema>;
 
 interface NewOrderStepFormProps {
   currentStep: number;
-  onStepSubmit: (data: any, step: number) => void;
+  onStepSubmit: (data: any, step: number, shouldCreateOrder?: boolean) => void;
   onCancel: () => void;
   onBack: () => void;
   onAddDesign: () => void;
+  onCreateOrder?: (currentStepData?: any) => void;
   initialData: Partial<NewOrderFormData>;
+  designsCount?: number;
+  isSubmitting?: boolean;
 }
 
 const channelOptions = [
@@ -97,6 +102,7 @@ const fabricationOptions = [
   { value: 'HECHO', label: 'Hecho' },
   { value: 'REHACER', label: 'Rehacer' },
   { value: 'RETOCAR', label: 'Retocar' },
+  { value: 'PROGRAMADO', label: 'Programado' },
 ];
 
 const saleOptions = [
@@ -114,12 +120,16 @@ const shippingOptions = [
   { value: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado' },
 ];
 
-export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, onAddDesign, initialData }: NewOrderStepFormProps) {
+export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, onAddDesign, onCreateOrder, initialData, designsCount = 0, isSubmitting = false }: NewOrderStepFormProps) {
   const [files, setFiles] = useState<{
     base?: File;
     vector?: File;
     photo?: File;
   }>({});
+  const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
+  const phoneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasAutoFilledRef = useRef(false);
+  const [measureInput, setMeasureInput] = useState<string>('');
 
   // Formulario para el paso 1 (Cliente)
   const customerForm = useForm<CustomerFormData>({
@@ -131,6 +141,59 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
       },
     },
   });
+
+  // Observar cambios en el teléfono para autocompletar
+  const watchedPhone = customerForm.watch('customer.phoneE164');
+
+  useEffect(() => {
+    // Limpiar timeout anterior
+    if (phoneTimeoutRef.current) {
+      clearTimeout(phoneTimeoutRef.current);
+    }
+
+    // Si el teléfono está vacío o muy corto, no buscar
+    if (!watchedPhone || watchedPhone.length < 8) {
+      return;
+    }
+
+    // Esperar 500ms después de que el usuario deje de escribir
+    phoneTimeoutRef.current = setTimeout(async () => {
+      // Solo autocompletar si los campos están vacíos o si el usuario no ha modificado manualmente
+      const currentFirstName = customerForm.getValues('customer.firstName');
+      const currentLastName = customerForm.getValues('customer.lastName');
+      
+      // Si ya hay datos, no autocompletar (el usuario ya ingresó datos)
+      if (currentFirstName || currentLastName) {
+        return;
+      }
+
+      try {
+        setIsLoadingCustomer(true);
+        const customer = await findCustomerByPhone(watchedPhone);
+        
+        if (customer) {
+          // Autocompletar los campos
+          customerForm.setValue('customer.firstName', customer.firstName);
+          customerForm.setValue('customer.lastName', customer.lastName);
+          if (customer.email) {
+            customerForm.setValue('customer.email', customer.email);
+          }
+          // El canal se mantiene en el valor por defecto o se puede mapear si hay un campo en Customer
+          hasAutoFilledRef.current = true;
+        }
+      } catch (error) {
+        console.error('Error buscando cliente:', error);
+      } finally {
+        setIsLoadingCustomer(false);
+      }
+    }, 500);
+
+    return () => {
+      if (phoneTimeoutRef.current) {
+        clearTimeout(phoneTimeoutRef.current);
+      }
+    };
+  }, [watchedPhone, customerForm]);
 
   // Formulario para el paso 2 (Pedido)
   const orderForm = useForm<OrderFormData>({
@@ -170,6 +233,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   };
 
   const handleOrderSubmit = (data: OrderFormData) => {
+    // En el paso 2, cuando se hace submit, solo agregar el diseño (no crear pedido)
     const finalData = {
       ...data,
       files,
@@ -178,15 +242,36 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   };
 
   const handleAddDesign = () => {
-    // Primero guardar los datos del paso 2
-    const currentData = orderForm.getValues();
-    const finalData = {
-      ...currentData,
-      files,
-    };
-    onStepSubmit(finalData, 2);
-    // Luego avanzar al paso 3
-    onAddDesign();
+    // Validar el formulario antes de agregar diseño
+    orderForm.handleSubmit((data) => {
+      const finalData = {
+        ...data,
+        files,
+      };
+      onStepSubmit(finalData, 2);
+      // Limpiar el formulario para el siguiente diseño
+      orderForm.reset({
+        order: {
+          stampType: 'CLASICO',
+        },
+        values: {
+          totalValue: 0,
+          depositValue: 0,
+        },
+        shipping: {
+          carrier: 'ANDREANI',
+        },
+        states: {
+          fabrication: 'SIN_HACER',
+          isPriority: false,
+          deadline: undefined,
+        },
+      });
+      setFiles({});
+      setMeasureInput('');
+      // Avanzar al paso 3
+      onAddDesign();
+    })();
   };
 
   if (currentStep === 1) {
@@ -219,14 +304,38 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             </div>
             <div className="space-y-2">
               <Label htmlFor="phoneE164">Teléfono *</Label>
-              <Input
-                id="phoneE164"
-                placeholder="+5491123456789"
-                {...customerForm.register('customer.phoneE164')}
-                className={customerForm.formState.errors.customer?.phoneE164 ? 'border-red-500' : ''}
-              />
+              <div className="relative">
+                <Input
+                  id="phoneE164"
+                  placeholder="5491123456789"
+                  {...customerForm.register('customer.phoneE164', {
+                    onChange: (e) => {
+                      // Limpiar el input: solo permitir números
+                      const cleanedValue = e.target.value.replace(/\D/g, '');
+                      customerForm.setValue('customer.phoneE164', cleanedValue, { shouldValidate: true });
+                    },
+                  })}
+                  onPaste={(e: React.ClipboardEvent<HTMLInputElement>) => {
+                    // Limpiar el valor pegado
+                    e.preventDefault();
+                    const pastedText = e.clipboardData.getData('text');
+                    const cleanedValue = pastedText.replace(/\D/g, '');
+                    customerForm.setValue('customer.phoneE164', cleanedValue, { shouldValidate: true });
+                  }}
+                  className={customerForm.formState.errors.customer?.phoneE164 ? 'border-red-500' : ''}
+                  disabled={isLoadingCustomer}
+                />
+                {isLoadingCustomer && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
               {customerForm.formState.errors.customer?.phoneE164 && (
                 <p className="text-xs text-red-500 mt-1">{customerForm.formState.errors.customer.phoneE164.message}</p>
+              )}
+              {hasAutoFilledRef.current && (
+                <p className="text-xs text-green-500 mt-1">✓ Datos del cliente cargados automáticamente</p>
               )}
             </div>
             <div className="space-y-2">
@@ -290,14 +399,35 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
           </div>
           <div className="col-span-2">
             <Input
-              id="requestedWidthMm"
-              type="number"
-              placeholder="Medida *"
-              {...orderForm.register('order.requestedWidthMm', { valueAsNumber: true })}
+              id="measureInput"
+              type="text"
+              placeholder="Medida * (Ej: 20x20 o 20)"
+              value={measureInput}
+              onChange={(e) => {
+                const value = e.target.value;
+                setMeasureInput(value);
+                
+                // Parsear el valor: puede ser "20x20" o solo "20"
+                const match = value.match(/^(\d+)(?:[xX×](\d+))?$/);
+                if (match) {
+                  const width = parseInt(match[1]);
+                  const height = match[2] ? parseInt(match[2]) : width; // Si no hay altura, usar el mismo valor
+                  
+                  orderForm.setValue('order.requestedWidthMm', width);
+                  orderForm.setValue('order.requestedHeightMm', height);
+                } else if (value === '') {
+                  // Si está vacío, limpiar los valores
+                  orderForm.setValue('order.requestedWidthMm', 0);
+                  orderForm.setValue('order.requestedHeightMm', 0);
+                }
+              }}
               className={orderForm.formState.errors.order?.requestedWidthMm ? 'border-red-500' : ''}
             />
             {orderForm.formState.errors.order?.requestedWidthMm && (
               <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.order.requestedWidthMm.message}</p>
+            )}
+            {measureInput && !measureInput.match(/^\d+([xX×]\d+)?$/) && (
+              <p className="text-xs text-yellow-500 mt-1">Formato: 20x20 o 20</p>
             )}
           </div>
           <div className="col-span-2">
@@ -485,9 +615,25 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
           <Button type="button" variant="secondary" onClick={handleAddDesign}>
             Agregar Diseño
           </Button>
-          <Button type="submit">
-            Crear Pedido
-          </Button>
+          {onCreateOrder && (
+            <Button 
+              type="button" 
+              onClick={() => {
+                // Validar y agregar el diseño actual, luego crear el pedido
+                orderForm.handleSubmit((data) => {
+                  const finalData = {
+                    ...data,
+                    files,
+                    step: 2,
+                  };
+                  onCreateOrder(finalData);
+                })();
+              }} 
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Creando...' : `Crear Pedido${designsCount > 0 ? ` (${designsCount + 1} diseño${designsCount > 0 ? 's' : ''})` : ''}`}
+            </Button>
+          )}
         </div>
       </div>
     </form>
@@ -517,14 +663,35 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
               </div>
               <div className="col-span-2">
                 <Input
-                  id="requestedWidthMm"
-                  type="number"
-                  placeholder="Medida (mm) * (Ej: 25)"
-                  {...orderForm.register('order.requestedWidthMm', { valueAsNumber: true })}
+                  id="measureInput-step3"
+                  type="text"
+                  placeholder="Medida * (Ej: 20x20 o 20)"
+                  value={measureInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setMeasureInput(value);
+                    
+                    // Parsear el valor: puede ser "20x20" o solo "20"
+                    const match = value.match(/^(\d+)(?:[xX×](\d+))?$/);
+                    if (match) {
+                      const width = parseInt(match[1]);
+                      const height = match[2] ? parseInt(match[2]) : width; // Si no hay altura, usar el mismo valor
+                      
+                      orderForm.setValue('order.requestedWidthMm', width);
+                      orderForm.setValue('order.requestedHeightMm', height);
+                    } else if (value === '') {
+                      // Si está vacío, limpiar los valores
+                      orderForm.setValue('order.requestedWidthMm', 0);
+                      orderForm.setValue('order.requestedHeightMm', 0);
+                    }
+                  }}
                   className={orderForm.formState.errors.order?.requestedWidthMm ? 'border-red-500' : ''}
                 />
                 {orderForm.formState.errors.order?.requestedWidthMm && (
                   <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.order?.requestedWidthMm?.message}</p>
+                )}
+                {measureInput && !measureInput.match(/^\d+([xX×]\d+)?$/) && (
+                  <p className="text-xs text-yellow-500 mt-1">Formato: 20x20 o 20</p>
                 )}
               </div>
               <div className="col-span-2">
@@ -707,12 +874,61 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             Atrás
           </Button>
           <div className="flex gap-3">
-            <Button type="button" variant="secondary" onClick={onAddDesign}>
+            <Button 
+              type="button" 
+              variant="secondary" 
+              onClick={() => {
+                // Validar y agregar diseño actual
+                orderForm.handleSubmit((data) => {
+                  const finalData = {
+                    ...data,
+                    files,
+                  };
+                  onStepSubmit(finalData, 3);
+                  // Limpiar el formulario para el siguiente diseño
+                  orderForm.reset({
+                    order: {
+                      stampType: 'CLASICO',
+                    },
+                    values: {
+                      totalValue: 0,
+                      depositValue: 0,
+                    },
+                    shipping: {
+                      carrier: 'ANDREANI',
+                    },
+                    states: {
+                      fabrication: 'SIN_HACER',
+                      isPriority: false,
+                      deadline: undefined,
+                    },
+                  });
+                  setFiles({});
+                  setMeasureInput('');
+                })();
+              }}
+            >
               Agregar Otro Diseño
             </Button>
-            <Button type="submit">
-              Finalizar Pedido
-            </Button>
+            {onCreateOrder && (
+              <Button 
+                type="button" 
+                onClick={() => {
+                  // Validar y agregar diseño actual antes de crear
+                  orderForm.handleSubmit((data) => {
+                    const finalData = {
+                      ...data,
+                      files,
+                      step: 3,
+                    };
+                    onCreateOrder?.(finalData);
+                  })();
+                }} 
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Creando...' : `Finalizar Pedido${designsCount > 0 ? ` (${designsCount + 1} diseño${designsCount > 0 ? 's' : ''})` : ''}`}
+              </Button>
+            )}
           </div>
         </div>
       </form>

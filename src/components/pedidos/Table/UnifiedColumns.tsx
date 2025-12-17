@@ -23,11 +23,11 @@ import { CellPrioridad } from './cells/CellPrioridad';
 import { CompactProgressIndicator } from './cells/CellProgressIndicator';
 
 interface UnifiedColumnsProps {
-  onTipoChange?: (orderId: string, newTipo: any) => void;
-  onFabricacionChange?: (orderId: string, newState: any) => void;
-  onVentaChange?: (orderId: string, newState: any) => void;
-  onEnvioEstadoChange?: (orderId: string, newState: any) => void;
-  onEnvioChange?: (orderId: string, newCarrier: string) => void;
+  onTipoChange?: (orderId: string, newTipo: any, itemId?: string) => void;
+  onFabricacionChange?: (orderId: string, newState: any, itemId?: string) => void;
+  onVentaChange?: (orderId: string, newState: any, itemId?: string) => void;
+  onEnvioEstadoChange?: (orderId: string, newState: any, itemId?: string) => void;
+  onEnvioChange?: (orderId: string, newCarrier: string | null, newService?: string | null) => void;
   onDateChange?: (orderId: string, newDate: Date) => void;
   onDeadlineChange?: (orderId: string, newDeadline: Date | null) => void;
   onTaskCreate?: (orderId: string, title: string, description?: string, dueDate?: Date) => void;
@@ -159,7 +159,11 @@ export function createUnifiedColumns({
     
     // Prioridad
     prioridad: ({ row }) => (
-      <CellPrioridad order={row.original} />
+      <CellPrioridad 
+        order={row.original} 
+        editingRowId={editingRowId}
+        onUpdate={onUpdate}
+      />
     ),
     
     // Fabricación

@@ -6,10 +6,11 @@ import { NewProgramDialog } from '@/components/programas/NewProgram/NewProgramDi
 import { ProgramsFiltersDialog } from '@/components/programas/Filters/ProgramsFiltersDialog';
 import { ProgramsSorterDialog } from '@/components/programas/Sorter/ProgramsSorterDialog';
 import { Toaster } from '@/components/ui/toaster';
-import { mockPrograms } from '@/lib/mocks/programs.mock';
+import { usePrograms } from '@/lib/hooks/usePrograms';
 import { useProgramsStore } from '@/lib/state/programs.store';
 
 export default function ProgramasPage() {
+  const { programs, loading, error } = usePrograms();
   const [showNewProgram, setShowNewProgram] = useState(false);
   const { showFilters, showSorter, setShowFilters, setShowSorter } = useProgramsStore();
 
@@ -31,7 +32,17 @@ export default function ProgramasPage() {
 
         {/* Programs Grid */}
         <div className="flex-1 p-6 overflow-hidden">
-          <ProgramsGrid programs={mockPrograms} />
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-muted-foreground">Cargando programas...</p>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-destructive">Error: {error.message}</p>
+            </div>
+          ) : (
+            <ProgramsGrid programs={programs} />
+          )}
         </div>
       </div>
 

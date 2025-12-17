@@ -125,6 +125,21 @@ CREATE TABLE sellos (
 );
 
 -- =====================================================
+-- TABLA: TAREAS
+-- =====================================================
+CREATE TABLE tareas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    orden_id UUID NOT NULL REFERENCES ordenes(id) ON DELETE CASCADE,
+    titulo VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    estado VARCHAR(20) DEFAULT 'PENDING' CHECK (estado IN ('PENDING', 'IN_PROGRESS', 'COMPLETED')),
+    fecha_limite DATE,
+    completada_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =====================================================
 -- ÍNDICES PARA OPTIMIZACIÓN
 -- =====================================================
 CREATE INDEX idx_clientes_dni ON clientes(dni);
@@ -134,9 +149,12 @@ CREATE INDEX idx_ordenes_fecha ON ordenes(fecha);
 CREATE INDEX idx_sellos_orden_id ON sellos(orden_id);
 CREATE INDEX idx_sellos_programa_id ON sellos(programa_id);
 CREATE INDEX idx_sellos_estado_fabricacion ON sellos(estado_fabricacion);
+CREATE INDEX idx_sellos_fecha_limite ON sellos(fecha_limite);
 CREATE INDEX idx_direcciones_cliente_id ON direcciones(cliente_id);
 CREATE INDEX idx_programa_fecha ON programa(fecha);
 CREATE INDEX idx_programa_estado_fabricacion ON programa(estado_fabricacion);
+CREATE INDEX idx_tareas_orden_id ON tareas(orden_id);
+CREATE INDEX idx_tareas_estado ON tareas(estado);
 
 -- =====================================================
 -- FUNCIONES PARA CAMPOS CALCULADOS
@@ -151,6 +169,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Función auxiliar para obtener costo de envío
+CREATE OR REPLACE FUNCTION get_shipping_cost(
+    p_empresa_envio VARCHAR(50),
+    p_tipo_envio VARCHAR(20)
+)
+RETURNS DECIMAL(10,2) AS $$
+DECLARE
+    v_costo DECIMAL(10,2);
+BEGIN
+    -- Si no hay empresa de envío o es "Retiro", retornar 0
+    IF p_empresa_envio IS NULL OR p_empresa_envio = 'Retiro' OR p_tipo_envio IS NULL OR p_tipo_envio = 'Retiro' THEN
+        RETURN 0;
+    END IF;
+
+    -- Obtener el costo de envío activo más reciente
+    SELECT costo INTO v_costo
+    FROM costos_de_envio
+    WHERE empresa = p_empresa_envio
+      AND servicio = p_tipo_envio
+      AND activo = true
+    ORDER BY activo_desde DESC
+    LIMIT 1;
+
+    -- Si no se encuentra, retornar 0
+    RETURN COALESCE(v_costo, 0);
+END;
+$$ LANGUAGE plpgsql;
+
 -- Función para actualizar campos calculados de órdenes
 CREATE OR REPLACE FUNCTION update_orden_totals()
 RETURNS TRIGGER AS $$
@@ -159,7 +205,12 @@ DECLARE
     total_senia DECIMAL(10,2);
     total_valor DECIMAL(10,2);
     total_restante DECIMAL(10,2);
+    costo_envio DECIMAL(10,2);
+    orden_id_val UUID;
 BEGIN
+    -- Obtener el ID de la orden
+    orden_id_val := COALESCE(NEW.orden_id, OLD.orden_id);
+    
     -- Calcular totales de la orden
     SELECT 
         COUNT(*),
@@ -168,7 +219,16 @@ BEGIN
         COALESCE(SUM(valor - senia), 0)
     INTO total_sellos, total_senia, total_valor, total_restante
     FROM sellos 
-    WHERE orden_id = COALESCE(NEW.orden_id, OLD.orden_id);
+    WHERE orden_id = orden_id_val;
+    
+    -- Obtener el costo de envío de la orden
+    SELECT get_shipping_cost(empresa_envio, tipo_envio)
+    INTO costo_envio
+    FROM ordenes
+    WHERE id = orden_id_val;
+    
+    -- Calcular el restante incluyendo el costo de envío
+    total_restante := total_restante + COALESCE(costo_envio, 0);
     
     -- Actualizar la orden
     UPDATE ordenes 
@@ -178,9 +238,28 @@ BEGIN
         valor_total = total_valor,
         restante = total_restante,
         updated_at = NOW()
-    WHERE id = COALESCE(NEW.orden_id, OLD.orden_id);
+    WHERE id = orden_id_val;
     
     RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Recalcular restante cuando cambia el envío (y también al insertar la orden)
+CREATE OR REPLACE FUNCTION update_orden_restante_on_shipping_change()
+RETURNS TRIGGER AS $$
+DECLARE
+    total_restante DECIMAL(10,2);
+    costo_envio DECIMAL(10,2);
+BEGIN
+    SELECT COALESCE(SUM(valor - senia), 0)
+    INTO total_restante
+    FROM sellos
+    WHERE orden_id = NEW.id;
+
+    costo_envio := get_shipping_cost(NEW.empresa_envio, NEW.tipo_envio);
+    NEW.restante := total_restante + COALESCE(costo_envio, 0);
+
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -222,6 +301,13 @@ CREATE TRIGGER trigger_update_orden_totals
     AFTER INSERT OR UPDATE OR DELETE ON sellos
     FOR EACH ROW
     EXECUTE FUNCTION update_orden_totals();
+
+-- Trigger para actualizar restante cuando cambia el envío (y al insertar la orden)
+DROP TRIGGER IF EXISTS trigger_update_orden_restante_on_shipping_change ON ordenes;
+CREATE TRIGGER trigger_update_orden_restante_on_shipping_change
+    BEFORE INSERT OR UPDATE OF empresa_envio, tipo_envio ON ordenes
+    FOR EACH ROW
+    EXECUTE FUNCTION update_orden_restante_on_shipping_change();
 
 -- Trigger para actualizar cantidad de sellos en programa
 CREATE TRIGGER trigger_update_programa_cantidad
@@ -330,7 +416,7 @@ COMMENT ON TABLE costos_de_envio IS 'Costos de envío por empresa y tipo de serv
 COMMENT ON COLUMN ordenes.cantidad_sellos IS 'Calculado automáticamente: suma de sellos en la orden';
 COMMENT ON COLUMN ordenes.senia_total IS 'Calculado automáticamente: suma de señas de todos los sellos';
 COMMENT ON COLUMN ordenes.valor_total IS 'Calculado automáticamente: suma de valores de todos los sellos';
-COMMENT ON COLUMN ordenes.restante IS 'Calculado automáticamente: valor_total - senia_total';
+COMMENT ON COLUMN ordenes.restante IS 'Calculado automáticamente: valor_total - senia_total + costo_envio';
 
 COMMENT ON COLUMN sellos.restante IS 'Calculado automáticamente: valor - senia';
 COMMENT ON COLUMN programa.cantidad_sellos IS 'Calculado automáticamente: cuenta de sellos asociados';

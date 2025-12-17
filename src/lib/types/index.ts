@@ -1,11 +1,30 @@
 // Enums
-export type FabricationState = 'SIN_HACER' | 'HACIENDO' | 'VERIFICAR' | 'HECHO' | 'REHACER' | 'RETOCAR';
+export type FabricationState = 'SIN_HACER' | 'HACIENDO' | 'VERIFICAR' | 'HECHO' | 'REHACER' | 'RETOCAR' | 'PROGRAMADO';
 export type SaleState = 'SEÑADO' | 'FOTO_ENVIADA' | 'TRANSFERIDO' | 'DEUDOR';
 export type ShippingState = 'SIN_ENVIO' | 'HACER_ETIQUETA' | 'ETIQUETA_LISTA' | 'DESPACHADO' | 'SEGUIMIENTO_ENVIADO';
 export type ShippingCarrier = 'ANDREANI' | 'CORREO_ARGENTINO' | 'VIA_CARGO' | 'OTRO';
 export type ShippingServiceDest = 'DOMICILIO' | 'SUCURSAL';
+export type ShippingOption = 
+  | 'ANDREANI_DOMICILIO' 
+  | 'ANDREANI_SUCURSAL' 
+  | 'CORREO_ARGENTINO_DOMICILIO' 
+  | 'CORREO_ARGENTINO_SUCURSAL' 
+  | 'VIA_CARGO_DOMICILIO' 
+  | 'VIA_CARGO_SUCURSAL' 
+  | 'OTRO' 
+  | 'NONE';
 export type ShippingOriginMethod = 'RETIRO_EN_ORIGEN' | 'ENTREGA_EN_SUCURSAL';
 export type StampType = '3MM' | 'ALIMENTO' | 'CLASICO' | 'ABC' | 'LACRE';
+export type AspireState = 'Aspire G' | 'Aspire G Check' | 'Aspire C' | 'Aspire C Check' | 'Aspire XL';
+// Claves normalizadas para ordenar/filtrar cuando Aspire y Fabricación comparten columna en UI
+export type AspireSortKey =
+  | 'ASPIRE_Aspire_G'
+  | 'ASPIRE_Aspire_G_Check'
+  | 'ASPIRE_Aspire_C'
+  | 'ASPIRE_Aspire_C_Check'
+  | 'ASPIRE_Aspire_XL';
+export type ProductionFabricacionAspireKey = FabricationState | AspireSortKey;
+export type MachineType = 'C' | 'G' | 'XL';
 export type ProgressStep = 
   | 'HECHO'
   | 'FOTO'
@@ -49,12 +68,12 @@ export interface Order {
   deadlineAt?: string | null;
   paidAmountCached: number;
   balanceAmountCached: number;
-  shipping: {
-    carrier: ShippingCarrier;
-    service: ShippingServiceDest;
-    origin: ShippingOriginMethod;
-    trackingNumber?: string | null;
-  };
+    shipping: {
+      carrier: ShippingCarrier | null;
+      service: ShippingServiceDest | null;
+      origin: ShippingOriginMethod;
+      trackingNumber?: string | null;
+    };
   items: OrderItem[];
   tasks?: Task[];
   progressStep?: ProgressStep;
@@ -77,9 +96,11 @@ export interface OrderItem {
   paidAmountItemCached: number;
   balanceItemCached: number;
   notes?: string;
+  program?: string; // Nombre del programa (programa_nombre en BD)
   files?: {
     baseUrl?: string;
     vectorUrl?: string;
+    vectorPreviewUrl?: string; // Preview PNG para archivos EPS
     photoUrl?: string;
   };
   contact: { 
@@ -102,6 +123,9 @@ export interface Filters {
   fabrication?: FabricationState[];
   sale?: SaleState[];
   shipping?: ShippingState[];
+  types?: StampType[];
+  channels?: ('WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL')[];
+  uploaders?: string[];
 }
 
 export interface SortCriteria {
@@ -141,8 +165,12 @@ export interface ProductionItem {
   productionState: ProductionState;
   isPriority: boolean;
   vectorizationState: VectorizationState;
-  program: ProgramType;
+  program: string; // Cambiado de ProgramType a string para permitir texto libre
+  aspireState?: AspireState | null;
+  machine?: MachineType | null;
   notes?: string;
+  deadline?: string | null; // Fecha límite del sello
+  takenBy?: { id: string; name: string } | null; // Usuario que subió el pedido
   files?: {
     baseUrl?: string;
     vectorUrl?: string;
@@ -154,7 +182,7 @@ export interface ProductionItem {
 // Program Types
 export type ProgramStatus = 'active' | 'inactive';
 export type ProgramCategory = 'PRODUCTION' | 'DESIGN' | 'ADMINISTRATION' | 'QUALITY' | 'OTHER';
-export type MachineType = 'C' | 'G' | 'XL' | 'ABC';
+export type ProgramMachineType = 'C' | 'G' | 'XL' | 'ABC'; // Para programas (incluye ABC)
 export type StampSize = 63 | 38 | 25 | 19 | 12;
 
 export interface ProgramStamp {

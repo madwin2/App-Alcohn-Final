@@ -8,30 +8,58 @@ import {
   MessageCircle, 
   User,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SidebarItem } from './SidebarItem';
 import { useOrdersStore } from '@/lib/state/orders.store';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { useToast } from '@/components/ui/use-toast';
 
 const sidebarItems = [
-  { icon: Home, label: 'Inicio', path: '/' },
-  { icon: ShoppingCart, label: 'Pedidos', path: '/pedidos' },
-  { icon: Layers, label: 'Vectorización', path: '/vectorizacion' },
-  { icon: Factory, label: 'Producción', path: '/produccion' },
-  { icon: Calendar, label: 'Programas', path: '/programas' },
-  { icon: CheckCircle, label: 'Verificación', path: '/verificacion' },
-  { icon: MessageCircle, label: 'WhatsApp Bot', path: '/whatsapp' },
+  { icon: Home, label: 'Inicio', path: '/', disabled: true },
+  { icon: ShoppingCart, label: 'Pedidos', path: '/pedidos', disabled: false },
+  { icon: Layers, label: 'Vectorización', path: '/vectorizacion', disabled: true },
+  { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },
+  { icon: Calendar, label: 'Programas', path: '/programas', disabled: true },
+  { icon: CheckCircle, label: 'Verificación', path: '/verificacion', disabled: true },
+  { icon: MessageCircle, label: 'WhatsApp Bot', path: '/whatsapp', disabled: true },
+  { icon: User, label: 'Registros', path: '/admin/registros', disabled: false },
 ];
 
 export function Sidebar() {
   const { sidebarExpanded, sidebarHovered, setSidebarExpanded, setSidebarHovered } = useOrdersStore();
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
 
   const isExpanded = sidebarExpanded || sidebarHovered;
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast({
+        title: 'Sesión cerrada',
+        description: 'Has cerrado sesión correctamente',
+      });
+      navigate('/login');
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo cerrar sesión',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const userEmail = user?.email || 'usuario@empresa.com';
+  const userName = user?.user_metadata?.nombre 
+    ? `${user.user_metadata.nombre} ${user.user_metadata.apellido || ''}`.trim()
+    : 'Usuario Actual';
 
   return (
     <div 
@@ -80,8 +108,11 @@ export function Sidebar() {
               label={item.label}
               isActive={location.pathname === item.path}
               isExpanded={isExpanded}
+              disabled={item.disabled}
               onClick={() => {
-                navigate(item.path);
+                if (!item.disabled) {
+                  navigate(item.path);
+                }
               }}
             />
           </div>
@@ -89,7 +120,7 @@ export function Sidebar() {
       </nav>
 
       {/* User Profile */}
-      <div className="border-t border-border/50 flex p-4 justify-start">
+      <div className="border-t border-border/50 p-4 space-y-2">
         <div className="flex items-center gap-3 justify-start">
           <div className="rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl h-10 w-10">
             <User className="h-5 w-5 text-white" />
@@ -98,10 +129,21 @@ export function Sidebar() {
             "transition-all duration-700 ease-in-out overflow-hidden",
             isExpanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"
           )}>
-            <p className="text-sm font-medium truncate">Usuario Actual</p>
-            <p className="text-xs text-muted-foreground truncate">usuario@empresa.com</p>
+            <p className="text-sm font-medium truncate">{userName}</p>
+            <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
           </div>
         </div>
+        {isExpanded && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSignOut}
+            className="w-full justify-start text-muted-foreground hover:text-destructive"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Cerrar Sesión
+          </Button>
+        )}
       </div>
     </div>
   );

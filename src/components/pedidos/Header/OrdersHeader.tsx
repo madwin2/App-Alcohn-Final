@@ -1,29 +1,34 @@
-import { Search, Filter, ArrowUpDown, Plus } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, Plus, Image } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StateChips } from './StateChips';
 import { useOrdersStore } from '@/lib/state/orders.store';
-import { mockOrders, getFabricationCounts } from '@/lib/mocks/orders.mock';
-import { FabricationState } from '@/lib/types/index';
+import { getFabricationCounts } from '@/lib/utils/orders.utils';
+import { FabricationState, Order } from '@/lib/types/index';
 
 interface OrdersHeaderProps {
+  orders: Order[];
   onNewOrder: () => void;
   onFilters: () => void;
   onSort: () => void;
+  onUploadPhotos?: () => void;
   onStateFilter: (state: FabricationState) => void;
   activeStates: FabricationState[];
 }
 
 export function OrdersHeader({ 
+  orders,
   onNewOrder, 
   onFilters, 
-  onSort, 
+  onSort,
+  onUploadPhotos,
   onStateFilter,
   activeStates 
 }: OrdersHeaderProps) {
   const { searchQuery, setSearchQuery } = useOrdersStore();
   
-  const activeOrdersCount = mockOrders.length;
+  const activeOrdersCount = orders.length;
+  const counts = getFabricationCounts(orders);
 
   return (
     <div className="space-y-4">
@@ -34,7 +39,7 @@ export function OrdersHeader({
             Pedidos
           </h1>
           <p className="text-xs text-gray-400">
-            Total: {activeOrdersCount} • Sin hacer: {getFabricationCounts(mockOrders)['SIN_HACER']} • Hecho: {getFabricationCounts(mockOrders)['HECHO']}
+            Total: {activeOrdersCount} • Sin hacer: {counts['SIN_HACER']} • Hecho: {counts['HECHO']}
           </p>
         </div>
         
@@ -71,6 +76,19 @@ export function OrdersHeader({
             <Filter className="h-4 w-4" />
             Filtros
           </Button>
+
+          {/* Subir Fotos */}
+          {onUploadPhotos && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onUploadPhotos}
+              className="gap-2"
+            >
+              <Image className="h-4 w-4" />
+              Subir Fotos
+            </Button>
+          )}
 
           {/* Nuevo Pedido */}
           <Button

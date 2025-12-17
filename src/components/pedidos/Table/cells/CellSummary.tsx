@@ -1,6 +1,6 @@
 import React from 'react';
 import { Order } from '@/lib/types';
-import { formatCurrency } from '@/lib/utils/format';
+import { formatCurrency, calculateOrderFabricationState, getFabricationLabel } from '@/lib/utils/format';
 
 interface CellSummaryProps {
   order: Order;
@@ -9,9 +9,10 @@ interface CellSummaryProps {
 
 export function CellSummary({ order, columnId }: CellSummaryProps) {
   const totalItems = order.items.length;
-  const totalValue = order.items.reduce((sum, item) => sum + (item.itemValue || 0), 0);
-  const totalDeposit = order.items.reduce((sum, item) => sum + (item.depositValueItem || 0), 0);
-  const totalRemaining = totalValue - totalDeposit;
+  // Usar valores calculados automáticamente por Supabase
+  const totalValue = order.totalValue || 0;
+  const totalDeposit = order.depositValueOrder || 0;
+  const totalRemaining = order.restPaidAmountOrder || 0;
   const hasPriority = order.items.some(item => item.isPriority);
 
   switch (columnId) {
@@ -62,9 +63,19 @@ export function CellSummary({ order, columnId }: CellSummaryProps) {
       );
     
     case 'empresa':
+      const getShippingLabel = () => {
+        if (!order.shipping?.carrier) return '—';
+        if (order.shipping.carrier === 'OTRO') return 'Otro';
+        const carrierName = order.shipping.carrier === 'ANDREANI' ? 'Andreani' :
+                           order.shipping.carrier === 'CORREO_ARGENTINO' ? 'Correo Argentino' :
+                           order.shipping.carrier === 'VIA_CARGO' ? 'Vía Cargo' : '';
+        const serviceName = order.shipping.service === 'DOMICILIO' ? 'Domicilio' :
+                           order.shipping.service === 'SUCURSAL' ? 'Sucursal' : '';
+        return serviceName ? `${carrierName} ${serviceName}` : carrierName;
+      };
       return (
         <span className="text-xs text-muted-foreground">
-          {order.shipping?.carrier || '—'}
+          {getShippingLabel()}
         </span>
       );
     
@@ -99,10 +110,10 @@ export function CellSummary({ order, columnId }: CellSummaryProps) {
       );
     
     case 'fabricacion':
-      const fabricationStates = [...new Set(order.items.map(item => item.fabricationState))];
+      const fabricationState = calculateOrderFabricationState(order.items);
       return (
         <span className="text-xs text-muted-foreground">
-          {fabricationStates.length > 1 ? 'Múltiple' : fabricationStates[0] || '—'}
+          {getFabricationLabel(fabricationState)}
         </span>
       );
     

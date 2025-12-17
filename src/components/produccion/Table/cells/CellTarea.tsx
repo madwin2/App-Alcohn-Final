@@ -3,13 +3,15 @@ import { ProductionItem, ProductionTask } from '@/lib/types/index';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CheckCircle, Circle, Clock, Trash2, Plus, Calendar } from 'lucide-react';
+import { AddTaskModal } from './AddTaskModal';
 
 interface CellTareaProps {
   item: ProductionItem;
-  onTaskCreate?: (itemId: string, title: string, description?: string) => void;
+  onTaskCreate?: (itemId: string, title: string, description?: string, dueDate?: Date) => void;
   onTaskUpdate?: (taskId: string, updates: any) => void;
   onTaskDelete?: (taskId: string) => void;
 }
@@ -49,17 +51,28 @@ export function CellTarea({ item, onTaskCreate, onTaskUpdate, onTaskDelete }: Ce
     }
   };
 
+  const getStatusLabel = (status: ProductionTask['status']) => {
+    switch (status) {
+      case 'COMPLETADO':
+        return 'Completada';
+      case 'EN_PROGRESO':
+        return 'En progreso';
+      case 'REVISAR':
+        return 'Revisar';
+      case 'REHACER':
+        return 'Rehacer';
+      default:
+        return 'Pendiente';
+    }
+  };
+
   if (tasks.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-4 w-4 p-0 hover:bg-white/10 rounded-full"
-          onClick={() => onTaskCreate?.(item.id, 'Nueva tarea')}
-        >
-          <Plus className="w-2 h-2 text-muted-foreground" />
-        </Button>
+        <AddTaskModal
+          itemId={item.id}
+          onTaskCreate={onTaskCreate || (() => {})}
+        />
       </div>
     );
   }
@@ -69,30 +82,48 @@ export function CellTarea({ item, onTaskCreate, onTaskUpdate, onTaskDelete }: Ce
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button
+            type="button"
             variant="ghost"
             size="sm"
             className="h-4 w-4 p-0 hover:bg-white/10 rounded-full"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onMouseDown={(e) => {
+              if (e.button === 2) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
           >
-            <Badge
-              variant="secondary"
-              className="h-4 w-4 rounded-full p-0 flex items-center justify-center text-xs font-medium bg-primary text-primary-foreground"
-            >
-              {pendingTasks.length}
-            </Badge>
+            {pendingTasks.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="h-4 w-4 rounded-full p-0 flex items-center justify-center text-xs font-medium bg-primary text-primary-foreground"
+              >
+                {pendingTasks.length}
+              </Badge>
+            )}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-80 bg-card border-border">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="font-medium text-sm">Tareas de producción</h4>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onClick={() => onTaskCreate?.(item.id, 'Nueva tarea')}
-              >
-                <Plus className="w-3 h-3" />
-              </Button>
+              <AddTaskModal
+                itemId={item.id}
+                onTaskCreate={onTaskCreate || (() => {})}
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </Button>
+                }
+              />
             </div>
             
             {tasks.map((task) => (
@@ -114,13 +145,21 @@ export function CellTarea({ item, onTaskCreate, onTaskUpdate, onTaskDelete }: Ce
                     <p className="text-xs text-muted-foreground mt-1">{task.description}</p>
                   )}
                   <div className="flex items-center gap-2 mt-2">
-                    <Badge
-                      variant="outline"
-                      className={`text-xs ${getStatusColor(task.status)}`}
+                    <Select
+                      value={task.status}
+                      onValueChange={(value: ProductionTask['status']) => handleTaskStatusChange(task.id, value)}
                     >
-                      {task.status === 'COMPLETADO' ? 'Completada' :
-                       task.status === 'EN_PROGRESO' ? 'En progreso' : 'Pendiente'}
-                    </Badge>
+                      <SelectTrigger className={`h-6 text-xs w-auto min-w-[120px] border rounded-md px-2 py-1 ${getStatusColor(task.status)}`}>
+                        <SelectValue placeholder={getStatusLabel(task.status)} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PENDIENTE">Pendiente</SelectItem>
+                        <SelectItem value="EN_PROGRESO">En progreso</SelectItem>
+                        <SelectItem value="REVISAR">Revisar</SelectItem>
+                        <SelectItem value="REHACER">Rehacer</SelectItem>
+                        <SelectItem value="COMPLETADO">Completada</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <span className="text-xs text-muted-foreground">
                       {format(new Date(task.createdAt), 'dd/MM/yy', { locale: es })}
                     </span>

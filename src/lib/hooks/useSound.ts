@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
 // Tipos de sonidos disponibles
-export type SoundType = 'success' | 'notification' | 'complete';
+export type SoundType = 'success' | 'notification' | 'complete' | 'transfer';
 
 // Hook para reproducir sonidos
 export function useSound() {
@@ -51,6 +51,49 @@ export function useSound() {
           gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
           oscillator.start(audioContext.currentTime);
           oscillator.stop(audioContext.currentTime + 0.5);
+          break;
+          
+        case 'transfer':
+          // Sonido satisfactorio de transferencia/dinero: acorde rico y ascendente
+          // Crear múltiples osciladores para un sonido más rico
+          const osc1 = audioContext.createOscillator();
+          const osc2 = audioContext.createOscillator();
+          const osc3 = audioContext.createOscillator();
+          const gain1 = audioContext.createGain();
+          const gain2 = audioContext.createGain();
+          const gain3 = audioContext.createGain();
+          
+          // Acorde mayor (Do-Mi-Sol) para sonido satisfactorio
+          osc1.frequency.setValueAtTime(523.25, audioContext.currentTime); // Do5
+          osc2.frequency.setValueAtTime(659.25, audioContext.currentTime); // Mi5
+          osc3.frequency.setValueAtTime(783.99, audioContext.currentTime); // Sol5
+          
+          // Rampa ascendente para efecto "cha-ching"
+          osc1.frequency.exponentialRampToValueAtTime(659.25, audioContext.currentTime + 0.2);
+          osc2.frequency.exponentialRampToValueAtTime(783.99, audioContext.currentTime + 0.2);
+          osc3.frequency.exponentialRampToValueAtTime(987.77, audioContext.currentTime + 0.2);
+          
+          // Ganancia con fade out suave
+          gain1.gain.setValueAtTime(0.2, audioContext.currentTime);
+          gain1.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+          gain2.gain.setValueAtTime(0.15, audioContext.currentTime);
+          gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+          gain3.gain.setValueAtTime(0.1, audioContext.currentTime);
+          gain3.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+          
+          osc1.connect(gain1);
+          osc2.connect(gain2);
+          osc3.connect(gain3);
+          gain1.connect(audioContext.destination);
+          gain2.connect(audioContext.destination);
+          gain3.connect(audioContext.destination);
+          
+          osc1.start(audioContext.currentTime);
+          osc1.stop(audioContext.currentTime + 0.4);
+          osc2.start(audioContext.currentTime);
+          osc2.stop(audioContext.currentTime + 0.4);
+          osc3.start(audioContext.currentTime);
+          osc3.stop(audioContext.currentTime + 0.4);
           break;
       }
     } catch (error) {

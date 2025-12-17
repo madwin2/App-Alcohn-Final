@@ -1,10 +1,10 @@
 import { Badge } from '@/components/ui/badge';
-import { FabricationState } from '@/lib/types/index';
-import { getFabricationCounts } from '@/lib/mocks/orders.mock';
-import { mockOrders } from '@/lib/mocks/orders.mock';
+import { FabricationState, Order } from '@/lib/types/index';
+import { getFabricationCounts } from '@/lib/utils/orders.utils';
 import { cn } from '@/lib/utils/cn';
 
 interface StateChipsProps {
+  orders: Order[];
   onStateClick?: (state: FabricationState) => void;
   activeStates?: FabricationState[];
 }
@@ -15,7 +15,8 @@ const stateLabels: Record<FabricationState, string> = {
   VERIFICAR: 'Verificar',
   HECHO: 'Hecho',
   REHACER: 'Rehacer',
-  RETOCAR: 'Retocar'
+  RETOCAR: 'Retocar',
+  PROGRAMADO: 'Programado'
 };
 
 // Color de texto para estado inactivo + fondo oscuro con borde sutil.
@@ -29,11 +30,12 @@ const stateActiveBg: Record<FabricationState, string> = {
   VERIFICAR: 'bg-orange-500 text-black',
   HECHO: 'bg-green-500 text-black',
   REHACER: 'bg-red-500 text-white',
-  RETOCAR: 'bg-yellow-400 text-black'
+  RETOCAR: 'bg-yellow-400 text-black',
+  PROGRAMADO: 'bg-purple-500 text-white'
 };
 
-export function StateChips({ onStateClick, activeStates = [] }: StateChipsProps) {
-  const counts = getFabricationCounts(mockOrders);
+export function StateChips({ orders, onStateClick, activeStates = [] }: StateChipsProps) {
+  const counts = getFabricationCounts(orders);
 
   return (
     <div className="flex flex-wrap gap-2">

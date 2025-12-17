@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2 } from 'lucide-react';
+import { X, ArrowUp, ArrowDown } from 'lucide-react';
 import { SortCriteria as SortCriteriaType } from '@/lib/types/index';
 
 interface SortCriteriaProps {
@@ -35,33 +35,38 @@ export function SortCriteria({ criteria, index, onUpdate, onRemove }: SortCriter
   };
 
   return (
-    <div className="flex items-center gap-2 p-3 border rounded-lg">
-      <div className="flex-1">
+    <div className="flex items-center gap-3 p-3.5 bg-card rounded-lg border border-border hover:border-primary/30 transition-colors">
+      <div className="flex items-center gap-2 flex-1">
         <Select value={criteria.field} onValueChange={handleFieldChange}>
-          <SelectTrigger className="h-8 text-xs">
+          <SelectTrigger className="h-9 w-[180px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {fieldOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value} className="text-xs">
+              <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-      </div>
-      
-      <div className="w-32">
+        
         <Select value={criteria.dir} onValueChange={handleDirectionChange}>
-          <SelectTrigger className="h-8 text-xs">
+          <SelectTrigger className="h-9 w-[140px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {directionOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value} className="text-xs">
-                {option.label}
-              </SelectItem>
-            ))}
+            <SelectItem value="asc">
+              <div className="flex items-center gap-2">
+                <ArrowUp className="h-3 w-3" />
+                Ascendente
+              </div>
+            </SelectItem>
+            <SelectItem value="desc">
+              <div className="flex items-center gap-2">
+                <ArrowDown className="h-3 w-3" />
+                Descendente
+              </div>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -70,9 +75,9 @@ export function SortCriteria({ criteria, index, onUpdate, onRemove }: SortCriter
         variant="outline"
         size="icon"
         onClick={() => onRemove(index)}
-        className="h-8 w-8"
+        className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
       >
-        <Trash2 className="h-3 w-3" />
+        <X className="h-4 w-4" />
       </Button>
     </div>
   );

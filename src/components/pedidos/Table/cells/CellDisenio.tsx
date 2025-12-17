@@ -22,22 +22,26 @@ export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, o
   
   if (!item) return null;
 
-  if (isEditing && !hasMultipleItems) {
+  if (isEditing && (!hasMultipleItems || order.items.length === 1)) {
     return (
       <div className="flex flex-col gap-0.5 min-w-0">
         <EditableInline 
           value={item.designName || ''} 
-          onCommit={(v) => onUpdate?.(order.id, { items: [{ ...item, designName: v }] })} 
+          onCommit={(v) => {
+            if (item.id) {
+              onUpdate?.(order.id, { items: [{ id: item.id, designName: v }] });
+            }
+          }} 
           className="text-sm font-medium"
         />
         <EditableInline 
           value={`${item.requestedWidthMm || 0}×${item.requestedHeightMm || 0}mm`} 
           onCommit={(v) => {
             const match = v.match(/(\d+)×(\d+)/);
-            if (match) {
+            if (match && item.id) {
               const width = parseInt(match[1]);
               const height = parseInt(match[2]);
-              onUpdate?.(order.id, { items: [{ ...item, requestedWidthMm: width, requestedHeightMm: height }] });
+              onUpdate?.(order.id, { items: [{ id: item.id, requestedWidthMm: width, requestedHeightMm: height }] });
             }
           }} 
           className="text-xs text-muted-foreground"
@@ -45,7 +49,11 @@ export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, o
         {showNotes && (
           <EditableInline 
             value={item.notes || ''} 
-            onCommit={(v) => onUpdate?.(order.id, { items: [{ ...item, notes: v }] })} 
+            onCommit={(v) => {
+              if (item.id) {
+                onUpdate?.(order.id, { items: [{ id: item.id, notes: v }] });
+              }
+            }} 
             className="text-xs text-blue-400"
           />
         )}

@@ -82,12 +82,14 @@ export function CellTasks({ order, onTaskUpdate, onTaskDelete, onTaskCreate }: C
             size="sm"
             className="h-4 w-4 p-0 hover:bg-white/10 rounded-full"
           >
-            <Badge
-              variant="secondary"
-              className="h-4 w-4 rounded-full p-0 flex items-center justify-center text-xs font-medium bg-primary text-primary-foreground"
-            >
-              {pendingTasks.length}
-            </Badge>
+            {pendingTasks.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="h-4 w-4 rounded-full p-0 flex items-center justify-center text-xs font-medium bg-primary text-primary-foreground"
+              >
+                {pendingTasks.length}
+              </Badge>
+            )}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-80 bg-card border-border">

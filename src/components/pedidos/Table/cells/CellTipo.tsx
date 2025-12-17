@@ -22,6 +22,8 @@ export function CellTipo({ order, onTipoChange }: CellTipoProps) {
   if (!item) return null;
 
   const handleValueChange = (value: string) => {
+    // Pasar el ID del item si existe (para items individuales en filas expandidas)
+    const itemId = item.id;
     onTipoChange?.(order.id, value as StampType);
   };
 

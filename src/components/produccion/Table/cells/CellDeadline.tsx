@@ -16,11 +16,11 @@ export function CellDeadline({ item, onDeadlineChange }: CellDeadlineProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Mock deadline para producción
-  const deadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días desde ahora
+  // Usar la fecha límite real del item, o null si no tiene
+  const deadline = item.deadline ? new Date(item.deadline) : null;
   const today = new Date();
-  const isOverdue = isBefore(deadline, today);
-  const isNearDeadline = isAfter(deadline, today) && isBefore(deadline, addDays(today, 3));
+  const isOverdue = deadline ? isBefore(deadline, today) : false;
+  const isNearDeadline = deadline ? isAfter(deadline, today) && isBefore(deadline, addDays(today, 3)) : false;
 
   const handleDeadlineChange = (newDeadline: Date | undefined) => {
     onDeadlineChange?.(item.id, newDeadline || null);
@@ -29,6 +29,7 @@ export function CellDeadline({ item, onDeadlineChange }: CellDeadlineProps) {
   };
 
   const getDeadlineText = () => {
+    if (!deadline) return 'Sin fecha límite';
     const diffDays = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     
     if (diffDays < 0) {
@@ -42,6 +43,54 @@ export function CellDeadline({ item, onDeadlineChange }: CellDeadlineProps) {
     }
   };
 
+  const getDeadlineColor = () => {
+    if (!deadline) return 'text-muted-foreground hover:bg-muted/50';
+    const diffDays = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays <= 2) {
+      // 2 días o menos: rojo
+      return 'text-red-500 hover:bg-red-500/10';
+    } else if (diffDays >= 3 && diffDays <= 7) {
+      // 3 a 7 días: amarillo
+      return 'text-yellow-500 hover:bg-yellow-500/10';
+    } else {
+      // Más de 7 días: gris
+      return 'text-muted-foreground hover:bg-muted/50';
+    }
+  };
+
+  if (!deadline) {
+    return (
+      <div className="flex items-center justify-start h-full">
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:bg-muted/50 p-2 text-left"
+            >
+              Sin fecha límite
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 bg-card border-border">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm">Fecha límite</h4>
+              </div>
+              <div className="space-y-2">
+                <DatePicker
+                  date={undefined}
+                  onDateChange={handleDeadlineChange}
+                  placeholder="Seleccionar fecha límite"
+                />
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center justify-start h-full">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -49,7 +98,7 @@ export function CellDeadline({ item, onDeadlineChange }: CellDeadlineProps) {
           <Button
             variant="ghost"
             size="sm"
-            className="text-xs text-red-500 hover:bg-red-500/10 p-2 text-left"
+            className={`text-xs p-2 text-left ${getDeadlineColor()}`}
           >
             {format(deadline, 'dd/MM/yy', { locale: es })} ({getDeadlineText()})
           </Button>

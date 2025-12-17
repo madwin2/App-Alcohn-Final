@@ -2,22 +2,24 @@ import { Search, Filter, ArrowUpDown, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useProductionStore } from '@/lib/state/production.store';
-import { mockProductionItems } from '@/lib/mocks/production.mock';
+import { ProductionItem } from '@/lib/types/index';
 
 interface ProductionHeaderProps {
+  items: ProductionItem[];
   onFilters: () => void;
   onSort: () => void;
 }
 
 export function ProductionHeader({ 
+  items,
   onFilters, 
   onSort
 }: ProductionHeaderProps) {
   const { searchQuery, setSearchQuery, showPreviews, setShowPreviews } = useProductionStore();
   
-  const activeItemsCount = mockProductionItems.length;
-  const pendingCount = mockProductionItems.filter(item => item.productionState === 'PENDIENTE').length;
-  const completedCount = mockProductionItems.filter(item => item.productionState === 'COMPLETADO').length;
+  const activeItemsCount = items.length;
+  const pendingCount = items.filter(item => item.productionState === 'PENDIENTE').length;
+  const completedCount = items.filter(item => item.productionState === 'COMPLETADO').length;
 
   return (
     <div className="space-y-4">
@@ -70,7 +72,11 @@ export function ProductionHeader({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowPreviews(!showPreviews)}
+            onClick={() => {
+              const newValue = !showPreviews;
+              console.log('ProductionHeader - Cambiando showPreviews de', showPreviews, 'a', newValue);
+              setShowPreviews(newValue);
+            }}
             className="gap-2"
           >
             {showPreviews ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

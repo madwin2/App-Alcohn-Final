@@ -6,6 +6,7 @@ export interface ColumnState {
   id: string;
   size: number;
   order: number;
+  hidden?: boolean;
 }
 
 interface OrdersStore {
@@ -15,6 +16,7 @@ interface OrdersStore {
   showPreviews: boolean;
   searchQuery: string;
   editingRowId: string | null;
+  configLoaded: boolean;
   
   // Estado de columnas
   columns: ColumnState[];
@@ -31,6 +33,8 @@ interface OrdersStore {
   setShowPreviews: (show: boolean) => void;
   setSearchQuery: (query: string) => void;
   setEditingRow: (id: string | null) => void;
+  setConfigLoaded: (loaded: boolean) => void;
+  loadConfig: (config: { columns?: ColumnState[]; filters?: Filters; sort?: SortState; showPreviews?: boolean }) => void;
 
   // Mutaciones de datos (mock)
   updateOrder: (orderId: string, patch: any) => void;
@@ -50,13 +54,17 @@ interface OrdersStore {
   // Acciones de columnas
   setColumnSize: (columnId: string, size: number) => void;
   reorderColumns: (columnIds: string[]) => void;
+  toggleColumnVisibility: (columnId: string) => void;
   resetColumns: () => void;
+  
+  // Obtener configuración para guardar
+  getConfigForSave: () => { columns: ColumnState[]; filters: Filters; sort: SortState; showPreviews: boolean };
 }
 
 const initialFilters: Filters = {};
 
 const initialSort: SortState = {
-  fabricationPriority: ['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'RETOCAR', 'REHACER'],
+  fabricationPriority: ['SIN_HACER', 'PROGRAMADO', 'HACIENDO', 'VERIFICAR', 'HECHO', 'RETOCAR', 'REHACER'],
   criteria: []
 };
 
@@ -77,6 +85,7 @@ export const useOrdersStore = create<OrdersStore>((set, get) => ({
   showPreviews: true,
   searchQuery: '',
   editingRowId: null,
+  configLoaded: false,
   columns: createInitialColumns(),
   filters: initialFilters,
   sort: initialSort,
@@ -87,6 +96,23 @@ export const useOrdersStore = create<OrdersStore>((set, get) => ({
   setShowPreviews: (show) => set({ showPreviews: show }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setEditingRow: (id) => set({ editingRowId: id }),
+  setConfigLoaded: (loaded) => set({ configLoaded: loaded }),
+  
+  loadConfig: (config) => {
+    if (config.columns) {
+      set({ columns: config.columns });
+    }
+    if (config.filters) {
+      set({ filters: config.filters });
+    }
+    if (config.sort) {
+      set({ sort: config.sort });
+    }
+    if (config.showPreviews !== undefined) {
+      set({ showPreviews: config.showPreviews });
+    }
+    set({ configLoaded: true });
+  },
   
   // Acciones de filtros
   setFilters: (newFilters) => set((state) => ({
@@ -138,5 +164,21 @@ export const useOrdersStore = create<OrdersStore>((set, get) => ({
     })
   })),
   
+  toggleColumnVisibility: (columnId) => set((state) => ({
+    columns: state.columns.map(col =>
+      col.id === columnId ? { ...col, hidden: !col.hidden } : col
+    )
+  })),
+  
   resetColumns: () => set({ columns: createInitialColumns() }),
+  
+  getConfigForSave: () => {
+    const state = get();
+    return {
+      columns: state.columns,
+      filters: state.filters,
+      sort: state.sort,
+      showPreviews: state.showPreviews,
+    };
+  },
 }));

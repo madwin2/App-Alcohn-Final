@@ -1,4 +1,5 @@
 // Utilidades de formateo para la aplicación
+import { FabricationState, OrderItem } from '@/lib/types/index';
 
 export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('es-AR', {
@@ -225,7 +226,8 @@ export const getFabricationLabel = (state: string, _isPriority: boolean = false)
     'VERIFICAR': 'Verificar',
     'HECHO': 'Hecho',
     'RETOCAR': 'Retocar',
-    'REHACER': 'Rehacer'
+    'REHACER': 'Rehacer',
+    'PROGRAMADO': 'Programado'
   };
   const baseLabel = labels[state] || state;
   return baseLabel;
@@ -268,6 +270,8 @@ export const getFabricationChipVisual = (state: string, isPriority: boolean = fa
         return buildVisual('234,179,8', '202,138,4', '234,179,8'); // amarillos
       case 'REHACER':
         return buildVisual('248,113,113', '239,68,68', '248,113,113'); // rojo claro
+      case 'PROGRAMADO':
+        return buildVisual('139,92,246', '124,58,237', '139,92,246'); // morado
       default:
         return buildVisual('75,85,99', '31,41,55', '107,114,128', true);
     }
@@ -317,3 +321,39 @@ export const getShippingChipVisual = (state: string): ChipVisual => {
       return buildVisual('55,65,81', '17,24,39', '107,114,128', true);
   }
 };
+
+// Orden de prioridad para estados de fabricación: el menor número tiene menor prioridad (estado más bajo)
+// Orden: Sin Hacer, Programado (y estados de aspire), Haciendo, Rehacer, Retocar, Verificar, Hecho
+const fabricationPriority: Record<FabricationState, number> = {
+  'SIN_HACER': 0,
+  'PROGRAMADO': 0.5, // Entre Sin Hacer y Haciendo, pero nunca aparece en la lista (prioridad la tiene aspire)
+  'HACIENDO': 1,
+  'RETOCAR': 2,
+  'REHACER': 3,
+  'VERIFICAR': 4,
+  'HECHO': 5
+};
+
+/**
+ * Calcula el estado de fabricación del pedido basado en todos sus sellos.
+ * - Si todos los sellos tienen el mismo estado, retorna ese estado.
+ * - Si hay estados distintos, retorna el estado con menor prioridad (menor número).
+ */
+export function calculateOrderFabricationState(items: OrderItem[]): FabricationState {
+  if (items.length === 0) return 'SIN_HACER';
+  
+  const states = items.map(item => item.fabricationState);
+  const uniqueStates = [...new Set(states)];
+  
+  // Si todos tienen el mismo estado, retornar ese estado
+  if (uniqueStates.length === 1) {
+    return uniqueStates[0] as FabricationState;
+  }
+  
+  // Si hay estados distintos, retornar el de menor prioridad
+  return uniqueStates.reduce((minState, currentState) => {
+    const minPriority = fabricationPriority[minState as FabricationState] ?? 999;
+    const currentPriority = fabricationPriority[currentState as FabricationState] ?? 999;
+    return currentPriority < minPriority ? currentState : minState;
+  }) as FabricationState;
+}

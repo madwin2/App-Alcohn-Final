@@ -16,7 +16,8 @@ const fabricationLabels: Record<FabricationState, string> = {
   'VERIFICAR': 'Verificar',
   'HECHO': 'Hecho',
   'REHACER': 'Rehacer',
-  'RETOCAR': 'Retocar'
+  'RETOCAR': 'Retocar',
+  'PROGRAMADO': 'Programado'
 };
 
 function SortableItem({ state }: { state: FabricationState }) {
@@ -38,18 +39,20 @@ function SortableItem({ state }: { state: FabricationState }) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 p-3 border rounded-lg bg-card ${
-        isDragging ? 'opacity-50' : ''
+      className={`flex items-center justify-between p-3.5 bg-card rounded-lg border transition-all ${
+        isDragging ? 'opacity-50 shadow-lg border-primary/50' : 'border-border hover:border-primary/30 hover:shadow-sm'
       }`}
     >
-      <div
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing"
-      >
-        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      <div className="flex items-center gap-3">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1.5 hover:bg-muted rounded transition-colors"
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <span className="text-sm font-medium">{fabricationLabels[state]}</span>
       </div>
-      <span className="text-sm font-medium">{fabricationLabels[state]}</span>
     </div>
   );
 }
@@ -75,8 +78,8 @@ export function FabricationOrderDnD({ fabricationPriority, onOrderChange }: Fabr
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-muted-foreground">
-        Arrastra para reordenar la prioridad de fabricación:
+      <p className="text-xs text-muted-foreground pl-6">
+        Arrastra los elementos para reordenar según su prioridad
       </p>
       <DndContext
         sensors={sensors}
@@ -87,9 +90,14 @@ export function FabricationOrderDnD({ fabricationPriority, onOrderChange }: Fabr
           items={fabricationPriority}
           strategy={verticalListSortingStrategy}
         >
-          <div className="space-y-2">
-            {fabricationPriority.map((state) => (
-              <SortableItem key={state} state={state} />
+          <div className="space-y-2 pl-6">
+            {fabricationPriority.map((state, index) => (
+              <div key={state} className="relative">
+                <SortableItem state={state} />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground bg-muted px-2.5 py-1 rounded-md">
+                  #{index + 1}
+                </span>
+              </div>
             ))}
           </div>
         </SortableContext>
