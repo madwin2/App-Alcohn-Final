@@ -27,7 +27,6 @@ const sidebarItems = [
   { icon: Calendar, label: 'Programas', path: '/programas', disabled: true },
   { icon: CheckCircle, label: 'Verificación', path: '/verificacion', disabled: true },
   { icon: MessageCircle, label: 'WhatsApp Bot', path: '/whatsapp', disabled: true },
-  { icon: User, label: 'Registros', path: '/admin/registros', disabled: false },
 ];
 
 export function Sidebar() {

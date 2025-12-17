@@ -3,7 +3,6 @@ import PedidosPage from './app/pedidos/index'
 import ProduccionPage from './app/produccion/index'
 import ProgramasPage from './app/programas/index'
 import LoginPage from './app/login/index'
-import RegistrosAdminPage from './app/admin/registros/index'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 
 function App() {
@@ -45,12 +44,8 @@ function App() {
             } 
           />
           <Route 
-            path="/admin/registros" 
-            element={
-              <ProtectedRoute>
-                <RegistrosAdminPage />
-              </ProtectedRoute>
-            } 
+            path="/admin/registros"
+            element={<Navigate to="/pedidos" replace />}
           />
         </Routes>
       </div>
