@@ -13,7 +13,7 @@ import { useTableViewPersistence } from '@/lib/hooks/useTableViewPersistence';
 import { FabricationState } from '@/lib/types/index';
 
 export default function PedidosPage() {
-  const { orders, loading, error, updateOrder, deleteOrder, addStampToOrder, deleteStamp, fetchOrders } = useOrders();
+  const { orders, loading, error, createOrder, updateOrder, deleteOrder, addStampToOrder, deleteStamp, fetchOrders } = useOrders();
   const [showFilters, setShowFilters] = useState(false);
   const [showSorter, setShowSorter] = useState(false);
   const [showNewOrder, setShowNewOrder] = useState(false);
@@ -112,6 +112,11 @@ export default function PedidosPage() {
       <NewOrderDialog
         open={showNewOrder}
         onOpenChange={setShowNewOrder}
+        createOrder={createOrder}
+        addStampToOrder={async (orderId, item, files) => {
+          await addStampToOrder(orderId, item, files);
+        }}
+        fetchOrders={fetchOrders}
       />
 
       <UploadPhotosDialog

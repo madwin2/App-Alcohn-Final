@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { NewOrderStepForm } from './NewOrderStepForm';
-import { NewOrderFormData } from '@/lib/types/index';
+import { NewOrderFormData, Order, OrderItem } from '@/lib/types/index';
 import { useToast } from '@/components/ui/use-toast';
 import { useSound } from '@/lib/hooks/useSound';
 import { useOrders } from '@/lib/hooks/useOrders';
@@ -9,6 +9,17 @@ import { useState } from 'react';
 interface NewOrderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Opcional: inyectar funciones desde la página (recomendado) para que el estado de la tabla
+   * se actualice sin refrescar. Si no se provee, el dialog usa su propio useOrders (estado aislado).
+   */
+  createOrder?: (formData: NewOrderFormData) => Promise<Order>;
+  addStampToOrder?: (
+    orderId: string,
+    item: Partial<OrderItem>,
+    files?: { base?: File; vector?: File; photo?: File }
+  ) => Promise<any>;
+  fetchOrders?: () => Promise<void>;
 }
 
 interface DesignData {
@@ -19,10 +30,19 @@ interface DesignData {
   files?: NewOrderFormData['files'];
 }
 
-export function NewOrderDialog({ open, onOpenChange }: NewOrderDialogProps) {
+export function NewOrderDialog({
+  open,
+  onOpenChange,
+  createOrder: createOrderProp,
+  addStampToOrder: addStampToOrderProp,
+  fetchOrders: fetchOrdersProp,
+}: NewOrderDialogProps) {
   const { toast } = useToast();
   const { playSound } = useSound();
-  const { createOrder, addStampToOrder, fetchOrders } = useOrders();
+  const ordersApi = useOrders();
+  const createOrder = createOrderProp ?? ordersApi.createOrder;
+  const addStampToOrder = addStampToOrderProp ?? ordersApi.addStampToOrder;
+  const fetchOrders = fetchOrdersProp ?? ordersApi.fetchOrders;
   const [currentStep, setCurrentStep] = useState(1);
   const [customerData, setCustomerData] = useState<NewOrderFormData['customer'] | null>(null);
   const [designs, setDesigns] = useState<DesignData[]>([]);
