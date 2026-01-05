@@ -38,7 +38,7 @@ const orderSchema = z.object({
     depositValue: z.number().min(0, 'La seña debe ser mayor o igual a 0'),
   }),
   shipping: z.object({
-    carrier: z.enum(['ANDREANI', 'CORREO_ARGENTINO', 'VIA_CARGO', 'OTRO']),
+    carrier: z.enum(['ANDREANI', 'CORREO_ARGENTINO', 'VIA_CARGO', 'OTRO']).optional(),
     service: z.enum(['DOMICILIO', 'SUCURSAL']).optional(),
   }),
   states: z.object({
@@ -80,6 +80,7 @@ const stampTypeOptions = [
 ];
 
 const carrierOptions = [
+  { value: 'NONE', label: '—' },
   { value: 'ANDREANI_DOMICILIO', label: 'Andreani - Domicilio' },
   { value: 'ANDREANI_SUCURSAL', label: 'Andreani - Sucursal' },
   { value: 'CORREO_ARGENTINO_DOMICILIO', label: 'Correo Argentino - Domicilio' },
@@ -212,8 +213,8 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         ...initialData.values,
       },
       shipping: {
-        carrier: 'ANDREANI',
-        service: 'DOMICILIO',
+        carrier: undefined,
+        service: undefined,
         ...initialData.shipping,
       },
       states: {
@@ -265,8 +266,8 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
           depositValue: 10000,
         },
         shipping: {
-          carrier: 'ANDREANI',
-          service: 'DOMICILIO',
+          carrier: undefined,
+          service: undefined,
         },
         states: {
           fabrication: 'SIN_HACER',
@@ -510,7 +511,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         <div className="grid grid-cols-6 gap-4">
           <div className="col-span-3">
             <Select onValueChange={(value) => {
-              if (value === 'OTRO') {
+              if (value === 'NONE') {
+                orderForm.setValue('shipping.carrier', undefined);
+                orderForm.setValue('shipping.service', undefined);
+              } else if (value === 'OTRO') {
                 orderForm.setValue('shipping.carrier', 'OTRO');
                 orderForm.setValue('shipping.service', undefined);
               } else {
@@ -521,9 +525,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             }} value={(() => {
               const carrier = orderForm.watch('shipping.carrier');
               const service = orderForm.watch('shipping.service');
+              if (!carrier) return 'NONE';
               if (carrier === 'OTRO') return 'OTRO';
               if (carrier && service) return `${carrier}_${service}` as ShippingOption;
-              return undefined;
+              return 'NONE';
             })()}>
               <SelectTrigger>
                 <SelectValue placeholder="Transportista" />
@@ -795,7 +800,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             <div className="grid grid-cols-6 gap-4">
               <div className="col-span-3">
                 <Select onValueChange={(value) => {
-                  if (value === 'OTRO') {
+                  if (value === 'NONE') {
+                    orderForm.setValue('shipping.carrier', undefined);
+                    orderForm.setValue('shipping.service', undefined);
+                  } else if (value === 'OTRO') {
                     orderForm.setValue('shipping.carrier', 'OTRO');
                     orderForm.setValue('shipping.service', undefined);
                   } else {
@@ -806,9 +814,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 }} value={(() => {
                   const carrier = orderForm.watch('shipping.carrier');
                   const service = orderForm.watch('shipping.service');
+                  if (!carrier) return 'NONE';
                   if (carrier === 'OTRO') return 'OTRO';
                   if (carrier && service) return `${carrier}_${service}` as ShippingOption;
-                  return undefined;
+                  return 'NONE';
                 })()}>
                   <SelectTrigger>
                     <SelectValue placeholder="Transportista" />
@@ -944,8 +953,8 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                       depositValue: 10000,
                     },
                     shipping: {
-                      carrier: 'ANDREANI',
-                      service: 'DOMICILIO',
+                      carrier: undefined,
+                      service: undefined,
                     },
                     states: {
                       fabrication: 'SIN_HACER',

@@ -17,7 +17,7 @@ const shippingOptions: { value: ShippingOption; carrier: ShippingCarrier | null;
   { value: 'VIA_CARGO_DOMICILIO', carrier: 'VIA_CARGO', service: 'DOMICILIO', iconName: 'VIA CARGO DOMICILIO', label: 'Vía Cargo Domicilio' },
   { value: 'VIA_CARGO_SUCURSAL', carrier: 'VIA_CARGO', service: 'SUCURSAL', iconName: 'VIA CARGO SUCURSAL', label: 'Vía Cargo Sucursal' },
   { value: 'OTRO', carrier: 'OTRO', service: null, iconName: 'ANDREANI DOMICILIO', label: 'Otro' },
-  { value: 'NONE', carrier: null, service: null, iconName: 'ANDREANI DOMICILIO', label: '—' },
+  { value: 'NONE', carrier: null, service: null, iconName: '', label: '—' },
 ];
 
 // Función para obtener el valor combinado actual
@@ -35,9 +35,9 @@ const getCurrentShippingOption = (carrier: ShippingCarrier | null | undefined, s
 };
 
 // Función para obtener el icono según la opción
-const getIconForOption = (option: ShippingOption): string => {
+const getIconForOption = (option: ShippingOption): string | null => {
   const found = shippingOptions.find(o => o.value === option);
-  return found?.iconName || 'ANDREANI DOMICILIO';
+  return found?.iconName || null;
 };
 
 export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
@@ -57,11 +57,15 @@ export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
         <SelectTrigger className="w-auto h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors flex justify-center items-center px-2">
           <SelectValue>
             <span className="flex items-center justify-center">
-              <SvgIcon 
-                name={getIconForOption(currentOption)} 
-                size={20}
-                className="flex-shrink-0"
-              />
+              {getIconForOption(currentOption) ? (
+                <SvgIcon 
+                  name={getIconForOption(currentOption)!} 
+                  size={20}
+                  className="flex-shrink-0"
+                />
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
             </span>
           </SelectValue>
         </SelectTrigger>
@@ -69,11 +73,13 @@ export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
           {shippingOptions.map((option) => (
             <SelectItem key={option.value} value={option.value} className="text-xs">
               <span className="flex items-center gap-2">
-                <SvgIcon 
-                  name={option.iconName} 
-                  size={16}
-                  className="flex-shrink-0"
-                />
+                {option.iconName ? (
+                  <SvgIcon 
+                    name={option.iconName} 
+                    size={16}
+                    className="flex-shrink-0"
+                  />
+                ) : null}
                 <span>{option.label}</span>
               </span>
             </SelectItem>
