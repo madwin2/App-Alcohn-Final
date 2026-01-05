@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { NewOrderFormData, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, StampType } from '@/lib/types/index';
+import { NewOrderFormData, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, ShippingOption, StampType } from '@/lib/types/index';
 import { useState, useEffect, useRef } from 'react';
 import { Upload, X } from 'lucide-react';
 import { findCustomerByPhone } from '@/lib/supabase/services/orders.service';
@@ -39,6 +39,7 @@ const orderSchema = z.object({
   }),
   shipping: z.object({
     carrier: z.enum(['ANDREANI', 'CORREO_ARGENTINO', 'VIA_CARGO', 'OTRO']),
+    service: z.enum(['DOMICILIO', 'SUCURSAL']).optional(),
   }),
   states: z.object({
     fabrication: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR', 'PROGRAMADO']),
@@ -79,9 +80,12 @@ const stampTypeOptions = [
 ];
 
 const carrierOptions = [
-  { value: 'ANDREANI', label: 'Andreani' },
-  { value: 'CORREO_ARGENTINO', label: 'Correo Argentino' },
-  { value: 'VIA_CARGO', label: 'Vía Cargo' },
+  { value: 'ANDREANI_DOMICILIO', label: 'Andreani - Domicilio' },
+  { value: 'ANDREANI_SUCURSAL', label: 'Andreani - Sucursal' },
+  { value: 'CORREO_ARGENTINO_DOMICILIO', label: 'Correo Argentino - Domicilio' },
+  { value: 'CORREO_ARGENTINO_SUCURSAL', label: 'Correo Argentino - Sucursal' },
+  { value: 'VIA_CARGO_DOMICILIO', label: 'Vía Cargo - Domicilio' },
+  { value: 'VIA_CARGO_SUCURSAL', label: 'Vía Cargo - Sucursal' },
   { value: 'OTRO', label: 'Otro' },
 ];
 
@@ -204,10 +208,12 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         ...initialData.order,
       },
       values: {
+        depositValue: 10000,
         ...initialData.values,
       },
       shipping: {
         carrier: 'ANDREANI',
+        service: 'DOMICILIO',
         ...initialData.shipping,
       },
       states: {
@@ -256,10 +262,11 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         },
         values: {
           totalValue: 0,
-          depositValue: 0,
+          depositValue: 10000,
         },
         shipping: {
           carrier: 'ANDREANI',
+          service: 'DOMICILIO',
         },
         states: {
           fabrication: 'SIN_HACER',
@@ -431,7 +438,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             )}
           </div>
           <div className="col-span-2">
-            <Select onValueChange={(value) => orderForm.setValue('order.stampType', value as StampType)}>
+            <Select 
+              value={orderForm.watch('order.stampType') || 'CLASICO'}
+              onValueChange={(value) => orderForm.setValue('order.stampType', value as StampType)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Tipo de Sello" />
               </SelectTrigger>
@@ -499,7 +509,22 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         <h3 className="text-lg font-medium">Transportista y Estado</h3>
         <div className="grid grid-cols-6 gap-4">
           <div className="col-span-3">
-            <Select onValueChange={(value) => orderForm.setValue('shipping.carrier', value as ShippingCarrier)}>
+            <Select onValueChange={(value) => {
+              if (value === 'OTRO') {
+                orderForm.setValue('shipping.carrier', 'OTRO');
+                orderForm.setValue('shipping.service', undefined);
+              } else {
+                const [carrier, service] = value.split('_') as [ShippingCarrier, ShippingServiceDest];
+                orderForm.setValue('shipping.carrier', carrier);
+                orderForm.setValue('shipping.service', service);
+              }
+            }} value={(() => {
+              const carrier = orderForm.watch('shipping.carrier');
+              const service = orderForm.watch('shipping.service');
+              if (carrier === 'OTRO') return 'OTRO';
+              if (carrier && service) return `${carrier}_${service}` as ShippingOption;
+              return undefined;
+            })()}>
               <SelectTrigger>
                 <SelectValue placeholder="Transportista" />
               </SelectTrigger>
@@ -513,7 +538,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             </Select>
           </div>
           <div className="col-span-3">
-            <Select onValueChange={(value) => orderForm.setValue('states.fabrication', value as FabricationState)}>
+            <Select 
+              value={orderForm.watch('states.fabrication') || 'SIN_HACER'}
+              onValueChange={(value) => orderForm.setValue('states.fabrication', value as FabricationState)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Estado de Fabricación" />
               </SelectTrigger>
@@ -695,7 +723,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 )}
               </div>
               <div className="col-span-2">
-                <Select onValueChange={(value) => orderForm.setValue('order.stampType', value as StampType)}>
+                <Select 
+                  value={orderForm.watch('order.stampType') || 'CLASICO'}
+                  onValueChange={(value) => orderForm.setValue('order.stampType', value as StampType)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Tipo de Sello" />
                   </SelectTrigger>
@@ -763,7 +794,22 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             <h3 className="text-lg font-medium">Transportista y Estado</h3>
             <div className="grid grid-cols-6 gap-4">
               <div className="col-span-3">
-                <Select onValueChange={(value) => orderForm.setValue('shipping.carrier', value as ShippingCarrier)}>
+                <Select onValueChange={(value) => {
+                  if (value === 'OTRO') {
+                    orderForm.setValue('shipping.carrier', 'OTRO');
+                    orderForm.setValue('shipping.service', undefined);
+                  } else {
+                    const [carrier, service] = value.split('_') as [ShippingCarrier, ShippingServiceDest];
+                    orderForm.setValue('shipping.carrier', carrier);
+                    orderForm.setValue('shipping.service', service);
+                  }
+                }} value={(() => {
+                  const carrier = orderForm.watch('shipping.carrier');
+                  const service = orderForm.watch('shipping.service');
+                  if (carrier === 'OTRO') return 'OTRO';
+                  if (carrier && service) return `${carrier}_${service}` as ShippingOption;
+                  return undefined;
+                })()}>
                   <SelectTrigger>
                     <SelectValue placeholder="Transportista" />
                   </SelectTrigger>
@@ -777,7 +823,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 </Select>
               </div>
               <div className="col-span-3">
-                <Select onValueChange={(value) => orderForm.setValue('states.fabrication', value as FabricationState)}>
+                <Select 
+                  value={orderForm.watch('states.fabrication') || 'SIN_HACER'}
+                  onValueChange={(value) => orderForm.setValue('states.fabrication', value as FabricationState)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Estado de Fabricación" />
                   </SelectTrigger>
@@ -892,10 +941,11 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                     },
                     values: {
                       totalValue: 0,
-                      depositValue: 0,
+                      depositValue: 10000,
                     },
                     shipping: {
                       carrier: 'ANDREANI',
+                      service: 'DOMICILIO',
                     },
                     states: {
                       fabrication: 'SIN_HACER',
