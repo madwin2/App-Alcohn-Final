@@ -173,9 +173,22 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
     onClear();
   };
 
-  // Helpers para fechas (guardamos como yyyy-MM-dd)
-  const setFromDate = (d?: Date) => setValue('dateRange.from' as any, d ? d.toISOString().slice(0, 10) : undefined);
-  const setToDate = (d?: Date) => setValue('dateRange.to' as any, d ? d.toISOString().slice(0, 10) : undefined);
+  // Helpers para fechas (guardamos como yyyy-MM-dd en hora local, sin conversión UTC)
+  const dateToLocalString = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const localStringToDate = (s: string): Date => {
+    // Parsear yyyy-MM-dd como fecha local (no UTC)
+    const [year, month, day] = s.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  const setFromDate = (d?: Date) => setValue('dateRange.from' as any, d ? dateToLocalString(d) : undefined);
+  const setToDate = (d?: Date) => setValue('dateRange.to' as any, d ? dateToLocalString(d) : undefined);
 
   const fromValue = watch('dateRange.from');
   const toValue = watch('dateRange.to');
@@ -191,11 +204,11 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
         <div className="grid grid-cols-2 gap-4 pl-6">
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">Desde</Label>
-            <DatePicker date={fromValue ? new Date(fromValue) : undefined} onDateChange={setFromDate} placeholder="Seleccionar fecha" />
+            <DatePicker date={fromValue ? localStringToDate(fromValue) : undefined} onDateChange={setFromDate} placeholder="Seleccionar fecha" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">Hasta</Label>
-            <DatePicker date={toValue ? new Date(toValue) : undefined} onDateChange={setToDate} placeholder="Seleccionar fecha" />
+            <DatePicker date={toValue ? localStringToDate(toValue) : undefined} onDateChange={setToDate} placeholder="Seleccionar fecha" />
           </div>
         </div>
       </div>
