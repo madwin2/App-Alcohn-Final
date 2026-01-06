@@ -370,9 +370,23 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
       if (fileUrls.photoUrl) updateData.foto_sello = fileUrls.photoUrl;
       if (fileUrls.vectorPreviewUrl) updateData.archivo_vector_preview = fileUrls.vectorPreviewUrl;
       
+      // Si se subió un vector, setear estado_vectorizacion = 'VECTORIZADO'
+      // Si no se subió vector, setear estado_vectorizacion = 'BASE' (por defecto)
+      if (fileUrls.vectorUrl || fileUrls.vectorPreviewUrl) {
+        updateData.estado_vectorizacion = 'VECTORIZADO';
+      } else {
+        updateData.estado_vectorizacion = 'BASE';
+      }
+      
       await supabase
         .from('sellos')
         .update(updateData)
+        .eq('id', sello.id);
+    } else {
+      // Si no se subieron archivos, setear estado_vectorizacion = 'BASE' por defecto
+      await supabase
+        .from('sellos')
+        .update({ estado_vectorizacion: 'BASE' })
         .eq('id', sello.id);
     }
 
@@ -721,6 +735,14 @@ export const addStampToOrder = async (orderId: string, item: Partial<OrderItem>,
       if (fileUrls.baseUrl) updateData.archivo_base = fileUrls.baseUrl;
       if (fileUrls.photoUrl) updateData.foto_sello = fileUrls.photoUrl;
       if (fileUrls.vectorPreviewUrl) updateData.archivo_vector_preview = fileUrls.vectorPreviewUrl;
+      
+      // Si se subió un vector, setear estado_vectorizacion = 'VECTORIZADO'
+      // Si no se subió vector, setear estado_vectorizacion = 'BASE' (por defecto)
+      if (fileUrls.vectorUrl || fileUrls.vectorPreviewUrl) {
+        updateData.estado_vectorizacion = 'VECTORIZADO';
+      } else {
+        updateData.estado_vectorizacion = 'BASE';
+      }
       
       await supabase
         .from('sellos')

@@ -128,20 +128,12 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
       };
       const stampType = sello.tipo ? (stampTypeMap[sello.tipo] || 'CLASICO') : 'CLASICO';
 
-      // Obtener estado de vectorización desde la BD, o calcularlo desde archivos si no existe
+      // Obtener estado de vectorización desde la BD
+      // Por defecto BASE si no está seteado
       let vectorizationState: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' = 'BASE';
       
-      // Si hay un estado guardado en la BD, usarlo
       if ((sello as any).estado_vectorizacion) {
         vectorizationState = (sello as any).estado_vectorizacion as 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO';
-      } else {
-        // Si no hay estado guardado, calcularlo desde archivos (comportamiento legacy)
-        if (sello.foto_sello) {
-          vectorizationState = 'VECTORIZADO';
-        }
-        if (sello.archivo_base && sello.foto_sello) {
-          vectorizationState = 'DESCARGADO';
-        }
       }
 
       // Obtener programa desde el campo programa_nombre
@@ -197,19 +189,14 @@ export const updateProductionItem = async (
       .eq('id', itemId)
       .single();
     
-    // Usar el vectorizationState actual del item si existe, sino calcularlo desde archivos
-    // Esto preserva estados como 'EN_PROCESO' que no se pueden calcular desde archivos
+    // Usar el vectorizationState actual del item si existe, sino usar el de la BD
     let currentVectorizationState: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' = 'BASE';
     if (currentItem && currentItem.vectorizationState) {
       // Si tenemos el item actual, usar su vectorizationState
       currentVectorizationState = currentItem.vectorizationState;
-    } else if (currentSello) {
-      // Si no tenemos el item, calcular desde archivos como fallback
-      if (currentSello.foto_sello && currentSello.archivo_base) {
-        currentVectorizationState = 'DESCARGADO';
-      } else if (currentSello.foto_sello) {
-        currentVectorizationState = 'VECTORIZADO';
-      }
+    } else if (currentSello && (currentSello as any).estado_vectorizacion) {
+      // Si no tenemos el item, usar el estado guardado en la BD
+      currentVectorizationState = (currentSello as any).estado_vectorizacion as 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO';
     }
 
     // Mapear estado de producción a estado de fabricación
