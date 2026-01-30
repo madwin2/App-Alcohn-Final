@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Order, NewOrderFormData } from '../types/index';
 import * as ordersService from '../supabase/services/orders.service';
+import { supabase } from '../supabase/client';
 
 export const useOrders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const data = await ordersService.getOrders();
       setOrders(data);
@@ -17,13 +19,34 @@ export const useOrders = () => {
       setError(err instanceof Error ? err : new Error('Error al cargar órdenes'));
       console.error('Error fetching orders:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [fetchOrders]);
+
+  // Realtime: actualizar lista cuando otra persona crea/edita/elimina órdenes o sellos
+  useEffect(() => {
+    const channel = supabase
+      .channel('orders-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ordenes' },
+        () => fetchOrders({ silent: true })
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sellos' },
+        () => fetchOrders({ silent: true })
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchOrders]);
 
   const createOrder = async (formData: NewOrderFormData): Promise<Order> => {
     try {

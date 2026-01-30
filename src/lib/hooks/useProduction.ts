@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ProductionItem } from '../types/index';
 import * as productionService from '../supabase/services/production.service';
+import { supabase } from '../supabase/client';
 
 export const useProduction = () => {
   const [items, setItems] = useState<ProductionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const data = await productionService.getProductionItems();
       setItems(data);
@@ -17,13 +19,29 @@ export const useProduction = () => {
       setError(err instanceof Error ? err : new Error('Error al cargar items de producción'));
       console.error('Error fetching production items:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchItems();
-  }, []);
+  }, [fetchItems]);
+
+  // Realtime: actualizar lista cuando otra persona modifica sellos (producción)
+  useEffect(() => {
+    const channel = supabase
+      .channel('production-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sellos' },
+        () => fetchItems({ silent: true })
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchItems]);
 
   const updateItem = async (itemId: string, updates: Partial<ProductionItem>): Promise<ProductionItem> => {
     try {
