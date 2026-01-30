@@ -25,11 +25,38 @@ const mapToProductionState = (estadoFabricacion: string | null): 'PENDIENTE' | '
 // Obtener todos los items de producción (sellos con sus órdenes y clientes)
 export const getProductionItems = async (): Promise<ProductionItem[]> => {
   try {
-    // Obtener todos los sellos con sus órdenes y clientes
+    // Obtener todos los sellos con sus órdenes y clientes.
+    // Incluir explícitamente archivo_vector_preview para que la previsualización y descarga del vector funcionen.
     const { data: sellos, error: sellosError } = await supabase
       .from('sellos')
       .select(`
-        *,
+        id,
+        orden_id,
+        programa_id,
+        fecha,
+        tipo,
+        senia,
+        fecha_limite,
+        diseno,
+        nota,
+        valor,
+        restante,
+        estado_fabricacion,
+        estado_venta,
+        archivo_base,
+        foto_sello,
+        archivo_vector_preview,
+        tipo_planchuela,
+        tiempo,
+        maquina,
+        estado_aspire,
+        largo_real,
+        ancho_real,
+        created_at,
+        updated_at,
+        es_prioritario,
+        estado_vectorizacion,
+        programa_nombre,
         ordenes!inner (
           id,
           taken_by,
