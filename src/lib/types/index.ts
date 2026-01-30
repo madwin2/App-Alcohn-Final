@@ -174,6 +174,7 @@ export interface ProductionItem {
   files?: {
     baseUrl?: string;
     vectorUrl?: string;
+    vectorPreviewUrl?: string; // Preview (PNG/SVG) para archivos EPS
     photoUrl?: string;
   };
   tasks?: ProductionTask[];

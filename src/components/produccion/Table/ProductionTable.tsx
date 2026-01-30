@@ -376,14 +376,14 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
 
   const handleDownloadVector = (item: ProductionItem) => {
     if (item.files?.vectorUrl) {
-      // Crear un enlace temporal para descargar el archivo
+      // Descargar siempre el EPS (vectorUrl), no el preview
       const link = document.createElement('a');
       link.href = item.files.vectorUrl;
-      link.download = `${item.designName}_vector`;
+      link.download = `${item.designName}_vector.eps`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast({ title: 'Descarga iniciada', description: 'Vector descargándose...' });
+      toast({ title: 'Descarga iniciada', description: 'Archivo EPS descargándose...' });
     }
   };
   const handleProgramaChange = useCallback(async (itemId: string, newProgram: string) => {

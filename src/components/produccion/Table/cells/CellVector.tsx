@@ -10,6 +10,9 @@ export function CellVector({ item }: CellVectorProps) {
   const { showPreviews } = useProductionStore();
   
   const hasFile = item.files?.vectorUrl;
+  const previewUrl = item.files?.vectorPreviewUrl;
+  // Mostrar el preview (SVG/PNG) para previsualizar; el EPS se usa solo para descargar
+  const displayUrl = previewUrl || hasFile;
 
   if (!showPreviews) {
     return null; // No mostrar nada cuando las previsualizaciones están deshabilitadas
@@ -24,9 +27,9 @@ export function CellVector({ item }: CellVectorProps) {
       ) : (
         <div className="w-10 h-10 rounded border overflow-hidden">
           <img
-            src={hasFile}
+            src={displayUrl}
             alt="Vector"
-            className="w-full h-full object-cover"
+            className={`w-full h-full ${previewUrl ? 'object-contain' : 'object-cover'}`}
             onError={(e) => {
               // Si falla la imagen, mostrar el ícono de subir
               e.currentTarget.style.display = 'none';

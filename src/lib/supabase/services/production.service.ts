@@ -158,7 +158,11 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         takenBy,
         files: {
           baseUrl: sello.archivo_base || undefined,
-          vectorUrl: undefined, // No hay campo vector en la BD
+          // Si hay preview de vector (EPS), la URL del EPS se deriva del path del preview
+          vectorUrl: (sello as any).archivo_vector_preview
+            ? (sello as any).archivo_vector_preview.replace(/_preview\.png$/i, '.eps')
+            : undefined,
+          vectorPreviewUrl: (sello as any).archivo_vector_preview || undefined,
           photoUrl: sello.foto_sello || undefined,
         },
         tasks: productionTasks,
