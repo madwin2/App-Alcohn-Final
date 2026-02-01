@@ -21,3 +21,6 @@ WHERE estado_fabricacion = 'Prioridad';
 
 
 
+
+
+

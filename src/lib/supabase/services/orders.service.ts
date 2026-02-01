@@ -551,9 +551,18 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
           // Si vectorPreviewUrl está presente (incluso si es undefined), actualizar
           if ('vectorPreviewUrl' in item.files) {
             selloData.archivo_vector_preview = item.files.vectorPreviewUrl || null;
-          } else if ('vectorUrl' in item.files && !item.files.vectorUrl) {
-            // Si vectorUrl se elimina, también eliminar el preview
-            selloData.archivo_vector_preview = null;
+            // Actualizar estado de vectorización: si hay vector, poner VECTORIZADO, si no, BASE
+            selloData.estado_vectorizacion = item.files.vectorPreviewUrl ? 'VECTORIZADO' : 'BASE';
+          } else if ('vectorUrl' in item.files) {
+            // Si vectorUrl se actualiza, también actualizar el estado
+            if (item.files.vectorUrl) {
+              // Si hay vectorUrl, poner VECTORIZADO
+              selloData.estado_vectorizacion = 'VECTORIZADO';
+            } else {
+              // Si se elimina vectorUrl, también eliminar el preview y poner BASE
+              selloData.archivo_vector_preview = null;
+              selloData.estado_vectorizacion = 'BASE';
+            }
           }
         }
         if (item.requestedWidthMm !== undefined) {

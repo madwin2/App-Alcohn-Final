@@ -8,6 +8,23 @@ import { FabricationState, SaleState, ShippingState, StampType } from '@/lib/typ
 import { DatePicker } from '@/components/ui/date-picker';
 import { getApprovedUsers } from '@/lib/supabase/services/auth.service';
 import { Calendar, Filter, X, Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const MONTH_LABELS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function getMonthOptions(count: number = 24): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const value = `${y}-${String(m + 1).padStart(2, '0')}`;
+    const label = `${MONTH_LABELS[m]} ${y}`;
+    options.push({ value, label });
+  }
+  return options;
+}
 
 const filtersSchema = z.object({
   dateRange: z
@@ -139,6 +156,7 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
   const { register, handleSubmit, watch, setValue, reset } = useForm<FiltersFormData>({
     resolver: zodResolver(filtersSchema),
     defaultValues: initialData || {
+      dateRange: undefined,
       fabrication: [],
       sale: [],
       shipping: [],
@@ -163,6 +181,7 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
 
   const handleClear = () => {
     reset({
+      dateRange: undefined,
       fabrication: [],
       sale: [],
       shipping: [],
@@ -192,6 +211,61 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
 
   const fromValue = watch('dateRange.from');
   const toValue = watch('dateRange.to');
+  const monthOptions = getMonthOptions(24);
+
+  const setQuickRange = (preset: 'hoy' | 'ayer' | 'esta_semana') => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (preset === 'hoy') {
+      const s = dateToLocalString(today);
+      setFromDate(today);
+      setToDate(today);
+      setValue('dateRange.from' as any, s);
+      setValue('dateRange.to' as any, s);
+      return;
+    }
+    if (preset === 'ayer') {
+      const ayer = new Date(today);
+      ayer.setDate(ayer.getDate() - 1);
+      const s = dateToLocalString(ayer);
+      setFromDate(ayer);
+      setToDate(ayer);
+      setValue('dateRange.from' as any, s);
+      setValue('dateRange.to' as any, s);
+      return;
+    }
+    if (preset === 'esta_semana') {
+      const day = today.getDay();
+      const lunes = new Date(today);
+      lunes.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      setFromDate(lunes);
+      setToDate(domingo);
+      setValue('dateRange.from' as any, dateToLocalString(lunes));
+      setValue('dateRange.to' as any, dateToLocalString(domingo));
+    }
+  };
+
+  const setMonthRange = (valueKey: string) => {
+    const [y, m] = valueKey.split('-').map(Number);
+    const from = new Date(y, m - 1, 1);
+    const to = new Date(y, m, 0);
+    setFromDate(from);
+    setToDate(to);
+    setValue('dateRange.from' as any, dateToLocalString(from));
+    setValue('dateRange.to' as any, dateToLocalString(to));
+  };
+
+  const selectedMonthValue = (() => {
+    if (!fromValue || !toValue) return '';
+    const from = localStringToDate(fromValue);
+    const to = localStringToDate(toValue);
+    if (from.getDate() !== 1) return '';
+    const lastDay = new Date(from.getFullYear(), from.getMonth() + 1, 0);
+    if (dateToLocalString(to) !== dateToLocalString(lastDay)) return '';
+    return `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}`;
+  })();
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-2">
@@ -201,14 +275,42 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <Label className="text-base font-semibold">Rango de fechas</Label>
         </div>
-        <div className="grid grid-cols-2 gap-4 pl-6">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Desde</Label>
-            <DatePicker date={fromValue ? localStringToDate(fromValue) : undefined} onDateChange={setFromDate} placeholder="Seleccionar fecha" />
+        <div className="space-y-3 pl-6">
+          <div className="flex flex-wrap gap-2">
+            <Chip selected={false} onToggle={() => setQuickRange('hoy')}>
+              Hoy
+            </Chip>
+            <Chip selected={false} onToggle={() => setQuickRange('ayer')}>
+              Ayer
+            </Chip>
+            <Chip selected={false} onToggle={() => setQuickRange('esta_semana')}>
+              Esta semana
+            </Chip>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Hasta</Label>
-            <DatePicker date={toValue ? localStringToDate(toValue) : undefined} onDateChange={setToDate} placeholder="Seleccionar fecha" />
+            <Label className="text-xs font-medium text-muted-foreground">Mes</Label>
+            <Select value={selectedMonthValue || undefined} onValueChange={setMonthRange}>
+              <SelectTrigger className="w-full max-w-[200px]">
+                <SelectValue placeholder="Seleccionar mes (ej. febrero 2026)" />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Desde</Label>
+              <DatePicker date={fromValue ? localStringToDate(fromValue) : undefined} onDateChange={setFromDate} placeholder="Seleccionar fecha" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Hasta</Label>
+              <DatePicker date={toValue ? localStringToDate(toValue) : undefined} onDateChange={setToDate} placeholder="Seleccionar fecha" />
+            </div>
           </div>
         </div>
       </div>

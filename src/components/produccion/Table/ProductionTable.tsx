@@ -79,27 +79,23 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
       );
     }
 
-    // Aplicar filtros del store
-    // Nota: Por ahora no filtramos por fecha ya que ProductionItem no tiene campo date
-    // Si se necesita, habría que agregarlo al mapeo desde la BD
-    // if (filters.dateRange?.from || filters.dateRange?.to) {
-    //   result = result.filter(item => {
-    //     const itemDate = item.date ? new Date(item.date) : null;
-    //     if (!itemDate) return false;
-    //     
-    //     if (filters.dateRange?.from) {
-    //       const fromDate = new Date(filters.dateRange.from);
-    //       fromDate.setHours(0, 0, 0, 0);
-    //       if (itemDate < fromDate) return false;
-    //     }
-    //     if (filters.dateRange?.to) {
-    //       const toDate = new Date(filters.dateRange.to);
-    //       toDate.setHours(23, 59, 59, 999);
-    //       if (itemDate > toDate) return false;
-    //     }
-    //     return true;
-    //   });
-    // }
+    // Aplicar filtros del store (fecha viene de la columna fecha de sellos)
+    if (filters.dateRange?.from || filters.dateRange?.to) {
+      result = result.filter(item => {
+        const itemDate = item.date ? new Date(item.date + 'T00:00:00') : null;
+        if (!itemDate) return false;
+
+        if (filters.dateRange?.from) {
+          const fromDate = new Date(filters.dateRange.from + 'T00:00:00');
+          if (itemDate < fromDate) return false;
+        }
+        if (filters.dateRange?.to) {
+          const toDate = new Date(filters.dateRange.to + 'T23:59:59.999');
+          if (itemDate > toDate) return false;
+        }
+        return true;
+      });
+    }
 
     if (filters.production && filters.production.length > 0) {
       result = result.filter(item =>

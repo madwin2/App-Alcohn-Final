@@ -131,3 +131,6 @@ COMMENT ON COLUMN ordenes.restante IS 'Calculado automáticamente: valor_total -
 
 
 
+
+
+

@@ -10,7 +10,10 @@ export function CellNotas({ item }: CellNotasProps) {
   }
 
   return (
-    <div className="text-sm text-gray-400">
+    <div
+      className="text-sm text-gray-400 leading-tight line-clamp-3 break-words min-w-0"
+      title={item.notes}
+    >
       {item.notes}
     </div>
   );

@@ -122,6 +122,15 @@ export const truncateText = (text: string, maxLength: number = 20): string => {
   return text.slice(0, maxLength) + '...';
 };
 
+/** Trunca a pocas palabras para mostrar en tabla (ej. notas en Pedidos). */
+export const truncateToWords = (text: string, maxWords: number = 5): string => {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  const words = trimmed.split(/\s+/);
+  if (words.length <= maxWords) return trimmed;
+  return words.slice(0, maxWords).join(' ') + '...';
+};
+
 export const getStampTypeIcon = (stampType: string): string => {
   switch (stampType) {
     case '3MM':

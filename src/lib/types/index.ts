@@ -158,6 +158,7 @@ export interface ProductionTask {
 export interface ProductionItem {
   id: string;
   orderId: string;
+  date?: string; // Fecha del sello (columna fecha en BD), formato YYYY-MM-DD
   designName: string;
   requestedWidthMm: number;
   requestedHeightMm: number;

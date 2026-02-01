@@ -1,4 +1,4 @@
-import { formatDimensions, truncateText } from '@/lib/utils/format';
+import { formatDimensions, truncateToWords } from '@/lib/utils/format';
 import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
 
@@ -14,12 +14,7 @@ export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, o
   const item = order.items[0]; // Mostrar el primer item
   const hasMultipleItems = order.items.length > 1;
   const isEditing = editingRowId === order.id;
-  
-  // Debug: mostrar información en consola
-  console.log('CellDisenio - Order ID:', order.id, 'Items count:', order.items.length, 'HasMultiple:', hasMultipleItems);
-  console.log('CellDisenio - Order object:', order);
-  console.log('CellDisenio - Items array:', order.items);
-  
+
   if (!item) return null;
 
   if (isEditing && (!hasMultipleItems || order.items.length === 1)) {
@@ -62,7 +57,6 @@ export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, o
   }
 
   const handleClick = () => {
-    console.log('CellDisenio clicked - hasMultipleItems:', hasMultipleItems, 'onExpand:', !!onExpand);
     if (hasMultipleItems && onExpand) {
       onExpand();
     }
@@ -84,11 +78,11 @@ export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, o
       </p>
       {/* Solo mostrar medidas y notas si NO hay múltiples items */}
       {!hasMultipleItems && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{formatDimensions(item.requestedWidthMm, item.requestedHeightMm)}</span>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+          <span className="shrink-0">{formatDimensions(item.requestedWidthMm, item.requestedHeightMm)}</span>
           {showNotes && item.notes && (
-            <span className="text-blue-400 truncate" title={item.notes}>
-              • {item.notes}
+            <span className="text-blue-400 truncate min-w-0" title={item.notes}>
+              • {truncateToWords(item.notes, 5)}
             </span>
           )}
         </div>

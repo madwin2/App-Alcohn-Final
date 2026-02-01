@@ -167,9 +167,14 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
       // IMPORTANTE: NO inferir el programa desde la máquina - debe estar vacío hasta que se complete manualmente
       let program = (sello as any).programa_nombre || '';
 
+      const dateStr = sello.fecha
+        ? (typeof sello.fecha === 'string' ? sello.fecha : (sello.fecha as any)?.toISOString?.()?.slice(0, 10) ?? null)
+        : undefined;
+
       return {
         id: sello.id,
         orderId: sello.orden_id,
+        date: dateStr ?? undefined,
         designName: sello.diseno || 'Sin diseño',
         requestedWidthMm: widthMm,
         requestedHeightMm: heightMm,
@@ -422,9 +427,14 @@ export const updateProductionItem = async (
     
     const productionTasks = (tareas || []).map(mapTareaToProductionTask);
 
+    const dateStr = updatedSello.fecha
+      ? (typeof updatedSello.fecha === 'string' ? updatedSello.fecha : (updatedSello.fecha as any)?.toISOString?.()?.slice(0, 10) ?? undefined)
+      : undefined;
+
     const updatedItem: ProductionItem = {
       id: updatedSello.id,
       orderId: updatedSello.orden_id,
+      date: dateStr,
       designName: updatedSello.diseno || 'Sin diseño',
       requestedWidthMm: widthMm,
       requestedHeightMm: heightMm,

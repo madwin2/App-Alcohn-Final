@@ -17,3 +17,6 @@ VITE_SUPABASE_ANON_KEY=TU_SUPABASE_ANON_KEY
 > Nota: `.env` ya está ignorado por git en `.gitignore`.
 
 
+
+
+

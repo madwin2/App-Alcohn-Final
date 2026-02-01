@@ -9,6 +9,24 @@ import { ProductionFilters } from '@/lib/state/production.store';
 import { ProductionState, VectorizationState } from '@/lib/types/index';
 import { getFabricationLabel } from '@/lib/utils/format';
 import { Calendar, Filter, X } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+
+const MONTH_LABELS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function getMonthOptions(count: number = 24): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const value = `${y}-${String(m + 1).padStart(2, '0')}`;
+    const label = `${MONTH_LABELS[m]} ${y}`;
+    options.push({ value, label });
+  }
+  return options;
+}
 
 // Mapeo de ProductionState a FabricationState para mostrar etiquetas
 const productionToFabricationMap: Record<ProductionState, string> = {
@@ -29,8 +47,8 @@ const vectorizationLabels: Record<VectorizationState, string> = {
 
 const filtersSchema = z.object({
   dateRange: z.object({
-    from: z.string(),
-    to: z.string(),
+    from: z.string().optional(),
+    to: z.string().optional(),
   }).optional(),
   production: z.array(z.enum(['PENDIENTE', 'EN_PROGRESO', 'COMPLETADO', 'REVISAR', 'REHACER'])).optional(),
   vectorization: z.array(z.enum(['BASE', 'VECTORIZADO', 'DESCARGADO', 'EN_PROCESO'])).optional(),
@@ -75,13 +93,78 @@ export function ProductionFiltersForm({ onSubmit, onClear, initialData }: Produc
     }
   };
 
+  const dateToLocalString = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const fromValue = watch('dateRange.from');
+  const toValue = watch('dateRange.to');
+  const monthOptions = getMonthOptions(24);
+
+  const setFromDate = (d?: Date) => setValue('dateRange.from', d ? dateToLocalString(d) : undefined);
+  const setToDate = (d?: Date) => setValue('dateRange.to', d ? dateToLocalString(d) : undefined);
+
+  const setQuickRange = (preset: 'hoy' | 'ayer' | 'esta_semana') => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (preset === 'hoy') {
+      const s = dateToLocalString(today);
+      setFromDate(today);
+      setToDate(today);
+      return;
+    }
+    if (preset === 'ayer') {
+      const ayer = new Date(today);
+      ayer.setDate(ayer.getDate() - 1);
+      const s = dateToLocalString(ayer);
+      setFromDate(ayer);
+      setToDate(ayer);
+      return;
+    }
+    if (preset === 'esta_semana') {
+      const day = today.getDay();
+      const lunes = new Date(today);
+      lunes.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      setFromDate(lunes);
+      setToDate(domingo);
+    }
+  };
+
+  const setMonthRange = (valueKey: string) => {
+    const [y, m] = valueKey.split('-').map(Number);
+    const from = new Date(y, m - 1, 1);
+    const to = new Date(y, m, 0);
+    setFromDate(from);
+    setToDate(to);
+  };
+
+  const selectedMonthValue = (() => {
+    if (!fromValue || !toValue) return '';
+    const [yFrom, mFrom, dFrom] = fromValue.split('-').map(Number);
+    const [yTo, mTo, dTo] = toValue.split('-').map(Number);
+    const from = new Date(yFrom, mFrom - 1, dFrom);
+    const to = new Date(yTo, mTo - 1, dTo);
+    if (from.getDate() !== 1) return '';
+    const lastDay = new Date(from.getFullYear(), from.getMonth() + 1, 0);
+    if (dateToLocalString(to) !== dateToLocalString(lastDay)) return '';
+    return `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}`;
+  })();
 
   const handleFormSubmit = (data: FiltersFormData) => {
     onSubmit(data);
   };
 
   const handleClear = () => {
-    reset();
+    reset({
+      dateRange: undefined,
+      production: [],
+      vectorization: [],
+    });
     onClear();
   };
 
@@ -93,24 +176,54 @@ export function ProductionFiltersForm({ onSubmit, onClear, initialData }: Produc
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <Label className="text-base font-semibold">Rango de fechas</Label>
         </div>
-        <div className="grid grid-cols-2 gap-4 pl-6">
-          <div className="space-y-1.5">
-            <Label htmlFor="from" className="text-xs font-medium text-muted-foreground">Desde</Label>
-            <Input
-              id="from"
-              type="date"
-              {...register('dateRange.from')}
-              className="h-9"
-            />
+        <div className="space-y-3 pl-6">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setQuickRange('hoy')}>
+              Hoy
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setQuickRange('ayer')}>
+              Ayer
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => setQuickRange('esta_semana')}>
+              Esta semana
+            </Button>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="to" className="text-xs font-medium text-muted-foreground">Hasta</Label>
-            <Input
-              id="to"
-              type="date"
-              {...register('dateRange.to')}
-              className="h-9"
-            />
+            <Label className="text-xs font-medium text-muted-foreground">Mes</Label>
+            <Select value={selectedMonthValue || undefined} onValueChange={setMonthRange}>
+              <SelectTrigger className="w-full max-w-[200px]">
+                <SelectValue placeholder="Seleccionar mes (ej. febrero 2026)" />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="from" className="text-xs font-medium text-muted-foreground">Desde</Label>
+              <Input
+                id="from"
+                type="date"
+                className="h-9"
+                value={fromValue ?? ''}
+                onChange={(e) => setValue('dateRange.from', e.target.value || undefined)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="to" className="text-xs font-medium text-muted-foreground">Hasta</Label>
+              <Input
+                id="to"
+                type="date"
+                className="h-9"
+                value={toValue ?? ''}
+                onChange={(e) => setValue('dateRange.to', e.target.value || undefined)}
+              />
+            </div>
           </div>
         </div>
       </div>
