@@ -11,7 +11,7 @@ export function CellNotas({ item }: CellNotasProps) {
 
   return (
     <div
-      className="text-sm text-gray-400 leading-tight line-clamp-3 break-words min-w-0"
+      className="text-sm text-gray-400 leading-tight line-clamp-3 break-words min-w-0 max-w-[220px] overflow-hidden"
       title={item.notes}
     >
       {item.notes}

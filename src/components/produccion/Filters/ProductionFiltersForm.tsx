@@ -2,7 +2,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ProductionFilters } from '@/lib/state/production.store';
@@ -11,6 +10,7 @@ import { getFabricationLabel } from '@/lib/utils/format';
 import { Calendar, Filter, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 
 const MONTH_LABELS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -204,23 +204,19 @@ export function ProductionFiltersForm({ onSubmit, onClear, initialData }: Produc
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="from" className="text-xs font-medium text-muted-foreground">Desde</Label>
-              <Input
-                id="from"
-                type="date"
-                className="h-9"
-                value={fromValue ?? ''}
-                onChange={(e) => setValue('dateRange.from', e.target.value || undefined)}
+              <Label className="text-xs font-medium text-muted-foreground">Desde</Label>
+              <DatePicker
+                date={parseDateSafe(fromValue)}
+                onDateChange={setFromDate}
+                placeholder="Seleccionar fecha"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="to" className="text-xs font-medium text-muted-foreground">Hasta</Label>
-              <Input
-                id="to"
-                type="date"
-                className="h-9"
-                value={toValue ?? ''}
-                onChange={(e) => setValue('dateRange.to', e.target.value || undefined)}
+              <Label className="text-xs font-medium text-muted-foreground">Hasta</Label>
+              <DatePicker
+                date={parseDateSafe(toValue)}
+                onDateChange={setToDate}
+                placeholder="Seleccionar fecha"
               />
             </div>
           </div>

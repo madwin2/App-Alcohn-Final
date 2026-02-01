@@ -6,13 +6,13 @@ interface CellFechaProps {
   onDateChange?: (itemId: string, newDate: Date) => void;
 }
 
-export function CellFecha({ item, onDateChange }: CellFechaProps) {
-  // Para producción, usamos la fecha de creación del item
-  const orderDate = new Date().toISOString().split('T')[0]; // Mock date
-  
+export function CellFecha({ item }: CellFechaProps) {
+  if (!item.date) {
+    return <div className="text-xs text-muted-foreground">-</div>;
+  }
   return (
     <div className="text-xs text-left">
-      {formatDate(orderDate)}
+      {formatDate(item.date)}
     </div>
   );
 }
