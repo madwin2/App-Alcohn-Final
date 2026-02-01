@@ -107,21 +107,24 @@ export function ProductionFiltersForm({ onSubmit, onClear, initialData }: Produc
   const setFromDate = (d?: Date) => setValue('dateRange.from', d ? dateToLocalString(d) : undefined);
   const setToDate = (d?: Date) => setValue('dateRange.to', d ? dateToLocalString(d) : undefined);
 
+  const parseDateSafe = (s: string | undefined): Date | undefined => {
+    if (!s || typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s.trim())) return undefined;
+    const [y, m, d] = s.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return isNaN(date.getTime()) ? undefined : date;
+  };
+
   const setQuickRange = (preset: 'hoy' | 'ayer' | 'esta_semana') => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (preset === 'hoy') {
-      const s = dateToLocalString(today);
-      setFromDate(today);
-      setToDate(today);
+      setValue('dateRange', { from: dateToLocalString(today), to: dateToLocalString(today) });
       return;
     }
     if (preset === 'ayer') {
       const ayer = new Date(today);
       ayer.setDate(ayer.getDate() - 1);
-      const s = dateToLocalString(ayer);
-      setFromDate(ayer);
-      setToDate(ayer);
+      setValue('dateRange', { from: dateToLocalString(ayer), to: dateToLocalString(ayer) });
       return;
     }
     if (preset === 'esta_semana') {
@@ -130,8 +133,7 @@ export function ProductionFiltersForm({ onSubmit, onClear, initialData }: Produc
       lunes.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
       const domingo = new Date(lunes);
       domingo.setDate(lunes.getDate() + 6);
-      setFromDate(lunes);
-      setToDate(domingo);
+      setValue('dateRange', { from: dateToLocalString(lunes), to: dateToLocalString(domingo) });
     }
   };
 
@@ -144,12 +146,9 @@ export function ProductionFiltersForm({ onSubmit, onClear, initialData }: Produc
   };
 
   const selectedMonthValue = (() => {
-    if (!fromValue || !toValue) return '';
-    const [yFrom, mFrom, dFrom] = fromValue.split('-').map(Number);
-    const [yTo, mTo, dTo] = toValue.split('-').map(Number);
-    const from = new Date(yFrom, mFrom - 1, dFrom);
-    const to = new Date(yTo, mTo - 1, dTo);
-    if (from.getDate() !== 1) return '';
+    const from = parseDateSafe(fromValue);
+    const to = parseDateSafe(toValue);
+    if (!from || !to || from.getDate() !== 1) return '';
     const lastDay = new Date(from.getFullYear(), from.getMonth() + 1, 0);
     if (dateToLocalString(to) !== dateToLocalString(lastDay)) return '';
     return `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}`;

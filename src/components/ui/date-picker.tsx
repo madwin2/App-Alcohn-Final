@@ -23,6 +23,7 @@ export function DatePicker({
   disabled = false,
   className
 }: DatePickerProps) {
+  const validDate = date && !isNaN(date.getTime()) ? date : undefined;
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -30,19 +31,19 @@ export function DatePicker({
           variant="ghost"
           className={cn(
             "w-auto justify-start text-left font-normal h-auto p-0 border-none bg-transparent hover:bg-transparent",
-            !date && "text-muted-foreground",
+            !validDate && "text-muted-foreground",
             className
           )}
           disabled={disabled}
         >
-          {date ? format(date, "dd/MM/yy", { locale: es }) : <span className="text-gray-400">{placeholder}</span>}
+          {validDate ? format(validDate, "dd/MM/yy", { locale: es }) : <span className="text-gray-400">{placeholder}</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
         <CustomCalendar
-          selected={date}
+          selected={validDate}
           onSelect={onDateChange}
-          defaultMonth={date}
+          defaultMonth={validDate}
           className="bg-card"
         />
       </PopoverContent>

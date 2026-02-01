@@ -84,20 +84,21 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
 
     // Aplicar filtros del store
     if (filters.dateRange?.from || filters.dateRange?.to) {
-      result = result.filter(order => {
-        const orderDate = new Date(order.orderDate);
-        if (filters.dateRange?.from) {
-          const fromDate = new Date(filters.dateRange.from);
-          fromDate.setHours(0, 0, 0, 0);
-          if (orderDate < fromDate) return false;
-        }
-        if (filters.dateRange?.to) {
-          const toDate = new Date(filters.dateRange.to);
-          toDate.setHours(23, 59, 59, 999);
-          if (orderDate > toDate) return false;
-        }
-        return true;
-      });
+      const fromStr = filters.dateRange?.from;
+      const toStr = filters.dateRange?.to;
+      const fromDate = fromStr ? new Date(fromStr + 'T00:00:00') : null;
+      const toDate = toStr ? new Date(toStr + 'T23:59:59.999') : null;
+      const fromValid = fromDate && !isNaN(fromDate.getTime());
+      const toValid = toDate && !isNaN(toDate.getTime());
+      if (fromValid || toValid) {
+        result = result.filter(order => {
+          const orderDate = new Date(order.orderDate);
+          if (isNaN(orderDate.getTime())) return false;
+          if (fromValid && orderDate < fromDate!) return false;
+          if (toValid && orderDate > toDate!) return false;
+          return true;
+        });
+      }
     }
 
     if (filters.fabrication && filters.fabrication.length > 0) {

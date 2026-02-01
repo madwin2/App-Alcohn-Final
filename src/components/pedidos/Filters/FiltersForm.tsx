@@ -206,6 +206,12 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
     return new Date(year, month - 1, day);
   };
 
+  const parseDateSafe = (s: string | undefined): Date | undefined => {
+    if (!s || typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s.trim())) return undefined;
+    const d = localStringToDate(s);
+    return isNaN(d.getTime()) ? undefined : d;
+  };
+
   const setFromDate = (d?: Date) => setValue('dateRange.from' as any, d ? dateToLocalString(d) : undefined);
   const setToDate = (d?: Date) => setValue('dateRange.to' as any, d ? dateToLocalString(d) : undefined);
 
@@ -218,20 +224,14 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
     today.setHours(0, 0, 0, 0);
     if (preset === 'hoy') {
       const s = dateToLocalString(today);
-      setFromDate(today);
-      setToDate(today);
-      setValue('dateRange.from' as any, s);
-      setValue('dateRange.to' as any, s);
+      setValue('dateRange' as any, { from: s, to: s });
       return;
     }
     if (preset === 'ayer') {
       const ayer = new Date(today);
       ayer.setDate(ayer.getDate() - 1);
       const s = dateToLocalString(ayer);
-      setFromDate(ayer);
-      setToDate(ayer);
-      setValue('dateRange.from' as any, s);
-      setValue('dateRange.to' as any, s);
+      setValue('dateRange' as any, { from: s, to: s });
       return;
     }
     if (preset === 'esta_semana') {
@@ -240,10 +240,7 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
       lunes.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
       const domingo = new Date(lunes);
       domingo.setDate(lunes.getDate() + 6);
-      setFromDate(lunes);
-      setToDate(domingo);
-      setValue('dateRange.from' as any, dateToLocalString(lunes));
-      setValue('dateRange.to' as any, dateToLocalString(domingo));
+      setValue('dateRange' as any, { from: dateToLocalString(lunes), to: dateToLocalString(domingo) });
     }
   };
 
@@ -258,10 +255,9 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
   };
 
   const selectedMonthValue = (() => {
-    if (!fromValue || !toValue) return '';
-    const from = localStringToDate(fromValue);
-    const to = localStringToDate(toValue);
-    if (from.getDate() !== 1) return '';
+    const from = parseDateSafe(fromValue);
+    const to = parseDateSafe(toValue);
+    if (!from || !to || from.getDate() !== 1) return '';
     const lastDay = new Date(from.getFullYear(), from.getMonth() + 1, 0);
     if (dateToLocalString(to) !== dateToLocalString(lastDay)) return '';
     return `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}`;
@@ -305,11 +301,11 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">Desde</Label>
-              <DatePicker date={fromValue ? localStringToDate(fromValue) : undefined} onDateChange={setFromDate} placeholder="Seleccionar fecha" />
+              <DatePicker date={parseDateSafe(fromValue)} onDateChange={setFromDate} placeholder="Seleccionar fecha" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground">Hasta</Label>
-              <DatePicker date={toValue ? localStringToDate(toValue) : undefined} onDateChange={setToDate} placeholder="Seleccionar fecha" />
+              <DatePicker date={parseDateSafe(toValue)} onDateChange={setToDate} placeholder="Seleccionar fecha" />
             </div>
           </div>
         </div>

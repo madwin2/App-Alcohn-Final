@@ -81,20 +81,21 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
 
     // Aplicar filtros del store (fecha viene de la columna fecha de sellos)
     if (filters.dateRange?.from || filters.dateRange?.to) {
-      result = result.filter(item => {
-        const itemDate = item.date ? new Date(item.date + 'T00:00:00') : null;
-        if (!itemDate) return false;
-
-        if (filters.dateRange?.from) {
-          const fromDate = new Date(filters.dateRange.from + 'T00:00:00');
-          if (itemDate < fromDate) return false;
-        }
-        if (filters.dateRange?.to) {
-          const toDate = new Date(filters.dateRange.to + 'T23:59:59.999');
-          if (itemDate > toDate) return false;
-        }
-        return true;
-      });
+      const fromStr = filters.dateRange?.from;
+      const toStr = filters.dateRange?.to;
+      const fromDate = fromStr ? new Date(fromStr + 'T00:00:00') : null;
+      const toDate = toStr ? new Date(toStr + 'T23:59:59.999') : null;
+      const fromValid = fromDate && !isNaN(fromDate.getTime());
+      const toValid = toDate && !isNaN(toDate.getTime());
+      if (fromValid || toValid) {
+        result = result.filter(item => {
+          const itemDate = item.date ? new Date(item.date + 'T00:00:00') : null;
+          if (!itemDate || isNaN(itemDate.getTime())) return false;
+          if (fromValid && itemDate < fromDate!) return false;
+          if (toValid && itemDate > toDate!) return false;
+          return true;
+        });
+      }
     }
 
     if (filters.production && filters.production.length > 0) {
