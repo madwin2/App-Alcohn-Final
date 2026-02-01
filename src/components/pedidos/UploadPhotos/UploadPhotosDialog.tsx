@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { formatDate } from '@/lib/utils/format';
 import { 
   getAvailableStampsForPhoto, 
   assignPhotoToStamp,
@@ -361,7 +362,7 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
                         ) : (
                           availableStamps.map(stamp => (
                             <SelectItem key={stamp.id} value={stamp.id}>
-                              {stamp.designName} - {stamp.customerName} ({new Date(stamp.orderDate).toLocaleDateString()})
+                              {stamp.designName} - {stamp.customerName} ({formatDate(stamp.orderDate)})
                             </SelectItem>
                           ))
                         )}

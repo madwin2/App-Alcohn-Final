@@ -1,4 +1,5 @@
 import { Order } from '@/lib/types';
+import { formatDate } from '@/lib/utils/format';
 import { CellCliente } from './cells/CellCliente';
 import { CellContacto } from './cells/CellContacto';
 import { CellEnvio } from './cells/CellEnvio';
@@ -33,7 +34,7 @@ export function OrderSummaryRow({ order }: OrderSummaryRowProps) {
       {/* Fecha */}
       <div className="w-20 px-2">
         <span className="text-xs text-muted-foreground">
-          {new Date(order.orderDate).toLocaleDateString()}
+          {formatDate(order.orderDate)}
         </span>
       </div>
       

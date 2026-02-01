@@ -1,6 +1,6 @@
 import React from 'react';
 import { Order } from '@/lib/types';
-import { formatCurrency, calculateOrderFabricationState, getFabricationLabel } from '@/lib/utils/format';
+import { formatCurrency, formatDate, calculateOrderFabricationState, getFabricationLabel } from '@/lib/utils/format';
 
 interface CellSummaryProps {
   order: Order;
@@ -19,7 +19,7 @@ export function CellSummary({ order, columnId }: CellSummaryProps) {
     case 'fecha':
       return (
         <span className="text-xs text-muted-foreground">
-          {new Date(order.orderDate).toLocaleDateString()}
+          {formatDate(order.orderDate)}
         </span>
       );
     

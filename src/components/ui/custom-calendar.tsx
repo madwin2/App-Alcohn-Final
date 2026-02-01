@@ -19,7 +19,9 @@ export function CustomCalendar({
   defaultMonth = new Date(),
   className
 }: CustomCalendarProps) {
-  const [currentMonth, setCurrentMonth] = React.useState(defaultMonth)
+  const safeSelected = selected instanceof Date && !isNaN(selected.getTime()) ? selected : undefined;
+  const safeDefaultMonth = defaultMonth instanceof Date && !isNaN(defaultMonth.getTime()) ? defaultMonth : new Date();
+  const [currentMonth, setCurrentMonth] = React.useState(safeDefaultMonth)
 
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(monthStart)
@@ -43,8 +45,8 @@ export function CustomCalendar({
           className={cn(
             "h-9 w-9 flex items-center justify-center text-sm cursor-pointer rounded-md hover:bg-accent hover:text-accent-foreground",
             !isSameMonth(day, monthStart) && "text-muted-foreground opacity-50",
-            isSameDay(day, selected || new Date()) && "bg-primary text-primary-foreground",
-            isSameDay(day, new Date()) && !isSameDay(day, selected || new Date()) && "bg-accent text-accent-foreground"
+            isSameDay(day, safeSelected ?? new Date()) && "bg-primary text-primary-foreground",
+            isSameDay(day, new Date()) && !isSameDay(day, safeSelected ?? new Date()) && "bg-accent text-accent-foreground"
           )}
           onClick={() => onSelect?.(cloneDay)}
         >

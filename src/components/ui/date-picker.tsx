@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { CustomCalendar } from "@/components/ui/custom-calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { parseOrderDateLocal } from "@/lib/utils/format"
 
 interface DatePickerProps {
   date?: Date
@@ -23,7 +24,15 @@ export function DatePicker({
   disabled = false,
   className
 }: DatePickerProps) {
-  const validDate = date && !isNaN(date.getTime()) ? date : undefined;
+  const validDate = React.useMemo(() => {
+    if (date == null) return undefined;
+    if (date instanceof Date && !isNaN(date.getTime())) return date;
+    if (typeof date === 'string') {
+      const d = parseOrderDateLocal(date);
+      return !isNaN(d.getTime()) ? d : undefined;
+    }
+    return undefined;
+  }, [date]);
   return (
     <Popover>
       <PopoverTrigger asChild>

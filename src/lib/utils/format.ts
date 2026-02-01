@@ -10,8 +10,17 @@ export const formatCurrency = (amount: number): string => {
   }).format(amount);
 };
 
+/** Parsea fecha tipo ISO o YYYY-MM-DD como fecha local (evita desfase de un día por UTC). */
+export const parseOrderDateLocal = (dateString: string): Date => {
+  const part = typeof dateString === 'string' ? dateString.split('T')[0] : '';
+  const [y, m, d] = part.split('-').map(Number);
+  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return new Date(NaN);
+  return new Date(y, m - 1, d);
+};
+
 export const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
+  const date = parseOrderDateLocal(dateString);
+  if (isNaN(date.getTime())) return '';
   return new Intl.DateTimeFormat('es-AR', {
     day: '2-digit',
     month: '2-digit',

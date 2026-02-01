@@ -10,6 +10,7 @@ import {
   getFilteredRowModel,
 } from '@tanstack/react-table';
 import { Order, FabricationState, SaleState, ShippingState, StampType } from '@/lib/types/index';
+import { parseOrderDateLocal } from '@/lib/utils/format';
 import { createUnifiedColumns } from './UnifiedColumns';
 import { useOrdersStore } from '@/lib/state/orders.store';
 import { useToast } from '@/components/ui/use-toast';
@@ -92,7 +93,7 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
       const toValid = toDate && !isNaN(toDate.getTime());
       if (fromValid || toValid) {
         result = result.filter(order => {
-          const orderDate = new Date(order.orderDate);
+          const orderDate = parseOrderDateLocal(order.orderDate);
           if (isNaN(orderDate.getTime())) return false;
           if (fromValid && orderDate < fromDate!) return false;
           if (toValid && orderDate > toDate!) return false;
@@ -171,7 +172,7 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
           
           switch (criteria.field) {
             case 'fecha':
-              comparison = new Date(a.orderDate).getTime() - new Date(b.orderDate).getTime();
+              comparison = parseOrderDateLocal(a.orderDate).getTime() - parseOrderDateLocal(b.orderDate).getTime();
               break;
             case 'cliente':
               const aName = `${a.customer.firstName} ${a.customer.lastName}`;

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { formatDate, isDeadlineNear, getDaysUntilDeadline } from '@/lib/utils/format';
+import { formatDate, isDeadlineNear, getDaysUntilDeadline, parseOrderDateLocal } from '@/lib/utils/format';
 import { Order } from '@/lib/types/index';
 import { DatePicker } from '@/components/ui/date-picker';
 
@@ -10,7 +10,15 @@ interface CellFechaProps {
 }
 
 export function CellFecha({ order, onDateChange }: CellFechaProps) {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(order.orderDate);
+  const initialDate = useMemo(() => {
+    const d = parseOrderDateLocal(order.orderDate);
+    return !isNaN(d.getTime()) ? d : undefined;
+  }, [order.orderDate]);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(initialDate);
+  useEffect(() => {
+    const d = parseOrderDateLocal(order.orderDate);
+    setSelectedDate(!isNaN(d.getTime()) ? d : undefined);
+  }, [order.orderDate]);
   const isNearDeadline = isDeadlineNear(order.deadlineAt);
   const daysUntilDeadline = getDaysUntilDeadline(order.deadlineAt);
 
