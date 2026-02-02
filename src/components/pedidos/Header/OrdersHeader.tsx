@@ -1,4 +1,4 @@
-import { Search, Filter, ArrowUpDown, Plus, Image } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, Plus, Image, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StateChips } from './StateChips';
@@ -12,6 +12,7 @@ interface OrdersHeaderProps {
   onFilters: () => void;
   onSort: () => void;
   onUploadPhotos?: () => void;
+  onExportVentas?: () => void;
   onStateFilter: (state: FabricationState) => void;
   activeStates: FabricationState[];
 }
@@ -22,6 +23,7 @@ export function OrdersHeader({
   onFilters, 
   onSort,
   onUploadPhotos,
+  onExportVentas,
   onStateFilter,
   activeStates 
 }: OrdersHeaderProps) {
@@ -87,6 +89,19 @@ export function OrdersHeader({
             >
               <Image className="h-4 w-4" />
               Subir Fotos
+            </Button>
+          )}
+
+          {/* Exportar ventas */}
+          {onExportVentas && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExportVentas}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Exportar ventas
             </Button>
           )}
 

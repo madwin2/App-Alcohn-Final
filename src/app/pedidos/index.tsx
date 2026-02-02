@@ -11,6 +11,7 @@ import { useOrders } from '@/lib/hooks/useOrders';
 import { useOrdersStore } from '@/lib/state/orders.store';
 import { useTableViewPersistence } from '@/lib/hooks/useTableViewPersistence';
 import { FabricationState } from '@/lib/types/index';
+import { exportVentasToCsv } from '@/lib/utils/exportVentas';
 
 export default function PedidosPage() {
   const { orders, loading, error, createOrder, updateOrder, deleteOrder, addStampToOrder, deleteStamp, fetchOrders } = useOrders();
@@ -66,6 +67,7 @@ export default function PedidosPage() {
               onFilters={() => setShowFilters(true)}
               onSort={() => setShowSorter(true)}
               onUploadPhotos={() => setShowUploadPhotos(true)}
+              onExportVentas={() => exportVentasToCsv(orders)}
               onStateFilter={handleStateFilter}
               activeStates={activeStates}
             />
