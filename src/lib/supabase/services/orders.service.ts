@@ -486,7 +486,7 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
       // e inspeccionar el estado de fabricación actual (para manejar prioridad)
       const { data: allSellos } = await supabase
         .from('sellos')
-        .select('id, valor, senia, estado_fabricacion, es_prioritario')
+        .select('id, valor, senia, estado_fabricacion, es_prioritario, estado_venta')
         .eq('orden_id', orderId);
 
       const sellosMap = new Map(allSellos?.map(s => [s.id, s]) || []);
@@ -544,6 +544,11 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
         }
         if (item.files && 'photoUrl' in item.files) {
           selloData.foto_sello = item.files.photoUrl || null;
+          // Si se está subiendo una foto (photoUrl no es null/undefined) y el estado de venta actual es "Señado",
+          // cambiar automáticamente a "Foto Enviada"
+          if (item.files.photoUrl && currentSello?.estado_venta === 'Señado' && item.saleState === undefined) {
+            selloData.estado_venta = 'Foto';
+          }
         }
         // El vector se maneja a través de vectorPreviewUrl (archivo_vector_preview en BD)
         // Si se elimina vectorUrl o vectorPreviewUrl, eliminamos el preview
