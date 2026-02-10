@@ -238,9 +238,9 @@ BEGIN
       -- URL de seguimiento si existe
       IF v_orden.seguimiento IS NOT NULL AND v_orden.seguimiento != '' THEN
         IF v_orden.empresa_envio = 'Correo Argentino' THEN
-          v_url_seguimiento := 'https://www.correoargentino.com.ar/formularios/ondnc';
+          v_url_seguimiento := 'https://www.correoargentino.com.ar/formularios/e-commerce';
         ELSIF v_orden.empresa_envio = 'Andreani' THEN
-          v_url_seguimiento := 'https://www.andreani.com/#!/envios/' || v_orden.seguimiento;
+          v_url_seguimiento := 'https://www.andreani.com/?tab=seguir-envio';
         ELSIF v_orden.empresa_envio = 'Via Cargo' THEN
           v_url_seguimiento := 'https://www.viacargo.com.ar/seguimiento';
         ELSE

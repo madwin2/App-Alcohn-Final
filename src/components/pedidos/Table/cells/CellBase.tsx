@@ -204,7 +204,7 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
           <div 
             onClick={handleClick}
             onContextMenu={(e) => e.stopPropagation()} // Prevenir que se propague al menú del pedido
-            className={`w-10 h-10 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity relative ${uploading ? 'opacity-50' : ''}`}
+            className={`w-10 h-10 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity relative bg-white ${uploading ? 'opacity-50' : ''}`}
           >
             {uploading && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
