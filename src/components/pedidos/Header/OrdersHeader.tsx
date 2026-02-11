@@ -1,9 +1,10 @@
+import { useMemo } from 'react';
 import { Search, Filter, ArrowUpDown, Plus, Image, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StateChips } from './StateChips';
 import { useOrdersStore } from '@/lib/state/orders.store';
-import { getFabricationCounts } from '@/lib/utils/orders.utils';
+import { getFabricationCounts, filterOrders } from '@/lib/utils/orders.utils';
 import { FabricationState, Order } from '@/lib/types/index';
 
 interface OrdersHeaderProps {
@@ -27,10 +28,15 @@ export function OrdersHeader({
   onStateFilter,
   activeStates 
 }: OrdersHeaderProps) {
-  const { searchQuery, setSearchQuery } = useOrdersStore();
+  const { searchQuery, setSearchQuery, filters, sort } = useOrdersStore();
   
-  const activeOrdersCount = orders.length;
-  const counts = getFabricationCounts(orders);
+  // Filtrar pedidos según los filtros aplicados
+  const filteredOrders = useMemo(() => {
+    return filterOrders(orders, searchQuery, filters, sort);
+  }, [orders, searchQuery, filters, sort]);
+  
+  const activeOrdersCount = filteredOrders.length;
+  const counts = getFabricationCounts(filteredOrders);
 
   return (
     <div className="space-y-4">
