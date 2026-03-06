@@ -18,6 +18,7 @@ import { DndTableContainer } from './DndTableContainer';
 import { ResizableHeader } from './ResizableHeader';
 import { Checkbox } from '@/components/ui/checkbox';
 import { createTask, updateTask, deleteTask } from '@/lib/supabase/services/orders.service';
+import { downloadFile } from '@/lib/supabase/services/storage.service';
 
 interface ProductionTableProps {
   items: ProductionItem[];
@@ -358,29 +359,40 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
     }
   }, [selectedRows, updateItem, toast]);
 
-  const handleDownloadBase = (item: ProductionItem) => {
-    if (item.files?.baseUrl) {
-      // Crear un enlace temporal para descargar el archivo
-      const link = document.createElement('a');
-      link.href = item.files.baseUrl;
-      link.download = `${item.designName}_archivo_base`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const handleDownloadBase = async (item: ProductionItem) => {
+    if (!item.files?.baseUrl) return;
+    try {
+      const urlParts = item.files.baseUrl.split('/');
+      const nameFromUrl = urlParts[urlParts.length - 1] || '';
+      const hasExtension = /\.(jpg|jpeg|png|gif|webp|pdf)$/i.test(nameFromUrl);
+      const filename = hasExtension
+        ? `${item.designName}_archivo_base.${(nameFromUrl.match(/\.([^.]+)$/)?.[1] || 'jpg')}`
+        : `${item.designName}_archivo_base.jpg`;
+      await downloadFile(item.files.baseUrl, filename);
       toast({ title: 'Descarga iniciada', description: 'Archivo base descargándose...' });
+    } catch (error) {
+      console.error('Error downloading base file:', error);
+      toast({
+        title: 'Error al descargar',
+        description: error instanceof Error ? error.message : 'No se pudo descargar el archivo base',
+        variant: 'destructive',
+      });
     }
   };
 
-  const handleDownloadVector = (item: ProductionItem) => {
-    if (item.files?.vectorUrl) {
-      // Descargar siempre el EPS (vectorUrl), no el preview
-      const link = document.createElement('a');
-      link.href = item.files.vectorUrl;
-      link.download = `${item.designName}_vector.eps`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const handleDownloadVector = async (item: ProductionItem) => {
+    if (!item.files?.vectorUrl) return;
+    try {
+      const filename = `${item.designName}_vector.eps`;
+      await downloadFile(item.files.vectorUrl, filename);
       toast({ title: 'Descarga iniciada', description: 'Archivo EPS descargándose...' });
+    } catch (error) {
+      console.error('Error downloading vector:', error);
+      toast({
+        title: 'Error al descargar',
+        description: error instanceof Error ? error.message : 'No se pudo descargar el vector',
+        variant: 'destructive',
+      });
     }
   };
   const handleProgramaChange = useCallback(async (itemId: string, newProgram: string) => {
