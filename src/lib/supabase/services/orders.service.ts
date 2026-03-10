@@ -274,8 +274,14 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
     if (ordenError) throw ordenError;
 
     // 3. Crear sello primero (sin archivos aún)
-    const selloDataSinArchivos = mapOrderItemToSello(
-      {
+    // Calcular fecha límite (si viene del formulario de creación)
+    const fechaLimite =
+      (formData.states as any).deadline instanceof Date
+        ? (formData.states as any).deadline.toISOString().split('T')[0]
+        : null;
+    const selloDataSinArchivos = {
+      ...mapOrderItemToSello(
+        {
         id: '',
         orderId: orden.id,
         designName: formData.order.designName,
@@ -294,23 +300,31 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
         balanceItemCached: formData.values.totalValue - formData.values.depositValue,
         files: {}, // Sin archivos aún
         contact: formData.customer,
+        },
+        orden.id,
+        {
+          id: cliente.id,
+          nombre: cliente.firstName,
+          apellido: cliente.lastName,
+          telefono: cliente.phoneE164,
+          mail: cliente.email || null,
+          dni: cliente.dni || null,
+          medio_contacto: formData.customer.channel === 'WHATSAPP' ? 'Whatsapp' : 
+                        formData.customer.channel === 'INSTAGRAM' ? 'Instagram' :
+                        formData.customer.channel === 'FACEBOOK' ? 'Facebook' :
+                        formData.customer.channel === 'MAIL' ? 'Mail' : 'Whatsapp',
+          created_at: null,
+          updated_at: null,
+        }
+      ),
+      // Sobrescribir campos específicos al crear el sello
+      ...{
+        // Guardar prioridad en la nueva columna es_prioritario (independiente del estado de fabricación)
+        es_prioritario: formData.states.isPriority ?? false,
+        // Guardar fecha límite si se especificó al crear el pedido
+        fecha_limite: fechaLimite,
       },
-      orden.id,
-      {
-        id: cliente.id,
-        nombre: cliente.firstName,
-        apellido: cliente.lastName,
-        telefono: cliente.phoneE164,
-        mail: cliente.email || null,
-        dni: cliente.dni || null,
-        medio_contacto: formData.customer.channel === 'WHATSAPP' ? 'Whatsapp' : 
-                       formData.customer.channel === 'INSTAGRAM' ? 'Instagram' :
-                       formData.customer.channel === 'FACEBOOK' ? 'Facebook' :
-                       formData.customer.channel === 'MAIL' ? 'Mail' : 'Whatsapp',
-        created_at: null,
-        updated_at: null,
-      }
-    );
+    };
 
     const { data: sello, error: selloError } = await supabase
       .from('sellos')

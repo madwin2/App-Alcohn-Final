@@ -256,5 +256,6 @@ export interface NewOrderFormData {
     sale: SaleState;
     shipping: ShippingState;
     isPriority: boolean;
+    deadline?: Date;
   };
 }
