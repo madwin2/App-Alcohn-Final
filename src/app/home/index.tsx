@@ -452,7 +452,7 @@ export default function HomePage() {
         {/* Sticky notes - posición absoluta, flotan sobre el contenido sin generar separación */}
         <div
           ref={containerRef}
-          className="absolute left-8 right-8 top-[136px] bottom-0 pointer-events-none"
+          className="absolute left-8 right-8 top-[136px] bottom-0 pointer-events-none z-20"
           style={{ minHeight: 200 }}
         >
             {/* Notas propias (grises) - arrastrables */}
@@ -490,17 +490,26 @@ export default function HomePage() {
               </div>
             ))}
             {/* Tareas de compañeros (amarillas) - arrastrables */}
-            {colleagueTasks.map((task) => (
+            {colleagueTasks.map((task, idx) => {
+              const rawLeft = task.posX ?? 0;
+              const rawTop = task.posY ?? 0;
+              // Si una tarea nueva todavía no tiene posición guardada, (0,0) puede quedar tapada.
+              // Usamos un fallback para que sea visible y desplazable.
+              const isDefaultPos = rawLeft === 0 && rawTop === 0;
+              const left = isDefaultPos ? 60 : rawLeft;
+              const top = isDefaultPos ? 60 + idx * 95 : rawTop;
+
+              return (
               <div
                 key={task.id}
                 className={cn(
-                  'group absolute w-[82px] h-[82px] transition-all duration-300 ease-out cursor-grab active:cursor-grabbing pointer-events-auto',
+                  'group absolute w-[82px] h-[82px] transition-all duration-300 ease-out cursor-grab active:cursor-grabbing pointer-events-auto z-20',
                   removingColleagueId === task.id && 'scale-0 opacity-0 pointer-events-none',
                   draggingId === task.id && 'z-50 cursor-grabbing',
                 )}
-                style={{ left: task.posX ?? 0, top: task.posY ?? 0 }}
+                style={{ left, top }}
                 onPointerDown={(e) =>
-                  handlePointerDown(e, task.id, task.posX ?? 0, task.posY ?? 0, false)
+                  handlePointerDown(e, task.id, left, top, false)
                 }
               >
                 <img
@@ -529,7 +538,8 @@ export default function HomePage() {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
             {/* Formulario agregar nota propia (cuando está activo) */}
             {isAdding ? (
               <div
