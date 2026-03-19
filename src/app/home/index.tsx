@@ -661,13 +661,11 @@ export default function HomePage() {
                     return (
                       <div
                         key={order.id}
-                        className="rounded-lg border border-white/10 bg-background/80 px-3 py-2 text-xs"
+                        className="rounded-lg border border-white/10 bg-background/80 p-2 text-xs"
                       >
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-1">
                           <div
-                            className={cn(
-                              'w-14 h-14 rounded border border-white/10 overflow-hidden flex-shrink-0 bg-muted',
-                            )}
+                            className="w-full aspect-square rounded overflow-hidden bg-muted/30"
                           >
                             {thumb ? (
                               <img src={thumb} alt="" className="w-full h-full object-contain" />
