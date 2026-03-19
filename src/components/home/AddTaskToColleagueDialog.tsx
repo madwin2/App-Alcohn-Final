@@ -51,6 +51,15 @@ export function AddTaskToColleagueDialog({
       return;
     }
 
+    if (!currentUserId) {
+      toast({
+        title: 'No estás autenticado',
+        description: 'Esperá un momento y probá de nuevo.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (selectedUserId === currentUserId) {
       toast({
         title: 'No podés asignarte a vos mismo',
@@ -131,7 +140,10 @@ export function AddTaskToColleagueDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting || colleaguesToShow.length === 0}>
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || colleaguesToShow.length === 0 || !currentUserId}
+          >
             {isSubmitting ? 'Enviando...' : 'Asignar'}
           </Button>
         </DialogFooter>

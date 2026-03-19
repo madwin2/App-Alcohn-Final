@@ -116,7 +116,7 @@ function groupStampsByOrder(stamps: StampWithOrder[]): OrderWithItems[] {
 }
 
 export default function HomePage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading, isAuthenticated } = useAuth();
   const { orders, loading, error } = useOrders();
 
   const userName =
@@ -134,18 +134,19 @@ export default function HomePage() {
   const [isAddToColleagueOpen, setIsAddToColleagueOpen] = useState(false);
 
   const fetchColleagueTasks = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id || !isAuthenticated) return;
     const tasks = await getDashboardTasksForUser(user.id);
     setColleagueTasks(tasks);
-  }, [user?.id]);
+  }, [user?.id, isAuthenticated]);
 
   useEffect(() => {
+    if (authLoading) return;
     fetchColleagueTasks();
   }, [fetchColleagueTasks]);
 
   // Fallback + realtime para que las tareas de compañeros se actualicen sin refresh
   useEffect(() => {
-    if (!user?.id) return;
+    if (authLoading || !user?.id || !isAuthenticated) return;
 
     const interval = window.setInterval(() => {
       fetchColleagueTasks();
@@ -166,7 +167,7 @@ export default function HomePage() {
       window.clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [user?.id, fetchColleagueTasks]);
+  }, [user?.id, fetchColleagueTasks, authLoading, isAuthenticated]);
 
   const handleMarkDone = useCallback((id: string) => {
     setRemovingId(id);
