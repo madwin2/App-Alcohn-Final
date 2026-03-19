@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils/cn';
 import type { Order, OrderItem } from '@/lib/types';
 import { getApprovedUsers } from '@/lib/supabase/services/auth.service';
+import { supabase } from '@/lib/supabase/client';
 import {
   getDashboardTasksForUser,
   deleteDashboardTask,
@@ -141,6 +142,31 @@ export default function HomePage() {
   useEffect(() => {
     fetchColleagueTasks();
   }, [fetchColleagueTasks]);
+
+  // Fallback + realtime para que las tareas de compañeros se actualicen sin refresh
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const interval = window.setInterval(() => {
+      fetchColleagueTasks();
+    }, 12000);
+
+    const channel = supabase
+      .channel('tasks-dashboard-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tareas_dashboard' },
+        () => {
+          fetchColleagueTasks();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      window.clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, fetchColleagueTasks]);
 
   const handleMarkDone = useCallback((id: string) => {
     setRemovingId(id);

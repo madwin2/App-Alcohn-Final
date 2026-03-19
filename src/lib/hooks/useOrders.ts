@@ -48,6 +48,17 @@ export const useOrders = () => {
     };
   }, [fetchOrders]);
 
+  // Fallback: polling para garantizar actualizaciones aunque realtime falle
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      fetchOrders({ silent: true });
+    }, 12000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [fetchOrders]);
+
   const createOrder = async (formData: NewOrderFormData): Promise<Order> => {
     try {
       const newOrder = await ordersService.createOrder(formData);
