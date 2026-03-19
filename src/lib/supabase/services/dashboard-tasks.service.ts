@@ -66,31 +66,22 @@ export const createDashboardTask = async (
   asignadoAUserId: string,
   creadoPorUserId: string,
   texto: string
-): Promise<DashboardTask | null> => {
-  const { data, error } = await supabase
+): Promise<void> => {
+  const { error } = await supabase
     .from('tareas_dashboard')
     .insert({
       asignado_a_user_id: asignadoAUserId,
       creado_por_user_id: creadoPorUserId,
       texto: texto.trim(),
     })
-    .select()
-    .single();
+    ;
 
   if (error) {
     console.error('Error creating dashboard task:', error);
     throw error;
   }
 
-  return data
-    ? {
-        id: data.id,
-        asignadoAUserId: data.asignado_a_user_id,
-        creadoPorUserId: data.creado_por_user_id,
-        texto: data.texto,
-        createdAt: data.created_at,
-      }
-    : null;
+  return;
 };
 
 /**
