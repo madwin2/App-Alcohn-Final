@@ -9,7 +9,6 @@ import { ProductionState, VectorizationState } from '@/lib/types/index';
 import { getFabricationLabel } from '@/lib/utils/format';
 import { Calendar, Filter, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 
 const MONTH_LABELS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];

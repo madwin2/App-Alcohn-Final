@@ -20,7 +20,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
 
 const sidebarItems = [
-  { icon: Home, label: 'Inicio', path: '/', disabled: true },
+  { icon: Home, label: 'Inicio', path: '/', disabled: false },
   { icon: ShoppingCart, label: 'Pedidos', path: '/pedidos', disabled: false },
   { icon: Layers, label: 'Vectorización', path: '/vectorizacion', disabled: true },
   { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },

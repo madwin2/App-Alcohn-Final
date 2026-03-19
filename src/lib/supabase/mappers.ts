@@ -282,6 +282,7 @@ export const mapOrdenToOrder = (
     id: orden.id,
     customer: mapClienteToCustomer(cliente),
     orderDate: orden.fecha || new Date().toISOString().split('T')[0],
+    createdAt: orden.created_at || undefined,
     takenBy: takenBy || null,
     totalValue: orden.valor_total ? Number(orden.valor_total) : 0,
     depositValueOrder: orden.senia_total ? Number(orden.senia_total) : 0,

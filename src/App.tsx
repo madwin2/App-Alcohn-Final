@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import HomePage from './app/home/index'
 import PedidosPage from './app/pedidos/index'
 import ProduccionPage from './app/produccion/index'
 import ProgramasPage from './app/programas/index'
@@ -15,7 +16,7 @@ function App() {
             path="/" 
             element={
               <ProtectedRoute>
-                <Navigate to="/pedidos" replace />
+                <HomePage />
               </ProtectedRoute>
             } 
           />

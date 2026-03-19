@@ -58,7 +58,8 @@ export interface Task {
 export interface Order {
   id: string;
   customer: Customer;
-  orderDate: string; // ISO
+  orderDate: string; // ISO o YYYY-MM-DD (fecha de negocio)
+  createdAt?: string | null; // ISO, cuando se creó la orden en el sistema
   takenBy?: { id: string; name: string } | null;
   totalValue: number;
   depositValueOrder?: number | null;
