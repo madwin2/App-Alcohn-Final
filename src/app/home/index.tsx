@@ -657,50 +657,35 @@ export default function HomePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {groupStampsByOrder(priorityStamps).map(({ order, items }) => {
                     const firstItem = items[0];
-                    const isPriority = items.some((i) => i.isPriority);
+                    const thumb = firstItem.files?.vectorPreviewUrl || firstItem.files?.baseUrl;
                     return (
                       <div
                         key={order.id}
                         className="rounded-lg border border-white/10 bg-background/80 px-3 py-2 text-xs space-y-2"
                       >
-                        <div className="flex gap-2 items-start">
-                          <div className="flex gap-0.5 shrink-0">
-                            {items.map((item) => {
-                              const thumb = item.files?.vectorPreviewUrl || item.files?.baseUrl;
-                              const isVectorPreview = !!item.files?.vectorPreviewUrl;
-                              return (
-                                <div
-                                  key={item.id}
-                                  className={cn(
-                                    'w-8 h-8 rounded border border-white/10 overflow-hidden flex-shrink-0',
-                                    isVectorPreview ? 'bg-white' : 'bg-muted',
-                                  )}
-                                >
-                                  {thumb ? (
-                                    <img src={thumb} alt="" className="w-full h-full object-contain" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground">—</div>
-                                  )}
-                                </div>
-                              );
-                            })}
+                        <div className="flex flex-col gap-2">
+                          <div
+                            className={cn(
+                              'w-14 h-14 rounded border border-white/10 overflow-hidden flex-shrink-0 bg-muted',
+                            )}
+                          >
+                            {thumb ? (
+                              <img src={thumb} alt="" className="w-full h-full object-contain" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground">
+                                —
+                              </div>
+                            )}
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1">
-                              <span className="font-medium truncate">{firstItem.designName}</span>
-                              {items.length > 1 && (
-                                <span className="text-[10px] text-muted-foreground">×{items.length}</span>
-                              )}
-                              {isPriority && (
-                                <span className="text-[10px] text-muted-foreground">· Prioridad</span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-muted-foreground truncate">
-                              {order.customer.firstName} {order.customer.lastName}
-                            </p>
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{firstItem.designName}</p>
                             {order.deadlineAt && (
                               <p className="text-[11px] text-muted-foreground">
-                                Límite: {new Date(order.deadlineAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}
+                                Límite:{' '}
+                                {new Date(order.deadlineAt).toLocaleDateString('es-AR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                })}
                               </p>
                             )}
                           </div>
