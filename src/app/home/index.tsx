@@ -645,23 +645,23 @@ export default function HomePage() {
         </section>
 
         {/* Prioritarios y con fecha límite */}
-        <section className="space-y-4 pb-10">
+        <section className="space-y-3 pb-4">
           <h2 className="text-lg font-semibold tracking-tight">Pedidos prioritarios y con fecha límite</h2>
           <Card className="border border-white/10 bg-card/50">
-            <CardContent className="pt-4">
+            <CardContent className="p-4 pt-2">
               {groupStampsByOrder(priorityStamps).length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No hay pedidos prioritarios ni con fecha límite pendientes de envío.
                 </p>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {groupStampsByOrder(priorityStamps).map(({ order, items }) => {
                     const firstItem = items[0];
                     const thumb = firstItem.files?.vectorPreviewUrl || firstItem.files?.baseUrl;
                     return (
                       <div
                         key={order.id}
-                        className="rounded-lg border border-white/10 bg-background/80 px-3 py-2 text-xs space-y-2"
+                        className="rounded-lg border border-white/10 bg-background/80 px-3 py-2 text-xs"
                       >
                         <div className="flex flex-col gap-2">
                           <div
