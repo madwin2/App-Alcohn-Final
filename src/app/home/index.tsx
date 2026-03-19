@@ -321,7 +321,7 @@ export default function HomePage() {
     }, [orders, currentMonth, currentYear, todayKey]);
 
   // Objetivos fijos (por ahora definidos en código; más adelante pueden venir de BD)
-  const MONTHLY_GOAL = 100;
+  const MONTHLY_GOAL = 200;
   const DAILY_GOAL = 10;
 
   const monthlyProgress = MONTHLY_GOAL > 0 ? Math.min((monthlyItems / MONTHLY_GOAL) * 100, 100) : 0;
