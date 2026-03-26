@@ -415,14 +415,14 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
 // Actualizar orden
 export const updateOrder = async (orderId: string, updates: Partial<Order>): Promise<Order> => {
   try {
-    // Primero obtener la orden existente para tener el cliente_id
-    const existingOrder = await getOrderById(orderId);
-    if (!existingOrder) {
-      throw new Error('Order not found');
-    }
-
-    // Actualizar cliente si se proporciona
+    // Solo cargar la orden existente si realmente se va a actualizar cliente.
+    // Esto evita una lectura completa extra para updates simples de estados.
+    let existingOrder: Order | null = null;
     if (updates.customer) {
+      existingOrder = await getOrderById(orderId);
+      if (!existingOrder) {
+        throw new Error('Order not found');
+      }
       const clienteData = mapCustomerToCliente(updates.customer);
       const { error: clienteError } = await supabase
         .from('clientes')
@@ -637,25 +637,31 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
       // Los valores totales (valor_total, senia_total, restante) se calculan automáticamente
       // por los triggers de la base de datos, no es necesario calcularlos manualmente aquí
       
-      // Solo actualizar estados generales si todos los items tienen el mismo estado
-      const updatedOrder = await getOrderById(orderId);
-      if (updatedOrder && updatedOrder.items.length > 0) {
-        // Verificar si todos los items tienen el mismo estado
-        const allSaleStates = updatedOrder.items.map(item => item.saleState).filter(Boolean);
-        const uniqueSaleStates = [...new Set(allSaleStates)];
+      // Actualizar estado general de la orden sin hacer getOrderById intermedio.
+      // Reutilizamos sellos ya leídos y aplicamos los cambios del patch en memoria.
+      if (allSellos && allSellos.length > 0) {
+        const saleStateBySello = new Map<string, string | null>(
+          allSellos.map((s) => [s.id, s.estado_venta ?? null]),
+        );
 
-        const ordenUpdateData: any = {};
-
-        // Actualizar estado general solo si todos los items tienen el mismo estado de venta
-        if (uniqueSaleStates.length === 1 && uniqueSaleStates[0]) {
-          ordenUpdateData.estado_orden = mapSaleStateToDB(uniqueSaleStates[0] as any);
+        for (const item of updates.items) {
+          if (!item.id) continue;
+          if (item.saleState !== undefined) {
+            saleStateBySello.set(item.id, mapSaleStateToDB(item.saleState));
+          } else if (item.files?.photoUrl) {
+            const current = saleStateBySello.get(item.id);
+            if (current === 'Señado') {
+              saleStateBySello.set(item.id, 'Foto');
+            }
+          }
         }
 
-        // Actualizar la orden solo si hay cambios en estados
-        if (Object.keys(ordenUpdateData).length > 0) {
+        const allSaleStates = Array.from(saleStateBySello.values()).filter(Boolean);
+        const uniqueSaleStates = [...new Set(allSaleStates)];
+        if (uniqueSaleStates.length === 1 && uniqueSaleStates[0]) {
           const { error: ordenUpdateError } = await supabase
             .from('ordenes')
-            .update(ordenUpdateData)
+            .update({ estado_orden: uniqueSaleStates[0] })
             .eq('id', orderId);
 
           if (ordenUpdateError) {
@@ -667,7 +673,11 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
     }
 
     // Obtener la orden actualizada
-    return await getOrderById(orderId) || existingOrder;
+    const finalOrder = await getOrderById(orderId);
+    if (!finalOrder) {
+      throw new Error('No se pudo obtener la orden actualizada');
+    }
+    return finalOrder;
   } catch (error) {
     console.error('Error updating order:', error);
     throw error;
