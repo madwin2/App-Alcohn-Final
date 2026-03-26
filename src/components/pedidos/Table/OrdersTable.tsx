@@ -31,10 +31,6 @@ interface OrdersTableProps {
 }
 
 export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteStamp }: OrdersTableProps) {
-  // Debug: verificar qué datos están llegando
-  console.log('OrdersTable - Total orders:', orders.length);
-  console.log('OrdersTable - Order 9:', orders.find(o => o.id === '9'));
-  
   const { 
     searchQuery, 
     setEditingRow, 
@@ -281,7 +277,7 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
       onExpand: toggleRow,
       isSubitem: false
     });
-  }, [editingRowId, toggleRow, orders, onUpdate]);
+  }, [editingRowId, toggleRow, onUpdate]);
 
   const subitemColumns = useMemo(() => {
     return createUnifiedColumns({
@@ -300,7 +296,7 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
       onExpand: toggleRow,
       isSubitem: true
     });
-  }, [editingRowId, toggleRow, orders, onUpdate]);
+  }, [editingRowId, toggleRow, onUpdate]);
 
   // Sistema unificado de columnas con redimensionamiento y reordenamiento
   const sortedColumns = useMemo(() => {
@@ -454,7 +450,7 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
               return (
                 <React.Fragment key={order.id}>
                   {/* Fila resumen con animación mejorada */}
-                  <tr className={`border-b hover:bg-gradient-to-r hover:from-primary/5 hover:to-primary/10 transition-all duration-200 ease-out cursor-pointer group ${isExpandedState ? 'summary-row-expanded' : ''} ${isCollapsing(order.id) ? 'summary-row-collapsing' : ''} ${isExpanding(order.id) ? 'summary-row-expanding' : ''}`}>
+                  <tr className={`border-b hover:bg-primary/5 transition-colors duration-150 cursor-pointer group ${isExpandedState ? 'summary-row-expanded' : ''} ${isCollapsing(order.id) ? 'summary-row-collapsing' : ''} ${isExpanding(order.id) ? 'summary-row-expanding' : ''}`}>
                     {sortedColumns.map((column) => {
                       if (!column.id) return null;
                       const columnState = columns.find(col => col.id === column.id);
@@ -502,9 +498,9 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                          <tr 
                            data-row 
                            onDoubleClick={() => handleRowDoubleClick(order.id)} 
-                           className={`hover:bg-muted/30 transition-all duration-300 ease-in-out bg-gradient-to-r from-muted/10 to-muted/5 shadow-sm animate-in slide-in-from-top-2 fade-in relative ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''} ${isCollapsing(order.id) ? 'expandable-item-exit' : 'expandable-item-enter'}`}
+                           className={`hover:bg-muted/30 transition-colors duration-150 bg-muted/5 relative ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''} ${isCollapsing(order.id) ? 'expandable-item-exit' : 'expandable-item-enter'}`}
                            style={{
-                             animationDelay: `${index * 100}ms`,
+                             animationDelay: '0ms',
                              marginBottom: index < order.items.length - 1 ? '2px' : '0px',
                              borderLeft: '2px solid #d1d5db',
                            }}
