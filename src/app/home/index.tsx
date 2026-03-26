@@ -654,7 +654,7 @@ export default function HomePage() {
                   No hay pedidos prioritarios ni con fecha límite pendientes de envío.
                 </p>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
                   {groupStampsByOrder(priorityStamps).map(({ order, items }) => {
                     const firstItem = items[0];
                     const thumb = firstItem.files?.vectorPreviewUrl || firstItem.files?.baseUrl;
