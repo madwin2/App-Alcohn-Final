@@ -321,6 +321,10 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
       .filter((col): col is NonNullable<typeof col> => col !== null);
   }, [columns, subitemColumns]);
 
+  const columnStateMap = useMemo(() => {
+    return new Map(columns.map((col) => [col.id, col]));
+  }, [columns]);
+
   const columnIds = columns.map(col => col.id);
 
   const table = useReactTable({
@@ -353,7 +357,7 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
-                    const columnState = columns.find(col => col.id === header.column.id);
+                    const columnState = columnStateMap.get(header.column.id);
                     const align = (header.column.columnDef.meta as any)?.align || 'left';
                     const isContacto = header.id === 'contacto';
                     const isRestante = header.id === 'restante';
@@ -391,19 +395,7 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                         onDoubleClick={() => handleRowDoubleClick(order.id)} 
                         className={`hover:bg-muted/50 transition-colors ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''}`}
                       >
-                        {sortedColumns.map((column) => {
-                          if (!column.id) return null;
-                          const columnState = columns.find(col => col.id === column.id);
-                          const align = (column.meta as any)?.align || 'left';
-                          const isContacto = column.id === 'contacto';
-                          const isRestante = column.id === 'restante';
-                          const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
-                          const isTextColumn = ['cliente', 'contacto'].includes(column.id);
-                          const isDisenioColumn = column.id === 'disenio';
-                          const paddingClass = isStateColumn ? 'px-0' : 'px-2';
-                          const textOverflowClass = isTextColumn ? 'overflow-hidden' : isDisenioColumn ? 'overflow-hidden' : 'overflow-hidden text-ellipsis whitespace-nowrap';
-                          
-                          // Crear un objeto row mock para compatibilidad con las celdas existentes
+                        {(() => {
                           const mockRow = {
                             original: order, // Pasar el pedido completo con todos los items
                             id: `${order.id}-${order.items[0].id}`,
@@ -414,7 +406,19 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                             renderValue: () => null,
                             table: {} as any,
                           } as any;
-                        
+
+                          return sortedColumns.map((column) => {
+                          if (!column.id) return null;
+                          const columnState = columnStateMap.get(column.id);
+                          const align = (column.meta as any)?.align || 'left';
+                          const isContacto = column.id === 'contacto';
+                          const isRestante = column.id === 'restante';
+                          const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
+                          const isTextColumn = ['cliente', 'contacto'].includes(column.id);
+                          const isDisenioColumn = column.id === 'disenio';
+                          const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                          const textOverflowClass = isTextColumn ? 'overflow-hidden' : isDisenioColumn ? 'overflow-hidden' : 'overflow-hidden text-ellipsis whitespace-nowrap';
+                          
                         return (
                             <td 
                               key={`${order.id}-${order.items[0].id}-${column.id}`} 
@@ -426,7 +430,8 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                                 : column.cell ? React.createElement(column.cell as any, { row: mockRow } as any) : null}
                           </td>
                         );
-                      })}
+                        });
+                        })()}
                     </tr>
                   </ContextMenuTrigger>
                   <ContextMenuContent>
@@ -451,20 +456,7 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                 <React.Fragment key={order.id}>
                   {/* Fila resumen con animación mejorada */}
                   <tr className={`border-b hover:bg-primary/5 transition-colors duration-150 cursor-pointer group ${isExpandedState ? 'summary-row-expanded' : ''} ${isCollapsing(order.id) ? 'summary-row-collapsing' : ''} ${isExpanding(order.id) ? 'summary-row-expanding' : ''}`}>
-                    {sortedColumns.map((column) => {
-                      if (!column.id) return null;
-                      const columnState = columns.find(col => col.id === column.id);
-                      const align = (column.meta as any)?.align || 'left';
-                      const isContacto = column.id === 'contacto';
-                      const isRestante = column.id === 'restante';
-                      const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
-                      const isTextColumn = ['cliente', 'contacto'].includes(column.id);
-                      const isDisenioColumn = column.id === 'disenio';
-                      const paddingClass = isStateColumn ? 'px-0' : 'px-2';
-                      const textOverflowClass = isTextColumn ? 'overflow-hidden' : isDisenioColumn ? 'overflow-hidden' : 'overflow-hidden text-ellipsis whitespace-nowrap';
-                      
-                      // Para la fila resumen, usar el pedido completo sin modificar
-                      // Las celdas individuales se encargan de calcular los totales correctamente
+                    {(() => {
                       const mockRow = {
                         original: order, // Usar el pedido completo
                         id: `${order.id}-summary`,
@@ -475,6 +467,18 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                         renderValue: () => null,
                         table: {} as any,
                       } as any;
+
+                      return sortedColumns.map((column) => {
+                      if (!column.id) return null;
+                      const columnState = columnStateMap.get(column.id);
+                      const align = (column.meta as any)?.align || 'left';
+                      const isContacto = column.id === 'contacto';
+                      const isRestante = column.id === 'restante';
+                      const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
+                      const isTextColumn = ['cliente', 'contacto'].includes(column.id);
+                      const isDisenioColumn = column.id === 'disenio';
+                      const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                      const textOverflowClass = isTextColumn ? 'overflow-hidden' : isDisenioColumn ? 'overflow-hidden' : 'overflow-hidden text-ellipsis whitespace-nowrap';
                       
                       return (
                         <td 
@@ -488,7 +492,8 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                             : column.cell ? React.createElement(column.cell as any, { row: mockRow } as any) : null}
                         </td>
                       );
-                    })}
+                      });
+                    })()}
                   </tr>
                   
                   {/* Filas expandidas */}
@@ -505,23 +510,7 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                              borderLeft: '2px solid #d1d5db',
                            }}
                          >
-                          {sortedSubitemColumns.map((column) => {
-                            if (!column.id) return null;
-                            
-                            // Columnas que deben estar vacías en las filas expandidas
-                            const columnsToHideInExpandedView = ['fecha', 'cliente', 'contacto', 'envio', 'envioEstado', 'seguimiento'];
-                            const shouldHideColumn = columnsToHideInExpandedView.includes(column.id);
-                            const columnState = columns.find(col => col.id === column.id);
-                            const align = (column.meta as any)?.align || 'left';
-                            const isContacto = column.id === 'contacto';
-                            const isRestante = column.id === 'restante';
-                            const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
-                            const isTextColumn = ['cliente', 'contacto'].includes(column.id);
-                            const isDisenioColumn = column.id === 'disenio';
-                            const paddingClass = isStateColumn ? 'px-0' : 'px-2';
-                            const textOverflowClass = isTextColumn ? 'overflow-hidden' : isDisenioColumn ? 'overflow-hidden' : 'overflow-hidden text-ellipsis whitespace-nowrap';
-                            
-                            // Crear un objeto row mock para compatibilidad con las celdas existentes
+                          {(() => {
                             const mockRow = {
                               original: { ...order, items: [item] }, // Solo el item actual para filas expandidas
                               id: `${order.id}-${item.id}`,
@@ -532,6 +521,22 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                               renderValue: () => null,
                               table: {} as any,
                             } as any;
+
+                            return sortedSubitemColumns.map((column) => {
+                            if (!column.id) return null;
+                            
+                            // Columnas que deben estar vacías en las filas expandidas
+                            const columnsToHideInExpandedView = ['fecha', 'cliente', 'contacto', 'envio', 'envioEstado', 'seguimiento'];
+                            const shouldHideColumn = columnsToHideInExpandedView.includes(column.id);
+                            const columnState = columnStateMap.get(column.id);
+                            const align = (column.meta as any)?.align || 'left';
+                            const isContacto = column.id === 'contacto';
+                            const isRestante = column.id === 'restante';
+                            const isStateColumn = ['fabricacion', 'venta', 'envioEstado'].includes(column.id);
+                            const isTextColumn = ['cliente', 'contacto'].includes(column.id);
+                            const isDisenioColumn = column.id === 'disenio';
+                            const paddingClass = isStateColumn ? 'px-0' : 'px-2';
+                            const textOverflowClass = isTextColumn ? 'overflow-hidden' : isDisenioColumn ? 'overflow-hidden' : 'overflow-hidden text-ellipsis whitespace-nowrap';
                             
                             return (
                               <td 
@@ -550,7 +555,8 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
                                 )}
                               </td>
                             );
-                          })}
+                            });
+                          })()}
                         </tr>
                       </ContextMenuTrigger>
                       <ContextMenuContent>
