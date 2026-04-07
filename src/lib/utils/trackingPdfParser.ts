@@ -51,18 +51,15 @@ const extractLikelyName = (line: string): string | null => {
   const clean = normalizeWhitespace(line);
   if (!clean) return null;
 
-  // Si la línea viene "Nombre Apellido + dirección", cortar antes del primer número.
+  // Regla pedida: usar siempre la primera línea tras DESTINATARIO.
+  // Solo limpiamos ruido obvio para no perder páginas por validaciones estrictas.
+  const upper = clean.toUpperCase();
+  if (upper.startsWith('CP:')) return null;
+
+  // Si viene pegado con dirección ("Nombre Apellido calle 123"), cortar en primer número.
   const firstDigitIndex = clean.search(/\d/);
   const head = firstDigitIndex >= 0 ? clean.slice(0, firstDigitIndex).trim() : clean;
-  if (looksLikeName(head)) return head;
-
-  // Fallback: probar con las primeras 2-4 palabras (nombre compuesto + apellido).
-  const tokens = head.split(' ').filter(Boolean);
-  for (let size = Math.min(tokens.length, 4); size >= 2; size -= 1) {
-    const candidate = tokens.slice(0, size).join(' ');
-    if (looksLikeName(candidate)) return candidate;
-  }
-  return null;
+  return normalizeWhitespace(head || clean);
 };
 
 const pageItemsToLines = (items: TextItem[]): string[] => {
