@@ -33,19 +33,6 @@ const INVALID_NAME_PHRASES = [
   'MAR DEL PLATA',
   'CORDOBA CAPITAL',
 ];
-const ADDRESS_HINTS = [
-  'CALLE',
-  'AV',
-  'AV.',
-  'AVENIDA',
-  'BARRIO',
-  'PASAJE',
-  'RUTA',
-  'NRO',
-  'NUMERO',
-  'GRAL',
-  'GENERAL',
-];
 
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
@@ -67,19 +54,6 @@ const extractLikelyName = (line: string): string | null => {
   // Si la línea viene "Nombre Apellido + dirección", cortar antes del primer número.
   const firstDigitIndex = clean.search(/\d/);
   const head = firstDigitIndex >= 0 ? clean.slice(0, firstDigitIndex).trim() : clean;
-  // Cortar apenas empiezan pistas de dirección
-  const rawTokens = head.split(' ').filter(Boolean);
-  const nameTokens: string[] = [];
-  for (const token of rawTokens) {
-    const upper = token.toUpperCase().replace(/[.,]/g, '');
-    const startsLowercase = /^[a-záéíóúñ]/.test(token);
-    if (startsLowercase || ADDRESS_HINTS.includes(upper)) {
-      break;
-    }
-    nameTokens.push(token);
-  }
-  const trimmedHead = normalizeWhitespace(nameTokens.join(' '));
-  if (looksLikeName(trimmedHead)) return trimmedHead;
   if (looksLikeName(head)) return head;
 
   // Fallback: probar con las primeras 2-4 palabras (nombre compuesto + apellido).
@@ -150,21 +124,8 @@ export const parseTrackingPdf = async (file: File): Promise<TrackingPdfEntry[]> 
       .filter((index) => index >= 0);
 
     for (const idx of destinatarioIndexes) {
-      let fullName: string | null = null;
-      // Regla principal: el nombre viene inmediatamente después de "DESTINATARIO"
-      if (idx + 1 <= lines.length - 1) {
-        fullName = extractLikelyName(lines[idx + 1]);
-      }
-      // Fallback defensivo por si el PDF viene raro
-      if (!fullName) {
-        for (let i = idx + 2; i <= Math.min(idx + 4, lines.length - 1); i += 1) {
-          const candidateName = extractLikelyName(lines[i]);
-          if (candidateName) {
-            fullName = candidateName;
-            break;
-          }
-        }
-      }
+      // Regla estricta: usar SOLO la primera línea después de DESTINATARIO
+      const fullName = idx + 1 <= lines.length - 1 ? extractLikelyName(lines[idx + 1]) : null;
       if (!fullName) continue;
 
       let trackingNumber: string | null = null;
