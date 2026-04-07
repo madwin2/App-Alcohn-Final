@@ -27,6 +27,12 @@ const INVALID_NAME_WORDS = [
   'DOM',
   'SUCURSAL',
 ];
+const INVALID_NAME_PHRASES = [
+  'SAN SALVADOR',
+  'BUENOS AIRES',
+  'MAR DEL PLATA',
+  'CORDOBA CAPITAL',
+];
 
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
@@ -36,7 +42,27 @@ const looksLikeName = (line: string): boolean => {
   if (/\d/.test(clean)) return false;
   if (!NAME_LINE_REGEX.test(clean)) return false;
   const upper = clean.toUpperCase();
-  return !INVALID_NAME_WORDS.some((word) => upper.includes(word));
+  if (INVALID_NAME_WORDS.some((word) => upper.includes(word))) return false;
+  if (INVALID_NAME_PHRASES.some((phrase) => upper.includes(phrase))) return false;
+  return true;
+};
+
+const extractLikelyName = (line: string): string | null => {
+  const clean = normalizeWhitespace(line);
+  if (!clean) return null;
+
+  // Si la línea viene "Nombre Apellido + dirección", cortar antes del primer número.
+  const firstDigitIndex = clean.search(/\d/);
+  const head = firstDigitIndex >= 0 ? clean.slice(0, firstDigitIndex).trim() : clean;
+  if (looksLikeName(head)) return head;
+
+  // Fallback: probar con las primeras 2-4 palabras (nombre compuesto + apellido).
+  const tokens = head.split(' ').filter(Boolean);
+  for (let size = Math.min(tokens.length, 4); size >= 2; size -= 1) {
+    const candidate = tokens.slice(0, size).join(' ');
+    if (looksLikeName(candidate)) return candidate;
+  }
+  return null;
 };
 
 const pageItemsToLines = (items: TextItem[]): string[] => {
@@ -99,9 +125,11 @@ export const parseTrackingPdf = async (file: File): Promise<TrackingPdfEntry[]> 
 
     for (const idx of destinatarioIndexes) {
       let fullName: string | null = null;
-      for (let i = idx + 1; i <= Math.min(idx + 6, lines.length - 1); i += 1) {
-        if (looksLikeName(lines[i])) {
-          fullName = normalizeWhitespace(lines[i]);
+      // Buscar primero en las líneas inmediatas al "DESTINATARIO"
+      for (let i = idx + 1; i <= Math.min(idx + 4, lines.length - 1); i += 1) {
+        const candidateName = extractLikelyName(lines[i]);
+        if (candidateName) {
+          fullName = candidateName;
           break;
         }
       }
