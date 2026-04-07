@@ -25,7 +25,7 @@ type SelloRow = Database['public']['Tables']['sellos']['Row'];
 const ORDER_REGISTERED_WEBHOOK_FN =
   (import.meta as any)?.env?.VITE_ORDER_WEBHOOK_FUNCTION_NAME || 'webhook-bot';
 
-const notifyOrderRegistered = async (order: Order): Promise<void> => {
+export const notifyOrderRegistered = async (order: Order): Promise<void> => {
   try {
     const fullName = `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim();
     const { error } = await supabase.functions.invoke(ORDER_REGISTERED_WEBHOOK_FN, {
@@ -431,12 +431,7 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
     }
 
     // 6. Obtener la orden completa
-    const createdOrder = (await getOrderById(orden.id)) || (orden as unknown as Order);
-
-    // 7. Notificar al bot que el pedido se registró (best effort)
-    await notifyOrderRegistered(createdOrder);
-
-    return createdOrder;
+    return (await getOrderById(orden.id)) || (orden as unknown as Order);
   } catch (error) {
     console.error('Error creating order:', error);
     throw error;

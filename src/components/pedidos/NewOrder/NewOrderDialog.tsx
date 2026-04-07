@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useSound } from '@/lib/hooks/useSound';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { useState } from 'react';
+import { notifyOrderRegistered } from '@/lib/supabase/services/orders.service';
 
 interface NewOrderDialogProps {
   open: boolean;
@@ -190,6 +191,9 @@ export function NewOrderDialog({
       // Refrescar la orden completa después de agregar todos los sellos
       // Esto asegura que el estado local tenga todos los datos actualizados
       await fetchOrders();
+
+      // Notificar al bot recién cuando el pedido ya quedó completo (todos los ítems cargados)
+      await notifyOrderRegistered(createdOrder);
       
       // Reproducir sonido de éxito
       playSound('success');
