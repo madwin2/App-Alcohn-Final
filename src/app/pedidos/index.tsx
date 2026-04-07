@@ -6,6 +6,7 @@ import { FiltersDialog } from '@/components/pedidos/Filters/FiltersDialog';
 import { SorterDialog } from '@/components/pedidos/Sorter/SorterDialog';
 import { NewOrderDialog } from '@/components/pedidos/NewOrder/NewOrderDialog';
 import { UploadPhotosDialog } from '@/components/pedidos/UploadPhotos/UploadPhotosDialog';
+import { UploadTrackingDialog } from '@/components/pedidos/UploadTracking/UploadTrackingDialog';
 import { Toaster } from '@/components/ui/toaster';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { useOrdersStore } from '@/lib/state/orders.store';
@@ -19,6 +20,7 @@ export default function PedidosPage() {
   const [showSorter, setShowSorter] = useState(false);
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [showUploadPhotos, setShowUploadPhotos] = useState(false);
+  const [showUploadTracking, setShowUploadTracking] = useState(false);
   const [activeStates, setActiveStates] = useState<FabricationState[]>([]);
   
   const store = useOrdersStore();
@@ -67,6 +69,7 @@ export default function PedidosPage() {
               onFilters={() => setShowFilters(true)}
               onSort={() => setShowSorter(true)}
               onUploadPhotos={() => setShowUploadPhotos(true)}
+              onUploadTracking={() => setShowUploadTracking(true)}
               onExportVentas={() => exportVentasToCsv(orders)}
               onStateFilter={handleStateFilter}
               activeStates={activeStates}
@@ -127,6 +130,27 @@ export default function PedidosPage() {
         onSuccess={() => {
           // Refrescar las órdenes cuando se asigne una foto exitosamente
           fetchOrders();
+        }}
+      />
+
+      <UploadTrackingDialog
+        open={showUploadTracking}
+        onOpenChange={setShowUploadTracking}
+        orders={orders}
+        onApply={async (matches) => {
+          for (const match of matches) {
+            await updateOrder(match.order.id, {
+              shipping: {
+                ...match.order.shipping,
+                trackingNumber: match.trackingNumber,
+              },
+              items: match.order.items.map((item) => ({
+                id: item.id,
+                shippingState: 'DESPACHADO',
+              })) as any,
+            });
+          }
+          await fetchOrders();
         }}
       />
 

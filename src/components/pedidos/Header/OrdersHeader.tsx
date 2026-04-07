@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Search, Filter, ArrowUpDown, Plus, Image, Download } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, Plus, Image, Download, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StateChips } from './StateChips';
@@ -13,6 +13,7 @@ interface OrdersHeaderProps {
   onFilters: () => void;
   onSort: () => void;
   onUploadPhotos?: () => void;
+  onUploadTracking?: () => void;
   onExportVentas?: () => void;
   onStateFilter: (state: FabricationState) => void;
   activeStates: FabricationState[];
@@ -24,6 +25,7 @@ export function OrdersHeader({
   onFilters, 
   onSort,
   onUploadPhotos,
+  onUploadTracking,
   onExportVentas,
   onStateFilter,
   activeStates 
@@ -95,6 +97,18 @@ export function OrdersHeader({
             >
               <Image className="h-4 w-4" />
               Subir Fotos
+            </Button>
+          )}
+
+          {onUploadTracking && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onUploadTracking}
+              className="gap-2"
+            >
+              <FileUp className="h-4 w-4" />
+              Subir seguimientos
             </Button>
           )}
 

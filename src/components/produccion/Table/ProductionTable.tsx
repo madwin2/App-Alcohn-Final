@@ -54,7 +54,11 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setEditingRow(null);
+      if (e.key === 'Escape') {
+        setEditingRow(null);
+        // Salir del modo de selección múltiple con ESC
+        setSelectedRows(new Set());
+      }
     };
     const onDblClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
