@@ -22,6 +22,32 @@ type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
 
+const ORDER_REGISTERED_WEBHOOK_FN =
+  (import.meta as any)?.env?.VITE_ORDER_WEBHOOK_FUNCTION_NAME || 'webhook-bot';
+
+const notifyOrderRegistered = async (order: Order): Promise<void> => {
+  try {
+    const fullName = `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim();
+    const { error } = await supabase.functions.invoke(ORDER_REGISTERED_WEBHOOK_FN, {
+      body: {
+        numero_telefono: order.customer.phoneE164,
+        tipo_actualizacion: 'pedido_registrado',
+        nombre: fullName || order.customer.firstName || 'Cliente',
+        datos: {
+          numero_pedido: order.id,
+        },
+      },
+    });
+
+    if (error) {
+      console.error('Error sending pedido_registrado webhook:', error);
+    }
+  } catch (error) {
+    // No bloquear el alta del pedido por fallo de webhook
+    console.error('Error invoking webhook function for order registration:', error);
+  }
+};
+
 // Obtener todas las órdenes con sus relaciones
 export const getOrders = async (): Promise<Order[]> => {
   try {
@@ -405,7 +431,12 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
     }
 
     // 6. Obtener la orden completa
-    return await getOrderById(orden.id) || orden as unknown as Order;
+    const createdOrder = (await getOrderById(orden.id)) || (orden as unknown as Order);
+
+    // 7. Notificar al bot que el pedido se registró (best effort)
+    await notifyOrderRegistered(createdOrder);
+
+    return createdOrder;
   } catch (error) {
     console.error('Error creating order:', error);
     throw error;
