@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Order } from '@/lib/types/index';
 import {
   normalizePersonName,
@@ -42,12 +43,25 @@ export function UploadTrackingDialog({
   const [entries, setEntries] = useState<TrackingPdfEntry[]>([]);
   const [isParsing, setIsParsing] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [manualAssignments, setManualAssignments] = useState<Record<string, string>>({});
 
   const candidateOrders = useMemo(
     () =>
       orders.filter((order) => {
         const state = order.items[0]?.shippingState;
         return state !== 'DESPACHADO' && state !== 'SEGUIMIENTO_ENVIADO';
+      }),
+    [orders]
+  );
+
+  const manualCandidateOrders = useMemo(
+    () =>
+      orders.filter((order) => {
+        const hasTracking = Boolean(order.shipping?.trackingNumber);
+        const shippingState = order.items[0]?.shippingState;
+        const shippingOk = shippingState !== 'DESPACHADO' && shippingState !== 'SEGUIMIENTO_ENVIADO';
+        const fabricationDone = order.items.length > 0 && order.items.every((item) => item.fabricationState === 'HECHO');
+        return !hasTracking && shippingOk && fabricationDone;
       }),
     [orders]
   );
@@ -118,7 +132,10 @@ export function UploadTrackingDialog({
   const resetState = () => {
     setFileName('');
     setEntries([]);
+    setManualAssignments({});
   };
+
+  const entryKey = (entry: TrackingPdfEntry) => `${entry.fullName}::${entry.trackingNumber}`;
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -138,6 +155,7 @@ export function UploadTrackingDialog({
     try {
       const parsed = await parseTrackingPdf(file);
       setEntries(parsed);
+      setManualAssignments({});
       toast({
         title: 'PDF procesado',
         description: `Se detectaron ${parsed.length} registros de seguimiento.`,
@@ -156,10 +174,38 @@ export function UploadTrackingDialog({
   };
 
   const applyMatches = async () => {
-    if (exactMatches.length === 0) {
+    const manualMatches: TrackingMatch[] = unmatched
+      .map((entry) => {
+        const selectedOrderId = manualAssignments[entryKey(entry)];
+        if (!selectedOrderId) return null;
+        const order = manualCandidateOrders.find((candidate) => candidate.id === selectedOrderId);
+        if (!order) return null;
+        return {
+          order,
+          trackingNumber: entry.trackingNumber,
+          sourceName: entry.fullName,
+        } satisfies TrackingMatch;
+      })
+      .filter((match): match is TrackingMatch => Boolean(match));
+
+    const allMatches = [...exactMatches, ...manualMatches];
+
+    if (allMatches.length === 0) {
       toast({
         title: 'Sin coincidencias',
-        description: 'No hay coincidencias exactas para aplicar.',
+        description: 'No hay coincidencias para aplicar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const duplicateOrderIds = allMatches
+      .map((match) => match.order.id)
+      .filter((id, index, arr) => arr.indexOf(id) !== index);
+    if (duplicateOrderIds.length > 0) {
+      toast({
+        title: 'Asignación duplicada',
+        description: 'Hay más de un seguimiento asignado al mismo pedido. Revisá las selecciones manuales.',
         variant: 'destructive',
       });
       return;
@@ -167,10 +213,10 @@ export function UploadTrackingDialog({
 
     setIsApplying(true);
     try {
-      await onApply(exactMatches);
+      await onApply(allMatches);
       toast({
         title: 'Seguimientos actualizados',
-        description: `Se actualizaron ${exactMatches.length} pedidos.`,
+        description: `Se actualizaron ${allMatches.length} pedidos.`,
       });
       resetState();
       onOpenChange(false);
@@ -248,14 +294,46 @@ export function UploadTrackingDialog({
           )}
 
           {unmatched.length > 0 && (
-            <div className="rounded border p-3 space-y-1 text-xs">
-              <p className="text-sm font-medium">Sin match en pedidos</p>
-              {unmatched.slice(0, 8).map((entry, idx) => (
-                <div key={`${entry.trackingNumber}-${idx}`}>
-                  {entry.fullName} - <span className="font-mono">{entry.trackingNumber}</span>
+            <div className="rounded border p-3 space-y-2 text-xs">
+              <p className="text-sm font-medium">Sin match en pedidos (asignación manual)</p>
+              {unmatched.slice(0, 12).map((entry, idx) => (
+                <div key={`${entry.trackingNumber}-${idx}`} className="grid grid-cols-2 gap-2 items-center">
+                  <div>
+                    {entry.fullName} - <span className="font-mono">{entry.trackingNumber}</span>
+                  </div>
+                  <Select
+                    value={manualAssignments[entryKey(entry)] || ''}
+                    onValueChange={(value) =>
+                      setManualAssignments((prev) => ({
+                        ...prev,
+                        [entryKey(entry)]: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Seleccionar pedido..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {manualCandidateOrders.length === 0 ? (
+                        <SelectItem value="none" disabled>
+                          No hay pedidos elegibles
+                        </SelectItem>
+                      ) : (
+                        manualCandidateOrders.map((order) => (
+                          <SelectItem key={order.id} value={order.id}>
+                            {order.customer.firstName} {order.customer.lastName}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
               ))}
-              {unmatched.length > 8 && <div>...y {unmatched.length - 8} más</div>}
+              {unmatched.length > 12 && <div>...y {unmatched.length - 12} más</div>}
+              <p className="text-[11px] text-muted-foreground">
+                Solo se muestran pedidos con fabricación HECHO, sin seguimiento y con envío distinto
+                de DESPACHADO / SEGUIMIENTO_ENVIADO.
+              </p>
             </div>
           )}
 
@@ -272,7 +350,7 @@ export function UploadTrackingDialog({
           )}
 
           <div className="flex justify-end">
-            <Button onClick={applyMatches} disabled={isApplying || isParsing || exactMatches.length === 0}>
+            <Button onClick={applyMatches} disabled={isApplying || isParsing}>
               {isApplying ? 'Aplicando...' : 'Aplicar seguimientos'}
             </Button>
           </div>
