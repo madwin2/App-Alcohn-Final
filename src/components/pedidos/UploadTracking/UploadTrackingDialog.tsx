@@ -68,7 +68,10 @@ export function UploadTrackingDialog({
         const shippingState = order.items[0]?.shippingState;
         const shippingOk = shippingState !== 'DESPACHADO' && shippingState !== 'SEGUIMIENTO_ENVIADO';
         const fabricationDone = order.items.length > 0 && order.items.every((item) => item.fabricationState === 'HECHO');
-        return !hasTracking && shippingOk && fabricationDone;
+        const saleOk =
+          order.items.length > 0 &&
+          order.items.every((item) => item.saleState === 'FOTO_ENVIADA' || item.saleState === 'TRANSFERIDO');
+        return !hasTracking && shippingOk && fabricationDone && saleOk;
       }),
     [orders]
   );
@@ -404,8 +407,8 @@ export function UploadTrackingDialog({
               ))}
               {unmatched.length > 12 && <div>...y {unmatched.length - 12} más</div>}
               <p className="text-[11px] text-muted-foreground">
-                Solo se muestran pedidos con fabricación HECHO, sin seguimiento y con envío distinto
-                de DESPACHADO / SEGUIMIENTO_ENVIADO.
+                Solo se muestran pedidos con fabricación HECHO, venta FOTO ENVIADA o TRANSFERIDO,
+                sin seguimiento y con envío distinto de DESPACHADO / SEGUIMIENTO_ENVIADO.
               </p>
             </div>
           )}
