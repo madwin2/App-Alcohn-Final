@@ -17,6 +17,13 @@ interface TrackingMatch {
   sourceName: string;
 }
 
+interface AlreadyAssignedMatch {
+  order: Order;
+  sourceName: string;
+  incomingTrackingNumber: string;
+  existingTrackingNumber: string;
+}
+
 interface NameParts {
   full: string;
   tokens: string[];
@@ -74,7 +81,7 @@ export function UploadTrackingDialog({
     return { full, tokens, firstName, lastName };
   };
 
-  const { exactMatches, ambiguous, unmatched } = useMemo(() => {
+  const { exactMatches, ambiguous, unmatched, alreadyAssigned } = useMemo(() => {
     const byName = new Map<string, Order[]>();
     const orderNameParts = new Map<string, NameParts>();
 
@@ -87,6 +94,7 @@ export function UploadTrackingDialog({
     }
 
     const matches: TrackingMatch[] = [];
+    const alreadyAssignedRows: AlreadyAssignedMatch[] = [];
     const ambiguousRows: TrackingPdfEntry[] = [];
     const unmatchedRows: TrackingPdfEntry[] = [];
 
@@ -95,11 +103,22 @@ export function UploadTrackingDialog({
       const key = entryParts.full;
       const candidates = byName.get(key) || [];
       if (candidates.length === 1) {
-        matches.push({
-          order: candidates[0],
-          trackingNumber: entry.trackingNumber,
-          sourceName: entry.fullName,
-        });
+        const matchedOrder = candidates[0];
+        const existingTracking = matchedOrder.shipping?.trackingNumber;
+        if (existingTracking) {
+          alreadyAssignedRows.push({
+            order: matchedOrder,
+            sourceName: entry.fullName,
+            incomingTrackingNumber: entry.trackingNumber,
+            existingTrackingNumber: existingTracking,
+          });
+        } else {
+          matches.push({
+            order: matchedOrder,
+            trackingNumber: entry.trackingNumber,
+            sourceName: entry.fullName,
+          });
+        }
       } else if (candidates.length > 1) {
         ambiguousRows.push(entry);
       } else {
@@ -113,11 +132,22 @@ export function UploadTrackingDialog({
         });
 
         if (fallbackCandidates.length === 1) {
-          matches.push({
-            order: fallbackCandidates[0],
-            trackingNumber: entry.trackingNumber,
-            sourceName: entry.fullName,
-          });
+          const matchedOrder = fallbackCandidates[0];
+          const existingTracking = matchedOrder.shipping?.trackingNumber;
+          if (existingTracking) {
+            alreadyAssignedRows.push({
+              order: matchedOrder,
+              sourceName: entry.fullName,
+              incomingTrackingNumber: entry.trackingNumber,
+              existingTrackingNumber: existingTracking,
+            });
+          } else {
+            matches.push({
+              order: matchedOrder,
+              trackingNumber: entry.trackingNumber,
+              sourceName: entry.fullName,
+            });
+          }
         } else if (fallbackCandidates.length > 1) {
           ambiguousRows.push(entry);
         } else {
@@ -126,7 +156,12 @@ export function UploadTrackingDialog({
       }
     }
 
-    return { exactMatches: matches, ambiguous: ambiguousRows, unmatched: unmatchedRows };
+    return {
+      exactMatches: matches,
+      ambiguous: ambiguousRows,
+      unmatched: unmatchedRows,
+      alreadyAssigned: alreadyAssignedRows,
+    };
   }, [candidateOrders, entries]);
 
   const resetState = () => {
@@ -271,9 +306,10 @@ export function UploadTrackingDialog({
             {fileName && <span className="text-xs text-muted-foreground">{fileName}</span>}
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-sm">
+          <div className="grid grid-cols-4 gap-2 text-sm">
             <div className="rounded border p-3">Detectados: {entries.length}</div>
             <div className="rounded border p-3">Coincidencia exacta: {exactMatches.length}</div>
+            <div className="rounded border p-3">Ya asignado: {alreadyAssigned.length}</div>
             <div className="rounded border p-3">Sin aplicar: {ambiguous.length + unmatched.length}</div>
           </div>
 
@@ -346,6 +382,24 @@ export function UploadTrackingDialog({
                 </div>
               ))}
               {ambiguous.length > 8 && <div>...y {ambiguous.length - 8} más</div>}
+            </div>
+          )}
+
+          {alreadyAssigned.length > 0 && (
+            <div className="rounded border p-3 space-y-1 text-xs">
+              <p className="text-sm font-medium">Ya asignado (pedido con seguimiento existente)</p>
+              {alreadyAssigned.slice(0, 10).map((row, idx) => (
+                <div key={`${row.order.id}-${row.incomingTrackingNumber}-${idx}`} className="space-y-0.5">
+                  <div>
+                    {row.order.customer.firstName} {row.order.customer.lastName} ({row.sourceName})
+                  </div>
+                  <div className="text-muted-foreground">
+                    Nuevo: <span className="font-mono">{row.incomingTrackingNumber}</span> | Actual:{' '}
+                    <span className="font-mono">{row.existingTrackingNumber}</span>
+                  </div>
+                </div>
+              ))}
+              {alreadyAssigned.length > 10 && <div>...y {alreadyAssigned.length - 10} más</div>}
             </div>
           )}
 
