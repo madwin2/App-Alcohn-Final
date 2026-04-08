@@ -81,11 +81,16 @@ export function UploadTrackingDialog({
     return { full, tokens, firstName, lastName };
   };
 
+  const isAlreadyAssignedOrder = (order: Order): boolean => {
+    const state = order.items[0]?.shippingState;
+    return Boolean(order.shipping?.trackingNumber) || state === 'DESPACHADO' || state === 'SEGUIMIENTO_ENVIADO';
+  };
+
   const { exactMatches, ambiguous, unmatched, alreadyAssigned } = useMemo(() => {
     const byName = new Map<string, Order[]>();
     const orderNameParts = new Map<string, NameParts>();
 
-    for (const order of candidateOrders) {
+    for (const order of orders) {
       const key = normalizePersonName(`${order.customer.firstName} ${order.customer.lastName}`);
       const existing = byName.get(key) || [];
       existing.push(order);
@@ -104,13 +109,12 @@ export function UploadTrackingDialog({
       const candidates = byName.get(key) || [];
       if (candidates.length === 1) {
         const matchedOrder = candidates[0];
-        const existingTracking = matchedOrder.shipping?.trackingNumber;
-        if (existingTracking) {
+        if (isAlreadyAssignedOrder(matchedOrder)) {
           alreadyAssignedRows.push({
             order: matchedOrder,
             sourceName: entry.fullName,
             incomingTrackingNumber: entry.trackingNumber,
-            existingTrackingNumber: existingTracking,
+            existingTrackingNumber: matchedOrder.shipping?.trackingNumber || '(sin número)',
           });
         } else {
           matches.push({
@@ -120,10 +124,27 @@ export function UploadTrackingDialog({
           });
         }
       } else if (candidates.length > 1) {
-        ambiguousRows.push(entry);
+        const actionableCandidates = candidates.filter((order) => !isAlreadyAssignedOrder(order));
+        if (actionableCandidates.length === 1) {
+          matches.push({
+            order: actionableCandidates[0],
+            trackingNumber: entry.trackingNumber,
+            sourceName: entry.fullName,
+          });
+        } else if (actionableCandidates.length === 0) {
+          const alreadyOrder = candidates[0];
+          alreadyAssignedRows.push({
+            order: alreadyOrder,
+            sourceName: entry.fullName,
+            incomingTrackingNumber: entry.trackingNumber,
+            existingTrackingNumber: alreadyOrder.shipping?.trackingNumber || '(sin número)',
+          });
+        } else {
+          ambiguousRows.push(entry);
+        }
       } else {
         // Fallback: apellido igual + algún nombre del pedido contenido en nombres del PDF
-        const fallbackCandidates = candidateOrders.filter((order) => {
+        const fallbackCandidates = orders.filter((order) => {
           const orderParts = orderNameParts.get(order.id);
           if (!orderParts) return false;
           if (!orderParts.lastName || orderParts.lastName !== entryParts.lastName) return false;
@@ -133,13 +154,12 @@ export function UploadTrackingDialog({
 
         if (fallbackCandidates.length === 1) {
           const matchedOrder = fallbackCandidates[0];
-          const existingTracking = matchedOrder.shipping?.trackingNumber;
-          if (existingTracking) {
+          if (isAlreadyAssignedOrder(matchedOrder)) {
             alreadyAssignedRows.push({
               order: matchedOrder,
               sourceName: entry.fullName,
               incomingTrackingNumber: entry.trackingNumber,
-              existingTrackingNumber: existingTracking,
+              existingTrackingNumber: matchedOrder.shipping?.trackingNumber || '(sin número)',
             });
           } else {
             matches.push({
@@ -149,7 +169,24 @@ export function UploadTrackingDialog({
             });
           }
         } else if (fallbackCandidates.length > 1) {
-          ambiguousRows.push(entry);
+          const actionableCandidates = fallbackCandidates.filter((order) => !isAlreadyAssignedOrder(order));
+          if (actionableCandidates.length === 1) {
+            matches.push({
+              order: actionableCandidates[0],
+              trackingNumber: entry.trackingNumber,
+              sourceName: entry.fullName,
+            });
+          } else if (actionableCandidates.length === 0) {
+            const alreadyOrder = fallbackCandidates[0];
+            alreadyAssignedRows.push({
+              order: alreadyOrder,
+              sourceName: entry.fullName,
+              incomingTrackingNumber: entry.trackingNumber,
+              existingTrackingNumber: alreadyOrder.shipping?.trackingNumber || '(sin número)',
+            });
+          } else {
+            ambiguousRows.push(entry);
+          }
         } else {
           unmatchedRows.push(entry);
         }
@@ -162,7 +199,7 @@ export function UploadTrackingDialog({
       unmatched: unmatchedRows,
       alreadyAssigned: alreadyAssignedRows,
     };
-  }, [candidateOrders, entries]);
+  }, [orders, entries]);
 
   const resetState = () => {
     setFileName('');
