@@ -31,6 +31,11 @@ interface NameParts {
   lastName: string;
 }
 
+const getOrderDesignLabel = (order: Order) => {
+  const firstDesign = order.items[0]?.designName?.trim() || 'Sin diseño';
+  return order.items.length > 1 ? `${firstDesign} +${order.items.length - 1} más` : firstDesign;
+};
+
 interface UploadTrackingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -72,7 +77,9 @@ export function UploadTrackingDialog({
           order.items.length > 0 &&
           order.items.every((item) => item.saleState === 'FOTO_ENVIADA' || item.saleState === 'TRANSFERIDO');
         return !hasTracking && shippingOk && fabricationDone && saleOk;
-      }),
+      }).sort((a, b) =>
+        getOrderDesignLabel(a).localeCompare(getOrderDesignLabel(b), 'es', { sensitivity: 'base' })
+      ),
     [orders]
   );
 
@@ -397,7 +404,7 @@ export function UploadTrackingDialog({
                       ) : (
                         manualCandidateOrders.map((order) => (
                           <SelectItem key={order.id} value={order.id}>
-                            {order.customer.firstName} {order.customer.lastName}
+                            {getOrderDesignLabel(order)}
                           </SelectItem>
                         ))
                       )}
