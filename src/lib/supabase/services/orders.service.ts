@@ -25,6 +25,10 @@ type SelloRow = Database['public']['Tables']['sellos']['Row'];
 const ORDER_REGISTERED_WEBHOOK_FN =
   (import.meta as any)?.env?.VITE_ORDER_WEBHOOK_FUNCTION_NAME || 'webhook-bot';
 
+/** Coincide con mapSaleState: NULL/vacío se muestra como Señado; al subir foto hay que pasar a Foto en BD. */
+const isVentaEquivalentToSenadoForPhoto = (estado: string | null | undefined): boolean =>
+  estado == null || estado === '' || estado === 'Señado';
+
 export const notifyOrderRegistered = async (order: Order): Promise<void> => {
   try {
     const fullName = `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim();
@@ -586,7 +590,11 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
           selloData.foto_sello = item.files.photoUrl || null;
           // Si se está subiendo una foto (photoUrl no es null/undefined) y el estado de venta actual es "Señado",
           // cambiar automáticamente a "Foto Enviada"
-          if (item.files.photoUrl && currentSello?.estado_venta === 'Señado' && item.saleState === undefined) {
+          if (
+            item.files.photoUrl &&
+            isVentaEquivalentToSenadoForPhoto(currentSello?.estado_venta) &&
+            item.saleState === undefined
+          ) {
             selloData.estado_venta = 'Foto';
           }
         }
@@ -676,7 +684,7 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
             saleStateBySello.set(item.id, mapSaleStateToDB(item.saleState));
           } else if (item.files?.photoUrl) {
             const current = saleStateBySello.get(item.id);
-            if (current === 'Señado') {
+            if (isVentaEquivalentToSenadoForPhoto(current)) {
               saleStateBySello.set(item.id, 'Foto');
             }
           }
@@ -1116,8 +1124,8 @@ export const assignPhotoToStamp = async (stampId: string, photoFile: File): Prom
     // Preparar los datos de actualización
     const updateData: { foto_sello: string; estado_venta?: string } = { foto_sello: photoUrl };
     
-    // Si el estado de venta actual es "Señado", cambiarlo a "Foto Enviada"
-    if (sello.estado_venta === 'Señado') {
+    // Si el estado equivale a Señado (incl. NULL en BD), pasar a Foto (Foto enviada en UI)
+    if (isVentaEquivalentToSenadoForPhoto(sello.estado_venta)) {
       updateData.estado_venta = 'Foto';
     }
 
@@ -1245,8 +1253,8 @@ export const assignPendingPhotoToStamp = async (pendingPhotoId: string, stampId:
     // Preparar los datos de actualización
     const updateData: { foto_sello: string; estado_venta?: string } = { foto_sello: finalUrl };
     
-    // Si el estado de venta actual es "Señado", cambiarlo a "Foto Enviada"
-    if (sello.estado_venta === 'Señado') {
+    // Si el estado equivale a Señado (incl. NULL en BD), pasar a Foto
+    if (isVentaEquivalentToSenadoForPhoto(sello.estado_venta)) {
       updateData.estado_venta = 'Foto';
     }
 
