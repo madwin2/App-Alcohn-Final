@@ -21,6 +21,11 @@ import { ResizableHeader } from './ResizableHeader';
 import { useExpandableRows } from './useExpandableRows';
 import './expand-animations.css';
 import { AddStampDialog } from '../AddStamp/AddStampDialog';
+import {
+  createOrderStickyTask,
+  deleteOrderStickyTaskByTaskId,
+} from '@/lib/supabase/services/order-sticky-tasks.service';
+import { supabase } from '@/lib/supabase/client';
 
 interface OrdersTableProps {
   orders: Order[];
@@ -198,7 +203,28 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
   const handleTaskCreate = async (orderId: string, title: string, description?: string, dueDate?: Date) => {
     try {
       const { createTask } = await import('@/lib/supabase/services/orders.service');
-      await createTask(orderId, title, description, dueDate);
+      const createdTask = await createTask(orderId, title, description, dueDate);
+
+      const relatedOrder = orders.find((o) => o.id === orderId);
+      const visibleForUserId = relatedOrder?.takenBy?.id;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const creatorUserId = user?.id;
+
+      if (visibleForUserId && creatorUserId) {
+        try {
+          await createOrderStickyTask({
+            orderId,
+            taskId: createdTask.id,
+            assignedToUserId: visibleForUserId,
+            createdByUserId: creatorUserId,
+            text: title,
+          });
+        } catch (stickyError) {
+          console.warn('No se pudo crear el post-it global de la tarea:', stickyError);
+        }
+      }
       
       // Refrescar la orden para obtener las tareas actualizadas
       if (onUpdate) {
@@ -216,6 +242,14 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
     try {
       const { updateTask } = await import('@/lib/supabase/services/orders.service');
       await updateTask(taskId, updates);
+
+      if (updates?.status === 'COMPLETED') {
+        try {
+          await deleteOrderStickyTaskByTaskId(taskId);
+        } catch (stickyError) {
+          console.warn('No se pudo eliminar el post-it global de la tarea:', stickyError);
+        }
+      }
       
       // Encontrar la orden que contiene esta tarea y refrescarla
       const orderWithTask = orders.find(order => order.tasks?.some(task => task.id === taskId));
@@ -233,6 +267,12 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
     try {
       const { deleteTask } = await import('@/lib/supabase/services/orders.service');
       await deleteTask(taskId);
+
+      try {
+        await deleteOrderStickyTaskByTaskId(taskId);
+      } catch (stickyError) {
+        console.warn('No se pudo eliminar el post-it global de la tarea:', stickyError);
+      }
       
       // Encontrar la orden que contiene esta tarea y refrescarla
       const orderWithTask = orders.find(order => order.tasks?.some(task => task.id === taskId));

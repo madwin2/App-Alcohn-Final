@@ -197,6 +197,7 @@ BEGIN
     v_costo_envio DECIMAL(10,2);
     v_restante_sello DECIMAL(10,2);
     v_restante_a_pagar DECIMAL(10,2);
+    v_restante_total_orden_calculado DECIMAL(10,2);
     v_tipo_mensaje_restante TEXT;
   BEGIN
     -- Solo procesar si se agregó una nueva foto (antes era NULL o vacío)
@@ -270,6 +271,13 @@ BEGIN
       -- Restante del sello (ya calculado por trigger de sellos, pero por las dudas)
       v_restante_sello := COALESCE(NEW.restante, (COALESCE(NEW.valor, 0) - COALESCE(NEW.senia, 0)));
 
+      -- Restante total de la orden (SUM(valor - senia) de todos los sellos)
+      -- Se calcula en el momento para evitar usar un valor cacheado/desactualizado.
+      SELECT COALESCE(SUM(COALESCE(s.valor, 0) - COALESCE(s.senia, 0)), 0)
+      INTO v_restante_total_orden_calculado
+      FROM sellos s
+      WHERE s.orden_id = v_orden_id;
+
       -- Costo de envío (si existe la función, úsala; si no, 0)
       BEGIN
         v_costo_envio := COALESCE(get_shipping_cost(v_orden.empresa_envio, v_orden.tipo_envio), 0);
@@ -280,7 +288,7 @@ BEGIN
       -- Determinar tipo de mensaje y monto a mostrar
       IF v_es_ultimo_sello THEN
         v_tipo_mensaje_restante := 'total_orden';
-        v_restante_a_pagar := COALESCE(v_orden.restante_orden, v_restante_sello);
+        v_restante_a_pagar := v_restante_total_orden_calculado + COALESCE(v_costo_envio, 0);
       ELSIF v_tiene_envio THEN
         v_tipo_mensaje_restante := 'restante_con_envio';
         v_restante_a_pagar := v_restante_sello + COALESCE(v_costo_envio, 0);
@@ -336,3 +344,70 @@ GRANT EXECUTE ON FUNCTION apply_webhook_pedido_listo_payload_migration() TO auth
 
 
 
+-- =====================================================
+-- Migración: post-its globales de tareas de pedidos
+-- =====================================================
+-- Permite mostrar tareas de un pedido en toda la app para quien cargó la orden.
+
+CREATE OR REPLACE FUNCTION apply_order_sticky_tasks_migration()
+RETURNS void
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  CREATE TABLE IF NOT EXISTS tareas_pedidos_globales (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    orden_id UUID NOT NULL REFERENCES ordenes(id) ON DELETE CASCADE,
+    tarea_id UUID NOT NULL REFERENCES tareas(id) ON DELETE CASCADE,
+    asignado_a_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    creado_por_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    texto TEXT NOT NULL,
+    pos_x INTEGER NOT NULL DEFAULT 0,
+    pos_y INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (tarea_id, asignado_a_user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tareas_pedidos_globales_asignado
+    ON tareas_pedidos_globales(asignado_a_user_id);
+
+  CREATE INDEX IF NOT EXISTS idx_tareas_pedidos_globales_orden
+    ON tareas_pedidos_globales(orden_id);
+
+  CREATE INDEX IF NOT EXISTS idx_tareas_pedidos_globales_tarea
+    ON tareas_pedidos_globales(tarea_id);
+
+  ALTER TABLE tareas_pedidos_globales ENABLE ROW LEVEL SECURITY;
+
+  DROP POLICY IF EXISTS "Usuarios ven sus postits de pedidos" ON tareas_pedidos_globales;
+  CREATE POLICY "Usuarios ven sus postits de pedidos"
+    ON tareas_pedidos_globales FOR SELECT
+    USING (auth.uid() = asignado_a_user_id);
+
+  DROP POLICY IF EXISTS "Usuarios crean postits de pedidos" ON tareas_pedidos_globales;
+  CREATE POLICY "Usuarios crean postits de pedidos"
+    ON tareas_pedidos_globales FOR INSERT
+    WITH CHECK (auth.uid() = creado_por_user_id);
+
+  DROP POLICY IF EXISTS "Asignado actualiza su posicion de postits pedidos" ON tareas_pedidos_globales;
+  CREATE POLICY "Asignado actualiza su posicion de postits pedidos"
+    ON tareas_pedidos_globales FOR UPDATE
+    USING (auth.uid() = asignado_a_user_id)
+    WITH CHECK (auth.uid() = asignado_a_user_id);
+
+  DROP POLICY IF EXISTS "Asignado elimina sus postits de pedidos" ON tareas_pedidos_globales;
+  CREATE POLICY "Asignado elimina sus postits de pedidos"
+    ON tareas_pedidos_globales FOR DELETE
+    USING (auth.uid() = asignado_a_user_id);
+
+  COMMENT ON TABLE tareas_pedidos_globales IS
+    'Post-its globales de tareas asociadas a pedidos para quien cargó la orden.';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Ejecutar inmediatamente
+SELECT apply_order_sticky_tasks_migration();
+
+-- Permitir RPC desde el cliente
+GRANT EXECUTE ON FUNCTION apply_order_sticky_tasks_migration() TO anon;
+GRANT EXECUTE ON FUNCTION apply_order_sticky_tasks_migration() TO authenticated;

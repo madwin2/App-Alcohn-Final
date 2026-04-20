@@ -5,11 +5,13 @@ import ProduccionPage from './app/produccion/index'
 import ProgramasPage from './app/programas/index'
 import LoginPage from './app/login/index'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
 
 function App() {
   return (
     <Router>
       <div className="min-h-screen bg-background">
+        <OrderTasksOverlay />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route 
