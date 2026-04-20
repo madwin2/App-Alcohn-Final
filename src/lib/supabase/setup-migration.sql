@@ -379,6 +379,10 @@ BEGIN
 
   ALTER TABLE tareas_pedidos_globales ENABLE ROW LEVEL SECURITY;
 
+  -- Asegurar permisos de tabla para PostgREST (además de RLS)
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE tareas_pedidos_globales TO authenticated;
+  GRANT SELECT ON TABLE tareas_pedidos_globales TO anon;
+
   DROP POLICY IF EXISTS "Usuarios ven sus postits de pedidos" ON tareas_pedidos_globales;
   CREATE POLICY "Usuarios ven sus postits de pedidos"
     ON tareas_pedidos_globales FOR SELECT
@@ -399,6 +403,12 @@ BEGIN
   CREATE POLICY "Asignado elimina sus postits de pedidos"
     ON tareas_pedidos_globales FOR DELETE
     USING (auth.uid() = asignado_a_user_id);
+
+  -- Permitir limpieza desde quien crea/completa la tarea en pedidos
+  DROP POLICY IF EXISTS "Creador elimina postits de pedidos" ON tareas_pedidos_globales;
+  CREATE POLICY "Creador elimina postits de pedidos"
+    ON tareas_pedidos_globales FOR DELETE
+    USING (auth.uid() = creado_por_user_id);
 
   COMMENT ON TABLE tareas_pedidos_globales IS
     'Post-its globales de tareas asociadas a pedidos para quien cargó la orden.';

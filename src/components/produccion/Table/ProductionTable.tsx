@@ -19,6 +19,11 @@ import { ResizableHeader } from './ResizableHeader';
 import { Checkbox } from '@/components/ui/checkbox';
 import { createTask, updateTask, deleteTask } from '@/lib/supabase/services/orders.service';
 import { downloadFile } from '@/lib/supabase/services/storage.service';
+import { supabase } from '@/lib/supabase/client';
+import {
+  createOrderStickyTask,
+  deleteOrderStickyTaskByTaskId,
+} from '@/lib/supabase/services/order-sticky-tasks.service';
 
 interface ProductionTableProps {
   items: ProductionItem[];
@@ -436,7 +441,34 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
       }
 
       // Crear la tarea usando el orderId con contexto PRODUCCION
-      await createTask(item.orderId, title, description, dueDate, 'PRODUCCION');
+      const createdTask = await createTask(item.orderId, title, description, dueDate, 'PRODUCCION');
+
+      // Resolver owner real de la orden desde BD para asignar el post-it global.
+      const { data: orderOwnerRow } = await supabase
+        .from('ordenes')
+        .select('taken_by')
+        .eq('id', item.orderId)
+        .single();
+      const visibleForUserId = (orderOwnerRow as { taken_by?: string | null } | null)?.taken_by ?? null;
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const creatorUserId = user?.id;
+
+      if (visibleForUserId && creatorUserId) {
+        try {
+          await createOrderStickyTask({
+            orderId: item.orderId,
+            taskId: createdTask.id,
+            assignedToUserId: visibleForUserId,
+            createdByUserId: creatorUserId,
+            text: title,
+          });
+        } catch (stickyError) {
+          console.warn('No se pudo crear el post-it global de la tarea en producción:', stickyError);
+        }
+      }
       
       // Actualizar solo el item específico para obtener las tareas actualizadas
       if (updateItem) {
@@ -483,6 +515,14 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
       }
 
       await updateTask(taskId, taskUpdates);
+
+      if (taskUpdates.status === 'COMPLETED') {
+        try {
+          await deleteOrderStickyTaskByTaskId(taskId);
+        } catch (stickyError) {
+          console.warn('No se pudo eliminar el post-it global de la tarea en producción:', stickyError);
+        }
+      }
       
       // Encontrar el item que contiene esta tarea y actualizarlo
       const itemWithTask = items.find(item => item.tasks?.some(task => task.id === taskId));
@@ -504,6 +544,12 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
   const handleTaskDelete = async (taskId: string) => {
     try {
       await deleteTask(taskId);
+
+      try {
+        await deleteOrderStickyTaskByTaskId(taskId);
+      } catch (stickyError) {
+        console.warn('No se pudo eliminar el post-it global de la tarea en producción:', stickyError);
+      }
       
       // Encontrar el item que contiene esta tarea y actualizarlo
       const itemWithTask = items.find(item => item.tasks?.some(task => task.id === taskId));
