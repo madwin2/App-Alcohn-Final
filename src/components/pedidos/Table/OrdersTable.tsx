@@ -205,8 +205,22 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
       const { createTask } = await import('@/lib/supabase/services/orders.service');
       const createdTask = await createTask(orderId, title, description, dueDate);
 
-      const relatedOrder = orders.find((o) => o.id === orderId);
-      const visibleForUserId = relatedOrder?.takenBy?.id;
+      // Tomar siempre el owner real de la orden desde BD.
+      // Evita depender del mapeo de takenBy (que puede venir null si falta el perfil visible).
+      let visibleForUserId: string | null = null;
+      const { data: orderOwnerRow } = await supabase
+        .from('ordenes')
+        .select('taken_by')
+        .eq('id', orderId)
+        .single();
+      visibleForUserId = (orderOwnerRow as { taken_by?: string | null } | null)?.taken_by ?? null;
+
+      // Fallback por compatibilidad con datos ya cargados en memoria
+      if (!visibleForUserId) {
+        const relatedOrder = orders.find((o) => o.id === orderId);
+        visibleForUserId = relatedOrder?.takenBy?.id ?? null;
+      }
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -224,6 +238,10 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
         } catch (stickyError) {
           console.warn('No se pudo crear el post-it global de la tarea:', stickyError);
         }
+      } else {
+        console.warn(
+          'No se pudo vincular post-it global: la orden no tiene taken_by o no hay usuario autenticado creador.'
+        );
       }
       
       // Refrescar la orden para obtener las tareas actualizadas
