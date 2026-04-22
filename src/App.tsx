@@ -3,6 +3,7 @@ import HomePage from './app/home/index'
 import PedidosPage from './app/pedidos/index'
 import ProduccionPage from './app/produccion/index'
 import ProgramasPage from './app/programas/index'
+import EnviosPage from './app/envios/index'
 import LoginPage from './app/login/index'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -45,6 +46,14 @@ function App() {
                 <ProgramasPage />
               </ProtectedRoute>
             } 
+          />
+          <Route
+            path="/envios"
+            element={
+              <ProtectedRoute>
+                <EnviosPage />
+              </ProtectedRoute>
+            }
           />
           <Route 
             path="/admin/registros"

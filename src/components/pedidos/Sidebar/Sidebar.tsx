@@ -3,6 +3,7 @@ import {
   ShoppingCart, 
   Layers, 
   Factory, 
+  Truck,
   Calendar, 
   CheckCircle, 
   MessageCircle, 
@@ -22,6 +23,7 @@ import { useToast } from '@/components/ui/use-toast';
 const sidebarItems = [
   { icon: Home, label: 'Inicio', path: '/', disabled: false },
   { icon: ShoppingCart, label: 'Pedidos', path: '/pedidos', disabled: false },
+  { icon: Truck, label: 'Envíos', path: '/envios', disabled: false },
   { icon: Layers, label: 'Vectorización', path: '/vectorizacion', disabled: true },
   { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },
   { icon: Calendar, label: 'Programas', path: '/programas', disabled: true },

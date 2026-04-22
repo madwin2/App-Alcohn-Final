@@ -1,0 +1,612 @@
+import { useMemo, useState } from 'react';
+import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Toaster } from '@/components/ui/toaster';
+import { useToast } from '@/components/ui/use-toast';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { useOrders } from '@/lib/hooks/useOrders';
+import { formatDate } from '@/lib/utils/format';
+import { Order } from '@/lib/types';
+import { supabase } from '@/lib/supabase/client';
+import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
+
+const isEligibleForShipping = (order: Order): boolean => {
+  if (!order.items.length) return false;
+
+  const allDone = order.items.every((item) => item.fabricationState === 'HECHO');
+  const validSaleState =
+    order.saleStateOrder === 'FOTO_ENVIADA' || order.saleStateOrder === 'TRANSFERIDO';
+  const shippingState = order.items[0]?.shippingState;
+  const withoutLabel = shippingState !== 'ETIQUETA_LISTA';
+
+  return allDone && validSaleState && withoutLabel;
+};
+
+const getRepresentativeItem = (order: Order) => {
+  if (!order.items.length) return null;
+  return order.items.find((item) => item.files?.baseUrl || item.files?.vectorPreviewUrl) || order.items[0];
+};
+
+
+interface ShippingFormData {
+  fullName: string;
+  province: string;
+  locality: string;
+  address: string;
+  postalCode: string;
+  email: string;
+  phone: string;
+}
+
+const emptyForm: ShippingFormData = {
+  fullName: '',
+  province: '',
+  locality: '',
+  address: '',
+  postalCode: '',
+  email: '',
+  phone: '',
+};
+
+const parseShippingText = (rawText: string): ShippingFormData => {
+  const lines = rawText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const email = rawText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? '';
+  const phone = (rawText.match(/(\+?\d[\d\s.-]{7,}\d)/g)?.[0] ?? '').replace(/[^\d]/g, '');
+  const province = lines.find((line) => /provincia/i.test(line))?.split(':').slice(1).join(':').trim() ?? '';
+  const locality = lines.find((line) => /localidad/i.test(line))?.split(':').slice(1).join(':').trim() ?? '';
+  const addressLine = lines.find((line) => /domicilio|direccion|sucursal|calle/i.test(line));
+  const address = addressLine?.split(':').slice(1).join(':').trim() || addressLine || '';
+  const cpLine = lines.find((line) => /codigo postal|cp/i.test(line));
+  const postalCode = cpLine?.match(/\d{4,8}/)?.[0] ?? '';
+  const fullName = lines[0]?.replace(/^nombre con el que recibe el pedido[:\s]*/i, '').trim() ?? '';
+
+  return {
+    fullName,
+    province,
+    locality,
+    address,
+    postalCode,
+    email,
+    phone,
+  };
+};
+
+export default function EnviosPage() {
+  const { orders, loading, error, updateOrder, fetchOrders } = useOrders();
+  const { toast } = useToast();
+  const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [shippingTypeDraft, setShippingTypeDraft] = useState<'DOMICILIO' | 'SUCURSAL'>('DOMICILIO');
+  const [rawShippingText, setRawShippingText] = useState('');
+  const [shippingForm, setShippingForm] = useState<ShippingFormData>(emptyForm);
+  const [showParseConfirmation, setShowParseConfirmation] = useState(false);
+  const [isSavingShippingData, setIsSavingShippingData] = useState(false);
+  const [lastCsvSkipped, setLastCsvSkipped] = useState<Array<{ orderId: string; reason: string }>>([]);
+
+  const eligibleOrders = useMemo(() => {
+    return orders.filter(isEligibleForShipping);
+  }, [orders]);
+
+  const csvOrders = useMemo(() => {
+    return eligibleOrders.filter((order) => order.items[0]?.shippingState !== 'ETIQUETA_LISTA');
+  }, [eligibleOrders]);
+
+  const visibleOrders = csvOrders;
+
+  const handleToggleShippingType = async (order: Order, type: 'DOMICILIO' | 'SUCURSAL') => {
+    try {
+      await updateOrder(order.id, {
+        shipping: {
+          ...order.shipping,
+          service: type,
+        },
+      });
+      toast({
+        title: 'Tipo de envío actualizado',
+        description: `La orden quedó en ${type === 'DOMICILIO' ? 'Domicilio' : 'Sucursal'}.`,
+      });
+    } catch (toggleError) {
+      toast({
+        title: 'No se pudo actualizar',
+        description: 'Hubo un error cambiando el tipo de envío.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleGenerateCsv = async () => {
+    if (!csvOrders.length) return;
+    setIsGeneratingCsv(true);
+    setLastCsvSkipped([]);
+
+    try {
+      const orderIds = csvOrders.map((order) => order.id);
+      const customerIds = [...new Set(csvOrders.map((order) => order.customer.id))];
+
+      const { data: dbOrders, error: dbOrdersError } = await supabase
+        .from('ordenes')
+        .select('id,direccion_id,cliente_id,tipo_envio')
+        .in('id', orderIds);
+
+      if (dbOrdersError) throw dbOrdersError;
+
+      const addressIds = (dbOrders ?? []).map((row) => row.direccion_id).filter(Boolean) as string[];
+      const { data: addresses, error: addressesError } = addressIds.length
+        ? await supabase.from('direcciones').select('id,provincia,localidad,domicilio,codigo_postal,nombre,apellido,telefono')
+            .in('id', addressIds)
+        : { data: [], error: null };
+
+      if (addressesError) throw addressesError;
+
+      const { data: customers, error: customersError } = await supabase
+        .from('clientes')
+        .select('id,mail')
+        .in('id', customerIds);
+      if (customersError) throw customersError;
+
+      const addressById = new Map((addresses ?? []).map((address) => [address.id, address]));
+      const customerById = new Map((customers ?? []).map((customer) => [customer.id, customer]));
+      const dbOrderById = new Map((dbOrders ?? []).map((order) => [order.id, order]));
+
+      const rows: string[][] = [];
+      const skipped: Array<{ orderId: string; reason: string }> = [];
+
+      for (const order of csvOrders) {
+        const dbOrder = dbOrderById.get(order.id);
+        const address = dbOrder?.direccion_id ? addressById.get(dbOrder.direccion_id) : null;
+
+        if (!dbOrder || !address) {
+          skipped.push({ orderId: order.id, reason: 'La orden no tiene dirección vinculada en Supabase.' });
+          continue;
+        }
+
+        const isSucursal = (order.shipping.service === 'SUCURSAL') || dbOrder.tipo_envio === 'Sucursal';
+        const csvRow = createCorreoCsvRow({
+          provincia: address.provincia || '',
+          localidad: address.localidad || '',
+          domicilio: address.domicilio || '',
+          codigoPostal: address.codigo_postal || '',
+          nombreCompleto: `${address.nombre || order.customer.firstName} ${address.apellido || order.customer.lastName}`,
+          email: customerById.get(order.customer.id)?.mail || order.customer.email || '',
+          telefono: address.telefono || order.customer.phoneE164 || '',
+          tipoEnvio: isSucursal ? 'Sucursal' : 'Domicilio',
+          numeroOrden: order.id,
+        });
+
+        if (!csvRow.ok) {
+          skipped.push({ orderId: order.id, reason: csvRow.reason });
+          continue;
+        }
+
+        rows.push(csvRow.row);
+      }
+
+      if (!rows.length) {
+        setLastCsvSkipped(skipped);
+        toast({
+          title: 'No se pudo generar el CSV',
+          description: 'No hay órdenes con datos suficientes de dirección/provincia para exportar.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const csvBody = rows.map((row) => row.join(';')).join('\n');
+      const csvContent = `${CSV_FIELDS.join(';')}\n${csvBody}`;
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `carga_correo_${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      const exportedOrderIds = new Set(rows.map((row) => row[row.length - 1]));
+      const exportedOrders = csvOrders.filter((order) => exportedOrderIds.has(order.id));
+
+      for (const order of exportedOrders) {
+        await updateOrder(order.id, {
+          items: order.items.map((item) => ({
+            id: item.id,
+            shippingState: 'ETIQUETA_LISTA',
+          })) as any,
+        });
+      }
+
+      await fetchOrders();
+      setLastCsvSkipped(skipped);
+      toast({
+        title: 'CSV generado',
+        description:
+          skipped.length > 0
+            ? `Se exportaron ${exportedOrders.length} órdenes. ${skipped.length} quedaron afuera (ver detalle abajo).`
+            : `Se exportaron ${exportedOrders.length} órdenes y se marcaron como Etiqueta Lista.`,
+      });
+    } catch (generateError) {
+      toast({
+        title: 'Error al generar CSV',
+        description: 'No se pudo completar la exportación.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingCsv(false);
+    }
+  };
+
+  const openShippingDialog = (order: Order) => {
+    setSelectedOrder(order);
+    setShippingTypeDraft(order.shipping.service === 'SUCURSAL' ? 'SUCURSAL' : 'DOMICILIO');
+    setRawShippingText('');
+    setShippingForm(emptyForm);
+    setShowParseConfirmation(false);
+  };
+
+  const closeShippingDialog = () => {
+    setSelectedOrder(null);
+    setRawShippingText('');
+    setShippingForm(emptyForm);
+    setShowParseConfirmation(false);
+  };
+
+  const handleParse = () => {
+    if (!rawShippingText.trim()) {
+      toast({
+        title: 'Texto vacío',
+        description: 'Pegá primero los datos del cliente para interpretar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const parsedData = parseShippingText(rawShippingText);
+    setShippingForm(parsedData);
+    setShowParseConfirmation(false);
+    toast({
+      title: 'Parseo listo',
+      description: 'Revisá los datos y luego confirmá para guardar.',
+    });
+  };
+
+  const handleSaveShippingData = async () => {
+    if (!selectedOrder) return;
+
+    setIsSavingShippingData(true);
+    try {
+      const cleanName = shippingForm.fullName.trim();
+      const nameParts = cleanName.split(' ').filter(Boolean);
+      const firstName = nameParts[0] ?? selectedOrder.customer.firstName;
+      const lastName = nameParts.slice(1).join(' ') || selectedOrder.customer.lastName || '-';
+
+      const { data: addressRow, error: addressError } = await supabase
+        .from('direcciones')
+        .insert({
+          cliente_id: selectedOrder.customer.id,
+          activa: true,
+          codigo_postal: shippingForm.postalCode || '0000',
+          provincia: shippingForm.province || 'SIN DEFINIR',
+          localidad: shippingForm.locality || 'SIN DEFINIR',
+          domicilio: shippingForm.address || 'SIN DEFINIR',
+          nombre: firstName,
+          apellido: lastName,
+          telefono: shippingForm.phone || null,
+          dni: null,
+        })
+        .select('id')
+        .single();
+
+      if (addressError) throw addressError;
+
+      const shippingTypeDb = shippingTypeDraft === 'SUCURSAL' ? 'Sucursal' : 'Domicilio';
+
+      const { error: orderError } = await supabase
+        .from('ordenes')
+        .update({
+          direccion_id: addressRow.id,
+          tipo_envio: shippingTypeDb,
+        })
+        .eq('id', selectedOrder.id);
+
+      if (orderError) throw orderError;
+
+      if (shippingForm.email.trim()) {
+        await supabase
+          .from('clientes')
+          .update({ mail: shippingForm.email.trim() })
+          .eq('id', selectedOrder.customer.id);
+      }
+
+      const needsTransfer = selectedOrder.saleStateOrder !== 'TRANSFERIDO';
+      if (needsTransfer) {
+        await updateOrder(selectedOrder.id, {
+          saleStateOrder: 'TRANSFERIDO',
+          items: selectedOrder.items.map((item) => ({
+            id: item.id,
+            saleState: item.saleState === 'TRANSFERIDO' ? item.saleState : 'TRANSFERIDO',
+          })) as any,
+        });
+      }
+
+      await fetchOrders();
+      closeShippingDialog();
+      toast({
+        title: 'Datos de envío guardados',
+        description: 'Se guardaron en Supabase y se actualizó el estado de venta cuando correspondía.',
+      });
+    } catch (saveError) {
+      toast({
+        title: 'Error al guardar datos',
+        description: saveError instanceof Error ? saveError.message : 'No se pudo guardar la información.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingShippingData(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Sidebar />
+
+      <div className="flex-1 flex flex-col ml-20">
+        <div className="border-b bg-background p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold">Envíos</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Órdenes listas para carga de datos y generación de etiqueta.
+              </p>
+            </div>
+            <Button onClick={handleGenerateCsv} disabled={!csvOrders.length || isGeneratingCsv}>
+              {isGeneratingCsv ? 'Generando CSV...' : `Generar CSV (${csvOrders.length})`}
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex-1 p-6 overflow-hidden">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-muted-foreground">Cargando órdenes...</p>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-destructive">Error: {error.message}</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+              <div className="overflow-auto max-h-[calc(100vh-220px)]">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-background z-10 border-b">
+                    <tr className="text-left text-muted-foreground">
+                      <th className="px-4 py-3 font-medium">Fecha</th>
+                      <th className="px-4 py-3 font-medium">Cliente</th>
+                      <th className="px-4 py-3 font-medium">Diseño</th>
+                      <th className="px-4 py-3 font-medium">Base</th>
+                      <th className="px-4 py-3 font-medium">Vector</th>
+                      <th className="px-4 py-3 font-medium">Tipo envío</th>
+                      <th className="px-4 py-3 font-medium">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleOrders.map((order) => {
+                      const item = getRepresentativeItem(order);
+                      const basePreview = item?.files?.baseUrl;
+                      const vectorPreview = item?.files?.vectorPreviewUrl || item?.files?.vectorUrl;
+                      const isSucursal = order.shipping.service === 'SUCURSAL';
+
+                      return (
+                        <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3">{formatDate(order.orderDate)}</td>
+                          <td className="px-4 py-3 font-medium">
+                            {`${order.customer.firstName} ${order.customer.lastName}`.trim()}
+                          </td>
+                          <td className="px-4 py-3">{item?.designName || 'Sin diseño'}</td>
+                          <td className="px-4 py-3">
+                            {basePreview ? (
+                              <img
+                                src={basePreview}
+                                alt="Preview base"
+                                className="h-12 w-12 rounded-md object-cover border"
+                              />
+                            ) : (
+                              <Badge variant="secondary">Sin preview</Badge>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {vectorPreview ? (
+                              <img
+                                src={vectorPreview}
+                                alt="Preview vector"
+                                className="h-12 w-12 rounded-md object-cover border"
+                              />
+                            ) : (
+                              <Badge variant="secondary">Sin preview</Badge>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant={isSucursal ? 'outline' : 'default'}
+                                onClick={() => handleToggleShippingType(order, 'DOMICILIO')}
+                              >
+                                Domicilio
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={isSucursal ? 'default' : 'outline'}
+                                onClick={() => handleToggleShippingType(order, 'SUCURSAL')}
+                              >
+                                Sucursal
+                              </Button>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Button size="sm" variant="secondary" onClick={() => openShippingDialog(order)}>
+                              Cargar datos
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {lastCsvSkipped.length > 0 && (
+                <div className="border-t bg-muted/20 p-4">
+                  <p className="text-sm font-medium mb-2">Órdenes excluidas del último CSV</p>
+                  <ul className="space-y-1 text-sm text-muted-foreground max-h-40 overflow-auto">
+                    {lastCsvSkipped.map((entry) => (
+                      <li key={entry.orderId}>
+                        {entry.orderId}: {entry.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {!visibleOrders.length && (
+                <div className="p-8 text-center text-muted-foreground">
+                  No hay órdenes pendientes de etiqueta para mostrar.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && closeShippingDialog()}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Cargar datos de envío</DialogTitle>
+            <DialogDescription>
+              Pegá el mensaje del cliente, revisá el parseo y confirmá antes de guardar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="raw-shipping-text">Texto del cliente</Label>
+              <Textarea
+                id="raw-shipping-text"
+                value={rawShippingText}
+                onChange={(event) => setRawShippingText(event.target.value)}
+                placeholder="Pegá acá los datos de envío..."
+                className="min-h-[240px]"
+              />
+              <Button variant="outline" onClick={handleParse}>
+                Interpretar texto
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant={shippingTypeDraft === 'DOMICILIO' ? 'default' : 'outline'}
+                  onClick={() => setShippingTypeDraft('DOMICILIO')}
+                >
+                  Domicilio
+                </Button>
+                <Button
+                  variant={shippingTypeDraft === 'SUCURSAL' ? 'default' : 'outline'}
+                  onClick={() => setShippingTypeDraft('SUCURSAL')}
+                >
+                  Sucursal
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Nombre completo</Label>
+                <Input
+                  value={shippingForm.fullName}
+                  onChange={(event) => setShippingForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Provincia</Label>
+                <Input
+                  value={shippingForm.province}
+                  onChange={(event) => setShippingForm((prev) => ({ ...prev, province: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Localidad</Label>
+                <Input
+                  value={shippingForm.locality}
+                  onChange={(event) => setShippingForm((prev) => ({ ...prev, locality: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Domicilio / Sucursal</Label>
+                <Input
+                  value={shippingForm.address}
+                  onChange={(event) => setShippingForm((prev) => ({ ...prev, address: event.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <Label>Código postal</Label>
+                  <Input
+                    value={shippingForm.postalCode}
+                    onChange={(event) => setShippingForm((prev) => ({ ...prev, postalCode: event.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Teléfono</Label>
+                  <Input
+                    value={shippingForm.phone}
+                    onChange={(event) => setShippingForm((prev) => ({ ...prev, phone: event.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  value={shippingForm.email}
+                  onChange={(event) => setShippingForm((prev) => ({ ...prev, email: event.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          {showParseConfirmation ? (
+            <div className="rounded-md border p-3 bg-muted/30 text-sm">
+              Confirmación final: se guardará la dirección en Supabase y la venta pasará a Transferido si corresponde.
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeShippingDialog}>
+              Cancelar
+            </Button>
+            {!showParseConfirmation ? (
+              <Button onClick={() => setShowParseConfirmation(true)}>Continuar con confirmación</Button>
+            ) : (
+              <Button onClick={handleSaveShippingData} disabled={isSavingShippingData}>
+                {isSavingShippingData ? 'Guardando...' : 'Confirmar y guardar'}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Toaster />
+    </div>
+  );
+}
