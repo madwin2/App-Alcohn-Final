@@ -20,6 +20,7 @@ import { formatDate } from '@/lib/utils/format';
 import { Order } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
+import { parseShippingText } from '@/lib/utils/parseShippingText';
 
 const isEligibleForShipping = (order: Order): boolean => {
   if (!order.items.length) return false;
@@ -57,33 +58,6 @@ const emptyForm: ShippingFormData = {
   postalCode: '',
   email: '',
   phone: '',
-};
-
-const parseShippingText = (rawText: string): ShippingFormData => {
-  const lines = rawText
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const email = rawText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? '';
-  const phone = (rawText.match(/(\+?\d[\d\s.-]{7,}\d)/g)?.[0] ?? '').replace(/[^\d]/g, '');
-  const province = lines.find((line) => /provincia/i.test(line))?.split(':').slice(1).join(':').trim() ?? '';
-  const locality = lines.find((line) => /localidad/i.test(line))?.split(':').slice(1).join(':').trim() ?? '';
-  const addressLine = lines.find((line) => /domicilio|direccion|sucursal|calle/i.test(line));
-  const address = addressLine?.split(':').slice(1).join(':').trim() || addressLine || '';
-  const cpLine = lines.find((line) => /codigo postal|cp/i.test(line));
-  const postalCode = cpLine?.match(/\d{4,8}/)?.[0] ?? '';
-  const fullName = lines[0]?.replace(/^nombre con el que recibe el pedido[:\s]*/i, '').trim() ?? '';
-
-  return {
-    fullName,
-    province,
-    locality,
-    address,
-    postalCode,
-    email,
-    phone,
-  };
 };
 
 export default function EnviosPage() {
