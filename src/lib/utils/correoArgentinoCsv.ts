@@ -1,4 +1,7 @@
-import sucursalesRawCsv from '../../../correo arg auto/codigos_sucursales_y_provincias_MiCorreo (2) - Envio sucursal.csv?raw';
+// Importante para deploy (Vercel): no depender de archivos fuera de `src`/`public`.
+// Si se quiere cargar un padrón completo de sucursales, puede inyectarse por variable
+// de entorno en build: VITE_CORREO_SUCURSALES_CSV.
+const sucursalesRawCsv = (import.meta.env.VITE_CORREO_SUCURSALES_CSV as string | undefined) ?? '';
 
 export const CSV_FIELDS = [
   'tipo_producto(obligatorio)',
@@ -112,6 +115,7 @@ const splitPhone = (phone: string): { area: string; number: string } => {
 };
 
 const parseSucursales = (): Sucursal[] => {
+  if (!sucursalesRawCsv.trim()) return [];
   const lines = sucursalesRawCsv.split(/\r?\n/).filter(Boolean);
   return lines.slice(1).map((line) => {
     const parts = line.split(',');
