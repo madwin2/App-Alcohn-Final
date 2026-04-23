@@ -21,6 +21,7 @@ import { Order } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
+import { canonicalizeProvince, normalizeLocality, normalizePhoneDigits } from '@/lib/utils/shippingNormalization';
 
 const isEligibleForShipping = (order: Order): boolean => {
   if (!order.items.length) return false;
@@ -77,6 +78,13 @@ const mergeShippingData = (
   };
 };
 
+const normalizeShippingFormData = (data: ShippingFormData): ShippingFormData => ({
+  ...data,
+  province: canonicalizeProvince(data.province),
+  locality: normalizeLocality(data.locality),
+  phone: normalizePhoneDigits(data.phone),
+});
+
 export default function EnviosPage() {
   const { orders, loading, error, updateOrder, fetchOrders } = useOrders();
   const { toast } = useToast();
@@ -102,12 +110,13 @@ export default function EnviosPage() {
 
   const handleToggleShippingType = async (order: Order, type: 'DOMICILIO' | 'SUCURSAL') => {
     try {
-      await updateOrder(order.id, {
-        shipping: {
-          ...order.shipping,
-          service: type,
-        },
-      });
+      const tipoEnvioDb = type === 'SUCURSAL' ? 'Sucursal' : 'Domicilio';
+      const { error } = await supabase
+        .from('ordenes')
+        .update({ tipo_envio: tipoEnvioDb })
+        .eq('id', order.id);
+      if (error) throw error;
+      await fetchOrders();
       toast({
         title: 'Tipo de envío actualizado',
         description: `La orden quedó en ${type === 'DOMICILIO' ? 'Domicilio' : 'Sucursal'}.`,
@@ -295,7 +304,7 @@ export default function EnviosPage() {
       const fallbackData = parseShippingText(rawShippingText);
       const parsedData = mergeShippingData(fallbackData, aiData);
 
-      setShippingForm(parsedData);
+      setShippingForm(normalizeShippingFormData(parsedData));
       setShowParseConfirmation(false);
       toast({
         title: 'Parseo IA listo',
@@ -320,7 +329,18 @@ export default function EnviosPage() {
 
     setIsSavingShippingData(true);
     try {
-      const cleanName = shippingForm.fullName.trim();
+      const normalizedForm = normalizeShippingFormData(shippingForm);
+      const canonicalProvince = canonicalizeProvince(normalizedForm.province);
+      if (!canonicalProvince) {
+        toast({
+          title: 'Provincia inválida',
+          description: 'La provincia debe ser una de las 24 provincias/Capital Federal (sin abreviaturas).',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const cleanName = normalizedForm.fullName.trim();
       const nameParts = cleanName.split(' ').filter(Boolean);
       const firstName = nameParts[0] ?? selectedOrder.customer.firstName;
       const lastName = nameParts.slice(1).join(' ') || selectedOrder.customer.lastName || '-';
@@ -330,13 +350,13 @@ export default function EnviosPage() {
         .insert({
           cliente_id: selectedOrder.customer.id,
           activa: true,
-          codigo_postal: shippingForm.postalCode || '0000',
-          provincia: shippingForm.province || 'SIN DEFINIR',
-          localidad: shippingForm.locality || 'SIN DEFINIR',
-          domicilio: shippingForm.address || 'SIN DEFINIR',
+          codigo_postal: normalizedForm.postalCode || '0000',
+          provincia: canonicalProvince || 'SIN DEFINIR',
+          localidad: normalizeLocality(normalizedForm.locality) || 'SIN DEFINIR',
+          domicilio: normalizedForm.address || 'SIN DEFINIR',
           nombre: firstName,
           apellido: lastName,
-          telefono: shippingForm.phone || null,
+          telefono: normalizePhoneDigits(normalizedForm.phone) || null,
           dni: null,
         })
         .select('id')
@@ -356,10 +376,10 @@ export default function EnviosPage() {
 
       if (orderError) throw orderError;
 
-      if (shippingForm.email.trim()) {
+      if (normalizedForm.email.trim()) {
         await supabase
           .from('clientes')
-          .update({ mail: shippingForm.email.trim() })
+          .update({ mail: normalizedForm.email.trim() })
           .eq('id', selectedOrder.customer.id);
       }
 
@@ -564,14 +584,24 @@ export default function EnviosPage() {
                 <Label>Provincia</Label>
                 <Input
                   value={shippingForm.province}
-                  onChange={(event) => setShippingForm((prev) => ({ ...prev, province: event.target.value }))}
+                  onChange={(event) =>
+                    setShippingForm((prev) => ({
+                      ...prev,
+                      province: canonicalizeProvince(event.target.value) || event.target.value,
+                    }))
+                  }
                 />
               </div>
               <div className="space-y-2">
                 <Label>Localidad</Label>
                 <Input
                   value={shippingForm.locality}
-                  onChange={(event) => setShippingForm((prev) => ({ ...prev, locality: event.target.value }))}
+                  onChange={(event) =>
+                    setShippingForm((prev) => ({
+                      ...prev,
+                      locality: normalizeLocality(event.target.value),
+                    }))
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -593,7 +623,12 @@ export default function EnviosPage() {
                   <Label>Teléfono</Label>
                   <Input
                     value={shippingForm.phone}
-                    onChange={(event) => setShippingForm((prev) => ({ ...prev, phone: event.target.value }))}
+                    onChange={(event) =>
+                      setShippingForm((prev) => ({
+                        ...prev,
+                        phone: normalizePhoneDigits(event.target.value),
+                      }))
+                    }
                   />
                 </div>
               </div>

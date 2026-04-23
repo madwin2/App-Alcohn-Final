@@ -1,3 +1,5 @@
+import { canonicalizeProvince, normalizeLocality, normalizePhoneDigits } from './shippingNormalization';
+
 // Importante para deploy (Vercel): no depender de archivos fuera de `src`/`public`.
 // Si se quiere cargar un padrón completo de sucursales, puede inyectarse por variable
 // de entorno en build: VITE_CORREO_SUCURSALES_CSV.
@@ -186,12 +188,15 @@ const buscarProvinciaPorCodigoPostal = (codigoPostal: string): string => {
 export const createCorreoCsvRow = (
   input: CorreoAddressInput,
 ): { row: string[]; ok: true } | { ok: false; reason: string } => {
-  const directProvinceCode = PROVINCE_CODES[normalizeString(input.provincia)] || '';
+  const canonicalProvince = canonicalizeProvince(input.provincia);
+  const locality = normalizeLocality(input.localidad);
+  const phone = normalizePhoneDigits(input.telefono);
+  const directProvinceCode = PROVINCE_CODES[normalizeString(canonicalProvince)] || '';
   const sucursal = buscarSucursalSmart(input);
-  const provinceFromLocalidad = input.localidad ? buscarProvinciaPorLocalidad(input.localidad) : '';
+  const provinceFromLocalidad = locality ? buscarProvinciaPorLocalidad(locality) : '';
   const provinceFromCp = input.codigoPostal ? buscarProvinciaPorCodigoPostal(input.codigoPostal) : '';
   const inferredProvince =
-    (directProvinceCode && input.provincia) ||
+    (directProvinceCode && canonicalProvince) ||
     sucursal?.provincia ||
     provinceFromLocalidad ||
     provinceFromCp ||
@@ -207,10 +212,10 @@ export const createCorreoCsvRow = (
   }
 
   const { street, number } = splitStreetAndNumber(input.domicilio);
-  const { area, number: phoneNumber } = splitPhone(input.telefono);
+  const { area, number: phoneNumber } = splitPhone(phone);
   const cleanedName = sanitizeCsvValue(input.nombreCompleto);
   const cleanedEmail = sanitizeCsvValue(input.email);
-  const cleanedLocality = sanitizeCsvValue(input.localidad);
+  const cleanedLocality = sanitizeCsvValue(locality);
   const cleanedPostalCode = sanitizeCsvValue(input.codigoPostal);
 
   const sucursalCode = input.tipoEnvio === 'Sucursal' ? sanitizeCsvValue(sucursal?.codigo || '') : '';
