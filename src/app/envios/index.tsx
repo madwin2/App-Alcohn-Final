@@ -268,32 +268,47 @@ export default function EnviosPage() {
 
     setIsParsingWithAi(true);
     try {
-      const fallbackData = parseShippingText(rawShippingText);
-      let aiData: Partial<ParsedShippingData> | null = null;
+      const response = await fetch('/api/parse-shipping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: rawShippingText }),
+      });
 
-      try {
-        const response = await fetch('/api/parse-shipping', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: rawShippingText }),
-        });
-        if (response.ok) {
-          const json = await response.json();
-          aiData = (json?.parsed ?? null) as Partial<ParsedShippingData> | null;
+      if (!response.ok) {
+        let details = '';
+        try {
+          const errJson = await response.json();
+          details = errJson?.error || errJson?.message || '';
+        } catch {
+          // ignore JSON parsing error
         }
-      } catch {
-        // Si IA falla, seguimos con el parser local.
+        throw new Error(details || `Error HTTP ${response.status}`);
       }
 
+      const json = await response.json();
+      const aiData = (json?.parsed ?? null) as Partial<ParsedShippingData> | null;
+      if (!aiData) {
+        throw new Error('La respuesta de IA no devolvió campos parseados.');
+      }
+
+      // IA obligatoria: se usa IA y se completa con parser local solo en campos faltantes.
+      const fallbackData = parseShippingText(rawShippingText);
       const parsedData = mergeShippingData(fallbackData, aiData);
+
       setShippingForm(parsedData);
       setShowParseConfirmation(false);
-
       toast({
-        title: aiData ? 'Parseo IA listo' : 'Parseo listo',
-        description: aiData
-          ? 'Se interpretó con IA + respaldo local. Revisá antes de confirmar.'
-          : 'Se interpretó con parser local. Revisá antes de confirmar.',
+        title: 'Parseo IA listo',
+        description: 'Se interpretó con IA. Revisá antes de confirmar.',
+      });
+    } catch (error) {
+      toast({
+        title: 'No se pudo usar IA',
+        description:
+          error instanceof Error
+            ? `${error.message}. Revisá OPENAI_API_KEY en Vercel y redeploy.`
+            : 'Revisá OPENAI_API_KEY en Vercel y redeploy.',
+        variant: 'destructive',
       });
     } finally {
       setIsParsingWithAi(false);
