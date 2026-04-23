@@ -278,11 +278,11 @@ export default function EnviosPage() {
         let details = '';
         try {
           const errJson = await response.json();
-          details = errJson?.error || errJson?.message || '';
+          details = errJson?.details || errJson?.error || errJson?.message || '';
         } catch {
           // ignore JSON parsing error
         }
-        throw new Error(details || `Error HTTP ${response.status}`);
+        throw new Error(`[${response.status}] ${details || 'Error al llamar /api/parse-shipping'}`);
       }
 
       const json = await response.json();
