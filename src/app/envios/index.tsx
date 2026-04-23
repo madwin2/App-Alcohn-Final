@@ -26,12 +26,11 @@ const isEligibleForShipping = (order: Order): boolean => {
   if (!order.items.length) return false;
 
   const allDone = order.items.every((item) => item.fabricationState === 'HECHO');
-  const validSaleState =
-    order.saleStateOrder === 'FOTO_ENVIADA' || order.saleStateOrder === 'TRANSFERIDO';
-  const shippingState = order.items[0]?.shippingState;
-  const withoutLabel = shippingState !== 'ETIQUETA_LISTA';
+  // Estado de venta: cualquiera.
+  // Estado de envío: incluir todos menos Seguimiento Enviado.
+  const hasTrackingSent = order.items.some((item) => item.shippingState === 'SEGUIMIENTO_ENVIADO');
 
-  return allDone && validSaleState && withoutLabel;
+  return allDone && !hasTrackingSent;
 };
 
 const getRepresentativeItem = (order: Order) => {
@@ -80,7 +79,7 @@ export default function EnviosPage() {
     return eligibleOrders.filter((order) => order.items[0]?.shippingState !== 'ETIQUETA_LISTA');
   }, [eligibleOrders]);
 
-  const visibleOrders = csvOrders;
+  const visibleOrders = eligibleOrders;
 
   const handleToggleShippingType = async (order: Order, type: 'DOMICILIO' | 'SUCURSAL') => {
     try {
