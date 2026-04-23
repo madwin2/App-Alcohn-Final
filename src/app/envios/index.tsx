@@ -20,7 +20,7 @@ import { formatDate } from '@/lib/utils/format';
 import { Order } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
-import { parseShippingText } from '@/lib/utils/parseShippingText';
+import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
 
 const isEligibleForShipping = (order: Order): boolean => {
   if (!order.items.length) return false;
@@ -61,6 +61,22 @@ const emptyForm: ShippingFormData = {
   phone: '',
 };
 
+const mergeShippingData = (
+  fallbackData: ParsedShippingData,
+  aiData?: Partial<ParsedShippingData> | null,
+): ShippingFormData => {
+  if (!aiData) return fallbackData;
+  return {
+    fullName: aiData.fullName?.trim() || fallbackData.fullName,
+    province: aiData.province?.trim() || fallbackData.province,
+    locality: aiData.locality?.trim() || fallbackData.locality,
+    address: aiData.address?.trim() || fallbackData.address,
+    postalCode: aiData.postalCode?.trim() || fallbackData.postalCode,
+    email: aiData.email?.trim() || fallbackData.email,
+    phone: aiData.phone?.trim() || fallbackData.phone,
+  };
+};
+
 export default function EnviosPage() {
   const { orders, loading, error, updateOrder, fetchOrders } = useOrders();
   const { toast } = useToast();
@@ -71,6 +87,7 @@ export default function EnviosPage() {
   const [shippingForm, setShippingForm] = useState<ShippingFormData>(emptyForm);
   const [showParseConfirmation, setShowParseConfirmation] = useState(false);
   const [isSavingShippingData, setIsSavingShippingData] = useState(false);
+  const [isParsingWithAi, setIsParsingWithAi] = useState(false);
   const [lastCsvSkipped, setLastCsvSkipped] = useState<Array<{ orderId: string; reason: string }>>([]);
 
   const eligibleOrders = useMemo(() => {
@@ -239,7 +256,7 @@ export default function EnviosPage() {
     setShowParseConfirmation(false);
   };
 
-  const handleParse = () => {
+  const handleParse = async () => {
     if (!rawShippingText.trim()) {
       toast({
         title: 'Texto vacío',
@@ -249,13 +266,38 @@ export default function EnviosPage() {
       return;
     }
 
-    const parsedData = parseShippingText(rawShippingText);
-    setShippingForm(parsedData);
-    setShowParseConfirmation(false);
-    toast({
-      title: 'Parseo listo',
-      description: 'Revisá los datos y luego confirmá para guardar.',
-    });
+    setIsParsingWithAi(true);
+    try {
+      const fallbackData = parseShippingText(rawShippingText);
+      let aiData: Partial<ParsedShippingData> | null = null;
+
+      try {
+        const response = await fetch('/api/parse-shipping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: rawShippingText }),
+        });
+        if (response.ok) {
+          const json = await response.json();
+          aiData = (json?.parsed ?? null) as Partial<ParsedShippingData> | null;
+        }
+      } catch {
+        // Si IA falla, seguimos con el parser local.
+      }
+
+      const parsedData = mergeShippingData(fallbackData, aiData);
+      setShippingForm(parsedData);
+      setShowParseConfirmation(false);
+
+      toast({
+        title: aiData ? 'Parseo IA listo' : 'Parseo listo',
+        description: aiData
+          ? 'Se interpretó con IA + respaldo local. Revisá antes de confirmar.'
+          : 'Se interpretó con parser local. Revisá antes de confirmar.',
+      });
+    } finally {
+      setIsParsingWithAi(false);
+    }
   };
 
   const handleSaveShippingData = async () => {
@@ -475,8 +517,8 @@ export default function EnviosPage() {
                 placeholder="Pegá acá los datos de envío..."
                 className="min-h-[240px]"
               />
-              <Button variant="outline" onClick={handleParse}>
-                Interpretar texto
+              <Button variant="outline" onClick={handleParse} disabled={isParsingWithAi}>
+                {isParsingWithAi ? 'Interpretando...' : 'Interpretar texto'}
               </Button>
             </div>
 
