@@ -26,11 +26,13 @@ const isEligibleForShipping = (order: Order): boolean => {
   if (!order.items.length) return false;
 
   const allDone = order.items.every((item) => item.fabricationState === 'HECHO');
-  // Estado de venta: cualquiera.
+  // Estado de venta: cualquiera excepto Deudor.
+  const hasDebtorState =
+    order.saleStateOrder === 'DEUDOR' || order.items.some((item) => item.saleState === 'DEUDOR');
   // Estado de envío: incluir todos menos Seguimiento Enviado.
   const hasTrackingSent = order.items.some((item) => item.shippingState === 'SEGUIMIENTO_ENVIADO');
 
-  return allDone && !hasTrackingSent;
+  return allDone && !hasTrackingSent && !hasDebtorState;
 };
 
 const getRepresentativeItem = (order: Order) => {
