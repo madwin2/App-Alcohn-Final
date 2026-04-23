@@ -370,9 +370,9 @@ export default function EnviosPage() {
                     <tr className="text-left text-muted-foreground">
                       <th className="px-4 py-3 font-medium">Fecha</th>
                       <th className="px-4 py-3 font-medium">Cliente</th>
+                      <th className="px-4 py-3 font-medium">Items</th>
                       <th className="px-4 py-3 font-medium">Diseño</th>
-                      <th className="px-4 py-3 font-medium">Base</th>
-                      <th className="px-4 py-3 font-medium">Vector</th>
+                      <th className="px-4 py-3 font-medium">Archivo</th>
                       <th className="px-4 py-3 font-medium">Tipo envío</th>
                       <th className="px-4 py-3 font-medium">Acciones</th>
                     </tr>
@@ -380,8 +380,8 @@ export default function EnviosPage() {
                   <tbody>
                     {visibleOrders.map((order) => {
                       const item = getRepresentativeItem(order);
-                      const basePreview = item?.files?.baseUrl;
-                      const vectorPreview = item?.files?.vectorPreviewUrl || item?.files?.vectorUrl;
+                      const availablePreview =
+                        item?.files?.baseUrl || item?.files?.vectorPreviewUrl || item?.files?.vectorUrl;
                       const isSucursal = order.shipping.service === 'SUCURSAL';
 
                       return (
@@ -390,23 +390,13 @@ export default function EnviosPage() {
                           <td className="px-4 py-3 font-medium">
                             {`${order.customer.firstName} ${order.customer.lastName}`.trim()}
                           </td>
+                          <td className="px-4 py-3">{order.items.length}</td>
                           <td className="px-4 py-3">{item?.designName || 'Sin diseño'}</td>
                           <td className="px-4 py-3">
-                            {basePreview ? (
+                            {availablePreview ? (
                               <img
-                                src={basePreview}
-                                alt="Preview base"
-                                className="h-12 w-12 rounded-md object-cover border"
-                              />
-                            ) : (
-                              <Badge variant="secondary">Sin preview</Badge>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            {vectorPreview ? (
-                              <img
-                                src={vectorPreview}
-                                alt="Preview vector"
+                                src={availablePreview}
+                                alt="Preview archivo"
                                 className="h-12 w-12 rounded-md object-cover border"
                               />
                             ) : (
