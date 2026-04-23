@@ -54,7 +54,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        model: process.env.OPENAI_MODEL || 'gpt-4o',
         temperature: 0,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -62,7 +62,12 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const body = await response.text();
-      res.status(502).json({ error: 'OpenAI request failed', details: body });
+      res.status(502).json({
+        error: 'OpenAI request failed',
+        details: body,
+        hint:
+          'Verificá acceso al modelo en OpenAI o configurá OPENAI_MODEL en Vercel (por ejemplo: gpt-4o).',
+      });
       return;
     }
 
