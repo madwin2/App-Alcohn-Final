@@ -38,7 +38,14 @@ const applyOptimisticPatch = (order: Order, updates: Partial<Order>): Order => {
   return nextOrder;
 };
 
-export const useOrders = () => {
+interface UseOrdersOptions {
+  enableRealtime?: boolean;
+  enablePolling?: boolean;
+}
+
+export const useOrders = (options?: UseOrdersOptions) => {
+  const enableRealtime = options?.enableRealtime ?? true;
+  const enablePolling = options?.enablePolling ?? true;
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -64,6 +71,8 @@ export const useOrders = () => {
 
   // Realtime: actualizar lista cuando otra persona crea/edita/elimina órdenes o sellos
   useEffect(() => {
+    if (!enableRealtime) return;
+
     const channel = supabase
       .channel('orders-realtime')
       .on(
@@ -81,10 +90,12 @@ export const useOrders = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders]);
+  }, [fetchOrders, enableRealtime]);
 
   // Fallback: polling para garantizar actualizaciones aunque realtime falle
   useEffect(() => {
+    if (!enablePolling) return;
+
     const interval = window.setInterval(() => {
       fetchOrders({ silent: true });
     }, 12000);
@@ -92,7 +103,7 @@ export const useOrders = () => {
     return () => {
       window.clearInterval(interval);
     };
-  }, [fetchOrders]);
+  }, [fetchOrders, enablePolling]);
 
   const createOrder = async (formData: NewOrderFormData): Promise<Order> => {
     try {

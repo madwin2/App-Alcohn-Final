@@ -102,11 +102,22 @@ export default function EnviosPage() {
     return orders.filter(isEligibleForShipping);
   }, [orders]);
 
+  /** Incluibles al CSV: ya tienen dirección en BD y aún no están en Etiqueta lista */
   const csvOrders = useMemo(() => {
-    return eligibleOrders.filter((order) => order.items[0]?.shippingState !== 'ETIQUETA_LISTA');
+    return eligibleOrders.filter(
+      (order) =>
+        Boolean(order.direccionId) && order.items[0]?.shippingState !== 'ETIQUETA_LISTA',
+    );
   }, [eligibleOrders]);
 
-  const visibleOrders = eligibleOrders;
+  const ordersConDatosEnvio = useMemo(
+    () => eligibleOrders.filter((order) => Boolean(order.direccionId)),
+    [eligibleOrders],
+  );
+  const ordersPendientesDatos = useMemo(
+    () => eligibleOrders.filter((order) => !order.direccionId),
+    [eligibleOrders],
+  );
 
   const handleToggleShippingType = async (order: Order, type: 'DOMICILIO' | 'SUCURSAL') => {
     try {
@@ -411,6 +422,81 @@ export default function EnviosPage() {
     }
   };
 
+  const renderOrderRow = (order: Order) => {
+    const item = getRepresentativeItem(order);
+    const availablePreview =
+      item?.files?.baseUrl || item?.files?.vectorPreviewUrl || item?.files?.vectorUrl;
+    const isSucursal = order.shipping.service === 'SUCURSAL';
+    const esEtiquetaLista = order.items[0]?.shippingState === 'ETIQUETA_LISTA';
+
+    return (
+      <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+        <td className="px-4 py-3">{formatDate(order.orderDate)}</td>
+        <td className="px-4 py-3 font-medium">
+          {`${order.customer.firstName} ${order.customer.lastName}`.trim()}
+        </td>
+        <td className="px-4 py-3">{order.items.length}</td>
+        <td className="px-4 py-3">{item?.designName || 'Sin diseño'}</td>
+        <td className="px-4 py-3">
+          {availablePreview ? (
+            <img
+              src={availablePreview}
+              alt="Preview archivo"
+              className="h-12 w-12 rounded-md object-cover border"
+            />
+          ) : (
+            <Badge variant="secondary">Sin preview</Badge>
+          )}
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant={isSucursal ? 'outline' : 'default'}
+                onClick={() => handleToggleShippingType(order, 'DOMICILIO')}
+              >
+                Domicilio
+              </Button>
+              <Button
+                size="sm"
+                variant={isSucursal ? 'default' : 'outline'}
+                onClick={() => handleToggleShippingType(order, 'SUCURSAL')}
+              >
+                Sucursal
+              </Button>
+            </div>
+            {esEtiquetaLista ? (
+              <Badge variant="outline" className="shrink-0 text-xs">
+                Etiqueta lista
+              </Badge>
+            ) : null}
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <Button size="sm" variant="secondary" onClick={() => openShippingDialog(order)}>
+            {order.direccionId ? 'Editar datos' : 'Cargar datos'}
+          </Button>
+        </td>
+      </tr>
+    );
+  };
+
+  const tableClass = 'w-full text-sm';
+  const tableHead = (
+    <thead className="sticky top-0 bg-background z-10 border-b">
+      <tr className="text-left text-muted-foreground">
+        <th className="px-4 py-3 font-medium">Fecha</th>
+        <th className="px-4 py-3 font-medium">Cliente</th>
+        <th className="px-4 py-3 font-medium">Items</th>
+        <th className="px-4 py-3 font-medium">Diseño</th>
+        <th className="px-4 py-3 font-medium">Archivo</th>
+        <th className="px-4 py-3 font-medium">Tipo envío</th>
+        <th className="px-4 py-3 font-medium">Acciones</th>
+      </tr>
+    </thead>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
@@ -421,7 +507,7 @@ export default function EnviosPage() {
             <div>
               <h1 className="text-2xl font-semibold">Envíos</h1>
               <p className="text-sm text-muted-foreground mt-1">
-                Órdenes listas para carga de datos y generación de etiqueta.
+                Con datos de envío listos para el CSV; abajo, pendientes de carga.
               </p>
             </div>
             <Button onClick={handleGenerateCsv} disabled={!csvOrders.length || isGeneratingCsv}>
@@ -430,7 +516,7 @@ export default function EnviosPage() {
           </div>
         </div>
 
-        <div className="flex-1 p-6 overflow-hidden">
+        <div className="flex-1 p-6 overflow-hidden flex flex-col gap-6 min-h-0">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-muted-foreground">Cargando órdenes...</p>
@@ -440,78 +526,56 @@ export default function EnviosPage() {
               <p className="text-destructive">Error: {error.message}</p>
             </div>
           ) : (
-            <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-              <div className="overflow-auto max-h-[calc(100vh-220px)]">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-background z-10 border-b">
-                    <tr className="text-left text-muted-foreground">
-                      <th className="px-4 py-3 font-medium">Fecha</th>
-                      <th className="px-4 py-3 font-medium">Cliente</th>
-                      <th className="px-4 py-3 font-medium">Items</th>
-                      <th className="px-4 py-3 font-medium">Diseño</th>
-                      <th className="px-4 py-3 font-medium">Archivo</th>
-                      <th className="px-4 py-3 font-medium">Tipo envío</th>
-                      <th className="px-4 py-3 font-medium">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleOrders.map((order) => {
-                      const item = getRepresentativeItem(order);
-                      const availablePreview =
-                        item?.files?.baseUrl || item?.files?.vectorPreviewUrl || item?.files?.vectorUrl;
-                      const isSucursal = order.shipping.service === 'SUCURSAL';
-
-                      return (
-                        <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
-                          <td className="px-4 py-3">{formatDate(order.orderDate)}</td>
-                          <td className="px-4 py-3 font-medium">
-                            {`${order.customer.firstName} ${order.customer.lastName}`.trim()}
-                          </td>
-                          <td className="px-4 py-3">{order.items.length}</td>
-                          <td className="px-4 py-3">{item?.designName || 'Sin diseño'}</td>
-                          <td className="px-4 py-3">
-                            {availablePreview ? (
-                              <img
-                                src={availablePreview}
-                                alt="Preview archivo"
-                                className="h-12 w-12 rounded-md object-cover border"
-                              />
-                            ) : (
-                              <Badge variant="secondary">Sin preview</Badge>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant={isSucursal ? 'outline' : 'default'}
-                                onClick={() => handleToggleShippingType(order, 'DOMICILIO')}
-                              >
-                                Domicilio
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={isSucursal ? 'default' : 'outline'}
-                                onClick={() => handleToggleShippingType(order, 'SUCURSAL')}
-                              >
-                                Sucursal
-                              </Button>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <Button size="sm" variant="secondary" onClick={() => openShippingDialog(order)}>
-                              Cargar datos
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            <>
+              <div className="space-y-2 min-h-0 flex flex-col flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h2 className="text-sm font-medium text-foreground">Con datos de envío (listos para etiqueta / CSV)</h2>
+                  <span className="text-xs text-muted-foreground tabular-nums">{ordersConDatosEnvio.length}</span>
+                </div>
+                <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
+                  <div className="overflow-auto max-h-[min(50vh,420px)]">
+                    <table className={tableClass}>
+                      {tableHead}
+                      <tbody>{ordersConDatosEnvio.map(renderOrderRow)}</tbody>
+                    </table>
+                  </div>
+                  {!ordersConDatosEnvio.length ? (
+                    <div className="p-6 text-center text-sm text-muted-foreground border-t">
+                      {eligibleOrders.length
+                        ? 'Ningún pedido con datos de envío aún. Usá «Cargar datos» en la tabla de abajo.'
+                        : 'No hay pedidos en esta lista.'}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
-              {lastCsvSkipped.length > 0 && (
-                <div className="border-t bg-muted/20 p-4">
+              <div className="space-y-2 min-h-0 flex flex-col flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h2 className="text-sm font-medium text-foreground">Pendientes de cargar datos de envío</h2>
+                  <span className="text-xs text-muted-foreground tabular-nums">{ordersPendientesDatos.length}</span>
+                </div>
+                <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
+                  <div className="overflow-auto max-h-[min(50vh,420px)]">
+                    <table className={tableClass}>
+                      {tableHead}
+                      <tbody>{ordersPendientesDatos.map(renderOrderRow)}</tbody>
+                    </table>
+                  </div>
+                  {!ordersPendientesDatos.length && eligibleOrders.length > 0 ? (
+                    <div className="p-6 text-center text-sm text-muted-foreground border-t">
+                      Todos los pedidos de esta lista ya tienen datos de envío.
+                    </div>
+                  ) : null}
+                  {!eligibleOrders.length ? (
+                    <div className="p-6 text-center text-sm text-muted-foreground border-t">
+                      No hay órdenes con fabricación lista y filtro de envío aplicable.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {lastCsvSkipped.length > 0 ? (
+                <div className="rounded-xl border bg-card p-4 bg-muted/20">
                   <p className="text-sm font-medium mb-2">Órdenes excluidas del último CSV</p>
                   <ul className="space-y-1 text-sm text-muted-foreground max-h-40 overflow-auto">
                     {lastCsvSkipped.map((entry) => (
@@ -521,14 +585,8 @@ export default function EnviosPage() {
                     ))}
                   </ul>
                 </div>
-              )}
-
-              {!visibleOrders.length && (
-                <div className="p-8 text-center text-muted-foreground">
-                  No hay órdenes pendientes de etiqueta para mostrar.
-                </div>
-              )}
-            </div>
+              ) : null}
+            </>
           )}
         </div>
       </div>

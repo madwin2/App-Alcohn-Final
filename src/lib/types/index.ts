@@ -69,12 +69,14 @@ export interface Order {
   deadlineAt?: string | null;
   paidAmountCached: number;
   balanceAmountCached: number;
-    shipping: {
-      carrier: ShippingCarrier | null;
-      service: ShippingServiceDest | null;
-      origin: ShippingOriginMethod;
-      trackingNumber?: string | null;
-    };
+  /** Vinculación a `direcciones` en Supabase; indica si ya hay datos de envío cargados */
+  direccionId?: string | null;
+  shipping: {
+    carrier: ShippingCarrier | null;
+    service: ShippingServiceDest | null;
+    origin: ShippingOriginMethod;
+    trackingNumber?: string | null;
+  };
   items: OrderItem[];
   tasks?: Task[];
   progressStep?: ProgressStep;

@@ -280,6 +280,7 @@ export const mapOrdenToOrder = (
 
   return {
     id: orden.id,
+    direccionId: orden.direccion_id ?? null,
     customer: mapClienteToCustomer(cliente),
     orderDate: orden.fecha || new Date().toISOString().split('T')[0],
     createdAt: orden.created_at || undefined,
