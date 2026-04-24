@@ -28,7 +28,7 @@ const customerSchema = z.object({
 const orderSchema = z.object({
   order: z.object({
     itemType: z.enum(['SELLO', 'ABECEDARIO', 'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA']),
-    designName: z.string().min(1, 'El nombre del diseño es requerido'),
+    designName: z.string().optional(),
     requestedWidthMm: z.number().min(1, 'La medida debe ser mayor a 0'),
     requestedHeightMm: z.number().min(1, 'La medida debe ser mayor a 0').optional(),
     stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
@@ -52,6 +52,14 @@ const orderSchema = z.object({
     isPriority: z.boolean(),
     deadline: z.date().optional(),
   }),
+}).superRefine((data, ctx) => {
+  if (data.order.itemType === 'SELLO' && !data.order.designName?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'El nombre del diseño es requerido',
+      path: ['order', 'designName'],
+    });
+  }
 });
 
 type CustomerFormData = z.infer<typeof customerSchema>;
@@ -285,6 +293,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
     // En el paso 2, cuando se hace submit, solo agregar el diseño (no crear pedido)
     const finalData = {
       ...data,
+      order: {
+        ...data.order,
+        designName: selectedItemType === 'SELLO' ? (data.order.designName || '') : '',
+      },
       files,
     };
     onStepSubmit(finalData, 2);
@@ -295,6 +307,10 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
     orderForm.handleSubmit((data) => {
       const finalData = {
         ...data,
+        order: {
+          ...data.order,
+          designName: selectedItemType === 'SELLO' ? (data.order.designName || '') : '',
+        },
         files,
       };
       onStepSubmit(finalData, 2);
@@ -454,17 +470,19 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
               </SelectContent>
             </Select>
           </div>
-          <div className="col-span-2">
-            <Input
-              id="designName"
-              placeholder="Nombre del Diseño *"
-              {...orderForm.register('order.designName')}
-              className={orderForm.formState.errors.order?.designName ? 'border-red-500' : ''}
-            />
-            {orderForm.formState.errors.order?.designName && (
-              <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.order.designName.message}</p>
-            )}
-          </div>
+          {selectedItemType === 'SELLO' && (
+            <div className="col-span-2">
+              <Input
+                id="designName"
+                placeholder="Nombre del Diseño *"
+                {...orderForm.register('order.designName')}
+                className={orderForm.formState.errors.order?.designName ? 'border-red-500' : ''}
+              />
+              {orderForm.formState.errors.order?.designName && (
+                <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.order.designName.message}</p>
+              )}
+            </div>
+          )}
           <div className="col-span-2">
             <Input
               id="measureInput"

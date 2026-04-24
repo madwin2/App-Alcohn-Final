@@ -15,7 +15,7 @@ import { useToast } from '@/components/ui/use-toast';
 
 const addStampSchema = z.object({
   itemType: z.enum(['SELLO', 'ABECEDARIO', 'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA']),
-  designName: z.string().min(1, 'El nombre del diseño es requerido'),
+  designName: z.string().optional(),
   requestedWidthMm: z.number().min(1, 'La medida debe ser mayor a 0'),
   stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
   soldadorPower: z.enum(['100W', '200W']).optional(),
@@ -30,6 +30,14 @@ const addStampSchema = z.object({
   saleState: z.enum(['SEÑADO', 'FOTO_ENVIADA', 'TRANSFERIDO', 'DEUDOR']),
   shippingState: z.enum(['SIN_ENVIO', 'HACER_ETIQUETA', 'ETIQUETA_LISTA', 'DESPACHADO', 'SEGUIMIENTO_ENVIADO']),
   isPriority: z.boolean(),
+}).superRefine((data, ctx) => {
+  if (data.itemType === 'SELLO' && !data.designName?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'El nombre del diseño es requerido',
+      path: ['designName'],
+    });
+  }
 });
 
 type AddStampFormData = z.infer<typeof addStampSchema>;
@@ -141,24 +149,26 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
     try {
       setIsSubmitting(true);
       
-      // Parsear la medida para obtener ancho y alto
-      const match = measureInput.match(/^(\d+)(?:[xX×](\d+))?$/);
-      if (!match) {
-        toast({
-          title: "Error",
-          description: "Formato de medida inválido. Use el formato: 20x20 o 20",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        return;
+      let width = 1;
+      let height = 1;
+      if (data.itemType === 'SELLO') {
+        const match = measureInput.match(/^(\d+)(?:[xX×](\d+))?$/);
+        if (!match) {
+          toast({
+            title: "Error",
+            description: "Formato de medida inválido. Use el formato: 20x20 o 20",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        width = parseInt(match[1]);
+        height = match[2] ? parseInt(match[2]) : width;
       }
-      
-      const width = parseInt(match[1]);
-      const height = match[2] ? parseInt(match[2]) : width; // Si no hay altura, usar el mismo valor
       
       await onAddStamp(order.id, {
         itemType: data.itemType,
-        designName: data.designName,
+        designName: data.itemType === 'SELLO' ? (data.designName || '') : '',
         requestedWidthMm: width,
         requestedHeightMm: height,
         stampType: data.stampType,
@@ -186,9 +196,18 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
         },
       }, files);
 
+      const itemLabel = data.itemType === 'ABECEDARIO'
+        ? 'abecedario'
+        : data.itemType === 'SOLDADOR'
+        ? 'soldador'
+        : data.itemType === 'MANGO_GOLPE'
+        ? 'mango de golpe'
+        : data.itemType === 'BASE_REMACHADORA'
+        ? 'base remachadora'
+        : 'sello';
       toast({
-        title: "¡Sello agregado!",
-        description: `Se ha agregado el sello "${data.designName}" al pedido`,
+        title: "¡Ítem agregado!",
+        description: `Se ha agregado ${itemLabel} al pedido`,
       });
 
       // Reset form
@@ -240,50 +259,48 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                   </SelectContent>
                 </Select>
               </div>
-              <div className="col-span-2">
-                <Label htmlFor="designName">Nombre del diseño *</Label>
-                <Input
-                  id="designName"
-                  {...register('designName')}
-                  className={errors.designName ? 'border-red-500' : ''}
-                />
-                {errors.designName && (
-                  <p className="text-xs text-red-500 mt-1">{errors.designName.message}</p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="requestedWidthMm">Medida (mm) *</Label>
-                <Input
-                  id="requestedWidthMm"
-                  type="text"
-                  placeholder="Ej: 20x20 o 20"
-                  value={measureInput}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setMeasureInput(value);
-                    
-                    // Parsear el valor: puede ser "20x20" o solo "20"
-                    const match = value.match(/^(\d+)(?:[xX×](\d+))?$/);
-                    if (match) {
-                      const width = parseInt(match[1]);
-                      const height = match[2] ? parseInt(match[2]) : width; // Si no hay altura, usar el mismo valor
-                      
-                      setValue('requestedWidthMm', width);
-                    } else if (value === '') {
-                      // Si está vacío, limpiar los valores
-                      setValue('requestedWidthMm', 0);
-                    }
-                  }}
-                  className={errors.requestedWidthMm ? 'border-red-500' : ''}
-                  disabled={selectedItemType !== 'SELLO'}
-                />
-                {errors.requestedWidthMm && (
-                  <p className="text-xs text-red-500 mt-1">{errors.requestedWidthMm.message}</p>
-                )}
-                {measureInput && !measureInput.match(/^\d+([xX×]\d+)?$/) && (
-                  <p className="text-xs text-yellow-500 mt-1">Formato: 20x20 o 20</p>
-                )}
-              </div>
+              {selectedItemType === 'SELLO' && (
+                <div className="col-span-2">
+                  <Label htmlFor="designName">Nombre del diseño *</Label>
+                  <Input
+                    id="designName"
+                    {...register('designName')}
+                    className={errors.designName ? 'border-red-500' : ''}
+                  />
+                  {errors.designName && (
+                    <p className="text-xs text-red-500 mt-1">{errors.designName.message}</p>
+                  )}
+                </div>
+              )}
+              {selectedItemType === 'SELLO' && (
+                <div>
+                  <Label htmlFor="requestedWidthMm">Medida (mm) *</Label>
+                  <Input
+                    id="requestedWidthMm"
+                    type="text"
+                    placeholder="Ej: 20x20 o 20"
+                    value={measureInput}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setMeasureInput(value);
+                      const match = value.match(/^(\d+)(?:[xX×](\d+))?$/);
+                      if (match) {
+                        const width = parseInt(match[1]);
+                        setValue('requestedWidthMm', width);
+                      } else if (value === '') {
+                        setValue('requestedWidthMm', 0);
+                      }
+                    }}
+                    className={errors.requestedWidthMm ? 'border-red-500' : ''}
+                  />
+                  {errors.requestedWidthMm && (
+                    <p className="text-xs text-red-500 mt-1">{errors.requestedWidthMm.message}</p>
+                  )}
+                  {measureInput && !measureInput.match(/^\d+([xX×]\d+)?$/) && (
+                    <p className="text-xs text-yellow-500 mt-1">Formato: 20x20 o 20</p>
+                  )}
+                </div>
+              )}
               <div>
                 {selectedItemType === 'SELLO' && (
                   <>

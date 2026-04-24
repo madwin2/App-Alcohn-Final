@@ -59,10 +59,20 @@ export function CellSummary({ order, columnId }: CellSummaryProps) {
       );
     
     case 'disenio':
+      const summaryItem = order.items[0];
+      const summaryText = summaryItem?.itemType === 'ABECEDARIO'
+        ? 'Abecedario'
+        : summaryItem?.itemType === 'SOLDADOR'
+        ? `Soldador ${summaryItem.itemConfig?.soldadorPower || ''}`.trim()
+        : summaryItem?.itemType === 'MANGO_GOLPE'
+        ? 'Mango de golpe'
+        : summaryItem?.itemType === 'BASE_REMACHADORA'
+        ? 'Base remachadora'
+        : summaryItem?.designName || '—';
       return (
         <div className="flex flex-col">
           <span className="text-xs font-medium truncate">
-            {order.items[0]?.designName || '—'}
+            {summaryText}
           </span>
           {totalItems > 1 && (
             <span className="text-[10px] text-muted-foreground">
