@@ -254,9 +254,14 @@ export default function EnviosPage() {
             : `Se exportaron ${exportedOrders.length} órdenes y se marcaron como Etiqueta Lista.`,
       });
     } catch (generateError) {
+      const msg =
+        generateError && typeof generateError === 'object' && 'message' in generateError
+          ? String((generateError as { message: string }).message)
+          : String(generateError);
+      console.error('Generar CSV:', generateError);
       toast({
         title: 'Error al generar CSV',
-        description: 'No se pudo completar la exportación.',
+        description: msg || 'No se pudo completar la exportación.',
         variant: 'destructive',
       });
     } finally {

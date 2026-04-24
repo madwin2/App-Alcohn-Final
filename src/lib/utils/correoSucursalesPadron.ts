@@ -75,7 +75,7 @@ export function normalizarNombreCorreo(nombre: string): string {
   }
   s = s.replace(/\./g, ' ');
   s = s.replace(/,/g, ' ');
-  s = ' '.join(s.split(/\s+/).filter(Boolean));
+  s = s.split(/\s+/).filter(Boolean).join(' ');
   s = s.trim();
   if (s.endsWith('S') && !s.endsWith('ES') && s.length > 4) {
     s = s.slice(0, -1);
