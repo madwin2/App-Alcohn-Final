@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useOrders } from '@/lib/hooks/useOrders';
-import { formatDate } from '@/lib/utils/format';
+import { formatDate, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
 import { Order } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
@@ -438,6 +438,7 @@ export default function EnviosPage() {
       item?.files?.baseUrl || item?.files?.vectorPreviewUrl || item?.files?.vectorUrl;
     const isSucursal = order.shipping.service === 'SUCURSAL';
     const esEtiquetaLista = order.items[0]?.shippingState === 'ETIQUETA_LISTA';
+    const visualEtiquetaLista = getShippingChipVisual('ETIQUETA_LISTA');
 
     return (
       <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
@@ -477,9 +478,20 @@ export default function EnviosPage() {
               </Button>
             </div>
             {esEtiquetaLista ? (
-              <Badge variant="outline" className="shrink-0 text-xs">
-                Etiqueta lista
-              </Badge>
+              <span
+                className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${visualEtiquetaLista.textClass}`}
+                style={{
+                  backgroundImage: visualEtiquetaLista.backgroundImage,
+                  backgroundColor: visualEtiquetaLista.backgroundColor,
+                  boxShadow: visualEtiquetaLista.boxShadow,
+                  borderColor: visualEtiquetaLista.borderColor,
+                  backdropFilter: 'saturate(140%) blur(3px)',
+                  color: visualEtiquetaLista.textColor,
+                  minWidth: visualEtiquetaLista.width,
+                }}
+              >
+                {getShippingLabel('ETIQUETA_LISTA')}
+              </span>
             ) : null}
           </div>
         </td>
@@ -673,11 +685,23 @@ export default function EnviosPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Domicilio / Sucursal</Label>
+                <Label>
+                  {shippingTypeDraft === 'SUCURSAL' ? 'Dirección de la sucursal' : 'Domicilio (calle y número)'}
+                </Label>
                 <Input
                   value={shippingForm.address}
                   onChange={(event) => setShippingForm((prev) => ({ ...prev, address: event.target.value }))}
+                  placeholder={
+                    shippingTypeDraft === 'SUCURSAL'
+                      ? 'Calle y número de la oficina (ej. FRANCIA 1670), según el padrón de Correo'
+                      : 'Calle, número, piso…'
+                  }
                 />
+                {shippingTypeDraft === 'SUCURSAL' ? (
+                  <p className="text-xs text-muted-foreground">
+                    Con sucursal usamos calle y número del padrón para asignar el código correcto; en una misma ciudad puede haber varias oficinas.
+                  </p>
+                ) : null}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-2">

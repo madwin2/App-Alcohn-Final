@@ -127,7 +127,7 @@ export const createCorreoCsvRow = (
       return {
         ok: false,
         reason:
-          'Sucursal: no hay coincidencia en el padrón MiCorreo. Revisá provincia, localidad de la sucursal, y en domicilio la calle y número que figuran en el padrón (o dejá solo la ciudad).',
+          'Sucursal: en el padrón no hubo una sola coincidencia. Revisá provincia y localidad, y en «Dirección de la sucursal» la calle y el número exactos (como en el listado MiCorreo). Si hay varias sucursales en la misma localidad, sin esa dirección no se puede elegir el código.',
       };
     }
     letraProvincia = obtenerCodigoProvincia(smart.provincia);

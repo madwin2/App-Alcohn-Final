@@ -215,66 +215,137 @@ export type SucursalSmartInput = {
   tipoEnvio: 'domicilio' | 'sucursal';
   provincia: string;
   localidad: string;
+  /** Para sucursal: dirección completa de la sucursal (calle + número, como en el padrón MiCorreo). */
   direccion: string;
 };
 
 /**
- * Alineado con `buscar_sucursal_smart` en app.py: sucursal+domicilio, luego localidad+provincia.
+ * Saca calle y número del texto (ej. "FRANCIA 1670", "9 DE JULIO 0", "S/C 0").
+ */
+export function parseCalleNumeroSucursal(direccion: string): { calle: string; numero: string } {
+  const raw = (direccion || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  if (!raw) {
+    return { calle: '', numero: '' };
+  }
+  const m = raw.match(/^(.*?)[\s,]+(N[°º]?\s*)?(\d+)\s*$/i);
+  if (m) {
+    return { calle: m[1]!.trim(), numero: m[3]! };
+  }
+  const partes = raw.split(/\s+/).filter(Boolean);
+  if (partes.length > 1 && /^\d+$/.test(partes[partes.length - 1]!)) {
+    return { calle: partes.slice(0, -1).join(' '), numero: partes[partes.length - 1]! };
+  }
+  return { calle: raw, numero: '' };
+}
+
+function esNumeroSucursalVacio(p: string): boolean {
+  const t = (p || '').trim();
+  if (!t) {
+    return true;
+  }
+  if (t === '0' || t === '00' || t === '0000') {
+    return true;
+  }
+  if (/^s\/?\s?c(\.|\/|$)?$/i.test(t) || t.toLowerCase() === 's/c') {
+    return true;
+  }
+  return false;
+}
+
+function numerosSucursalCoinciden(cliente: string, padron: string): boolean {
+  const a = (cliente || '').trim();
+  const b = (padron || '').trim();
+  if (a === b) {
+    return true;
+  }
+  if (esNumeroSucursalVacio(a) && esNumeroSucursalVacio(b)) {
+    return true;
+  }
+  return false;
+}
+
+/** Coincidencia de calle entre el texto del cliente y la columna CALLE del padrón. */
+function calleSucursalCoincideConPadron(calleUser: string, callePadron: string): boolean {
+  const u = normalizarNombreCorreo(calleUser);
+  const p = normalizarNombreCorreo(callePadron);
+  if (!u) {
+    return false;
+  }
+  if (!p) {
+    return false;
+  }
+  if (u === p) {
+    return true;
+  }
+  if (p.includes(u) || u.includes(p)) {
+    return true;
+  }
+  const uWords = u.split(' ').filter((w) => w.length > 2);
+  for (const w of uWords) {
+    if (p.includes(w)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Sucursal: primero restringe por localidad+provincia; si hay más de una oficina, exige
+ * que calle y número del campo dirección coincidan con el padrón (misma lógica que "correo arg auto" pero priorizando localidad).
+ * Domicilio: no aplica; devolvemos null.
  */
 export function buscarSucursalSmart(
   input: SucursalSmartInput,
   sucursales: SucursalMiCorreo[],
 ): SucursalMiCorreo | null {
-  const provinciaNorm = normalizarNombreCorreo(input.provincia);
-  const direccion = (input.direccion || '').trim();
-  const partes = direccion ? direccion.split(/\s+/).filter(Boolean) : [];
-  let numero = '';
-  let calle = '';
-  if (direccion) {
-    if (partes.length > 1 && /^\d+$/.test(partes[partes.length - 1]!)) {
-      numero = partes[partes.length - 1]!;
-      calle = partes.slice(0, -1).join(' ');
-    } else {
-      calle = direccion;
-    }
-  }
-  const calleNorm = normalizarNombreCorreo(calle);
-  const numeroNorm = numero.trim();
-
-  if (input.tipoEnvio === 'sucursal' && calleNorm && numeroNorm) {
-    const coincidencias: SucursalMiCorreo[] = [];
-    for (const s of sucursales) {
-      if (normalizarNombreCorreo(s.provincia) === provinciaNorm) {
-        const sCalle = normalizarNombreCorreo(s.calle);
-        if (calleNorm.length && sCalle.includes(calleNorm)) {
-          const numSuc = s.numero.trim();
-          if (
-            numeroNorm === numSuc ||
-            ((numeroNorm === '0' || !numeroNorm) && (numSuc === '0' || !numSuc))
-          ) {
-            coincidencias.push(s);
-          }
-        }
-      }
-    }
-    if (coincidencias.length) {
-      return coincidencias[0]!;
-    }
+  if (input.tipoEnvio !== 'sucursal') {
+    return null;
   }
 
-  const localidad = input.localidad;
-  const localidadNorm = normalizarNombreCorreo(localidad);
-  const porLoc: SucursalMiCorreo[] = [];
-  for (const s of sucursales) {
-    if (
-      normalizarNombreCorreo(s.provincia) === provinciaNorm &&
-      normalizarNombreCorreo(s.localidad) === localidadNorm
-    ) {
-      porLoc.push(s);
-    }
+  const locN = normalizarNombreCorreo(input.localidad);
+  const provN = normalizarNombreCorreo(input.provincia);
+  if (!provN) {
+    return null;
   }
-  if (porLoc.length) {
-    return porLoc[0]!;
+
+  const { calle, numero } = parseCalleNumeroSucursal(input.direccion);
+  const calleN = normalizarNombreCorreo(calle);
+  const numT = (numero || '').trim();
+
+  const enLocalidadYProv = locN
+    ? sucursales.filter(
+        (s) =>
+          normalizarNombreCorreo(s.provincia) === provN && normalizarNombreCorreo(s.localidad) === locN,
+      )
+    : [];
+
+  if (enLocalidadYProv.length === 1) {
+    return enLocalidadYProv[0]!;
+  }
+
+  if (enLocalidadYProv.length > 1) {
+    if (!calleN) {
+      return null;
+    }
+    const filtradas = enLocalidadYProv.filter(
+      (s) => calleSucursalCoincideConPadron(calle, s.calle) && numerosSucursalCoinciden(numT, s.numero),
+    );
+    if (filtradas.length === 1) {
+      return filtradas[0]!;
+    }
+    return null;
+  }
+
+  const enProvSolo = sucursales.filter((s) => normalizarNombreCorreo(s.provincia) === provN);
+  if (calleN) {
+    const m2 = enProvSolo.filter(
+      (s) => calleSucursalCoincideConPadron(calle, s.calle) && numerosSucursalCoinciden(numT, s.numero),
+    );
+    if (m2.length === 1) {
+      return m2[0]!;
+    }
   }
   return null;
 }
