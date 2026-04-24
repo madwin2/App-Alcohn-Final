@@ -79,7 +79,6 @@ export type CorreoAddressInput = {
   email: string;
   telefono: string;
   tipoEnvio: 'Domicilio' | 'Sucursal';
-  numeroOrden: string;
 };
 
 /**
@@ -188,7 +187,7 @@ export const createCorreoCsvRow = (
     '',
     area,
     sanitizeCsvValue(phoneNumber),
-    sanitizeCsvValue(input.numeroOrden),
+    '',
   ];
 
   return { ok: true, row: row.map((cell) => sanitizeCsvValue(String(cell))) };

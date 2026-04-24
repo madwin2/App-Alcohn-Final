@@ -176,6 +176,8 @@ export default function EnviosPage() {
       const dbOrderById = new Map((dbOrders ?? []).map((order) => [order.id, order]));
 
       const rows: string[][] = [];
+      /** Ids de órdenes cuya fila salió en el CSV (el campo `numero_orden` no se rellena, no se puede deducir del archivo). */
+      const exportedOrderIdsInOrder: string[] = [];
       const skipped: Array<{ orderId: string; reason: string }> = [];
 
       for (const order of csvOrders) {
@@ -197,7 +199,6 @@ export default function EnviosPage() {
           email: customerById.get(order.customer.id)?.mail || order.customer.email || '',
           telefono: address.telefono || order.customer.phoneE164 || '',
           tipoEnvio: isSucursal ? 'Sucursal' : 'Domicilio',
-          numeroOrden: order.id,
         });
 
         if (!csvRow.ok) {
@@ -206,6 +207,7 @@ export default function EnviosPage() {
         }
 
         rows.push(csvRow.row);
+        exportedOrderIdsInOrder.push(order.id);
       }
 
       if (!rows.length) {
@@ -232,8 +234,8 @@ export default function EnviosPage() {
       link.click();
       URL.revokeObjectURL(url);
 
-      const exportedOrderIds = new Set(rows.map((row) => row[row.length - 1]));
-      const exportedOrders = csvOrders.filter((order) => exportedOrderIds.has(order.id));
+      const exportedIdSet = new Set(exportedOrderIdsInOrder);
+      const exportedOrders = csvOrders.filter((order) => exportedIdSet.has(order.id));
 
       for (const order of exportedOrders) {
         await updateOrder(order.id, {
