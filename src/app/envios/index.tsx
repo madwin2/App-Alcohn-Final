@@ -210,9 +210,12 @@ export default function EnviosPage() {
 
       if (!rows.length) {
         setLastCsvSkipped(skipped);
+        const primerMotivo = skipped[0]
+          ? `${skipped[0].orderId.slice(0, 8)}…: ${skipped[0].reason}`
+          : 'No hay filas exportables (revisar provincia, calle, sucursal o padrón CSV en el deploy).';
         toast({
           title: 'No se pudo generar el CSV',
-          description: 'No hay órdenes con datos suficientes de dirección/provincia para exportar.',
+          description: `${primerMotivo}${skipped.length > 1 ? ` (+${skipped.length - 1} más en el listado de abajo)` : ''}`,
           variant: 'destructive',
         });
         return;

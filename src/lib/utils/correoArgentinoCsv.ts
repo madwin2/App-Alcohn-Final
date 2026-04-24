@@ -1,9 +1,10 @@
 import { canonicalizeProvince, normalizeLocality, normalizePhoneDigits } from './shippingNormalization';
-
-// Importante para deploy (Vercel): no depender de archivos fuera de `src`/`public`.
-// Si se quiere cargar un padrón completo de sucursales, puede inyectarse por variable
-// de entorno en build: VITE_CORREO_SUCURSALES_CSV.
-const sucursalesRawCsv = (import.meta.env.VITE_CORREO_SUCURSALES_CSV as string | undefined) ?? '';
+import {
+  buscarSucursal,
+  buscarSucursalSmart,
+  getSucursalesPadron,
+  obtenerCodigoProvincia,
+} from './correoSucursalesPadron';
 
 export const CSV_FIELDS = [
   'tipo_producto(obligatorio)',
@@ -38,53 +39,6 @@ export const DEFAULT_VALUES = {
   valor_del_contenido: '40000',
 };
 
-const PROVINCE_CODES: Record<string, string> = {
-  SALTA: 'A',
-  'BUENOS AIRES': 'B',
-  'CAPITAL FEDERAL': 'C',
-  'SAN LUIS': 'D',
-  'ENTRE RIOS': 'E',
-  'LA RIOJA': 'F',
-  'SANTIAGO DEL ESTERO': 'G',
-  CHACO: 'H',
-  'SAN JUAN': 'J',
-  CATAMARCA: 'K',
-  'LA PAMPA': 'L',
-  MENDOZA: 'M',
-  MISIONES: 'N',
-  FORMOSA: 'P',
-  NEUQUEN: 'Q',
-  'RIO NEGRO': 'R',
-  'SANTA FE': 'S',
-  TUCUMAN: 'T',
-  CHUBUT: 'U',
-  'TIERRA DEL FUEGO': 'V',
-  CORRIENTES: 'W',
-  CORDOBA: 'X',
-  JUJUY: 'Y',
-  'SANTA CRUZ': 'Z',
-};
-
-type Sucursal = {
-  codigo: string;
-  calle: string;
-  numero: string;
-  localidad: string;
-  provincia: string;
-};
-
-export type CorreoAddressInput = {
-  provincia: string;
-  localidad: string;
-  domicilio: string;
-  codigoPostal: string;
-  nombreCompleto: string;
-  email: string;
-  telefono: string;
-  tipoEnvio: 'Domicilio' | 'Sucursal';
-  numeroOrden: string;
-};
-
 export const normalizeString = (value: string): string =>
   value
     .normalize('NFD')
@@ -106,7 +60,7 @@ const splitStreetAndNumber = (address: string): { street: string; number: string
   const cleaned = sanitizeCsvValue(address);
   const match = cleaned.match(/^(.*?)(\d+)\s*$/);
   if (!match) return { street: cleaned, number: '' };
-  return { street: match[1].trim(), number: match[2].trim() };
+  return { street: match[1]!.trim(), number: match[2]!.trim() };
 };
 
 const splitPhone = (phone: string): { area: string; number: string } => {
@@ -116,121 +70,101 @@ const splitPhone = (phone: string): { area: string; number: string } => {
   return { area: digits.slice(0, 3), number: digits.slice(3) };
 };
 
-const parseSucursales = (): Sucursal[] => {
-  if (!sucursalesRawCsv.trim()) return [];
-  const lines = sucursalesRawCsv.split(/\r?\n/).filter(Boolean);
-  return lines.slice(1).map((line) => {
-    const parts = line.split(',');
-    return {
-      codigo: (parts[0] || '').trim(),
-      calle: (parts[1] || '').trim(),
-      numero: (parts[2] || '').trim(),
-      localidad: (parts[3] || '').trim(),
-      provincia: (parts[4] || '').trim(),
-    };
-  });
+export type CorreoAddressInput = {
+  provincia: string;
+  localidad: string;
+  domicilio: string;
+  codigoPostal: string;
+  nombreCompleto: string;
+  email: string;
+  telefono: string;
+  tipoEnvio: 'Domicilio' | 'Sucursal';
+  numeroOrden: string;
 };
 
-const SUCURSALES = parseSucursales();
-
-const buscarSucursal = (localidad: string, provincia: string): Sucursal | null => {
-  const localidadNorm = normalizeString(localidad);
-  const provinciaNorm = normalizeString(provincia);
-
-  const exact = SUCURSALES.find(
-    (s) => normalizeString(s.localidad) === localidadNorm && normalizeString(s.provincia) === provinciaNorm,
-  );
-  if (exact) return exact;
-
-  const fallback = SUCURSALES.find((s) => normalizeString(s.localidad) === localidadNorm);
-  return fallback || null;
-};
-
-const buscarSucursalSmart = (input: CorreoAddressInput): Sucursal | null => {
-  const provinciaNorm = normalizeString(input.provincia);
-  const { street, number } = splitStreetAndNumber(input.domicilio);
-  const streetNorm = normalizeString(street);
-
-  if (input.tipoEnvio === 'Sucursal' && streetNorm && number) {
-    const byStreet = SUCURSALES.find((s) => {
-      const sameProvince = normalizeString(s.provincia) === provinciaNorm;
-      const streetMatches = normalizeString(s.calle).includes(streetNorm);
-      const numberMatches = sanitizeCsvValue(s.numero) === number;
-      return sameProvince && streetMatches && numberMatches;
-    });
-    if (byStreet) return byStreet;
-  }
-
-  return buscarSucursal(input.localidad, input.provincia);
-};
-
-const buscarProvinciaPorLocalidad = (localidad: string): string => {
-  const locNorm = normalizeString(localidad);
-  const found = SUCURSALES.find((s) => normalizeString(s.localidad) === locNorm);
-  return found?.provincia || '';
-};
-
-const buscarProvinciaPorCodigoPostal = (codigoPostal: string): string => {
-  const cp = sanitizeCsvValue(codigoPostal);
-  if (!cp) return '';
-
-  // El archivo de sucursales no trae CP explícito en columnas separadas.
-  // Como fallback leve, buscamos coincidencias textuales.
-  const found = SUCURSALES.find(
-    (s) =>
-      s.localidad.includes(cp) ||
-      s.calle.includes(cp) ||
-      sanitizeCsvValue(s.numero) === cp,
-  );
-  return found?.provincia || '';
-};
-
+/**
+ * Fila de plantilla Masiva Correo (mismos criterios que "correo arg auto" + padrón MiCorreo embebido).
+ */
 export const createCorreoCsvRow = (
   input: CorreoAddressInput,
-): { row: string[]; ok: true } | { ok: false; reason: string } => {
-  const canonicalProvince = canonicalizeProvince(input.provincia);
-  const locality = normalizeLocality(input.localidad);
-  const phone = normalizePhoneDigits(input.telefono);
-  const directProvinceCode = PROVINCE_CODES[normalizeString(canonicalProvince)] || '';
-  const sucursal = buscarSucursalSmart(input);
-  const provinceFromLocalidad = locality ? buscarProvinciaPorLocalidad(locality) : '';
-  const provinceFromCp = input.codigoPostal ? buscarProvinciaPorCodigoPostal(input.codigoPostal) : '';
-  const inferredProvince =
-    (directProvinceCode && canonicalProvince) ||
-    sucursal?.provincia ||
-    provinceFromLocalidad ||
-    provinceFromCp ||
-    '';
-  const inferredProvinceCode = PROVINCE_CODES[normalizeString(inferredProvince)] || '';
-
-  if (!inferredProvinceCode) {
+):
+  | { row: string[]; ok: true }
+  | { ok: false; reason: string } => {
+  const SUC = getSucursalesPadron();
+  if (!SUC.length) {
     return {
       ok: false,
       reason:
-        'No se pudo mapear provincia/código. Revisar provincia, localidad o código postal de la dirección.',
+        'Padrón de sucursales vacío. Incluimos `src/lib/data/sucursales_micorreo.csv` en el build; si hace falta otro, usá VITE_CORREO_SUCURSALES_CSV.',
     };
   }
 
-  const { street, number } = splitStreetAndNumber(input.domicilio);
+  const locality = normalizeLocality(input.localidad);
+  const phone = normalizePhoneDigits(input.telefono);
   const { area, number: phoneNumber } = splitPhone(phone);
   const cleanedName = sanitizeCsvValue(input.nombreCompleto);
   const cleanedEmail = sanitizeCsvValue(input.email);
   const cleanedLocality = sanitizeCsvValue(locality);
   const cleanedPostalCode = sanitizeCsvValue(input.codigoPostal);
+  const { street, number } = splitStreetAndNumber(input.domicilio);
+  const streetForCsv = sanitizeCsvValue(street);
+  const isSucursal = input.tipoEnvio === 'Sucursal';
 
-  const sucursalCode = input.tipoEnvio === 'Sucursal' ? sanitizeCsvValue(sucursal?.codigo || '') : '';
-  if (input.tipoEnvio === 'Sucursal' && !sucursalCode) {
+  let letraProvincia = '';
+  let sucursalCode = '';
+  const domicilioRaw = (input.domicilio || '').trim();
+
+  if (isSucursal) {
+    const smart = buscarSucursalSmart(
+      {
+        tipoEnvio: 'sucursal',
+        provincia: input.provincia,
+        localidad: locality,
+        direccion: domicilioRaw,
+      },
+      SUC,
+    );
+    if (!smart) {
+      return {
+        ok: false,
+        reason:
+          'Sucursal: no hay coincidencia en el padrón MiCorreo. Revisá provincia, localidad de la sucursal, y en domicilio la calle y número que figuran en el padrón (o dejá solo la ciudad).',
+      };
+    }
+    letraProvincia = obtenerCodigoProvincia(smart.provincia);
+    sucursalCode = sanitizeCsvValue(smart.codigo);
+    if (!sucursalCode) {
+      return { ok: false, reason: 'Sucursal encontrada en padrón pero sin código.' };
+    }
+  } else {
+    const dePadron = buscarSucursal(locality, input.provincia, SUC);
+    const provCanon = canonicalizeProvince(input.provincia);
+    const provFuente = dePadron
+      ? dePadron.provincia
+      : provCanon || (input.provincia || '').trim();
+    letraProvincia = obtenerCodigoProvincia(provFuente);
+    if (!letraProvincia && provCanon) {
+      letraProvincia = obtenerCodigoProvincia(provCanon);
+    }
+  }
+
+  if (!letraProvincia) {
     return {
       ok: false,
-      reason: 'Envío a sucursal sin sucursal válida encontrada (calle/número/localidad/provincia).',
+      reason:
+        'No se pudo obtener el código de letra de provincia. Revisá el nombre de provincia en el domicilio guardado.',
     };
   }
 
-  if (input.tipoEnvio === 'Domicilio' && (!cleanedLocality || !sanitizeCsvValue(street))) {
+  if (!isSucursal && (!cleanedLocality || !streetForCsv)) {
     return {
       ok: false,
-      reason: 'Envío a domicilio incompleto: falta localidad o calle.',
+      reason: 'Domicilio incompleto: faltan localidad o calle (con número al final o en el texto).',
     };
+  }
+
+  if (isSucursal && !sucursalCode) {
+    return { ok: false, reason: 'Sucursal sin código en padrón.' };
   }
 
   const row = [
@@ -240,14 +174,14 @@ export const createCorreoCsvRow = (
     DEFAULT_VALUES.altura,
     DEFAULT_VALUES.peso,
     DEFAULT_VALUES.valor_del_contenido,
-    inferredProvinceCode,
-    sucursalCode,
-    input.tipoEnvio === 'Sucursal' ? '' : cleanedLocality,
-    input.tipoEnvio === 'Sucursal' ? '' : sanitizeCsvValue(street),
-    input.tipoEnvio === 'Sucursal' ? '' : sanitizeCsvValue(number),
+    letraProvincia,
+    isSucursal ? sucursalCode : '',
+    isSucursal ? '' : cleanedLocality,
+    isSucursal ? '' : streetForCsv,
+    isSucursal ? '' : sanitizeCsvValue(number),
     '',
     '',
-    input.tipoEnvio === 'Sucursal' ? '' : cleanedPostalCode,
+    isSucursal ? '' : cleanedPostalCode,
     cleanedName,
     cleanedEmail,
     '',
@@ -257,5 +191,5 @@ export const createCorreoCsvRow = (
     sanitizeCsvValue(input.numeroOrden),
   ];
 
-  return { ok: true, row: row.map((cell) => sanitizeCsvValue(cell)) };
+  return { ok: true, row: row.map((cell) => sanitizeCsvValue(String(cell))) };
 };

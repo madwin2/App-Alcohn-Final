@@ -85,8 +85,13 @@ const LOCALITY_ABBREVIATIONS: Record<string, string> = {
 };
 
 export const canonicalizeProvince = (value: string): string => {
+  if (!value?.trim()) return '';
   const normalized = normalize(value);
-  return PROVINCE_ALIASES[normalized] || '';
+  if (PROVINCE_ALIASES[normalized]) return PROVINCE_ALIASES[normalized];
+  for (const p of PROVINCES) {
+    if (normalize(p) === normalized) return p;
+  }
+  return '';
 };
 
 export const normalizeLocality = (value: string): string => {
