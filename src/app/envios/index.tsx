@@ -210,7 +210,21 @@ export default function EnviosPage() {
         exportedOrderIdsInOrder.push(order.id);
       }
 
+      const skippedIdSet = new Set(skipped.map((entry) => entry.orderId));
+      const skippedOrders = csvOrders.filter((order) => skippedIdSet.has(order.id));
+
+      // Si una orden no pudo generar etiqueta, queda marcada para rehacerla.
+      for (const order of skippedOrders) {
+        await updateOrder(order.id, {
+          items: order.items.map((item) => ({
+            id: item.id,
+            shippingState: 'HACER_ETIQUETA',
+          })) as any,
+        });
+      }
+
       if (!rows.length) {
+        await fetchOrders();
         setLastCsvSkipped(skipped);
         const primerMotivo = skipped[0]
           ? `${skipped[0].orderId.slice(0, 8)}…: ${skipped[0].reason}`
@@ -437,8 +451,12 @@ export default function EnviosPage() {
     const availablePreview =
       item?.files?.baseUrl || item?.files?.vectorPreviewUrl || item?.files?.vectorUrl;
     const isSucursal = order.shipping.service === 'SUCURSAL';
-    const esEtiquetaLista = order.items[0]?.shippingState === 'ETIQUETA_LISTA';
-    const visualEtiquetaLista = getShippingChipVisual('ETIQUETA_LISTA');
+    const shippingState = order.items[0]?.shippingState;
+    const showShippingChip =
+      shippingState === 'HACER_ETIQUETA' || shippingState === 'ETIQUETA_LISTA';
+    const shippingChipVisual = showShippingChip
+      ? getShippingChipVisual(shippingState)
+      : null;
 
     return (
       <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
@@ -477,20 +495,20 @@ export default function EnviosPage() {
                 Sucursal
               </Button>
             </div>
-            {esEtiquetaLista ? (
+            {showShippingChip && shippingChipVisual ? (
               <span
-                className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${visualEtiquetaLista.textClass}`}
+                className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${shippingChipVisual.textClass}`}
                 style={{
-                  backgroundImage: visualEtiquetaLista.backgroundImage,
-                  backgroundColor: visualEtiquetaLista.backgroundColor,
-                  boxShadow: visualEtiquetaLista.boxShadow,
-                  borderColor: visualEtiquetaLista.borderColor,
+                  backgroundImage: shippingChipVisual.backgroundImage,
+                  backgroundColor: shippingChipVisual.backgroundColor,
+                  boxShadow: shippingChipVisual.boxShadow,
+                  borderColor: shippingChipVisual.borderColor,
                   backdropFilter: 'saturate(140%) blur(3px)',
-                  color: visualEtiquetaLista.textColor,
-                  minWidth: visualEtiquetaLista.width,
+                  color: shippingChipVisual.textColor,
+                  minWidth: shippingChipVisual.width,
                 }}
               >
-                {getShippingLabel('ETIQUETA_LISTA')}
+                {getShippingLabel(shippingState)}
               </span>
             ) : null}
           </div>
