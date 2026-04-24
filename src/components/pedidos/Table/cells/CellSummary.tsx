@@ -42,9 +42,19 @@ export function CellSummary({ order, columnId }: CellSummaryProps) {
       );
     
     case 'tipo':
+      const firstItem = order.items[0];
+      const itemTypeLabel = firstItem?.itemType === 'ABECEDARIO'
+        ? 'Abecedario'
+        : firstItem?.itemType === 'SOLDADOR'
+        ? 'Soldador'
+        : firstItem?.itemType === 'MANGO_GOLPE'
+        ? 'Mango de Golpe'
+        : firstItem?.itemType === 'BASE_REMACHADORA'
+        ? 'Base Remachadora'
+        : firstItem?.stampType || 'Sello';
       return (
         <span className="text-xs text-muted-foreground">
-          {totalItems > 1 ? 'Múltiple' : order.items[0]?.stampType || '—'}
+          {totalItems > 1 ? 'Múltiple' : itemTypeLabel}
         </span>
       );
     

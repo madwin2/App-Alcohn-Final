@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { NewOrderFormData, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, ShippingOption, StampType } from '@/lib/types/index';
+import { NewOrderFormData, FabricationState, ShippingCarrier, ShippingServiceDest, ShippingOption, StampType, ItemType, SoldadorPower, AbecedarioCase } from '@/lib/types/index';
 import { useState, useEffect, useRef } from 'react';
 import { Upload, X } from 'lucide-react';
 import { findCustomerByPhone } from '@/lib/supabase/services/orders.service';
@@ -27,10 +27,16 @@ const customerSchema = z.object({
 // Schema para el paso 2 (Información del pedido)
 const orderSchema = z.object({
   order: z.object({
+    itemType: z.enum(['SELLO', 'ABECEDARIO', 'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA']),
     designName: z.string().min(1, 'El nombre del diseño es requerido'),
     requestedWidthMm: z.number().min(1, 'La medida debe ser mayor a 0'),
     requestedHeightMm: z.number().min(1, 'La medida debe ser mayor a 0').optional(),
     stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
+    soldadorPower: z.enum(['100W', '200W']).optional(),
+    abecedarioTipografia: z.string().optional(),
+    abecedarioAlturaMm: z.number().optional(),
+    abecedarioCase: z.enum(['MAYUSCULA', 'MINUSCULA', 'AMBAS']).optional(),
+    abecedarioExtraLetters: z.string().optional(),
     notes: z.string().optional(),
   }),
   values: z.object({
@@ -77,6 +83,25 @@ const stampTypeOptions = [
   { value: 'CLASICO', label: 'Clásico' },
   { value: 'ABC', label: 'ABC' },
   { value: 'LACRE', label: 'Lacre' },
+];
+
+const itemTypeOptions: { value: ItemType; label: string }[] = [
+  { value: 'SELLO', label: 'Sello' },
+  { value: 'ABECEDARIO', label: 'Abecedario' },
+  { value: 'SOLDADOR', label: 'Soldador Eléctrico' },
+  { value: 'MANGO_GOLPE', label: 'Mango de Golpe' },
+  { value: 'BASE_REMACHADORA', label: 'Base para Remachadora' },
+];
+
+const soldadorPowerOptions: { value: SoldadorPower; label: string }[] = [
+  { value: '100W', label: '100W' },
+  { value: '200W', label: '200W' },
+];
+
+const abecedarioCaseOptions: { value: AbecedarioCase; label: string }[] = [
+  { value: 'MAYUSCULA', label: 'Mayúscula' },
+  { value: 'MINUSCULA', label: 'Minúscula' },
+  { value: 'AMBAS', label: 'Ambas' },
 ];
 
 const carrierOptions = [
@@ -205,6 +230,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
     resolver: zodResolver(orderSchema),
     defaultValues: {
       order: {
+        itemType: 'SELLO',
         stampType: 'CLASICO',
         ...initialData.order,
       },
@@ -227,9 +253,25 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   });
 
   const watchedValues = orderForm.watch(['values.totalValue', 'values.depositValue']);
+  const selectedItemType = orderForm.watch('order.itemType');
   const totalValue = watchedValues[0] || 0;
   const depositValue = watchedValues[1] || 0;
   const restante = Math.max(0, totalValue - depositValue);
+
+  useEffect(() => {
+    if (selectedItemType === 'SOLDADOR') {
+      orderForm.setValue('values.totalValue', 75000);
+    } else if (selectedItemType === 'MANGO_GOLPE') {
+      orderForm.setValue('values.totalValue', 25000);
+    } else if (selectedItemType === 'BASE_REMACHADORA') {
+      orderForm.setValue('values.totalValue', 40000);
+    }
+    if (selectedItemType !== 'SELLO') {
+      orderForm.setValue('order.requestedWidthMm', 1);
+      orderForm.setValue('order.requestedHeightMm', 1);
+      orderForm.setValue('order.stampType', 'CLASICO');
+    }
+  }, [selectedItemType, orderForm]);
 
   const handleFileChange = (type: 'base' | 'vector' | 'photo', file: File | undefined) => {
     setFiles(prev => ({ ...prev, [type]: file }));
@@ -259,6 +301,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
       // Limpiar el formulario para el siguiente diseño
       orderForm.reset({
         order: {
+          itemType: 'SELLO',
           stampType: 'CLASICO',
         },
         values: {
@@ -395,6 +438,23 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         <h3 className="text-lg font-medium">Diseño</h3>
         <div className="grid grid-cols-6 gap-4">
           <div className="col-span-2">
+            <Select
+              value={orderForm.watch('order.itemType') || 'SELLO'}
+              onValueChange={(value) => orderForm.setValue('order.itemType', value as ItemType)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Tipo de Ítem" />
+              </SelectTrigger>
+              <SelectContent>
+                {itemTypeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-2">
             <Input
               id="designName"
               placeholder="Nombre del Diseño *"
@@ -429,7 +489,8 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                   orderForm.setValue('order.requestedHeightMm', 0);
                 }
               }}
-              className={orderForm.formState.errors.order?.requestedWidthMm ? 'border-red-500' : ''}
+              className={`${selectedItemType !== 'SELLO' ? 'opacity-60' : ''} ${orderForm.formState.errors.order?.requestedWidthMm ? 'border-red-500' : ''}`}
+              disabled={selectedItemType !== 'SELLO'}
             />
             {orderForm.formState.errors.order?.requestedWidthMm && (
               <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.order.requestedWidthMm.message}</p>
@@ -439,22 +500,84 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             )}
           </div>
           <div className="col-span-2">
-            <Select 
-              value={orderForm.watch('order.stampType') || 'CLASICO'}
-              onValueChange={(value) => orderForm.setValue('order.stampType', value as StampType)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Tipo de Sello" />
-              </SelectTrigger>
-              <SelectContent>
-                {stampTypeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {selectedItemType === 'SELLO' && (
+              <Select 
+                value={orderForm.watch('order.stampType') || 'CLASICO'}
+                onValueChange={(value) => orderForm.setValue('order.stampType', value as StampType)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Tipo de Sello" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stampTypeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {selectedItemType === 'SOLDADOR' && (
+              <Select
+                value={orderForm.watch('order.soldadorPower') || '100W'}
+                onValueChange={(value) => orderForm.setValue('order.soldadorPower', value as SoldadorPower)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Potencia" />
+                </SelectTrigger>
+                <SelectContent>
+                  {soldadorPowerOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {selectedItemType === 'ABECEDARIO' && (
+              <Input
+                placeholder="Tipografía"
+                value={orderForm.watch('order.abecedarioTipografia') || ''}
+                onChange={(e) => orderForm.setValue('order.abecedarioTipografia', e.target.value)}
+              />
+            )}
           </div>
+          {selectedItemType === 'ABECEDARIO' && (
+            <>
+              <div className="col-span-2">
+                <Input
+                  type="number"
+                  placeholder="Altura de letra (mm)"
+                  value={orderForm.watch('order.abecedarioAlturaMm') || ''}
+                  onChange={(e) => orderForm.setValue('order.abecedarioAlturaMm', Number(e.target.value))}
+                />
+              </div>
+              <div className="col-span-2">
+                <Select
+                  value={orderForm.watch('order.abecedarioCase') || 'MAYUSCULA'}
+                  onValueChange={(value) => orderForm.setValue('order.abecedarioCase', value as AbecedarioCase)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Mayús / Minús" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {abecedarioCaseOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <Input
+                  placeholder="Letras extras (opcional)"
+                  value={orderForm.watch('order.abecedarioExtraLetters') || ''}
+                  onChange={(e) => orderForm.setValue('order.abecedarioExtraLetters', e.target.value)}
+                />
+              </div>
+            </>
+          )}
           <div className="col-span-6">
             <Textarea
               id="notes"
@@ -477,6 +600,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
               placeholder="Valor Total *"
               {...orderForm.register('values.totalValue', { valueAsNumber: true })}
               className={orderForm.formState.errors.values?.totalValue ? 'border-red-500' : ''}
+              disabled={selectedItemType === 'SOLDADOR' || selectedItemType === 'MANGO_GOLPE' || selectedItemType === 'BASE_REMACHADORA'}
             />
             {orderForm.formState.errors.values?.totalValue && (
               <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.values.totalValue.message}</p>

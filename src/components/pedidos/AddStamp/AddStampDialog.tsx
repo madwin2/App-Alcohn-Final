@@ -8,15 +8,21 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Order, StampType, FabricationState, SaleState, ShippingState } from '@/lib/types/index';
+import { Order, StampType, FabricationState, SaleState, ShippingState, ItemType, SoldadorPower, AbecedarioCase } from '@/lib/types/index';
 import { useState, useEffect } from 'react';
 import { Upload, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 const addStampSchema = z.object({
+  itemType: z.enum(['SELLO', 'ABECEDARIO', 'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA']),
   designName: z.string().min(1, 'El nombre del diseño es requerido'),
   requestedWidthMm: z.number().min(1, 'La medida debe ser mayor a 0'),
   stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
+  soldadorPower: z.enum(['100W', '200W']).optional(),
+  abecedarioTipografia: z.string().optional(),
+  abecedarioAlturaMm: z.number().optional(),
+  abecedarioCase: z.enum(['MAYUSCULA', 'MINUSCULA', 'AMBAS']).optional(),
+  abecedarioExtraLetters: z.string().optional(),
   notes: z.string().optional(),
   itemValue: z.number().min(0, 'El valor debe ser mayor o igual a 0'),
   depositValueItem: z.number().min(0, 'La seña debe ser mayor o igual a 0'),
@@ -41,6 +47,14 @@ const stampTypeOptions = [
   { value: 'CLASICO', label: 'Clásico' },
   { value: 'ABC', label: 'ABC' },
   { value: 'LACRE', label: 'Lacre' },
+];
+
+const itemTypeOptions: { value: ItemType; label: string }[] = [
+  { value: 'SELLO', label: 'Sello' },
+  { value: 'ABECEDARIO', label: 'Abecedario' },
+  { value: 'SOLDADOR', label: 'Soldador Eléctrico' },
+  { value: 'MANGO_GOLPE', label: 'Mango de Golpe' },
+  { value: 'BASE_REMACHADORA', label: 'Base para Remachadora' },
 ];
 
 const fabricationOptions = [
@@ -80,6 +94,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm<AddStampFormData>({
     resolver: zodResolver(addStampSchema),
     defaultValues: {
+      itemType: 'SELLO',
       stampType: 'CLASICO',
       fabricationState: 'SIN_HACER',
       saleState: 'SEÑADO',
@@ -91,9 +106,24 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
   });
 
   const watchedValues = watch(['itemValue', 'depositValueItem']);
+  const selectedItemType = watch('itemType');
   const itemValue = watchedValues[0] || 0;
   const depositValue = watchedValues[1] || 0;
   const restante = Math.max(0, itemValue - depositValue);
+
+  useEffect(() => {
+    if (selectedItemType === 'SOLDADOR') {
+      setValue('itemValue', 75000);
+    } else if (selectedItemType === 'MANGO_GOLPE') {
+      setValue('itemValue', 25000);
+    } else if (selectedItemType === 'BASE_REMACHADORA') {
+      setValue('itemValue', 40000);
+    }
+    if (selectedItemType !== 'SELLO') {
+      setValue('requestedWidthMm', 1);
+      setValue('stampType', 'CLASICO');
+    }
+  }, [selectedItemType, setValue]);
 
   // Resetear el campo de medida cuando se abre el diálogo
   useEffect(() => {
@@ -127,10 +157,18 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
       const height = match[2] ? parseInt(match[2]) : width; // Si no hay altura, usar el mismo valor
       
       await onAddStamp(order.id, {
+        itemType: data.itemType,
         designName: data.designName,
         requestedWidthMm: width,
         requestedHeightMm: height,
         stampType: data.stampType,
+        itemConfig: {
+          soldadorPower: data.soldadorPower,
+          abecedarioTipografia: data.abecedarioTipografia,
+          abecedarioAlturaMm: data.abecedarioAlturaMm,
+          abecedarioCase: data.abecedarioCase,
+          abecedarioExtraLetters: data.abecedarioExtraLetters,
+        },
         notes: data.notes,
         itemValue: data.itemValue,
         depositValueItem: data.depositValueItem,
@@ -175,7 +213,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-8">
         <DialogHeader className="pb-6">
           <DialogTitle className="text-xl">
-            Agregar Sello al Pedido
+            Agregar Ítem al Pedido
           </DialogTitle>
           <p className="text-sm text-muted-foreground mt-2">
             Cliente: {order.customer.firstName} {order.customer.lastName}
@@ -187,6 +225,21 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Diseño</h3>
             <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label>Tipo de ítem</Label>
+                <Select value={watch('itemType')} onValueChange={(value) => setValue('itemType', value as ItemType)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar tipo de ítem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {itemTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="col-span-2">
                 <Label htmlFor="designName">Nombre del diseño *</Label>
                 <Input
@@ -222,6 +275,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                     }
                   }}
                   className={errors.requestedWidthMm ? 'border-red-500' : ''}
+                  disabled={selectedItemType !== 'SELLO'}
                 />
                 {errors.requestedWidthMm && (
                   <p className="text-xs text-red-500 mt-1">{errors.requestedWidthMm.message}</p>
@@ -231,20 +285,69 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                 )}
               </div>
               <div>
-                <Label htmlFor="stampType">Tipo de sello</Label>
-                <Select onValueChange={(value) => setValue('stampType', value as StampType)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stampTypeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {selectedItemType === 'SELLO' && (
+                  <>
+                    <Label htmlFor="stampType">Tipo de sello</Label>
+                    <Select onValueChange={(value) => setValue('stampType', value as StampType)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stampTypeOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
+                {selectedItemType === 'SOLDADOR' && (
+                  <>
+                    <Label>Potencia</Label>
+                    <Select onValueChange={(value) => setValue('soldadorPower', value as SoldadorPower)} value={watch('soldadorPower') || '100W'}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar potencia" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="100W">100W</SelectItem>
+                        <SelectItem value="200W">200W</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
+                {selectedItemType === 'ABECEDARIO' && (
+                  <>
+                    <Label>Tipografía</Label>
+                    <Input value={watch('abecedarioTipografia') || ''} onChange={(e) => setValue('abecedarioTipografia', e.target.value)} />
+                  </>
+                )}
               </div>
+              {selectedItemType === 'ABECEDARIO' && (
+                <>
+                  <div>
+                    <Label>Altura de letra (mm)</Label>
+                    <Input type="number" value={watch('abecedarioAlturaMm') || ''} onChange={(e) => setValue('abecedarioAlturaMm', Number(e.target.value))} />
+                  </div>
+                  <div>
+                    <Label>Mayús / Minús</Label>
+                    <Select onValueChange={(value) => setValue('abecedarioCase', value as AbecedarioCase)} value={watch('abecedarioCase') || 'MAYUSCULA'}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MAYUSCULA">Mayúscula</SelectItem>
+                        <SelectItem value="MINUSCULA">Minúscula</SelectItem>
+                        <SelectItem value="AMBAS">Ambas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="col-span-2">
+                    <Label>Letras extras</Label>
+                    <Input value={watch('abecedarioExtraLetters') || ''} onChange={(e) => setValue('abecedarioExtraLetters', e.target.value)} />
+                  </div>
+                </>
+              )}
               <div className="col-span-2">
                 <Label htmlFor="notes">Notas</Label>
                 <Textarea
@@ -268,6 +371,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                   type="number"
                   {...register('itemValue', { valueAsNumber: true })}
                   className={errors.itemValue ? 'border-red-500' : ''}
+                  disabled={selectedItemType === 'SOLDADOR' || selectedItemType === 'MANGO_GOLPE' || selectedItemType === 'BASE_REMACHADORA'}
                 />
                 {errors.itemValue && (
                   <p className="text-xs text-red-500 mt-1">{errors.itemValue.message}</p>
@@ -419,7 +523,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
               Cancelar
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Agregando...' : 'Agregar Sello'}
+              {isSubmitting ? 'Agregando...' : 'Agregar Ítem'}
             </Button>
           </div>
         </form>

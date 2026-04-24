@@ -27,6 +27,20 @@ export function CellTipo({ order, onTipoChange }: CellTipoProps) {
     onTipoChange?.(order.id, value as StampType);
   };
 
+  if (item.itemType && item.itemType !== 'SELLO') {
+    return (
+      <span className="text-xs text-muted-foreground">
+        {item.itemType === 'ABECEDARIO'
+          ? 'Abecedario'
+          : item.itemType === 'SOLDADOR'
+          ? 'Soldador'
+          : item.itemType === 'MANGO_GOLPE'
+          ? 'Mango de Golpe'
+          : 'Base Remachadora'}
+      </span>
+    );
+  }
+
   return (
     <Select value={item.stampType} onValueChange={handleValueChange}>
         <SelectTrigger className="w-full h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors">

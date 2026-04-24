@@ -80,6 +80,8 @@ export interface Database {
           tiempo: number | null;
           maquina: 'C' | 'G' | 'XL' | null;
           estado_aspire: 'Aspire G' | 'Aspire G Check' | 'Aspire C' | 'Aspire C Check' | 'Aspire XL' | null;
+          item_type: 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA' | null;
+          item_config: Record<string, any> | null;
           largo_real: number | null;
           ancho_real: number | null;
           created_at: string | null;

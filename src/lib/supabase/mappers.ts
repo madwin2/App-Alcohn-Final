@@ -1,4 +1,4 @@
-import { Order, OrderItem, Customer, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, StampType, ProgressStep, Task } from '../types/index';
+import { Order, OrderItem, Customer, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, StampType, ProgressStep, Task, ItemType } from '../types/index';
 import { Database } from './types';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
@@ -128,6 +128,17 @@ const mapStampType = (tipo: string | null): StampType => {
   return tipo ? (mapping[tipo] || 'CLASICO') : 'CLASICO';
 };
 
+const mapItemType = (itemType: string | null): ItemType => {
+  const mapping: Record<string, ItemType> = {
+    'SELLO': 'SELLO',
+    'ABECEDARIO': 'ABECEDARIO',
+    'SOLDADOR': 'SOLDADOR',
+    'MANGO_GOLPE': 'MANGO_GOLPE',
+    'BASE_REMACHADORA': 'BASE_REMACHADORA',
+  };
+  return itemType ? (mapping[itemType] || 'SELLO') : 'SELLO';
+};
+
 export const mapStampTypeToDB = (tipo: StampType): string => {
   const mapping: Record<StampType, string> = {
     'CLASICO': 'Clasico',
@@ -195,7 +206,9 @@ export const mapSelloToOrderItem = (sello: SelloRow, cliente: ClienteRow): Order
     designName: sello.diseno || 'Sin diseño',
     requestedWidthMm: widthMm,
     requestedHeightMm: heightMm,
+    itemType: mapItemType((sello as any).item_type),
     stampType: mapStampType(sello.tipo),
+    itemConfig: ((sello as any).item_config as Record<string, any> | null) || undefined,
     itemValue: sello.valor ? Number(sello.valor) : 0,
     fabricationState: mapFabricationState(sello.estado_fabricacion),
     // Leer prioridad desde la columna es_prioritario (independiente del estado de fabricación)
@@ -321,7 +334,9 @@ export const mapOrderItemToSello = (
   cliente: ClienteRow
 ) => ({
   orden_id: ordenId,
-  tipo: mapStampTypeToDB(item.stampType) as 'Clasico' | '3mm' | 'Lacre' | 'Alimento' | 'ABC',
+  item_type: item.itemType || 'SELLO',
+  item_config: item.itemConfig || {},
+  tipo: mapStampTypeToDB(item.stampType || 'CLASICO') as 'Clasico' | '3mm' | 'Lacre' | 'Alimento' | 'ABC',
   diseno: item.designName,
   nota: item.notes || null,
   valor: item.itemValue || 0,

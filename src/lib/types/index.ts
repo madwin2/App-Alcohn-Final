@@ -15,6 +15,9 @@ export type ShippingOption =
   | 'NONE';
 export type ShippingOriginMethod = 'RETIRO_EN_ORIGEN' | 'ENTREGA_EN_SUCURSAL';
 export type StampType = '3MM' | 'ALIMENTO' | 'CLASICO' | 'ABC' | 'LACRE';
+export type ItemType = 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA';
+export type SoldadorPower = '100W' | '200W';
+export type AbecedarioCase = 'MAYUSCULA' | 'MINUSCULA' | 'AMBAS';
 export type AspireState = 'Aspire G' | 'Aspire G Check' | 'Aspire C' | 'Aspire C Check' | 'Aspire XL';
 // Claves normalizadas para ordenar/filtrar cuando Aspire y Fabricación comparten columna en UI
 export type AspireSortKey =
@@ -88,7 +91,15 @@ export interface OrderItem {
   designName: string;
   requestedWidthMm: number;
   requestedHeightMm: number;
+  itemType?: ItemType;
   stampType: StampType;
+  itemConfig?: {
+    soldadorPower?: SoldadorPower;
+    abecedarioTipografia?: string;
+    abecedarioAlturaMm?: number;
+    abecedarioCase?: AbecedarioCase;
+    abecedarioExtraLetters?: string;
+  };
   itemValue?: number | null;
   fabricationState: FabricationState;
   isPriority: boolean;
@@ -234,10 +245,16 @@ export interface NewOrderFormData {
     channel: 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'OTRO';
   };
   order: {
+    itemType?: ItemType;
     designName: string;
     requestedWidthMm: number;
     requestedHeightMm: number;
     stampType: StampType;
+    soldadorPower?: SoldadorPower;
+    abecedarioTipografia?: string;
+    abecedarioAlturaMm?: number;
+    abecedarioCase?: AbecedarioCase;
+    abecedarioExtraLetters?: string;
     notes?: string;
   };
   values: {

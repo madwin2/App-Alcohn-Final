@@ -169,7 +169,15 @@ export function NewOrderDialog({
           designName: design.order.designName,
           requestedWidthMm: design.order.requestedWidthMm,
           requestedHeightMm: design.order.requestedHeightMm || design.order.requestedWidthMm, // Usar altura si existe, sino usar el ancho
+          itemType: design.order.itemType || 'SELLO',
           stampType: design.order.stampType,
+          itemConfig: {
+            soldadorPower: design.order.soldadorPower,
+            abecedarioTipografia: design.order.abecedarioTipografia,
+            abecedarioAlturaMm: design.order.abecedarioAlturaMm,
+            abecedarioCase: design.order.abecedarioCase,
+            abecedarioExtraLetters: design.order.abecedarioExtraLetters,
+          },
           notes: design.order.notes,
           itemValue: design.values.totalValue,
           fabricationState: design.states.fabrication,
