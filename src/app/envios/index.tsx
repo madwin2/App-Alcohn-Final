@@ -96,6 +96,7 @@ export default function EnviosPage() {
   const [showParseConfirmation, setShowParseConfirmation] = useState(false);
   const [isSavingShippingData, setIsSavingShippingData] = useState(false);
   const [isParsingWithAi, setIsParsingWithAi] = useState(false);
+  const [isLoadingExistingShippingData, setIsLoadingExistingShippingData] = useState(false);
   const [lastCsvSkipped, setLastCsvSkipped] = useState<Array<{ orderId: string; reason: string }>>([]);
 
   const eligibleOrders = useMemo(() => {
@@ -285,12 +286,48 @@ export default function EnviosPage() {
     }
   };
 
-  const openShippingDialog = (order: Order) => {
+  const openShippingDialog = async (order: Order) => {
     setSelectedOrder(order);
     setShippingTypeDraft(order.shipping.service === 'SUCURSAL' ? 'SUCURSAL' : 'DOMICILIO');
     setRawShippingText('');
-    setShippingForm(emptyForm);
+    setShippingForm({
+      ...emptyForm,
+      fullName: `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim(),
+      email: order.customer.email || '',
+      phone: order.customer.phoneE164 || '',
+    });
     setShowParseConfirmation(false);
+
+    if (!order.direccionId) return;
+
+    setIsLoadingExistingShippingData(true);
+    try {
+      const { data: existingAddress, error: existingAddressError } = await supabase
+        .from('direcciones')
+        .select('provincia,localidad,domicilio,codigo_postal,nombre,apellido,telefono')
+        .eq('id', order.direccionId)
+        .single();
+      if (existingAddressError) throw existingAddressError;
+
+      const fullName = `${existingAddress?.nombre || order.customer.firstName || ''} ${existingAddress?.apellido || order.customer.lastName || ''}`.trim();
+      setShippingForm({
+        fullName,
+        province: canonicalizeProvince(existingAddress?.provincia || '') || (existingAddress?.provincia || ''),
+        locality: normalizeLocality(existingAddress?.localidad || ''),
+        address: existingAddress?.domicilio || '',
+        postalCode: existingAddress?.codigo_postal || '',
+        email: order.customer.email || '',
+        phone: normalizePhoneDigits(existingAddress?.telefono || order.customer.phoneE164 || ''),
+      });
+    } catch (existingAddressLoadError) {
+      toast({
+        title: 'No se pudieron cargar los datos actuales',
+        description: 'Podés editarlos manualmente y volver a guardar.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingExistingShippingData(false);
+    }
   };
 
   const closeShippingDialog = () => {
@@ -653,6 +690,9 @@ export default function EnviosPage() {
               <Button variant="outline" onClick={handleParse} disabled={isParsingWithAi}>
                 {isParsingWithAi ? 'Interpretando...' : 'Interpretar texto'}
               </Button>
+              {isLoadingExistingShippingData ? (
+                <p className="text-xs text-muted-foreground">Cargando datos actuales...</p>
+              ) : null}
             </div>
 
             <div className="space-y-3">
@@ -763,7 +803,9 @@ export default function EnviosPage() {
               Cancelar
             </Button>
             {!showParseConfirmation ? (
-              <Button onClick={() => setShowParseConfirmation(true)}>Continuar con confirmación</Button>
+              <Button onClick={() => setShowParseConfirmation(true)} disabled={isLoadingExistingShippingData}>
+                Continuar con confirmación
+              </Button>
             ) : (
               <Button onClick={handleSaveShippingData} disabled={isSavingShippingData}>
                 {isSavingShippingData ? 'Guardando...' : 'Confirmar y guardar'}
