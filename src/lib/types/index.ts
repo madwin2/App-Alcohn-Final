@@ -65,6 +65,8 @@ export interface Order {
   createdAt?: string | null; // ISO, cuando se creó la orden en el sistema
   takenBy?: { id: string; name: string } | null;
   totalValue: number;
+  fabricationCostTotal?: number | null;
+  fabricationMarginTotal?: number | null;
   depositValueOrder?: number | null;
   restPaidAmountOrder?: number | null;
   saleStateOrder?: SaleState | null;
@@ -101,6 +103,8 @@ export interface OrderItem {
     abecedarioExtraLetters?: string;
   };
   itemValue?: number | null;
+  fabricationCostItem?: number | null;
+  fabricationMarginItem?: number | null;
   fabricationState: FabricationState;
   isPriority: boolean;
   saleState: SaleState;

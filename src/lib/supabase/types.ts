@@ -46,6 +46,8 @@ export interface Database {
           cantidad_sellos: number | null;
           senia_total: number | null;
           valor_total: number | null;
+          costo_fabricacion_total: number | null;
+          margen_fabricacion_total: number | null;
           restante: number | null;
           seguimiento: string | null;
           estado_orden: 'Señado' | 'Hecho' | 'Foto' | 'Transferido' | 'Hacer Etiqueta' | 'Etiqueta Lista' | 'Despachado' | 'Seguimiento Enviado' | null;
@@ -70,6 +72,8 @@ export interface Database {
           diseno: string | null;
           nota: string | null;
           valor: number;
+          costo_fabricacion: number | null;
+          margen_fabricacion: number | null;
           restante: number | null;
           estado_fabricacion: 'Sin Hacer' | 'Haciendo' | 'Hecho' | 'Rehacer' | 'Retocar' | 'Prioridad' | 'Verificar' | null;
           estado_venta: 'Señado' | 'Foto' | 'Transferido' | null;

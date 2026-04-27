@@ -210,6 +210,8 @@ export const mapSelloToOrderItem = (sello: SelloRow, cliente: ClienteRow): Order
     stampType: mapStampType(sello.tipo),
     itemConfig: ((sello as any).item_config as Record<string, any> | null) || undefined,
     itemValue: sello.valor ? Number(sello.valor) : 0,
+    fabricationCostItem: (sello as any).costo_fabricacion != null ? Number((sello as any).costo_fabricacion) : null,
+    fabricationMarginItem: (sello as any).margen_fabricacion != null ? Number((sello as any).margen_fabricacion) : null,
     fabricationState: mapFabricationState(sello.estado_fabricacion),
     // Leer prioridad desde la columna es_prioritario (independiente del estado de fabricación)
     isPriority: (sello as any).es_prioritario === true || (sello as any).es_prioritario === 'true',
@@ -299,6 +301,8 @@ export const mapOrdenToOrder = (
     createdAt: orden.created_at || undefined,
     takenBy: takenBy || null,
     totalValue: orden.valor_total ? Number(orden.valor_total) : 0,
+    fabricationCostTotal: (orden as any).costo_fabricacion_total != null ? Number((orden as any).costo_fabricacion_total) : null,
+    fabricationMarginTotal: (orden as any).margen_fabricacion_total != null ? Number((orden as any).margen_fabricacion_total) : null,
     depositValueOrder: orden.senia_total ? Number(orden.senia_total) : 0,
     restPaidAmountOrder: orden.restante ? Number(orden.restante) : 0,
     saleStateOrder,
