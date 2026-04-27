@@ -4,6 +4,7 @@ import PedidosPage from './app/pedidos/index'
 import ProduccionPage from './app/produccion/index'
 import ProgramasPage from './app/programas/index'
 import EnviosPage from './app/envios/index'
+import EconomiaPage from './app/economia/index'
 import LoginPage from './app/login/index'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -58,6 +59,14 @@ function App() {
           <Route 
             path="/admin/registros"
             element={<Navigate to="/pedidos" replace />}
+          />
+          <Route
+            path="/economia"
+            element={
+              <ProtectedRoute>
+                <EconomiaPage />
+              </ProtectedRoute>
+            }
           />
         </Routes>
       </div>

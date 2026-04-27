@@ -58,6 +58,7 @@ export function Sidebar() {
   };
 
   const userEmail = user?.email || 'usuario@empresa.com';
+  const isEconomiaUser = user?.email?.toLowerCase() === 'julian.475@hotmail.com';
   const userName = user?.user_metadata?.nombre 
     ? `${user.user_metadata.nombre} ${user.user_metadata.apellido || ''}`.trim()
     : 'Usuario Actual';
@@ -118,6 +119,18 @@ export function Sidebar() {
             />
           </div>
         ))}
+        {isEconomiaUser && (
+          <div className="flex justify-start">
+            <SidebarItem
+              icon={Calendar}
+              label="Economía"
+              isActive={location.pathname === '/economia'}
+              isExpanded={isExpanded}
+              disabled={false}
+              onClick={() => navigate('/economia')}
+            />
+          </div>
+        )}
       </nav>
 
       {/* User Profile */}
