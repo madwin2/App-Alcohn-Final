@@ -5,6 +5,7 @@
  */
 
 import sucursalesMiCorreoDefecto from '../data/sucursales_micorreo.csv?raw';
+import { supabase } from '../supabase/client';
 
 const ABREVIACIONES: Array<[string, string]> = [
   ['GRAL.', 'GENERAL'],
@@ -160,6 +161,40 @@ export function parseSucursalesMiCorreoCsvText(raw: string): SucursalMiCorreo[] 
 }
 
 let padronEfectivo: SucursalMiCorreo[] | null = null;
+let supabasePadronChecked = false;
+
+const SUPABASE_PADRON_TABLE = 'correo_sucursales';
+
+const mapSupabasePadronRowToSucursal = (row: any): SucursalMiCorreo => ({
+  codigo: String(row?.codigo || '').trim(),
+  calle: String(row?.calle || '').trim(),
+  numero: String(row?.numero || '').trim(),
+  localidad: String(row?.localidad || '').trim().toUpperCase(),
+  provincia: String(row?.provincia || '').trim().toUpperCase(),
+});
+
+/**
+ * Intenta obtener el padrón desde Supabase.
+ * Si la tabla no existe o falla (permiso/esquema), devuelve [] y se usa fallback local.
+ */
+async function tryLoadPadronFromSupabase(): Promise<SucursalMiCorreo[]> {
+  try {
+    const { data, error } = await supabase
+      .from(SUPABASE_PADRON_TABLE as any)
+      .select('codigo,calle,numero,localidad,provincia')
+      .limit(10000);
+
+    if (error) {
+      console.warn('Padron sucursales: fallback a CSV local (Supabase error):', error.message || error);
+      return [];
+    }
+    const rows = (data || []).map(mapSupabasePadronRowToSucursal).filter((r) => r.codigo && r.provincia);
+    return rows;
+  } catch (error) {
+    console.warn('Padron sucursales: fallback a CSV local (Supabase excepción):', error);
+    return [];
+  }
+}
 
 /** Padrón en memoria: archivo embebido en el bundle o reemplazable por VITE (texto del CSV). */
 export function getSucursalesPadron(): SucursalMiCorreo[] {
@@ -167,6 +202,22 @@ export function getSucursalesPadron(): SucursalMiCorreo[] {
   const raw = envInlineCsv || sucursalesMiCorreoDefecto;
   padronEfectivo = parseSucursalesMiCorreoCsvText(typeof raw === 'string' ? raw : '');
   return padronEfectivo;
+}
+
+/**
+ * Supabase-first: si hay padrón cargado en tabla, lo usa.
+ * Fallback automático al CSV local embebido para no romper flujo.
+ */
+export async function getSucursalesPadronPreferSupabase(): Promise<SucursalMiCorreo[]> {
+  if (!supabasePadronChecked) {
+    supabasePadronChecked = true;
+    const fromDb = await tryLoadPadronFromSupabase();
+    if (fromDb.length > 0) {
+      padronEfectivo = fromDb;
+      return padronEfectivo;
+    }
+  }
+  return getSucursalesPadron();
 }
 
 /**

@@ -2,7 +2,7 @@ import { canonicalizeProvince, normalizeLocality, normalizePhoneDigits } from '.
 import {
   buscarSucursal,
   buscarSucursalSmart,
-  getSucursalesPadron,
+  getSucursalesPadronPreferSupabase,
   obtenerCodigoProvincia,
 } from './correoSucursalesPadron';
 
@@ -84,12 +84,13 @@ export type CorreoAddressInput = {
 /**
  * Fila de plantilla Masiva Correo (mismos criterios que "correo arg auto" + padrón MiCorreo embebido).
  */
-export const createCorreoCsvRow = (
+export const createCorreoCsvRow = async (
   input: CorreoAddressInput,
-):
+): Promise<
   | { row: string[]; ok: true }
-  | { ok: false; reason: string } => {
-  const SUC = getSucursalesPadron();
+  | { ok: false; reason: string }
+> => {
+  const SUC = await getSucursalesPadronPreferSupabase();
   if (!SUC.length) {
     return {
       ok: false,

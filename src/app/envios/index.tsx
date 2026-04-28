@@ -194,7 +194,7 @@ export default function EnviosPage() {
         }
 
         const isSucursal = (order.shipping.service === 'SUCURSAL') || dbOrder.tipo_envio === 'Sucursal';
-        const csvRow = createCorreoCsvRow({
+        const csvRow = await createCorreoCsvRow({
           provincia: address.provincia || '',
           localidad: address.localidad || '',
           domicilio: address.domicilio || '',
