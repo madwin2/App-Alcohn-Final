@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "setup": "node scripts/setup.js"
+    "setup": "node scripts/setup.js",
+    "import:ventas": "node scripts/import-ventas-csv.mjs",
+    "import:ventas:dry": "node scripts/import-ventas-csv.mjs --dry-run"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
