@@ -48,7 +48,7 @@ const DEFAULT_STOCK_ITEMS: Array<{ key: StockItemKey; name: string }> = [
   { key: 'TUBO_125MM', name: 'Tubos 125mm' },
 ];
 
-type MinimalOrderItem = {
+export type MinimalOrderItem = {
   itemType?: string;
   stampType?: string;
   itemConfig?: { soldadorPower?: '100W' | '200W' } | null;
@@ -162,6 +162,60 @@ export const setAssignmentForItem = async (itemKey: StockItemKey, userIds: strin
   if (insError) throw insError;
 };
 
+/** Requisitos de una línea (sello) según el mismo BOM que el consumo al enviar. */
+export const requirementsForOrderItem = (item: MinimalOrderItem): Record<StockItemKey, number> => {
+  const requirements: Record<StockItemKey, number> = {
+    ...BASE_REQUIREMENTS,
+    SOLDADOR_100W: 0,
+    SOLDADOR_200W: 0,
+    SOLDADOR_ADAPTADO_100W: 0,
+    SOLDADOR_ADAPTADO_200W: 0,
+  };
+
+  const itemType = item.itemType ?? 'SELLO';
+  if (itemType === 'ABECEDARIO' || item.stampType === 'ABC') {
+    requirements.TUBO_125MM += 1;
+    requirements.MANGO += 1;
+    requirements.VARILLA += 1;
+    requirements.PRISIONERO += 1;
+    requirements.TUERCA += 1;
+    requirements.SOPORTE_ABECEDARIO += 1;
+    requirements.CAJA_ABECEDARIO += 1;
+    return requirements;
+  }
+
+  if (itemType === 'SOLDADOR') {
+    const power = item.itemConfig?.soldadorPower === '200W' ? '200W' : '100W';
+    if (power === '200W') {
+      requirements.SOLDADOR_ADAPTADO_200W += 1;
+    } else {
+      requirements.SOLDADOR_ADAPTADO_100W += 1;
+    }
+    return requirements;
+  }
+
+  if (itemType === 'MANGO_GOLPE') {
+    requirements.MANGO_GOLPE += 1;
+    return requirements;
+  }
+
+  requirements.TUBO_80MM += 1;
+  requirements.PRISIONERO += 1;
+  requirements.VARILLA += 1;
+  requirements.MANGO += 1;
+  requirements.TUERCA += 1;
+  return requirements;
+};
+
+const addRequirementRecords = (
+  acc: Record<StockItemKey, number>,
+  next: Record<StockItemKey, number>,
+) => {
+  (Object.keys(next) as StockItemKey[]).forEach((key) => {
+    acc[key] = (acc[key] ?? 0) + next[key];
+  });
+};
+
 const calculateRequirements = (items: MinimalOrderItem[]) => {
   const requirements: Record<StockItemKey, number> = {
     ...BASE_REQUIREMENTS,
@@ -172,41 +226,53 @@ const calculateRequirements = (items: MinimalOrderItem[]) => {
   };
 
   for (const item of items) {
-    const itemType = item.itemType ?? 'SELLO';
-    if (itemType === 'ABECEDARIO' || item.stampType === 'ABC') {
-      requirements.TUBO_125MM += 1;
-      requirements.MANGO += 1;
-      requirements.VARILLA += 1;
-      requirements.PRISIONERO += 1;
-      requirements.TUERCA += 1;
-      requirements.SOPORTE_ABECEDARIO += 1;
-      requirements.CAJA_ABECEDARIO += 1;
-      continue;
-    }
-
-    if (itemType === 'SOLDADOR') {
-      const power = item.itemConfig?.soldadorPower === '200W' ? '200W' : '100W';
-      if (power === '200W') {
-        requirements.SOLDADOR_ADAPTADO_200W += 1;
-      } else {
-        requirements.SOLDADOR_ADAPTADO_100W += 1;
-      }
-      continue;
-    }
-
-    if (itemType === 'MANGO_GOLPE') {
-      requirements.MANGO_GOLPE += 1;
-      continue;
-    }
-
-    requirements.TUBO_80MM += 1;
-    requirements.PRISIONERO += 1;
-    requirements.VARILLA += 1;
-    requirements.MANGO += 1;
-    requirements.TUERCA += 1;
+    addRequirementRecords(requirements, requirementsForOrderItem(item));
   }
 
   return requirements;
+};
+
+/** Suma de insumos necesarios para cubrir todos los sellos de órdenes aún no enviadas (seguimiento distinto de «Seguimiento Enviado»). */
+export const getPendingShipmentStockDemand = async (): Promise<Record<StockItemKey, number>> => {
+  const empty: Record<StockItemKey, number> = {
+    ...BASE_REQUIREMENTS,
+    SOLDADOR_100W: 0,
+    SOLDADOR_200W: 0,
+    SOLDADOR_ADAPTADO_100W: 0,
+    SOLDADOR_ADAPTADO_200W: 0,
+  };
+
+  // Incluye NULL: un pedido sin estado_envio cargado sigue contando como pendiente de envío.
+  const { data: pendingOrders, error: ordenesError } = await supabase
+    .from('ordenes')
+    .select('id')
+    .or('estado_envio.is.null,estado_envio.neq.Seguimiento Enviado');
+
+  if (ordenesError) throw ordenesError;
+  const ordenIds = (pendingOrders ?? []).map((r) => r.id);
+  if (!ordenIds.length) return empty;
+
+  const { data: sellosRows, error: sellosError } = await supabase
+    .from('sellos')
+    .select('item_type, tipo, item_config')
+    .in('orden_id', ordenIds);
+
+  if (sellosError) throw sellosError;
+
+  const totals: Record<StockItemKey, number> = {
+    ...empty,
+  };
+
+  for (const row of sellosRows ?? []) {
+    const item: MinimalOrderItem = {
+      itemType: (row as any).item_type ?? 'SELLO',
+      stampType: (row as any).tipo === 'ABC' ? 'ABC' : 'CLASICO',
+      itemConfig: ((row as any).item_config as Record<string, unknown> | null) ?? undefined,
+    };
+    addRequirementRecords(totals, requirementsForOrderItem(item));
+  }
+
+  return totals;
 };
 
 const insertMovements = async (movements: StockMovementInsert[]) => {

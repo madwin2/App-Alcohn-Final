@@ -6,10 +6,10 @@ import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { getApprovedUsers } from '@/lib/supabase/services/auth.service';
 import {
+  getPendingShipmentStockDemand,
   getStockAssignments,
   getStockItems,
   setAssignmentForItem,
-  setStockMinQuantity,
   setStockQuantity,
   StockItem,
 } from '@/lib/supabase/services/stock.service';
@@ -17,33 +17,35 @@ import {
 export default function StockPage() {
   const { toast } = useToast();
   const [items, setItems] = useState<StockItem[]>([]);
+  const [pendingDemandByKey, setPendingDemandByKey] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [assignments, setAssignments] = useState<Record<string, string[]>>({});
   const [pendingQty, setPendingQty] = useState<Record<string, string>>({});
-  const [pendingMinQty, setPendingMinQty] = useState<Record<string, string>>({});
 
-  const lowStockItems = useMemo(
-    () => items.filter((item) => item.quantity <= item.minQuantity),
-    [items],
-  );
+  const shortageItems = useMemo(() => {
+    return items.filter((item) => {
+      const needed = pendingDemandByKey[item.itemKey] ?? 0;
+      if (needed <= 0) return false;
+      return item.quantity < needed;
+    });
+  }, [items, pendingDemandByKey]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [stockItems, approvedUsers, assignmentMap] = await Promise.all([
+      const [stockItems, approvedUsers, assignmentMap, demand] = await Promise.all([
         getStockItems(),
         getApprovedUsers(),
         getStockAssignments(),
+        getPendingShipmentStockDemand(),
       ]);
       setItems(stockItems);
       setUsers(approvedUsers);
       setAssignments(assignmentMap);
+      setPendingDemandByKey(demand);
       setPendingQty(
         Object.fromEntries(stockItems.map((item) => [item.id, String(item.quantity)])),
-      );
-      setPendingMinQty(
-        Object.fromEntries(stockItems.map((item) => [item.id, String(item.minQuantity)])),
       );
     } catch (error) {
       toast({
@@ -66,7 +68,6 @@ export default function StockPage() {
   const handleSaveStock = async (item: StockItem) => {
     try {
       await setStockQuantity(item.id, Number(pendingQty[item.id] ?? item.quantity));
-      await setStockMinQuantity(item.id, Number(pendingMinQty[item.id] ?? item.minQuantity));
       await loadData();
       toast({
         title: 'Stock actualizado',
@@ -111,7 +112,8 @@ export default function StockPage() {
         <div className="border-b bg-background p-6">
           <h1 className="text-2xl font-semibold">Stock</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Control de insumos y responsables para alertas automáticas.
+            El mínimo necesario se calcula solo: suma lo que hace falta para los pedidos cuyo envío todavía
+            no está en «Seguimiento enviado» (misma receta que al descontar al enviar).
           </p>
         </div>
 
@@ -119,11 +121,11 @@ export default function StockPage() {
           <div className="rounded-xl border bg-card p-4">
             <p className="text-sm font-medium">Resumen rápido</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Ítems en alerta (stock menor o igual al mínimo): {lowStockItems.length}
+              Ítems con stock por debajo de lo necesario para pendientes: {shortageItems.length}
             </p>
-            {!!lowStockItems.length && (
+            {!!shortageItems.length && (
               <p className="text-xs text-muted-foreground mt-1">
-                {lowStockItems.map((item) => item.itemName).join(' | ')}
+                {shortageItems.map((item) => item.itemName).join(' | ')}
               </p>
             )}
           </div>
@@ -135,7 +137,7 @@ export default function StockPage() {
                   <tr className="text-left">
                     <th className="px-4 py-3">Ítem</th>
                     <th className="px-4 py-3">Stock actual</th>
-                    <th className="px-4 py-3">Mínimo</th>
+                    <th className="px-4 py-3">Necesario (pendientes)</th>
                     <th className="px-4 py-3">Responsables por faltante</th>
                     <th className="px-4 py-3">Acciones</th>
                   </tr>
@@ -149,14 +151,15 @@ export default function StockPage() {
                     </tr>
                   ) : (
                     items.map((item) => {
-                      const isLow = item.quantity <= item.minQuantity;
+                      const needed = pendingDemandByKey[item.itemKey] ?? 0;
+                      const isShort = needed > 0 && item.quantity < needed;
                       const selectedUsers = assignments[item.itemKey] ?? [];
                       return (
                         <tr key={item.id} className="border-b last:border-b-0">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span>{item.itemName}</span>
-                              {isLow ? (
+                              {isShort ? (
                                 <span className="text-xs rounded-full border border-red-400/40 text-red-500 px-2 py-0.5">
                                   Bajo
                                 </span>
@@ -173,15 +176,8 @@ export default function StockPage() {
                               }
                             />
                           </td>
-                          <td className="px-4 py-3 w-36">
-                            <Input
-                              type="number"
-                              min={0}
-                              value={pendingMinQty[item.id] ?? ''}
-                              onChange={(event) =>
-                                setPendingMinQty((prev) => ({ ...prev, [item.id]: event.target.value }))
-                              }
-                            />
+                          <td className="px-4 py-3 w-36 tabular-nums text-muted-foreground">
+                            {needed}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap gap-2">
