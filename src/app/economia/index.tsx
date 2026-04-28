@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -15,8 +16,16 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  createEconomiaMovimientoReal,
+  deleteEconomiaMovimientoReal,
+  fetchEconomiaMovimientosReales,
+  type RealMovement,
+  type RealMovementType,
+} from '@/lib/supabase/services/economiaMovimientos.service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
+import { useToast } from '@/components/ui/use-toast';
 import type { Order, OrderItem } from '@/lib/types';
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
@@ -67,6 +76,12 @@ const pendingLabel = (state: string) => {
   if (state === 'DEUDOR') return 'Deudor';
   if (state === 'FOTO_ENVIADA') return 'Foto enviada';
   return 'Señado';
+};
+
+const movementTypeLabel = (type: RealMovementType) => {
+  if (type === 'USD_PURCHASE') return 'Compra de USD (ahorro)';
+  if (type === 'INV_EMPRESA') return 'Inversión empresa';
+  return 'Inversión Cyprea';
 };
 
 const itemTypeOf = (item: OrderItem): 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA' => {
@@ -179,8 +194,17 @@ function PendingPieChart({
 export default function EconomiaPage() {
   const { user, loading: authLoading } = useAuth();
   const { orders, loading } = useOrders();
+  const { toast } = useToast();
   const [fixedMonthlyCost, setFixedMonthlyCost] = useState(0);
   const [usdRate, setUsdRate] = useState(1200);
+  const [realMovements, setRealMovements] = useState<RealMovement[]>([]);
+  const [movementsLoading, setMovementsLoading] = useState(false);
+
+  const [movementDate, setMovementDate] = useState(new Date().toISOString().split('T')[0]);
+  const [usdAmount, setUsdAmount] = useState(0);
+  const [usdBuyRate, setUsdBuyRate] = useState(usdRate);
+  const [invEmpresaArs, setInvEmpresaArs] = useState(0);
+  const [invCypreaArs, setInvCypreaArs] = useState(0);
 
   useEffect(() => {
     const fixedRaw = localStorage.getItem(STORAGE_KEY_FIXED);
@@ -198,6 +222,31 @@ export default function EconomiaPage() {
   }, [usdRate]);
 
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
+
+  useEffect(() => {
+    if (authLoading || !isAllowed) return;
+    let cancelled = false;
+    (async () => {
+      setMovementsLoading(true);
+      try {
+        const rows = await fetchEconomiaMovimientosReales();
+        if (!cancelled) setRealMovements(rows);
+      } catch (error) {
+        if (!cancelled) {
+          toast({
+            title: 'No se pudieron cargar los movimientos reales',
+            description: error instanceof Error ? error.message : String(error),
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        if (!cancelled) setMovementsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAllowed, toast]);
 
   const monthly = useMemo<MonthlyRow[]>(() => {
     const byMonth = new Map<string, MonthlyRow>();
@@ -314,6 +363,28 @@ export default function EconomiaPage() {
 
   const ticketPromedio = totals.pedidos > 0 ? totals.ventasBrutas / totals.pedidos : 0;
   const unidadesPromedio = totals.pedidos > 0 ? totals.unidades / totals.pedidos : 0;
+  const realSummary = useMemo(() => {
+    const byType = {
+      USD_PURCHASE: 0,
+      INV_EMPRESA: 0,
+      INV_CYPREA: 0,
+    } satisfies Record<RealMovementType, number>;
+    let usdPurchased = 0;
+    for (const m of realMovements) {
+      byType[m.type] += Number(m.amountArs || 0);
+      if (m.type === 'USD_PURCHASE') usdPurchased += Number(m.amountUsd || 0);
+    }
+    const totalAdjustmentsArs = byType.USD_PURCHASE + byType.INV_EMPRESA + byType.INV_CYPREA;
+    const gananciaRealArs = totals.gananciaPesos - totalAdjustmentsArs;
+    const gananciaRealUsd = usdRate > 0 ? gananciaRealArs / usdRate : 0;
+    return {
+      byType,
+      usdPurchased,
+      totalAdjustmentsArs,
+      gananciaRealArs,
+      gananciaRealUsd,
+    };
+  }, [realMovements, totals.gananciaPesos, usdRate]);
   const pendingBreakdown = useMemo(() => {
     const byState = {
       DEUDOR: { amount: 0, count: 0 },
@@ -353,6 +424,39 @@ export default function EconomiaPage() {
   if (!isAllowed) {
     return <Navigate to="/pedidos" replace />;
   }
+
+  const usdPurchaseArs = usdAmount * usdBuyRate;
+  const addMovement = async (movement: {
+    date: string;
+    type: RealMovementType;
+    amountArs: number;
+    amountUsd?: number;
+    rate?: number;
+  }) => {
+    try {
+      await createEconomiaMovimientoReal(movement);
+      const rows = await fetchEconomiaMovimientosReales();
+      setRealMovements(rows);
+    } catch (error) {
+      toast({
+        title: 'No se pudo guardar el movimiento',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    }
+  };
+  const removeMovement = async (id: string) => {
+    try {
+      await deleteEconomiaMovimientoReal(id);
+      setRealMovements((prev) => prev.filter((m) => m.id !== id));
+    } catch (error) {
+      toast({
+        title: 'No se pudo eliminar el movimiento',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -402,14 +506,181 @@ export default function EconomiaPage() {
               <CardHeader>
                 <CardDescription>Ganancia total</CardDescription>
                 <CardTitle className="text-2xl">{formatArs(totals.gananciaPesos)}</CardTitle>
+                <CardDescription>Real: {formatArs(realSummary.gananciaRealArs)}</CardDescription>
               </CardHeader>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardDescription>Ganancia en USD</CardDescription>
-                <CardTitle className="text-2xl">{formatUsd(totals.gananciaUsd)}</CardTitle>
-              </CardHeader>
-            </Card>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Card className="cursor-pointer transition-colors hover:bg-muted/30">
+                  <CardHeader>
+                    <CardDescription>Ganancia en USD</CardDescription>
+                    <CardTitle className="text-2xl">{formatUsd(totals.gananciaUsd)}</CardTitle>
+                    <CardDescription>Real: {formatUsd(realSummary.gananciaRealUsd)} · click para ajustar</CardDescription>
+                  </CardHeader>
+                </Card>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>Ganancia real (ajustes)</DialogTitle>
+                  <DialogDescription>
+                    Registrá compras de USD e inversiones para pasar de ganancia teórica a ganancia real.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <Card>
+                    <CardContent className="py-4">
+                      <p className="text-xs text-muted-foreground">Ganancia teórica</p>
+                      <p className="text-lg font-semibold">{formatArs(totals.gananciaPesos)}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="py-4">
+                      <p className="text-xs text-muted-foreground">Ajustes acumulados</p>
+                      <p className="text-lg font-semibold">{formatArs(realSummary.totalAdjustmentsArs)}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="py-4">
+                      <p className="text-xs text-muted-foreground">Ganancia real</p>
+                      <p className="text-lg font-semibold">{formatArs(realSummary.gananciaRealArs)}</p>
+                      <p className="text-xs text-muted-foreground">{formatUsd(realSummary.gananciaRealUsd)}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Compra de USD (ahorro)</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-2">
+                      <Label htmlFor="mov-date-usd">Fecha</Label>
+                      <Input id="mov-date-usd" type="date" value={movementDate} onChange={(e) => setMovementDate(e.target.value)} />
+                      <Label htmlFor="mov-usd-amount">USD comprados</Label>
+                      <Input
+                        id="mov-usd-amount"
+                        type="number"
+                        value={usdAmount}
+                        onChange={(e) => setUsdAmount(Number(e.target.value || 0))}
+                      />
+                      <Label htmlFor="mov-usd-rate">Precio por USD (ARS)</Label>
+                      <Input
+                        id="mov-usd-rate"
+                        type="number"
+                        value={usdBuyRate}
+                        onChange={(e) => setUsdBuyRate(Number(e.target.value || 0))}
+                      />
+                      <p className="text-xs text-muted-foreground">Impacto en pesos: {formatArs(usdPurchaseArs)}</p>
+                      <Button
+                        disabled={movementsLoading}
+                        onClick={() => {
+                          if (!movementDate || usdAmount <= 0 || usdBuyRate <= 0) return;
+                          void addMovement({
+                            date: movementDate,
+                            type: 'USD_PURCHASE',
+                            amountUsd: usdAmount,
+                            rate: usdBuyRate,
+                            amountArs: usdPurchaseArs,
+                          });
+                          setUsdAmount(0);
+                        }}
+                      >
+                        {movementsLoading ? 'Guardando...' : 'Agregar compra USD'}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Inversiones</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-2">
+                      <Label htmlFor="mov-date-inv">Fecha</Label>
+                      <Input id="mov-date-inv" type="date" value={movementDate} onChange={(e) => setMovementDate(e.target.value)} />
+                      <Label htmlFor="mov-inv-empresa">Inversión empresa (ARS)</Label>
+                      <Input
+                        id="mov-inv-empresa"
+                        type="number"
+                        value={invEmpresaArs}
+                        onChange={(e) => setInvEmpresaArs(Number(e.target.value || 0))}
+                      />
+                      <Button
+                        variant="outline"
+                        disabled={movementsLoading}
+                        onClick={() => {
+                          if (!movementDate || invEmpresaArs <= 0) return;
+                          void addMovement({
+                            date: movementDate,
+                            type: 'INV_EMPRESA',
+                            amountArs: invEmpresaArs,
+                          });
+                          setInvEmpresaArs(0);
+                        }}
+                      >
+                        {movementsLoading ? 'Guardando...' : 'Agregar inversión empresa'}
+                      </Button>
+                      <Label htmlFor="mov-inv-cyprea">Inversión Cyprea (ARS)</Label>
+                      <Input
+                        id="mov-inv-cyprea"
+                        type="number"
+                        value={invCypreaArs}
+                        onChange={(e) => setInvCypreaArs(Number(e.target.value || 0))}
+                      />
+                      <Button
+                        variant="outline"
+                        disabled={movementsLoading}
+                        onClick={() => {
+                          if (!movementDate || invCypreaArs <= 0) return;
+                          void addMovement({
+                            date: movementDate,
+                            type: 'INV_CYPREA',
+                            amountArs: invCypreaArs,
+                          });
+                          setInvCypreaArs(0);
+                        }}
+                      >
+                        {movementsLoading ? 'Guardando...' : 'Agregar inversión Cyprea'}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Movimientos cargados</CardTitle>
+                    <CardDescription>
+                      USD acumulados: {realSummary.usdPurchased.toFixed(2)} · Ahorro en pesos: {formatArs(realSummary.byType.USD_PURCHASE)}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="max-h-64 overflow-auto">
+                    <div className="flex flex-col gap-2">
+                      {movementsLoading ? (
+                        <p className="text-sm text-muted-foreground">Cargando movimientos...</p>
+                      ) : realMovements.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Todavía no hay movimientos cargados.</p>
+                      ) : (
+                        realMovements.map((m) => (
+                          <div key={m.id} className="flex items-center justify-between rounded border p-2 text-sm">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{movementTypeLabel(m.type)}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {m.date}
+                                {m.type === 'USD_PURCHASE' ? ` · ${m.amountUsd?.toFixed(2)} USD a ${formatArs(m.rate || 0)}` : ''}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{formatArs(m.amountArs)}</span>
+                              <Button variant="ghost" size="sm" disabled={movementsLoading} onClick={() => void removeMovement(m.id)}>
+                                Quitar
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </DialogContent>
+            </Dialog>
             <Dialog>
               <DialogTrigger asChild>
                 <Card className="cursor-pointer transition-colors hover:bg-muted/30">

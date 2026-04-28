@@ -150,6 +150,41 @@ export interface Database {
           note: string | null;
         }>;
       };
+      economia_movimientos_reales: {
+        Row: {
+          id: string;
+          movement_date: string;
+          movement_type: 'USD_PURCHASE' | 'INV_EMPRESA' | 'INV_CYPREA';
+          amount_ars: number;
+          amount_usd: number | null;
+          usd_rate: number | null;
+          note: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          movement_date: string;
+          movement_type: 'USD_PURCHASE' | 'INV_EMPRESA' | 'INV_CYPREA';
+          amount_ars: number;
+          amount_usd?: number | null;
+          usd_rate?: number | null;
+          note?: string | null;
+          created_by?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<{
+          movement_date: string;
+          movement_type: 'USD_PURCHASE' | 'INV_EMPRESA' | 'INV_CYPREA';
+          amount_ars: number;
+          amount_usd: number | null;
+          usd_rate: number | null;
+          note: string | null;
+          updated_at: string;
+        }>;
+      };
     };
   };
 }
