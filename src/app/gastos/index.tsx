@@ -5,58 +5,24 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Toaster } from '@/components/ui/toaster';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
+import {
+  DEFAULT_VARIABLE_COSTS,
+  type VariableCostsState,
+} from '@/lib/gastos/variableCosts';
+import {
+  fetchLatestFabricacionParams,
+  insertFabricacionParamsVersion,
+} from '@/lib/supabase/services/fabricacionParametros.service';
+
+export type { VariableCostsState };
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
 
-/** Misma clave que Economía para que el costo fijo mensual sea único. */
 const STORAGE_KEY_FIXED = 'economia_fixed_monthly_cost_ars';
-
 const STORAGE_VARIABLE = 'gastos_variable_costs_v1';
 const STORAGE_MONTHLY = 'gastos_mensuales_v1';
-
-export type VariableCostsState = {
-  soldador100: number;
-  soldador200: number;
-  baseRemachadora: number;
-  mangoGolpe: number;
-  amortFresa: number;
-  planchuela12: number;
-  planchuela20: number;
-  planchuela25: number;
-  planchuela40: number;
-  planchuela63: number;
-  tubo: number;
-  cajaAbc: number;
-  mangoMadera: number;
-  varilla: number;
-  prisionero: number;
-  soporteAbc: number;
-  abcCmSimple: number;
-  abcCmAmbas: number;
-  selloPerdidaCorteCm: number;
-};
-
-const DEFAULT_VARIABLE: VariableCostsState = {
-  soldador100: 13000,
-  soldador200: 30000,
-  baseRemachadora: 13000,
-  mangoGolpe: 7000,
-  amortFresa: 5600,
-  planchuela12: 375,
-  planchuela20: 530,
-  planchuela25: 690,
-  planchuela40: 1015,
-  planchuela63: 2190,
-  tubo: 1100,
-  cajaAbc: 4000,
-  mangoMadera: 860,
-  varilla: 250,
-  prisionero: 100,
-  soporteAbc: 12000,
-  abcCmSimple: 40,
-  abcCmAmbas: 80,
-  selloPerdidaCorteCm: 0.8,
-};
 
 const MONTHLY_CATEGORIES = [
   { key: 'publicidad', label: 'Publicidad' },
@@ -107,24 +73,44 @@ const currentMonthKey = () => {
 const formatArs = (value: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
 
+function formatEffectiveLabel(iso: string) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return iso;
+  }
+}
+
+/** Convierte valor de input datetime-local a ISO; vacío = undefined (usa ahora al guardar). */
+function localDatetimeToIso(local: string): string | undefined {
+  if (!local.trim()) return undefined;
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
 function NumberField({
   label,
   value,
   onChange,
   hint,
+  disabled,
 }: {
   label: string;
   value: number;
   onChange: (n: number) => void;
   hint?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <input
-        className="w-full bg-background border rounded-md px-3 py-2 text-sm"
+        className="w-full bg-background border rounded-md px-3 py-2 text-sm disabled:opacity-50"
         type="number"
         inputMode="decimal"
+        disabled={disabled}
         value={Number.isFinite(value) ? value : 0}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
       />
@@ -135,25 +121,22 @@ function NumberField({
 
 export default function GastosPage() {
   const { user, loading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [fixedMonthly, setFixedMonthly] = useState(0);
-  const [variable, setVariable] = useState<VariableCostsState>(DEFAULT_VARIABLE);
+  const [variable, setVariable] = useState<VariableCostsState>(DEFAULT_VARIABLE_COSTS);
   const [monthlyByMonth, setMonthlyByMonth] = useState<Record<string, MonthlyExpensesRow>>({});
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
+
+  const [paramsLoading, setParamsLoading] = useState(false);
+  const [paramsSaving, setParamsSaving] = useState(false);
+  const [lastSynced, setLastSynced] = useState<{ effectiveFrom: string; note: string | null } | null>(null);
+  const [vigenteDesdeLocal, setVigenteDesdeLocal] = useState('');
+
+  const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
   useEffect(() => {
     const fixedRaw = localStorage.getItem(STORAGE_KEY_FIXED);
     if (fixedRaw) setFixedMonthly(Number(fixedRaw) || 0);
-
-    const vRaw = localStorage.getItem(STORAGE_VARIABLE);
-    if (vRaw) {
-      try {
-        const parsed = JSON.parse(vRaw) as Partial<VariableCostsState>;
-        setVariable({ ...DEFAULT_VARIABLE, ...parsed });
-      } catch {
-        /* keep default */
-      }
-    }
-
     setMonthlyByMonth(parseMonthlyStore(localStorage.getItem(STORAGE_MONTHLY)));
   }, []);
 
@@ -162,14 +145,61 @@ export default function GastosPage() {
   }, [fixedMonthly]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_MONTHLY, JSON.stringify(monthlyByMonth));
+  }, [monthlyByMonth]);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_VARIABLE, JSON.stringify(variable));
   }, [variable]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_MONTHLY, JSON.stringify(monthlyByMonth));
-  }, [monthlyByMonth]);
-
-  const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
+    if (authLoading || !isAllowed) return;
+    let cancelled = false;
+    (async () => {
+      setParamsLoading(true);
+      try {
+        const latest = await fetchLatestFabricacionParams();
+        if (cancelled) return;
+        if (latest) {
+          setVariable(latest.params);
+          setLastSynced({ effectiveFrom: latest.effectiveFrom, note: latest.note });
+        } else {
+          const vRaw = localStorage.getItem(STORAGE_VARIABLE);
+          if (vRaw) {
+            try {
+              const parsed = JSON.parse(vRaw) as Partial<VariableCostsState>;
+              setVariable({ ...DEFAULT_VARIABLE_COSTS, ...parsed });
+            } catch {
+              /* empty */
+            }
+          }
+          setLastSynced(null);
+        }
+      } catch (e: unknown) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        const vRaw = localStorage.getItem(STORAGE_VARIABLE);
+        if (vRaw) {
+          try {
+            const parsed = JSON.parse(vRaw) as Partial<VariableCostsState>;
+            setVariable({ ...DEFAULT_VARIABLE_COSTS, ...parsed });
+          } catch {
+            /* empty */
+          }
+        }
+        toast({
+          title: 'No se pudieron cargar los costos desde Supabase',
+          description: msg,
+          variant: 'destructive',
+        });
+      } finally {
+        if (!cancelled) setParamsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAllowed]);
 
   const currentRow = useMemo(() => {
     return monthlyByMonth[selectedMonth] ?? emptyMonthlyRow();
@@ -193,6 +223,36 @@ export default function GastosPage() {
     setVariable((v) => ({ ...v, ...patch }));
   };
 
+  const handleGuardarCostosDb = async () => {
+    setParamsSaving(true);
+    try {
+      const effectiveIso = localDatetimeToIso(vigenteDesdeLocal);
+      await insertFabricacionParamsVersion(variable, {
+        effectiveFromIso: effectiveIso,
+        note: 'App Gastos',
+      });
+      const latest = await fetchLatestFabricacionParams();
+      if (latest) {
+        setLastSynced({ effectiveFrom: latest.effectiveFrom, note: latest.note });
+        setVariable(latest.params);
+      }
+      setVigenteDesdeLocal('');
+      toast({
+        title: 'Costos guardados en Supabase',
+        description: 'Se creó una nueva versión de parámetros. Los sellos nuevos usarán esta tarifa según la fecha de vigencia.',
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast({
+        title: 'Error al guardar',
+        description: msg,
+        variant: 'destructive',
+      });
+    } finally {
+      setParamsSaving(false);
+    }
+  };
+
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   }
@@ -201,6 +261,8 @@ export default function GastosPage() {
     return <Navigate to="/pedidos" replace />;
   }
 
+  const paramsDisabled = paramsLoading || paramsSaving;
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
@@ -208,7 +270,8 @@ export default function GastosPage() {
         <div>
           <h1 className="text-2xl font-semibold">Gastos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configuración de costos fijos, parámetros de fabricación y gastos operativos por mes (solo tu usuario).
+            Configuración de costos fijos, parámetros de fabricación (Supabase) y gastos operativos por mes (solo tu
+            usuario).
           </p>
         </div>
 
@@ -226,62 +289,89 @@ export default function GastosPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Costos variables de fabricación</CardTitle>
-            <CardDescription>
-              Borrador local (este navegador). En producción el costo por ítem lo calcula Postgres leyendo la tabla{' '}
-              <code className="text-xs bg-muted px-1 rounded">fabricacion_parametros</code>: cada versión tiene una
-              fecha <code className="text-xs bg-muted px-1 rounded">effective_from</code>. Para subir precios sin
-              reescribir históricos, insertá una fila nueva en Supabase con los montos actualizados y la fecha desde
-              la cual rigen; los sellos ya guardados no cambian hasta que edites esa fila.
-            </CardDescription>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>Costos variables de fabricación</CardTitle>
+                <CardDescription className="mt-1.5">
+                  Sincronizado con la tabla <code className="text-xs bg-muted px-1 rounded">fabricacion_parametros</code>{' '}
+                  en Supabase. Al guardar se inserta una <strong>nueva versión</strong> con fecha de vigencia; el trigger
+                  de costos usa la tarifa correspondiente al <code className="text-xs bg-muted px-1 rounded">created_at</code>{' '}
+                  de cada sello.
+                </CardDescription>
+              </div>
+              <div className="flex flex-col gap-2 sm:items-end shrink-0">
+                {lastSynced ? (
+                  <p className="text-xs text-muted-foreground max-w-[280px] sm:text-right">
+                    Última versión cargada: <span className="text-foreground">{formatEffectiveLabel(lastSynced.effectiveFrom)}</span>
+                    {lastSynced.note ? ` · ${lastSynced.note}` : ''}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground sm:text-right">Aún no hay datos en la tabla o falló la carga.</p>
+                )}
+                <div className="flex flex-col gap-1 w-full sm:w-auto">
+                  <Label className="text-xs text-muted-foreground">Vigente desde (opcional)</Label>
+                  <input
+                    type="datetime-local"
+                    className="bg-background border rounded-md px-3 py-2 text-sm w-full sm:w-[220px] disabled:opacity-50"
+                    disabled={paramsDisabled}
+                    value={vigenteDesdeLocal}
+                    onChange={(e) => setVigenteDesdeLocal(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Vacío = momento del guardado (ahora).</p>
+                </div>
+                <Button type="button" onClick={handleGuardarCostosDb} disabled={paramsDisabled}>
+                  {paramsSaving ? 'Guardando…' : paramsLoading ? 'Cargando…' : 'Guardar en Supabase'}
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-8">
             <div>
               <h3 className="text-sm font-medium mb-3">Ítems terminados</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="Soldador 100W (sin amort.)" value={variable.soldador100} onChange={(n) => updateVariable({ soldador100: n })} />
-                <NumberField label="Soldador 200W (sin amort.)" value={variable.soldador200} onChange={(n) => updateVariable({ soldador200: n })} />
-                <NumberField label="Base remachadora (sin amort.)" value={variable.baseRemachadora} onChange={(n) => updateVariable({ baseRemachadora: n })} />
-                <NumberField label="Mango de golpe (total)" value={variable.mangoGolpe} onChange={(n) => updateVariable({ mangoGolpe: n })} />
-                <NumberField label="Amortización fresa (resto de ítems)" value={variable.amortFresa} onChange={(n) => updateVariable({ amortFresa: n })} hint="En DB no aplica a mango de golpe." />
+                <NumberField label="Soldador 100W (sin amort.)" value={variable.soldador100} onChange={(n) => updateVariable({ soldador100: n })} disabled={paramsDisabled} />
+                <NumberField label="Soldador 200W (sin amort.)" value={variable.soldador200} onChange={(n) => updateVariable({ soldador200: n })} disabled={paramsDisabled} />
+                <NumberField label="Base remachadora (sin amort.)" value={variable.baseRemachadora} onChange={(n) => updateVariable({ baseRemachadora: n })} disabled={paramsDisabled} />
+                <NumberField label="Mango de golpe (total)" value={variable.mangoGolpe} onChange={(n) => updateVariable({ mangoGolpe: n })} disabled={paramsDisabled} />
+                <NumberField label="Amortización fresa (resto de ítems)" value={variable.amortFresa} onChange={(n) => updateVariable({ amortFresa: n })} hint="En DB no aplica a mango de golpe." disabled={paramsDisabled} />
               </div>
             </div>
 
             <div>
               <h3 className="text-sm font-medium mb-3">Bronce / planchuela ($ por cm)</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="12 mm" value={variable.planchuela12} onChange={(n) => updateVariable({ planchuela12: n })} />
-                <NumberField label="20 mm" value={variable.planchuela20} onChange={(n) => updateVariable({ planchuela20: n })} />
-                <NumberField label="25 mm" value={variable.planchuela25} onChange={(n) => updateVariable({ planchuela25: n })} />
-                <NumberField label="40 mm" value={variable.planchuela40} onChange={(n) => updateVariable({ planchuela40: n })} />
-                <NumberField label="63 mm" value={variable.planchuela63} onChange={(n) => updateVariable({ planchuela63: n })} />
+                <NumberField label="12 mm" value={variable.planchuela12} onChange={(n) => updateVariable({ planchuela12: n })} disabled={paramsDisabled} />
+                <NumberField label="20 mm" value={variable.planchuela20} onChange={(n) => updateVariable({ planchuela20: n })} disabled={paramsDisabled} />
+                <NumberField label="25 mm" value={variable.planchuela25} onChange={(n) => updateVariable({ planchuela25: n })} disabled={paramsDisabled} />
+                <NumberField label="40 mm" value={variable.planchuela40} onChange={(n) => updateVariable({ planchuela40: n })} disabled={paramsDisabled} />
+                <NumberField label="63 mm" value={variable.planchuela63} onChange={(n) => updateVariable({ planchuela63: n })} disabled={paramsDisabled} />
               </div>
             </div>
 
             <div>
               <h3 className="text-sm font-medium mb-3">Packaging</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="Tubo" value={variable.tubo} onChange={(n) => updateVariable({ tubo: n })} />
-                <NumberField label="Caja plástico abecedario" value={variable.cajaAbc} onChange={(n) => updateVariable({ cajaAbc: n })} />
+                <NumberField label="Tubo" value={variable.tubo} onChange={(n) => updateVariable({ tubo: n })} disabled={paramsDisabled} />
+                <NumberField label="Caja plástico abecedario" value={variable.cajaAbc} onChange={(n) => updateVariable({ cajaAbc: n })} disabled={paramsDisabled} />
               </div>
             </div>
 
             <div>
               <h3 className="text-sm font-medium mb-3">Piezas — sello</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="Mango madera" value={variable.mangoMadera} onChange={(n) => updateVariable({ mangoMadera: n })} />
-                <NumberField label="Varilla" value={variable.varilla} onChange={(n) => updateVariable({ varilla: n })} />
-                <NumberField label="Prisionero" value={variable.prisionero} onChange={(n) => updateVariable({ prisionero: n })} />
-                <NumberField label="Pérdida corte sello (cm)" value={variable.selloPerdidaCorteCm} onChange={(n) => updateVariable({ selloPerdidaCorteCm: n })} hint="Ej. 0,8 cm = 8 mm sumados al largo." />
+                <NumberField label="Mango madera" value={variable.mangoMadera} onChange={(n) => updateVariable({ mangoMadera: n })} disabled={paramsDisabled} />
+                <NumberField label="Varilla" value={variable.varilla} onChange={(n) => updateVariable({ varilla: n })} disabled={paramsDisabled} />
+                <NumberField label="Prisionero" value={variable.prisionero} onChange={(n) => updateVariable({ prisionero: n })} disabled={paramsDisabled} />
+                <NumberField label="Pérdida corte sello (cm)" value={variable.selloPerdidaCorteCm} onChange={(n) => updateVariable({ selloPerdidaCorteCm: n })} hint="Ej. 0,8 cm = 8 mm sumados al largo." disabled={paramsDisabled} />
               </div>
             </div>
 
             <div>
               <h3 className="text-sm font-medium mb-3">Piezas — abecedario</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="Soporte ABC" value={variable.soporteAbc} onChange={(n) => updateVariable({ soporteAbc: n })} />
-                <NumberField label="Cm material mayús. / minús. (una)" value={variable.abcCmSimple} onChange={(n) => updateVariable({ abcCmSimple: n })} />
-                <NumberField label="Cm material mayús. + minús. (ambas)" value={variable.abcCmAmbas} onChange={(n) => updateVariable({ abcCmAmbas: n })} />
+                <NumberField label="Soporte ABC" value={variable.soporteAbc} onChange={(n) => updateVariable({ soporteAbc: n })} disabled={paramsDisabled} />
+                <NumberField label="Cm material mayús. / minús. (una)" value={variable.abcCmSimple} onChange={(n) => updateVariable({ abcCmSimple: n })} disabled={paramsDisabled} />
+                <NumberField label="Cm material mayús. + minús. (ambas)" value={variable.abcCmAmbas} onChange={(n) => updateVariable({ abcCmAmbas: n })} disabled={paramsDisabled} />
               </div>
             </div>
           </CardContent>
@@ -290,7 +380,7 @@ export default function GastosPage() {
         <Card>
           <CardHeader>
             <CardTitle>Gastos del mes</CardTitle>
-            <CardDescription>Montos en pesos por categoría; elegí el mes arriba.</CardDescription>
+            <CardDescription>Montos en pesos por categoría (solo en este navegador). Elegí el mes arriba.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">

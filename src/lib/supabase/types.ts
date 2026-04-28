@@ -129,6 +129,27 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['costos_de_envio']['Row'], 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['costos_de_envio']['Insert']>;
       };
+      fabricacion_parametros: {
+        Row: {
+          id: string;
+          effective_from: string;
+          params: Record<string, number>;
+          created_at: string;
+          note: string | null;
+        };
+        Insert: {
+          id?: string;
+          effective_from: string;
+          params: Record<string, number>;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<{
+          effective_from: string;
+          params: Record<string, number>;
+          note: string | null;
+        }>;
+      };
     };
   };
 }
