@@ -10,7 +10,8 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
-  LogOut
+  LogOut,
+  Wallet,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SidebarItem } from './SidebarItem';
@@ -120,16 +121,28 @@ export function Sidebar() {
           </div>
         ))}
         {isEconomiaUser && (
-          <div className="flex justify-start">
-            <SidebarItem
-              icon={Calendar}
-              label="Economía"
-              isActive={location.pathname === '/economia'}
-              isExpanded={isExpanded}
-              disabled={false}
-              onClick={() => navigate('/economia')}
-            />
-          </div>
+          <>
+            <div className="flex justify-start">
+              <SidebarItem
+                icon={Calendar}
+                label="Economía"
+                isActive={location.pathname === '/economia'}
+                isExpanded={isExpanded}
+                disabled={false}
+                onClick={() => navigate('/economia')}
+              />
+            </div>
+            <div className="flex justify-start">
+              <SidebarItem
+                icon={Wallet}
+                label="Gastos"
+                isActive={location.pathname === '/gastos'}
+                isExpanded={isExpanded}
+                disabled={false}
+                onClick={() => navigate('/gastos')}
+              />
+            </div>
+          </>
         )}
       </nav>
 

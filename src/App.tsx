@@ -5,6 +5,7 @@ import ProduccionPage from './app/produccion/index'
 import ProgramasPage from './app/programas/index'
 import EnviosPage from './app/envios/index'
 import EconomiaPage from './app/economia/index'
+import GastosPage from './app/gastos/index'
 import LoginPage from './app/login/index'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -65,6 +66,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <EconomiaPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/gastos"
+            element={
+              <ProtectedRoute>
+                <GastosPage />
               </ProtectedRoute>
             }
           />
