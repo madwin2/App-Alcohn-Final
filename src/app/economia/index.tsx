@@ -5,6 +5,14 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -55,6 +63,12 @@ const itemTypeLabel = (item: string) => {
   return item;
 };
 
+const pendingLabel = (state: string) => {
+  if (state === 'DEUDOR') return 'Deudor';
+  if (state === 'FOTO_ENVIADA') return 'Foto enviada';
+  return 'Señado';
+};
+
 const itemTypeOf = (item: OrderItem): 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA' => {
   if (item.itemType) return item.itemType;
   if (item.stampType === 'ABC') return 'ABECEDARIO';
@@ -90,6 +104,73 @@ function TinyLineChart({ values }: { values: number[] }) {
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>Mín {min.toFixed(0)}</span>
         <span>Máx {max.toFixed(0)}</span>
+      </div>
+    </div>
+  );
+}
+
+function PendingPieChart({
+  data,
+}: {
+  data: Array<{ key: string; label: string; amount: number; color: string }>;
+}) {
+  const total = data.reduce((acc, d) => acc + d.amount, 0);
+  if (total <= 0) {
+    return <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">Sin pendiente</div>;
+  }
+
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  let acc = 0;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-center">
+        <svg viewBox="0 0 120 120" className="size-48">
+          <circle cx="60" cy="60" r={radius} fill="none" stroke="hsl(var(--muted))" strokeWidth="14" />
+          {data.map((slice) => {
+            const fraction = slice.amount / total;
+            const length = circumference * fraction;
+            const offset = -acc;
+            acc += length;
+            return (
+              <circle
+                key={slice.key}
+                cx="60"
+                cy="60"
+                r={radius}
+                fill="none"
+                stroke={slice.color}
+                strokeWidth="14"
+                strokeLinecap="butt"
+                strokeDasharray={`${length} ${circumference - length}`}
+                strokeDashoffset={offset}
+                transform="rotate(-90 60 60)"
+              />
+            );
+          })}
+          <circle cx="60" cy="60" r="28" fill="hsl(var(--background))" />
+          <text x="60" y="56" textAnchor="middle" className="fill-foreground text-[9px] font-medium">
+            Pendiente
+          </text>
+          <text x="60" y="68" textAnchor="middle" className="fill-foreground text-[10px] font-semibold">
+            {formatArs(total)}
+          </text>
+        </svg>
+      </div>
+      <div className="flex flex-col gap-2">
+        {data.map((slice) => {
+          const pct = total > 0 ? (slice.amount / total) * 100 : 0;
+          return (
+            <div key={slice.key} className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                <span className="size-2.5 rounded-full" style={{ backgroundColor: slice.color }} />
+                <span>{slice.label}</span>
+              </div>
+              <span className="text-muted-foreground">{pct.toFixed(1)}%</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -233,6 +314,37 @@ export default function EconomiaPage() {
 
   const ticketPromedio = totals.pedidos > 0 ? totals.ventasBrutas / totals.pedidos : 0;
   const unidadesPromedio = totals.pedidos > 0 ? totals.unidades / totals.pedidos : 0;
+  const pendingBreakdown = useMemo(() => {
+    const byState = {
+      DEUDOR: { amount: 0, count: 0 },
+      FOTO_ENVIADA: { amount: 0, count: 0 },
+      SEÑADO: { amount: 0, count: 0 },
+    };
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        if (item.saleState === 'TRANSFERIDO') continue;
+        const key = item.saleState === 'DEUDOR' ? 'DEUDOR' : item.saleState === 'FOTO_ENVIADA' ? 'FOTO_ENVIADA' : 'SEÑADO';
+        byState[key].amount += Number(item.itemValue || 0);
+        byState[key].count += 1;
+      }
+    }
+
+    return byState;
+  }, [orders]);
+  const pendingSlices = useMemo(
+    () => [
+      { key: 'DEUDOR', label: 'Deudor', amount: pendingBreakdown.DEUDOR.amount, color: 'hsl(var(--destructive))' },
+      {
+        key: 'FOTO_ENVIADA',
+        label: 'Foto enviada',
+        amount: pendingBreakdown.FOTO_ENVIADA.amount,
+        color: 'hsl(var(--primary))',
+      },
+      { key: 'SEÑADO', label: 'Señado', amount: pendingBreakdown.SEÑADO.amount, color: 'hsl(var(--ring))' },
+    ],
+    [pendingBreakdown],
+  );
 
   if (authLoading || loading) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
@@ -298,12 +410,51 @@ export default function EconomiaPage() {
                 <CardTitle className="text-2xl">{formatUsd(totals.gananciaUsd)}</CardTitle>
               </CardHeader>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardDescription>Pendiente de cobro</CardDescription>
-                <CardTitle className="text-2xl">{formatArs(totals.pendiente)}</CardTitle>
-              </CardHeader>
-            </Card>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Card className="cursor-pointer transition-colors hover:bg-muted/30">
+                  <CardHeader>
+                    <CardDescription>Pendiente de cobro</CardDescription>
+                    <CardTitle className="text-2xl">{formatArs(totals.pendiente)}</CardTitle>
+                    <CardDescription>Click para ver desglose</CardDescription>
+                  </CardHeader>
+                </Card>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Desglose pendiente de cobro</DialogTitle>
+                  <DialogDescription>Detalle por estado de venta pendiente.</DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <PendingPieChart data={pendingSlices} />
+                  <div className="flex flex-col gap-3">
+                    {(['DEUDOR', 'FOTO_ENVIADA', 'SEÑADO'] as const).map((state) => {
+                      const total = pendingSlices.reduce((acc, x) => acc + x.amount, 0);
+                      const pct = total > 0 ? (pendingBreakdown[state].amount / total) * 100 : 0;
+                      return (
+                        <Card key={state}>
+                          <CardContent className="flex items-center justify-between py-4">
+                            <div className="flex flex-col gap-1">
+                              <p className="text-sm font-medium">{pendingLabel(state)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {pendingBreakdown[state].count} ítems · {pct.toFixed(1)}%
+                              </p>
+                            </div>
+                            <p className="text-lg font-semibold">{formatArs(pendingBreakdown[state].amount)}</p>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                    <Card>
+                      <CardContent className="flex items-center justify-between py-4">
+                        <p className="text-sm font-medium">Total pendiente</p>
+                        <p className="text-lg font-semibold">{formatArs(totals.pendiente)}</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <Tabs defaultValue="mensual">
