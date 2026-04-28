@@ -125,13 +125,16 @@ export default function EnviosPage() {
       const tipoEnvioDb = type === 'SUCURSAL' ? 'Sucursal' : 'Domicilio';
       const { error } = await supabase
         .from('ordenes')
-        .update({ tipo_envio: tipoEnvioDb })
+        .update({
+          empresa_envio: 'Correo Argentino',
+          tipo_envio: tipoEnvioDb,
+        })
         .eq('id', order.id);
       if (error) throw error;
       await fetchOrders();
       toast({
         title: 'Tipo de envío actualizado',
-        description: `La orden quedó en ${type === 'DOMICILIO' ? 'Domicilio' : 'Sucursal'}.`,
+        description: `La orden quedó en ${type === 'DOMICILIO' ? 'Domicilio' : 'Sucursal'} con Correo Argentino.`,
       });
     } catch (toggleError) {
       toast({
@@ -287,6 +290,15 @@ export default function EnviosPage() {
   };
 
   const openShippingDialog = async (order: Order) => {
+    if (!order.shipping.service) {
+      toast({
+        title: 'Seleccioná tipo de envío',
+        description: 'Primero marcá Domicilio o Sucursal para poder cargar los datos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSelectedOrder(order);
     setShippingTypeDraft(order.shipping.service === 'SUCURSAL' ? 'SUCURSAL' : 'DOMICILIO');
     setRawShippingText('');
@@ -488,6 +500,8 @@ export default function EnviosPage() {
     const availablePreview =
       item?.files?.baseUrl || item?.files?.vectorPreviewUrl || item?.files?.vectorUrl;
     const isSucursal = order.shipping.service === 'SUCURSAL';
+    const isDomicilio = order.shipping.service === 'DOMICILIO';
+    const hasShippingTypeSelected = isSucursal || isDomicilio;
     const shippingState = order.items[0]?.shippingState;
     const showShippingChip =
       shippingState === 'HACER_ETIQUETA' || shippingState === 'ETIQUETA_LISTA';
@@ -519,7 +533,7 @@ export default function EnviosPage() {
             <div className="flex gap-2">
               <Button
                 size="sm"
-                variant={isSucursal ? 'outline' : 'default'}
+                variant={isDomicilio ? 'default' : 'outline'}
                 onClick={() => handleToggleShippingType(order, 'DOMICILIO')}
               >
                 Domicilio
@@ -551,7 +565,13 @@ export default function EnviosPage() {
           </div>
         </td>
         <td className="px-4 py-3">
-          <Button size="sm" variant="secondary" onClick={() => openShippingDialog(order)}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => openShippingDialog(order)}
+            disabled={!hasShippingTypeSelected}
+            title={!hasShippingTypeSelected ? 'Seleccioná Domicilio o Sucursal primero' : undefined}
+          >
             {order.direccionId ? 'Editar datos' : 'Cargar datos'}
           </Button>
         </td>
