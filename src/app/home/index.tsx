@@ -138,7 +138,6 @@ export default function HomePage() {
   const [approvedUsers, setApprovedUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [colleagueTasks, setColleagueTasks] = useState<DashboardTask[]>([]);
   const [isAddToColleagueOpen, setIsAddToColleagueOpen] = useState(false);
-  const [skippedStockTaskIds, setSkippedStockTaskIds] = useState<Set<string>>(new Set());
   const [stockReplenishSyncedAt, setStockReplenishSyncedAt] = useState<Date | null>(null);
 
   const fetchColleagueTasks = useCallback(async () => {
@@ -168,16 +167,6 @@ export default function HomePage() {
     );
     return { stockReplenishVms, stickyColleagueTasks };
   }, [colleagueTasks]);
-
-  useEffect(() => {
-    const existing = new Set(colleagueTasks.map((t) => t.id));
-    setSkippedStockTaskIds((prev) => new Set([...prev].filter((id) => existing.has(id))));
-  }, [colleagueTasks]);
-
-  const visibleStockReplenishEntries = useMemo(
-    () => stockReplenishVms.filter((entry) => !skippedStockTaskIds.has(entry.task.id)),
-    [stockReplenishVms, skippedStockTaskIds],
-  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -437,9 +426,8 @@ export default function HomePage() {
           </div>
 
           <StockReplenishSection
-            entries={visibleStockReplenishEntries}
+            entries={stockReplenishVms}
             lastSyncedAt={stockReplenishSyncedAt}
-            onSkip={(taskId) => setSkippedStockTaskIds((prev) => new Set(prev).add(taskId))}
             onCompleted={async () => {
               await fetchColleagueTasks();
             }}

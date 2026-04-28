@@ -28,7 +28,6 @@ import { useToast } from '@/components/ui/use-toast';
 
 interface StockReplenishSectionProps {
   entries: { task: DashboardTask; payload: StockReplenishPayload }[];
-  onSkip: (taskId: string) => void;
   onCompleted: () => void | Promise<void>;
   /** Momento del último fetch de tareas (para etiqueta «Actualizado…»). */
   lastSyncedAt: Date | null;
@@ -61,7 +60,6 @@ function formatSyncedLabel(at: Date | null): string {
 
 export function StockReplenishSection({
   entries,
-  onSkip,
   onCompleted,
   lastSyncedAt,
 }: StockReplenishSectionProps) {
@@ -132,13 +130,7 @@ export function StockReplenishSection({
             value={totals.stock}
             tone="default"
           />
-          <SummaryCell
-            dotClass="bg-red-500/90"
-            label="Faltan"
-            value={totals.shortage}
-            tone="accent"
-            sub="unidades entre ítems pendientes"
-          />
+          <SummaryCell dotClass="bg-red-500/90" label="Faltan" value={totals.shortage} tone="accent" />
         </div>
 
         {/* Lista de tareas */}
@@ -153,13 +145,7 @@ export function StockReplenishSection({
 
           <div className="divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-black/25">
             {entries.map(({ task, payload }) => (
-              <ReplenishTaskRow
-                key={task.id}
-                task={task}
-                payload={payload}
-                onSkip={() => onSkip(task.id)}
-                onCompleted={onCompleted}
-              />
+              <ReplenishTaskRow key={task.id} task={task} payload={payload} onCompleted={onCompleted} />
             ))}
           </div>
         </div>
@@ -216,12 +202,10 @@ function SummaryCell(props: {
 function ReplenishTaskRow({
   task,
   payload,
-  onSkip,
   onCompleted,
 }: {
   task: DashboardTask;
   payload: StockReplenishPayload;
-  onSkip: () => void;
   onCompleted: () => void | Promise<void>;
 }) {
   const { toast } = useToast();
@@ -267,47 +251,25 @@ function ReplenishTaskRow({
   };
 
   return (
-    <div className="flex flex-col gap-3 p-3.5 text-left sm:flex-row sm:items-center sm:gap-4">
-      <div className="flex min-w-0 flex-1 gap-3">
+    <div className="flex flex-col gap-2 p-3 text-left sm:flex-row sm:items-center sm:gap-3 sm:justify-between">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]"
           aria-hidden
         >
-          <Icon className="h-[18px] w-[18px] text-white/85" strokeWidth={1.5} />
+          <Icon className="h-4 w-4 text-white/85" strokeWidth={1.5} />
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <p className="text-sm font-semibold text-white">Stockear {payload.itemName}</p>
-            {payload.orderId ? (
-              <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
-                Envío
-              </span>
-            ) : null}
-          </div>
-          <p className="text-[11px] leading-relaxed text-muted-foreground mt-0.5">
-            Se necesitan al menos{' '}
-            <span className="text-foreground/90 tabular-nums">{payload.needed.toLocaleString('es-AR')}</span>; en depósito
-            hay{' '}
-            <span className="text-foreground/90 tabular-nums">{payload.stockAlMomento.toLocaleString('es-AR')}</span>.
-            {payload.pedidoEtiqueta && payload.orderId ? (
-              <span className="block mt-1 text-muted-foreground/95">
-                Pedido:{' '}
-                <span className="font-mono text-foreground/80">{payload.pedidoEtiqueta}</span>
-              </span>
-            ) : null}
-          </p>
-          <button
-            type="button"
-            className="mt-2 text-[10px] text-muted-foreground underline-offset-4 hover:text-white hover:underline"
-            disabled={busy}
-            onClick={onSkip}
-          >
-            Omitir por ahora
-          </button>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="truncate text-sm font-semibold text-white">Stockear {payload.itemName}</p>
+          {payload.orderId ? (
+            <span className="shrink-0 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-200/90">
+              Envío
+            </span>
+          ) : null}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap shrink-0">
+      <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-nowrap shrink-0 pt-1 sm:pt-0">
         <div className="flex flex-col items-end gap-0.5 mr-1">
           <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Faltan</span>
           <span className="text-lg font-semibold tabular-nums leading-none text-red-500">{payload.shortage}</span>
