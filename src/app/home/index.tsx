@@ -139,12 +139,14 @@ export default function HomePage() {
   const [colleagueTasks, setColleagueTasks] = useState<DashboardTask[]>([]);
   const [isAddToColleagueOpen, setIsAddToColleagueOpen] = useState(false);
   const [skippedStockTaskIds, setSkippedStockTaskIds] = useState<Set<string>>(new Set());
+  const [stockReplenishSyncedAt, setStockReplenishSyncedAt] = useState<Date | null>(null);
 
   const fetchColleagueTasks = useCallback(async () => {
     if (!user?.id || !isAuthenticated) return;
     await syncStockReplenishTasksForCurrentUser();
     const tasks = await getDashboardTasksForUser(user.id);
     setColleagueTasks(tasks);
+    setStockReplenishSyncedAt(new Date());
   }, [user?.id, isAuthenticated]);
 
   /** Tareas tipo reposición vs post-its sociales entre compañeros */
@@ -436,6 +438,7 @@ export default function HomePage() {
 
           <StockReplenishSection
             entries={visibleStockReplenishEntries}
+            lastSyncedAt={stockReplenishSyncedAt}
             onSkip={(taskId) => setSkippedStockTaskIds((prev) => new Set(prev).add(taskId))}
             onCompleted={async () => {
               await fetchColleagueTasks();
