@@ -31,9 +31,29 @@ interface NameParts {
   lastName: string;
 }
 
+const DESIGN_LABEL_MAX_LENGTH = 64;
+
 const getOrderDesignLabel = (order: Order) => {
-  const firstDesign = order.items[0]?.designName?.trim() || 'Sin diseño';
-  return order.items.length > 1 ? `${firstDesign} +${order.items.length - 1} más` : firstDesign;
+  const designNames = order.items
+    .map((item) => item.designName?.trim() || 'Sin diseño')
+    .filter(Boolean);
+
+  if (designNames.length <= 1) {
+    return designNames[0] || 'Sin diseño';
+  }
+
+  const firstDesign = designNames[0];
+  let label = firstDesign;
+  let index = 1;
+
+  while (index < designNames.length) {
+    const nextCandidate = `${label}, ${designNames[index]}`;
+    if (nextCandidate.length > DESIGN_LABEL_MAX_LENGTH) break;
+    label = nextCandidate;
+    index += 1;
+  }
+
+  return index < designNames.length ? `${label}...` : label;
 };
 
 interface UploadTrackingDialogProps {
