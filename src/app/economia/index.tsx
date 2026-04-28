@@ -3,7 +3,11 @@ import { Navigate } from 'react-router-dom';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useOrders } from '@/lib/hooks/useOrders';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
 import type { Order, OrderItem } from '@/lib/types';
 
@@ -42,6 +46,15 @@ const formatArs = (value: number) =>
 const formatUsd = (value: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 
+const itemTypeLabel = (item: string) => {
+  if (item === 'SELLO') return 'Sellos';
+  if (item === 'SOLDADOR') return 'Soldadores';
+  if (item === 'MANGO_GOLPE') return 'Mango de golpe';
+  if (item === 'ABECEDARIO') return 'Abecedarios';
+  if (item === 'BASE_REMACHADORA') return 'Base remachadora';
+  return item;
+};
+
 const itemTypeOf = (item: OrderItem): 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA' => {
   if (item.itemType) return item.itemType;
   if (item.stampType === 'ABC') return 'ABECEDARIO';
@@ -58,17 +71,27 @@ const orderMonthKey = (order: Order): string => {
 function TinyLineChart({ values }: { values: number[] }) {
   if (values.length === 0) return <div className="h-24 text-xs text-muted-foreground">Sin datos</div>;
   const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const span = Math.max(max - min, 1);
   const points = values
     .map((v, i) => {
       const x = (i / Math.max(values.length - 1, 1)) * 100;
-      const y = 100 - (v / max) * 100;
+      const y = 100 - ((v - min) / span) * 100;
       return `${x},${y}`;
     })
     .join(' ');
   return (
-    <svg viewBox="0 0 100 100" className="w-full h-24">
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-400" />
-    </svg>
+    <div className="flex flex-col gap-2">
+      <svg viewBox="0 0 100 100" className="h-24 w-full">
+        <line x1="0" y1="100" x2="100" y2="100" stroke="currentColor" className="text-border" strokeWidth="1" />
+        <line x1="0" y1="0" x2="100" y2="0" stroke="currentColor" className="text-border" strokeWidth="1" />
+        <polyline points={points} fill="none" stroke="currentColor" strokeWidth="2.2" className="text-primary" />
+      </svg>
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <span>Mín {min.toFixed(0)}</span>
+        <span>Máx {max.toFixed(0)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -222,91 +245,205 @@ export default function EconomiaPage() {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <div className="ml-20 p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Economía</h1>
-          <div className="flex gap-3">
-            <label className="text-sm">Costos fijos mensuales</label>
-            <input
-              className="bg-background border rounded px-2 py-1 w-36"
-              type="number"
-              value={fixedMonthlyCost}
-              onChange={(e) => setFixedMonthlyCost(Number(e.target.value || 0))}
-            />
-            <label className="text-sm">Dólar</label>
-            <input className="bg-background border rounded px-2 py-1 w-24" type="number" value={usdRate} onChange={(e) => setUsdRate(Number(e.target.value || 1))} />
-          </div>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Registro por mes</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left border-b">
-                  <th>Mes</th><th>Ventas Brutas</th><th>Costos Fijos</th><th>Costos Ventas</th><th>Sellos</th><th>Soldadores</th><th>Mangos</th><th>Abecedarios</th><th>Bases</th><th>Ganancia $</th><th>Ganancia USD</th><th>Transferido</th><th>Pendiente</th>
-                </tr>
-              </thead>
-              <tbody>
-                {monthly.map((r) => (
-                  <tr key={r.key} className="border-b">
-                    <td>{r.label}</td>
-                    <td>{formatArs(r.ventasBrutas)}</td>
-                    <td>{formatArs(r.costosFijos)}</td>
-                    <td>{formatArs(r.costosVentas)}</td>
-                    <td>{r.sellos}</td>
-                    <td>{r.soldadores}</td>
-                    <td>{r.mangos}</td>
-                    <td>{r.abecedarios}</td>
-                    <td>{r.bases}</td>
-                    <td>{formatArs(r.gananciaPesos)}</td>
-                    <td>{formatUsd(r.gananciaUsd)}</td>
-                    <td>{formatArs(r.transferido)}</td>
-                    <td>{formatArs(r.pendiente)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ventas Totales</p><p className="text-xl font-semibold">{formatArs(totals.ventasBrutas)}</p></CardContent></Card>
-          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Costos Totales</p><p className="text-xl font-semibold">{formatArs(totals.costosVentas + totals.costosFijos)}</p></CardContent></Card>
-          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ganancia Total</p><p className="text-xl font-semibold">{formatArs(totals.gananciaPesos)}</p></CardContent></Card>
-          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Transferido</p><p className="text-xl font-semibold">{formatArs(totals.transferido)}</p></CardContent></Card>
-          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Pendiente</p><p className="text-xl font-semibold">{formatArs(totals.pendiente)}</p></CardContent></Card>
-          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Pedidos Totales</p><p className="text-xl font-semibold">{totals.pedidos}</p></CardContent></Card>
-        </div>
-
-        <Card>
-          <CardHeader><CardTitle>Desglose de ítems vendidos</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {itemBreakdown.map((row) => (
-              <div key={row.item}>
-                <div className="flex justify-between text-sm">
-                  <span>{row.item}</span>
-                  <span>{row.unidades} u. | {formatArs(row.ganancia)} ganancia</span>
+      <div className="ml-20 p-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+          <Card>
+            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <CardTitle>Economía</CardTitle>
+                  <Badge variant="secondary">Panel ejecutivo</Badge>
                 </div>
-                <div className="h-2 bg-muted rounded">
-                  <div className="h-2 bg-blue-400 rounded" style={{ width: `${row.pct}%` }} />
+                <CardDescription>Vista consolidada de ventas, costos, márgenes y tendencias.</CardDescription>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="fixed-cost">Costos fijos mensuales</Label>
+                  <Input
+                    id="fixed-cost"
+                    type="number"
+                    value={fixedMonthlyCost}
+                    onChange={(e) => setFixedMonthlyCost(Number(e.target.value || 0))}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="usd-rate">Dólar referencia</Label>
+                  <Input
+                    id="usd-rate"
+                    type="number"
+                    value={usdRate}
+                    onChange={(e) => setUsdRate(Number(e.target.value || 1))}
+                  />
                 </div>
               </div>
-            ))}
-          </CardContent>
-        </Card>
+            </CardHeader>
+          </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ticket Promedio</p><p className="text-3xl font-semibold">{formatArs(ticketPromedio)}</p></CardContent></Card>
-          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Unidades promedio por pedido</p><p className="text-3xl font-semibold">{unidadesPromedio.toFixed(1)}</p></CardContent></Card>
-        </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Card>
+              <CardHeader>
+                <CardDescription>Ventas brutas</CardDescription>
+                <CardTitle className="text-2xl">{formatArs(totals.ventasBrutas)}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Ganancia total</CardDescription>
+                <CardTitle className="text-2xl">{formatArs(totals.gananciaPesos)}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Ganancia en USD</CardDescription>
+                <CardTitle className="text-2xl">{formatUsd(totals.gananciaUsd)}</CardTitle>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Pendiente de cobro</CardDescription>
+                <CardTitle className="text-2xl">{formatArs(totals.pendiente)}</CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          <Card><CardHeader><CardTitle className="text-base">Venta Bruta</CardTitle></CardHeader><CardContent><TinyLineChart values={monthly.map((m) => m.ventasBrutas)} /></CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-base">Ganancia USD</CardTitle></CardHeader><CardContent><TinyLineChart values={monthly.map((m) => m.gananciaUsd)} /></CardContent></Card>
-          <Card><CardHeader><CardTitle className="text-base">Unidades vendidas</CardTitle></CardHeader><CardContent><TinyLineChart values={monthly.map((m) => m.unidades)} /></CardContent></Card>
+          <Tabs defaultValue="mensual">
+            <TabsList>
+              <TabsTrigger value="mensual">Mensual</TabsTrigger>
+              <TabsTrigger value="mix">Mix de ítems</TabsTrigger>
+              <TabsTrigger value="tendencias">Tendencias</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="mensual">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Registro por mes</CardTitle>
+                  <CardDescription>Evolución mensual de ventas, costos y resultado.</CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-auto">
+                  <table className="w-full min-w-[980px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="py-2 pr-3">Mes</th>
+                        <th className="py-2 pr-3 text-right">Ventas Brutas</th>
+                        <th className="py-2 pr-3 text-right">Costos Fijos</th>
+                        <th className="py-2 pr-3 text-right">Costos Ventas</th>
+                        <th className="py-2 pr-3 text-center">Sellos</th>
+                        <th className="py-2 pr-3 text-center">Soldadores</th>
+                        <th className="py-2 pr-3 text-center">Mangos</th>
+                        <th className="py-2 pr-3 text-center">Abecedarios</th>
+                        <th className="py-2 pr-3 text-center">Bases</th>
+                        <th className="py-2 pr-3 text-right">Ganancia $</th>
+                        <th className="py-2 pr-3 text-right">Ganancia USD</th>
+                        <th className="py-2 pr-3 text-right">Transferido</th>
+                        <th className="py-2 text-right">Pendiente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthly.map((r) => (
+                        <tr key={r.key} className="border-b last:border-0">
+                          <td className="py-2 pr-3">
+                            <Badge variant="outline">{r.label}</Badge>
+                          </td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.ventasBrutas)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.costosFijos)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.costosVentas)}</td>
+                          <td className="py-2 pr-3 text-center">{r.sellos}</td>
+                          <td className="py-2 pr-3 text-center">{r.soldadores}</td>
+                          <td className="py-2 pr-3 text-center">{r.mangos}</td>
+                          <td className="py-2 pr-3 text-center">{r.abecedarios}</td>
+                          <td className="py-2 pr-3 text-center">{r.bases}</td>
+                          <td className="py-2 pr-3 text-right font-medium">{formatArs(r.gananciaPesos)}</td>
+                          <td className="py-2 pr-3 text-right">{formatUsd(r.gananciaUsd)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.transferido)}</td>
+                          <td className="py-2 text-right">{formatArs(r.pendiente)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="mix">
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+                <Card className="xl:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Desglose de ítems vendidos</CardTitle>
+                    <CardDescription>Participación en unidades y ganancia por categoría.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                    {itemBreakdown.map((row) => (
+                      <div key={row.item} className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{itemTypeLabel(row.item)}</Badge>
+                            <span className="text-muted-foreground">{row.unidades} u.</span>
+                          </div>
+                          <span className="font-medium">{formatArs(row.ganancia)}</span>
+                        </div>
+                        <div className="h-2 rounded bg-muted">
+                          <div className="h-2 rounded bg-primary" style={{ width: `${row.pct}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                <div className="flex flex-col gap-3">
+                  <Card>
+                    <CardHeader>
+                      <CardDescription>Ticket promedio</CardDescription>
+                      <CardTitle>{formatArs(ticketPromedio)}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardDescription>Unidades por pedido</CardDescription>
+                      <CardTitle>{unidadesPromedio.toFixed(1)}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardDescription>Pedidos totales</CardDescription>
+                      <CardTitle>{totals.pedidos}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="tendencias">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Venta bruta</CardTitle>
+                    <CardDescription>{formatArs(totals.ventasBrutas)} acumulado</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <TinyLineChart values={monthly.map((m) => m.ventasBrutas)} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Ganancia USD</CardTitle>
+                    <CardDescription>{formatUsd(totals.gananciaUsd)} acumulado</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <TinyLineChart values={monthly.map((m) => m.gananciaUsd)} />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Unidades vendidas</CardTitle>
+                    <CardDescription>{totals.unidades} unidades</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <TinyLineChart values={monthly.map((m) => m.unidades)} />
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
       <Toaster />
