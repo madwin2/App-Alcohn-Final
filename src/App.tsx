@@ -4,6 +4,7 @@ import PedidosPage from './app/pedidos/index'
 import ProduccionPage from './app/produccion/index'
 import ProgramasPage from './app/programas/index'
 import EnviosPage from './app/envios/index'
+import StockPage from './app/stock/index'
 import EconomiaPage from './app/economia/index'
 import GastosPage from './app/gastos/index'
 import LoginPage from './app/login/index'
@@ -54,6 +55,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <EnviosPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stock"
+            element={
+              <ProtectedRoute>
+                <StockPage />
               </ProtectedRoute>
             }
           />

@@ -25,6 +25,7 @@ import {
   createOrderStickyTask,
   deleteOrderStickyTaskByTaskId,
 } from '@/lib/supabase/services/order-sticky-tasks.service';
+import { consumeStockForOrderWhenTrackingSent } from '@/lib/supabase/services/stock.service';
 import { supabase } from '@/lib/supabase/client';
 
 interface OrdersTableProps {
@@ -172,16 +173,52 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
   const handleEnvioEstadoChange = async (orderId: string, newState: ShippingState, itemId?: string) => {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
-    
+
+    const isAlreadyTrackingSent = itemId
+      ? order.items.find((item) => item.id === itemId)?.shippingState === 'SEGUIMIENTO_ENVIADO'
+      : order.items.every((item) => item.shippingState === 'SEGUIMIENTO_ENVIADO');
+    const shouldConsumeStock = newState === 'SEGUIMIENTO_ENVIADO' && !isAlreadyTrackingSent;
+
+    const maybeConsumeStock = async () => {
+      if (!shouldConsumeStock) return;
+      const result = await consumeStockForOrderWhenTrackingSent({
+        orderId: order.id,
+        orderLabel: order.id.slice(0, 8),
+        items: order.items.map((item) => ({
+          itemType: item.itemType,
+          stampType: item.stampType,
+          itemConfig: item.itemConfig,
+        })),
+      });
+
+      if (!result.ok) {
+        const detail = result.missing
+          .map((item) => `${item.name} (${item.available}/${item.required})`)
+          .join(' | ');
+        toast({
+          title: 'Falta stock para este envío',
+          description: `Se crearon tareas para reponer: ${detail}`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Stock descontado',
+          description: 'Se registró el consumo de insumos para el envío.',
+        });
+      }
+    };
+
     // Si se especifica un itemId, solo actualizar ese item
     if (itemId) {
       const item = order.items.find(i => i.id === itemId);
       if (item) {
+        await maybeConsumeStock();
         await handleUpdate(orderId, { items: [{ id: itemId, shippingState: newState }] as any });
       }
     } else {
       // Si no se especifica itemId, actualizar todos los items (comportamiento anterior)
       const updatedItems = order.items.map(item => ({ id: item.id, shippingState: newState }));
+      await maybeConsumeStock();
       await handleUpdate(orderId, { items: updatedItems as any });
     }
   };
