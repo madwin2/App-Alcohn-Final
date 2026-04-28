@@ -18,6 +18,12 @@ import { AddTaskToColleagueDialog } from '@/components/home/AddTaskToColleagueDi
 import {
   updateDashboardTaskPosition,
 } from '@/lib/supabase/services/dashboard-tasks.service';
+import {
+  parseStockReplenishTask,
+  syncStockReplenishTasksForCurrentUser,
+  type StockReplenishPayload,
+} from '@/lib/supabase/services/stock.service';
+import { StockReplenishDialog } from '@/components/home/StockReplenishDialog';
 import stickyNoteAddSvg from '@/assets/sticky-notes/sticky-note-add.svg';
 import stickyNoteTaskSvg from '@/assets/sticky-notes/sticky-note-task.svg';
 import stickyNoteAddWorkmateSvg from '@/assets/sticky-notes/sticky-note-add-workmate.svg';
@@ -132,12 +138,41 @@ export default function HomePage() {
   const [approvedUsers, setApprovedUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [colleagueTasks, setColleagueTasks] = useState<DashboardTask[]>([]);
   const [isAddToColleagueOpen, setIsAddToColleagueOpen] = useState(false);
+  const [skippedStockTaskIds, setSkippedStockTaskIds] = useState<Set<string>>(new Set());
 
   const fetchColleagueTasks = useCallback(async () => {
     if (!user?.id || !isAuthenticated) return;
+    await syncStockReplenishTasksForCurrentUser();
     const tasks = await getDashboardTasksForUser(user.id);
     setColleagueTasks(tasks);
   }, [user?.id, isAuthenticated]);
+
+  /** Tareas tipo reposición vs post-its sociales entre compañeros */
+  const { stockReplenishVms, stickyColleagueTasks } = useMemo(() => {
+    const stockReplenishVms: { task: DashboardTask; payload: StockReplenishPayload }[] = [];
+    const stickyColleagueTasks: DashboardTask[] = [];
+
+    colleagueTasks.forEach((task) => {
+      const payload = parseStockReplenishTask(task.texto);
+      if (payload) {
+        stockReplenishVms.push({ task, payload });
+      } else {
+        stickyColleagueTasks.push(task);
+      }
+    });
+
+    stockReplenishVms.sort(
+      (a, b) => new Date(a.task.createdAt).getTime() - new Date(b.task.createdAt).getTime(),
+    );
+    return { stockReplenishVms, stickyColleagueTasks };
+  }, [colleagueTasks]);
+
+  useEffect(() => {
+    const existing = new Set(colleagueTasks.map((t) => t.id));
+    setSkippedStockTaskIds((prev) => new Set([...prev].filter((id) => existing.has(id))));
+  }, [colleagueTasks]);
+
+  const activeStockVm = stockReplenishVms.find((entry) => !skippedStockTaskIds.has(entry.task.id));
 
   useEffect(() => {
     if (authLoading) return;
@@ -490,7 +525,7 @@ export default function HomePage() {
               </div>
             ))}
             {/* Tareas de compañeros (amarillas) - arrastrables */}
-            {colleagueTasks.map((task, idx) => {
+            {stickyColleagueTasks.map((task, idx) => {
               const rawLeft = task.posX ?? 0;
               const rawTop = task.posY ?? 0;
               // Si una tarea nueva todavía no tiene posición guardada, (0,0) puede quedar tapada.
@@ -602,6 +637,19 @@ export default function HomePage() {
           colleagues={approvedUsers.length ? approvedUsers : [{ id: user?.id || 'me', name: userName }]}
           currentUserId={user?.id || ''}
           onTaskCreated={fetchColleagueTasks}
+        />
+
+        <StockReplenishDialog
+          task={activeStockVm?.task ?? null}
+          open={Boolean(activeStockVm)}
+          onOpenChange={(next) => {
+            if (!next && activeStockVm) {
+              setSkippedStockTaskIds((prev) => new Set(prev).add(activeStockVm.task.id));
+            }
+          }}
+          onCompleted={async () => {
+            await fetchColleagueTasks();
+          }}
         />
 
         {/* Mensaje de bienvenida */}

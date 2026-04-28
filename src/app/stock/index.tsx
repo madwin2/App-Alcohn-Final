@@ -12,6 +12,7 @@ import {
   setAssignmentForItem,
   setStockQuantity,
   StockItem,
+  syncStockReplenishTasksForCurrentUser,
 } from '@/lib/supabase/services/stock.service';
 
 export default function StockPage() {
@@ -47,6 +48,7 @@ export default function StockPage() {
       setPendingQty(
         Object.fromEntries(stockItems.map((item) => [item.id, String(item.quantity)])),
       );
+      await syncStockReplenishTasksForCurrentUser();
     } catch (error) {
       toast({
         title: 'Error cargando stock',
