@@ -23,7 +23,7 @@ import {
   syncStockReplenishTasksForCurrentUser,
   type StockReplenishPayload,
 } from '@/lib/supabase/services/stock.service';
-import { StockReplenishDialog } from '@/components/home/StockReplenishDialog';
+import { StockReplenishSection } from '@/components/home/StockReplenishSection';
 import stickyNoteAddSvg from '@/assets/sticky-notes/sticky-note-add.svg';
 import stickyNoteTaskSvg from '@/assets/sticky-notes/sticky-note-task.svg';
 import stickyNoteAddWorkmateSvg from '@/assets/sticky-notes/sticky-note-add-workmate.svg';
@@ -172,7 +172,10 @@ export default function HomePage() {
     setSkippedStockTaskIds((prev) => new Set([...prev].filter((id) => existing.has(id))));
   }, [colleagueTasks]);
 
-  const activeStockVm = stockReplenishVms.find((entry) => !skippedStockTaskIds.has(entry.task.id));
+  const visibleStockReplenishEntries = useMemo(
+    () => stockReplenishVms.filter((entry) => !skippedStockTaskIds.has(entry.task.id)),
+    [stockReplenishVms, skippedStockTaskIds],
+  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -394,8 +397,10 @@ export default function HomePage() {
       <Sidebar />
 
       <div className="relative flex-1 flex flex-col ml-20 px-8 py-8 space-y-4">
-        {/* Primera fila: diseño simple al estilo referencia */}
-        <div className="flex flex-col md:flex-row items-center md:items-center justify-between gap-10">
+        {/* Primera fila: columna izquierda (objetivos + tarjetas stock fijas) · usuarios · botones */}
+        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-10 w-full">
+          {/* Columna izquierda: Objetivos + reposición stock (misma estética que columnas Sellos listos) */}
+          <div className="flex flex-col gap-4 shrink-0 w-full xl:w-auto xl:max-w-[380px]">
           {/* Objetivos */}
           <div className="flex flex-col justify-center gap-3 text-xs min-w-[220px] h-[120px]">
             <h2 className="text-lg font-semibold tracking-tight">Objetivos</h2>
@@ -429,8 +434,17 @@ export default function HomePage() {
             </div>
           </div>
 
+          <StockReplenishSection
+            entries={visibleStockReplenishEntries}
+            onSkip={(taskId) => setSkippedStockTaskIds((prev) => new Set(prev).add(taskId))}
+            onCompleted={async () => {
+              await fetchColleagueTasks();
+            }}
+          />
+          </div>
+
           {/* Usuarios - cápsula con borde */}
-          <div className="flex-1 flex justify-center h-[120px]">
+          <div className="flex-1 flex justify-center min-h-[120px] xl:pt-0 xl:justify-center">
             <div className="flex items-center gap-6 px-6 py-3 rounded-full border border-white/10 bg-black/40 shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-sm max-w-full overflow-x-auto">
               {(approvedUsers.length ? approvedUsers : [{ id: user?.id || 'me', name: userName }]).map(
                 (u) => (
@@ -456,7 +470,7 @@ export default function HomePage() {
           </div>
 
           {/* Botones add - al mismo nivel que Objetivos y usuarios */}
-          <div className="flex items-center gap-2 h-[120px] shrink-0">
+          <div className="flex items-center gap-2 min-h-[120px] shrink-0 justify-center xl:justify-end self-center xl:self-start">
             <button
               type="button"
               onClick={() => setIsAdding(true)}
@@ -637,19 +651,6 @@ export default function HomePage() {
           colleagues={approvedUsers.length ? approvedUsers : [{ id: user?.id || 'me', name: userName }]}
           currentUserId={user?.id || ''}
           onTaskCreated={fetchColleagueTasks}
-        />
-
-        <StockReplenishDialog
-          task={activeStockVm?.task ?? null}
-          open={Boolean(activeStockVm)}
-          onOpenChange={(next) => {
-            if (!next && activeStockVm) {
-              setSkippedStockTaskIds((prev) => new Set(prev).add(activeStockVm.task.id));
-            }
-          }}
-          onCompleted={async () => {
-            await fetchColleagueTasks();
-          }}
         />
 
         {/* Mensaje de bienvenida */}
