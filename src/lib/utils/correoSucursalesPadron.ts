@@ -4,7 +4,6 @@
  * - normalizar_nombre + buscar_sucursal + buscar_sucursal_smart
  */
 
-import sucursalesMiCorreoDefecto from '../data/sucursales_micorreo.csv?raw';
 import { supabase } from '../supabase/client';
 
 const ABREVIACIONES: Array<[string, string]> = [
@@ -84,31 +83,6 @@ export function normalizarNombreCorreo(nombre: string): string {
   return s;
 }
 
-function parseCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let field = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const c = line[i];
-    if (inQuotes) {
-      if (c === '"') {
-        inQuotes = false;
-      } else {
-        field += c;
-      }
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ',') {
-      out.push(field);
-      field = '';
-    } else {
-      field += c;
-    }
-  }
-  out.push(field);
-  return out.map((c) => c.trim());
-}
-
 export type SucursalMiCorreo = {
   codigo: string;
   calle: string;
@@ -116,49 +90,6 @@ export type SucursalMiCorreo = {
   localidad: string;
   provincia: string;
 };
-
-const envInlineCsv = (import.meta.env.VITE_CORREO_SUCURSALES_CSV as string | undefined)?.trim() ?? '';
-
-/** Parsea el CSV oficial (Mismo esquema que en Python: CÓDIGO, CALLE, NÚMERO, LOCALIDAD, PROVINCIA, HORARIOS). */
-export function parseSucursalesMiCorreoCsvText(raw: string): SucursalMiCorreo[] {
-  if (!raw.trim()) return [];
-  const lines = raw.split(/\r?\n/).filter((l) => l.trim().length);
-  if (lines.length < 2) return [];
-
-  const header = parseCsvLine(lines[0]).map((h) => h.trim().replace(/^\uFEFF/, ''));
-  const hNorm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-  const col = (pred: (low: string) => boolean) => {
-    const i = header.findIndex((cell) => pred(hNorm(cell)));
-    return i;
-  };
-  const iC = col((c) => c.startsWith('codig'));
-  const iCal = col((c) => c.startsWith('calle') && !c.startsWith('cod'));
-  const iN = col((c) => c.startsWith('numer') || c.startsWith('núm'));
-  const iL = col((c) => c.startsWith('local'));
-  const iP = col((c) => c.startsWith('provin'));
-
-  const cCod = iC >= 0 ? iC : 0;
-  const cCal = iCal >= 0 ? iCal : 1;
-  const cN = iN >= 0 ? iN : 2;
-  const cL = iL >= 0 ? iL : 3;
-  const cP = iP >= 0 ? iP : 4;
-  if (header.length < 5) return [];
-
-  const out: SucursalMiCorreo[] = [];
-  for (let l = 1; l < lines.length; l += 1) {
-    const row = parseCsvLine(lines[l]);
-    if (row.length < 5) continue;
-    out.push({
-      codigo: (row[cCod] || '').trim(),
-      calle: (row[cCal] || '').trim(),
-      numero: (row[cN] || '').trim(),
-      localidad: (row[cL] || '').trim().toUpperCase(),
-      provincia: (row[cP] || '').trim().toUpperCase(),
-    });
-  }
-  return out;
-}
 
 let padronEfectivo: SucursalMiCorreo[] | null = null;
 let supabasePadronChecked = false;
@@ -175,7 +106,7 @@ const mapSupabasePadronRowToSucursal = (row: any): SucursalMiCorreo => ({
 
 /**
  * Intenta obtener el padrón desde Supabase.
- * Si la tabla no existe o falla (permiso/esquema), devuelve [] y se usa fallback local.
+ * Si la tabla no existe o falla (permiso/esquema), devuelve [].
  */
 async function tryLoadPadronFromSupabase(): Promise<SucursalMiCorreo[]> {
   try {
@@ -185,30 +116,22 @@ async function tryLoadPadronFromSupabase(): Promise<SucursalMiCorreo[]> {
       .limit(10000);
 
     if (error) {
-      console.warn('Padron sucursales: fallback a CSV local (Supabase error):', error.message || error);
+      console.warn('Padron sucursales: error al leer desde Supabase:', error.message || error);
       return [];
     }
     const rows = (data || []).map(mapSupabasePadronRowToSucursal).filter((r) => r.codigo && r.provincia);
     return rows;
   } catch (error) {
-    console.warn('Padron sucursales: fallback a CSV local (Supabase excepción):', error);
+    console.warn('Padron sucursales: excepción al leer desde Supabase:', error);
     return [];
   }
 }
 
-/** Padrón en memoria: archivo embebido en el bundle o reemplazable por VITE (texto del CSV). */
-export function getSucursalesPadron(): SucursalMiCorreo[] {
-  if (padronEfectivo) return padronEfectivo;
-  const raw = envInlineCsv || sucursalesMiCorreoDefecto;
-  padronEfectivo = parseSucursalesMiCorreoCsvText(typeof raw === 'string' ? raw : '');
-  return padronEfectivo;
-}
-
 /**
- * Supabase-first: si hay padrón cargado en tabla, lo usa.
- * Fallback automático al CSV local embebido para no romper flujo.
+ * Padrón 100% Supabase.
  */
 export async function getSucursalesPadronPreferSupabase(): Promise<SucursalMiCorreo[]> {
+  if (padronEfectivo) return padronEfectivo;
   if (!supabasePadronChecked) {
     supabasePadronChecked = true;
     const fromDb = await tryLoadPadronFromSupabase();
@@ -217,7 +140,7 @@ export async function getSucursalesPadronPreferSupabase(): Promise<SucursalMiCor
       return padronEfectivo;
     }
   }
-  return getSucursalesPadron();
+  return [];
 }
 
 /**

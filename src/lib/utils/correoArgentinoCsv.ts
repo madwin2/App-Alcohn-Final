@@ -95,7 +95,7 @@ export const createCorreoCsvRow = async (
     return {
       ok: false,
       reason:
-        'Padrón de sucursales vacío. Incluimos `src/lib/data/sucursales_micorreo.csv` en el build; si hace falta otro, usá VITE_CORREO_SUCURSALES_CSV.',
+        'Padrón de sucursales no disponible en Supabase (tabla `correo_sucursales` vacía o inaccesible).',
     };
   }
 
