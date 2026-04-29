@@ -388,10 +388,10 @@ export default function HomePage() {
       <Sidebar />
 
       <div className="relative flex-1 flex flex-col ml-20 px-8 py-8 space-y-4">
-        {/* Primera fila: columna izquierda (objetivos + tarjetas stock fijas) · usuarios · botones */}
+        {/* Primera fila: objetivos · usuarios · botones */}
         <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-10 w-full">
-          {/* Columna izquierda: Objetivos + reposición stock (misma estética que columnas Sellos listos) */}
-          <div className="flex flex-col gap-4 shrink-0 w-full xl:w-auto xl:max-w-[380px]">
+          {/* Columna izquierda: Objetivos */}
+          <div className="flex flex-col gap-4 shrink-0 w-full xl:w-auto xl:max-w-[320px]">
           {/* Objetivos */}
           <div className="flex flex-col justify-center gap-3 text-xs min-w-[220px] h-[120px]">
             <h2 className="text-lg font-semibold tracking-tight">Objetivos</h2>
@@ -424,14 +424,6 @@ export default function HomePage() {
               </div>
             </div>
           </div>
-
-          <StockReplenishSection
-            entries={stockReplenishVms}
-            lastSyncedAt={stockReplenishSyncedAt}
-            onCompleted={async () => {
-              await fetchColleagueTasks();
-            }}
-          />
           </div>
 
           {/* Usuarios - cápsula con borde */}
@@ -644,17 +636,35 @@ export default function HomePage() {
           onTaskCreated={fetchColleagueTasks}
         />
 
-        {/* Mensaje de bienvenida */}
-        <div className="text-center py-6 space-y-2">
-          <p className="text-sm uppercase tracking-[0.25em] text-muted-foreground">
-            Visualizador del día
-          </p>
-          <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
-            Hola {userName.split(' ')[0]}!
-          </h1>
-          <p className="text-2xl md:text-3xl text-muted-foreground">
-            Bienvenido a Alcohn.
-          </p>
+        {/* Bloque principal en 3 columnas: stock · bienvenida · espacio futuro */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch py-2">
+          <div className="xl:min-h-[320px]">
+            <StockReplenishSection
+              entries={stockReplenishVms}
+              lastSyncedAt={stockReplenishSyncedAt}
+              onCompleted={async () => {
+                await fetchColleagueTasks();
+              }}
+            />
+          </div>
+
+          <div className="xl:min-h-[320px] rounded-2xl border border-white/10 bg-black/20 backdrop-blur-sm flex items-center justify-center px-6">
+            <div className="text-center space-y-2">
+              <p className="text-sm uppercase tracking-[0.25em] text-muted-foreground">
+                Visualizador del día
+              </p>
+              <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
+                Hola {userName.split(' ')[0]}!
+              </h1>
+              <p className="text-2xl md:text-3xl text-muted-foreground">
+                Bienvenido a Alcohn.
+              </p>
+            </div>
+          </div>
+
+          <div className="xl:min-h-[320px] rounded-2xl border border-dashed border-white/10 bg-black/10 flex items-center justify-center">
+            <p className="text-sm text-muted-foreground">Espacio reservado para próxima tarjeta</p>
+          </div>
         </div>
 
         {/* Sellos listos */}
