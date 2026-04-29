@@ -648,7 +648,7 @@ export default function HomePage() {
             />
           </div>
 
-          <div className="xl:min-h-[320px] rounded-2xl border border-white/10 bg-black/20 backdrop-blur-sm flex items-center justify-center px-6">
+          <div className="xl:min-h-[320px] rounded-2xl bg-black/20 backdrop-blur-sm flex items-center justify-center px-6">
             <div className="text-center space-y-2">
               <p className="text-sm uppercase tracking-[0.25em] text-muted-foreground">
                 Visualizador del día
@@ -662,7 +662,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="xl:min-h-[320px] rounded-2xl border border-dashed border-white/10 bg-black/10 flex items-center justify-center">
+          <div className="xl:min-h-[320px] rounded-2xl bg-black/10 flex items-center justify-center">
             <p className="text-sm text-muted-foreground">Espacio reservado para próxima tarjeta</p>
           </div>
         </div>
