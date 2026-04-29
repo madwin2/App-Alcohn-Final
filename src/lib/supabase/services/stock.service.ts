@@ -4,6 +4,8 @@ export type StockItemKey =
   | 'CAJA_ABECEDARIO'
   | 'SOPORTE_ABECEDARIO'
   | 'MANGO_GOLPE'
+  | 'ALUMINIO_PARA_BASE'
+  | 'BASE_REMACHADORA'
   | 'SOLDADOR_100W'
   | 'SOLDADOR_200W'
   | 'SOLDADOR_ADAPTADO_100W'
@@ -36,6 +38,8 @@ const DEFAULT_STOCK_ITEMS: Array<{ key: StockItemKey; name: string }> = [
   { key: 'CAJA_ABECEDARIO', name: 'Caja de Abecedario' },
   { key: 'SOPORTE_ABECEDARIO', name: 'Soporte de Abecedario' },
   { key: 'MANGO_GOLPE', name: 'Mango de Golpe' },
+  { key: 'ALUMINIO_PARA_BASE', name: 'Aluminio para Base' },
+  { key: 'BASE_REMACHADORA', name: 'Base Remachadora' },
   { key: 'SOLDADOR_100W', name: 'Soldador 100W' },
   { key: 'SOLDADOR_200W', name: 'Soldador 200W' },
   { key: 'SOLDADOR_ADAPTADO_100W', name: 'Soldador Adaptado 100W' },
@@ -58,6 +62,8 @@ const BASE_REQUIREMENTS: Record<Exclude<StockItemKey, 'SOLDADOR_100W' | 'SOLDADO
   CAJA_ABECEDARIO: 0,
   SOPORTE_ABECEDARIO: 0,
   MANGO_GOLPE: 0,
+  ALUMINIO_PARA_BASE: 0,
+  BASE_REMACHADORA: 0,
   TUERCA: 0,
   VARILLA: 0,
   PRISIONERO: 0,
@@ -199,6 +205,11 @@ export const requirementsForOrderItem = (item: MinimalOrderItem): Record<StockIt
     return requirements;
   }
 
+  if (itemType === 'BASE_REMACHADORA') {
+    requirements.BASE_REMACHADORA += 1;
+    return requirements;
+  }
+
   requirements.TUBO_80MM += 1;
   requirements.PRISIONERO += 1;
   requirements.VARILLA += 1;
@@ -305,7 +316,11 @@ export const consumeStockForOrderWhenTrackingSent = async (params: {
   const missing: Array<{ key: StockItemKey; name: string; required: number; available: number }> = [];
 
   for (const [key, required] of requiredEntries) {
-    if (key === 'SOLDADOR_ADAPTADO_100W' || key === 'SOLDADOR_ADAPTADO_200W') continue;
+    if (
+      key === 'SOLDADOR_ADAPTADO_100W' ||
+      key === 'SOLDADOR_ADAPTADO_200W' ||
+      key === 'BASE_REMACHADORA'
+    ) continue;
     const row = stockByKey.get(key);
     const available = Number(row?.quantity ?? 0);
     if (available < required) {
@@ -338,6 +353,22 @@ export const consumeStockForOrderWhenTrackingSent = async (params: {
   checkSoldadorPower('SOLDADOR_ADAPTADO_100W', 'SOLDADOR_100W');
   checkSoldadorPower('SOLDADOR_ADAPTADO_200W', 'SOLDADOR_200W');
 
+  const neededBaseRemachadora = requirements.BASE_REMACHADORA;
+  if (neededBaseRemachadora > 0) {
+    const finishedAvailable = Number(stockByKey.get('BASE_REMACHADORA')?.quantity ?? 0);
+    const rawAvailable = Number(stockByKey.get('ALUMINIO_PARA_BASE')?.quantity ?? 0);
+    const totalCover = finishedAvailable + rawAvailable;
+    if (totalCover < neededBaseRemachadora) {
+      const label = stockByKey.get('BASE_REMACHADORA')?.item_name ?? 'Base Remachadora';
+      missing.push({
+        key: 'BASE_REMACHADORA',
+        name: label,
+        required: neededBaseRemachadora,
+        available: totalCover,
+      });
+    }
+  }
+
   if (missing.length) {
     await createMissingStockTasks(params.orderId, params.orderLabel, missing);
     return { ok: false, missing };
@@ -347,7 +378,11 @@ export const consumeStockForOrderWhenTrackingSent = async (params: {
   const updates: Array<{ id: string; quantity: number }> = [];
 
   for (const [key, required] of requiredEntries) {
-    if (key === 'SOLDADOR_ADAPTADO_100W' || key === 'SOLDADOR_ADAPTADO_200W') continue;
+    if (
+      key === 'SOLDADOR_ADAPTADO_100W' ||
+      key === 'SOLDADOR_ADAPTADO_200W' ||
+      key === 'BASE_REMACHADORA'
+    ) continue;
     const row = stockByKey.get(key);
     const nextQty = Number(row.quantity) - required;
     updates.push({ id: row.id, quantity: nextQty });
@@ -404,6 +439,47 @@ export const consumeStockForOrderWhenTrackingSent = async (params: {
 
   consumeSoldadorPower('SOLDADOR_ADAPTADO_100W', 'SOLDADOR_100W');
   consumeSoldadorPower('SOLDADOR_ADAPTADO_200W', 'SOLDADOR_200W');
+
+  const consumeBaseRemachadora = () => {
+    const needed = requirements.BASE_REMACHADORA;
+    if (needed <= 0) return;
+    const finishedRow = stockByKey.get('BASE_REMACHADORA');
+    const rawRow = stockByKey.get('ALUMINIO_PARA_BASE');
+    const finishedAvailable = Number(finishedRow.quantity ?? 0);
+    const consumeFinished = Math.min(finishedAvailable, needed);
+    const fabricateFromRaw = needed - consumeFinished;
+
+    if (consumeFinished > 0) {
+      updates.push({
+        id: finishedRow.id,
+        quantity: finishedAvailable - consumeFinished,
+      });
+      movements.push({
+        stock_item_id: finishedRow.id,
+        movement_type: 'OUT',
+        quantity: consumeFinished,
+        note: `Consumo base remachadora por envío (${params.orderLabel})`,
+        order_id: params.orderId,
+      });
+    }
+
+    if (fabricateFromRaw > 0) {
+      const rawAvailable = Number(rawRow.quantity ?? 0);
+      updates.push({
+        id: rawRow.id,
+        quantity: rawAvailable - fabricateFromRaw,
+      });
+      movements.push({
+        stock_item_id: rawRow.id,
+        movement_type: 'OUT',
+        quantity: fabricateFromRaw,
+        note: `Consumo de aluminio para mecanizar base y enviar (${params.orderLabel})`,
+        order_id: params.orderId,
+      });
+    }
+  };
+
+  consumeBaseRemachadora();
 
   for (const update of updates) {
     const { error: upErr } = await supabase

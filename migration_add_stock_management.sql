@@ -107,6 +107,8 @@ values
   ('CAJA_ABECEDARIO', 'Caja de Abecedario'),
   ('SOPORTE_ABECEDARIO', 'Soporte de Abecedario'),
   ('MANGO_GOLPE', 'Mango de Golpe'),
+  ('ALUMINIO_PARA_BASE', 'Aluminio para Base'),
+  ('BASE_REMACHADORA', 'Base Remachadora'),
   ('SOLDADOR_100W', 'Soldador 100W'),
   ('SOLDADOR_200W', 'Soldador 200W'),
   ('SOLDADOR_ADAPTADO_100W', 'Soldador Adaptado 100W'),
