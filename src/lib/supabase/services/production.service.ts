@@ -7,6 +7,35 @@ type SelloRow = Database['public']['Tables']['sellos']['Row'];
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
 
+const mapItemType = (itemType: string | null | undefined): 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA' => {
+  const mapping: Record<string, 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA'> = {
+    SELLO: 'SELLO',
+    ABECEDARIO: 'ABECEDARIO',
+    SOLDADOR: 'SOLDADOR',
+    MANGO_GOLPE: 'MANGO_GOLPE',
+    BASE_REMACHADORA: 'BASE_REMACHADORA',
+  };
+  return itemType ? (mapping[itemType] || 'SELLO') : 'SELLO';
+};
+
+const getItemTypeLabel = (itemType: 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA'): string => {
+  const labels: Record<'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA', string> = {
+    SELLO: 'Sello',
+    ABECEDARIO: 'ABC',
+    SOLDADOR: 'Soldador',
+    MANGO_GOLPE: 'Mango de golpe',
+    BASE_REMACHADORA: 'Base de remachadora',
+  };
+  return labels[itemType];
+};
+
+const resolveDisplayDesignName = (designName: string | null, itemType: 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA'): string => {
+  if (designName && designName.trim().length > 0) {
+    return designName.trim();
+  }
+  return getItemTypeLabel(itemType);
+};
+
 // Mapear estado de fabricación a estado de producción
 const mapToProductionState = (estadoFabricacion: string | null): 'PENDIENTE' | 'EN_PROGRESO' | 'COMPLETADO' | 'REVISAR' | 'REHACER' => {
   const mapping: Record<string, 'PENDIENTE' | 'EN_PROGRESO' | 'COMPLETADO' | 'REVISAR' | 'REHACER'> = {
@@ -35,6 +64,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         programa_id,
         fecha,
         tipo,
+        item_type,
         senia,
         fecha_limite,
         diseno,
@@ -154,6 +184,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         'ABC': 'ABC',
       };
       const stampType = sello.tipo ? (stampTypeMap[sello.tipo] || 'CLASICO') : 'CLASICO';
+      const itemType = mapItemType((sello as any).item_type);
 
       // Obtener estado de vectorización desde la BD
       // Por defecto BASE si no está seteado
@@ -175,7 +206,8 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         id: sello.id,
         orderId: sello.orden_id,
         date: dateStr ?? undefined,
-        designName: sello.diseno || 'Sin diseño',
+        itemType,
+        designName: resolveDisplayDesignName(sello.diseno, itemType),
         requestedWidthMm: widthMm,
         requestedHeightMm: heightMm,
         stampType,
@@ -377,6 +409,7 @@ export const updateProductionItem = async (
       'ABC': 'ABC',
     };
     const stampType = updatedSello.tipo ? (stampTypeMap[updatedSello.tipo] || 'CLASICO') : 'CLASICO';
+    const itemType = mapItemType((updatedSello as any).item_type);
 
     // Obtener estado de vectorización desde la BD actualizada, o usar el valor de updates
     let vectorizationState: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO';
@@ -435,7 +468,8 @@ export const updateProductionItem = async (
       id: updatedSello.id,
       orderId: updatedSello.orden_id,
       date: dateStr,
-      designName: updatedSello.diseno || 'Sin diseño',
+      itemType,
+      designName: resolveDisplayDesignName(updatedSello.diseno, itemType),
       requestedWidthMm: widthMm,
       requestedHeightMm: heightMm,
       stampType,
