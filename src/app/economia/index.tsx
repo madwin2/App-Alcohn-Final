@@ -23,13 +23,13 @@ import {
   type RealMovement,
   type RealMovementType,
 } from '@/lib/supabase/services/economiaMovimientos.service';
+import { fetchTotalesGastosMensualesPorMes } from '@/lib/supabase/services/gastosMensuales.service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import type { Order, OrderItem } from '@/lib/types';
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
-const STORAGE_KEY_FIXED = 'economia_fixed_monthly_cost_ars';
 const STORAGE_KEY_USD = 'economia_usd_rate';
 
 type MonthlyRow = {
@@ -195,7 +195,8 @@ export default function EconomiaPage() {
   const { user, loading: authLoading } = useAuth();
   const { orders, loading } = useOrders();
   const { toast } = useToast();
-  const [fixedMonthlyCost, setFixedMonthlyCost] = useState(0);
+  const [gastosTotalesPorMes, setGastosTotalesPorMes] = useState<Record<string, number>>({});
+  const [gastosMensualesLoading, setGastosMensualesLoading] = useState(false);
   const [usdRate, setUsdRate] = useState(1200);
   const [realMovements, setRealMovements] = useState<RealMovement[]>([]);
   const [movementsLoading, setMovementsLoading] = useState(false);
@@ -207,15 +208,9 @@ export default function EconomiaPage() {
   const [invCypreaArs, setInvCypreaArs] = useState(0);
 
   useEffect(() => {
-    const fixedRaw = localStorage.getItem(STORAGE_KEY_FIXED);
     const usdRaw = localStorage.getItem(STORAGE_KEY_USD);
-    if (fixedRaw) setFixedMonthlyCost(Number(fixedRaw) || 0);
     if (usdRaw) setUsdRate(Number(usdRaw) || 1200);
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_FIXED, String(fixedMonthlyCost));
-  }, [fixedMonthlyCost]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_USD, String(usdRate));
@@ -248,6 +243,31 @@ export default function EconomiaPage() {
     };
   }, [authLoading, isAllowed, toast]);
 
+  useEffect(() => {
+    if (authLoading || !isAllowed) return;
+    let cancelled = false;
+    (async () => {
+      setGastosMensualesLoading(true);
+      try {
+        const map = await fetchTotalesGastosMensualesPorMes();
+        if (!cancelled) setGastosTotalesPorMes(map);
+      } catch (error) {
+        if (!cancelled) {
+          toast({
+            title: 'No se pudieron cargar los gastos mensuales',
+            description: error instanceof Error ? error.message : String(error),
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        if (!cancelled) setGastosMensualesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAllowed, toast]);
+
   const monthly = useMemo<MonthlyRow[]>(() => {
     const byMonth = new Map<string, MonthlyRow>();
 
@@ -259,7 +279,7 @@ export default function EconomiaPage() {
           key,
           label: monthLabel(key),
           ventasBrutas: 0,
-          costosFijos: fixedMonthlyCost,
+          costosFijos: gastosTotalesPorMes[key] ?? 0,
           costosVentas: 0,
           sellos: 0,
           soldadores: 0,
@@ -301,7 +321,7 @@ export default function EconomiaPage() {
     }
 
     return Array.from(byMonth.values()).sort((a, b) => a.key.localeCompare(b.key));
-  }, [orders, fixedMonthlyCost, usdRate]);
+  }, [orders, gastosTotalesPorMes, usdRate]);
 
   const totals = useMemo(() => {
     return monthly.reduce(
@@ -474,13 +494,13 @@ export default function EconomiaPage() {
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <Label htmlFor="fixed-cost">Costos fijos mensuales</Label>
-                  <Input
-                    id="fixed-cost"
-                    type="number"
-                    value={fixedMonthlyCost}
-                    onChange={(e) => setFixedMonthlyCost(Number(e.target.value || 0))}
-                  />
+                  <Label>Gastos mensuales (por mes)</Label>
+                  <p className="text-sm text-muted-foreground leading-snug">
+                    El total por mes (categorías, sueldos, aguinaldo, etc.) se define en{' '}
+                    <span className="text-foreground font-medium">Gastos</span> y se guarda en Supabase. Cada fila de la
+                    tabla usa el mes del pedido.
+                    {gastosMensualesLoading ? ' Cargando totales…' : ''}
+                  </p>
                 </div>
                 <div className="flex flex-col gap-1">
                   <Label htmlFor="usd-rate">Dólar referencia</Label>

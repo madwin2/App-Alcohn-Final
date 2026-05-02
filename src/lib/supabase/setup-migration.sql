@@ -421,3 +421,62 @@ SELECT apply_order_sticky_tasks_migration();
 -- Permitir RPC desde el cliente
 GRANT EXECUTE ON FUNCTION apply_order_sticky_tasks_migration() TO anon;
 GRANT EXECUTE ON FUNCTION apply_order_sticky_tasks_migration() TO authenticated;
+
+
+-- =====================================================
+-- Migración: gastos mensuales (operativos por YYYY-MM)
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION apply_gastos_mensuales_migration()
+RETURNS void
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  CREATE TABLE IF NOT EXISTS gastos_mensuales (
+    mes TEXT PRIMARY KEY CHECK (mes ~ '^[0-9]{4}-[0-9]{2}$'),
+    data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_gastos_mensuales_updated ON gastos_mensuales(updated_at DESC);
+
+  COMMENT ON TABLE gastos_mensuales IS
+    'Gastos operativos por mes (categorías, sueldos, etc.). data: JSON con montos y sueldos_por_usuario.';
+
+  ALTER TABLE gastos_mensuales ENABLE ROW LEVEL SECURITY;
+
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE gastos_mensuales TO authenticated;
+  GRANT SELECT ON TABLE gastos_mensuales TO anon;
+
+  DROP POLICY IF EXISTS "Usuarios autenticados leen gastos mensuales" ON gastos_mensuales;
+  CREATE POLICY "Usuarios autenticados leen gastos mensuales"
+    ON gastos_mensuales FOR SELECT
+    TO authenticated
+    USING (true);
+
+  DROP POLICY IF EXISTS "Usuarios autenticados insertan gastos mensuales" ON gastos_mensuales;
+  CREATE POLICY "Usuarios autenticados insertan gastos mensuales"
+    ON gastos_mensuales FOR INSERT
+    TO authenticated
+    WITH CHECK (true);
+
+  DROP POLICY IF EXISTS "Usuarios autenticados actualizan gastos mensuales" ON gastos_mensuales;
+  CREATE POLICY "Usuarios autenticados actualizan gastos mensuales"
+    ON gastos_mensuales FOR UPDATE
+    TO authenticated
+    USING (true)
+    WITH CHECK (true);
+
+  DROP POLICY IF EXISTS "Usuarios autenticados eliminan gastos mensuales" ON gastos_mensuales;
+  CREATE POLICY "Usuarios autenticados eliminan gastos mensuales"
+    ON gastos_mensuales FOR DELETE
+    TO authenticated
+    USING (true);
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT apply_gastos_mensuales_migration();
+
+GRANT EXECUTE ON FUNCTION apply_gastos_mensuales_migration() TO anon;
+GRANT EXECUTE ON FUNCTION apply_gastos_mensuales_migration() TO authenticated;

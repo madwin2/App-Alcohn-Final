@@ -12,58 +12,32 @@ import {
   type VariableCostsState,
 } from '@/lib/gastos/variableCosts';
 import {
+  aguinaldoMensual,
+  emptyMonthlyPayload,
+  mergeMonthlyPayload,
+  MONTHLY_CATEGORIES,
+  MONTHLY_EXTRA_CATEGORIES,
+  sumSueldos,
+  totalGastosMensuales,
+  type MonthlyExpensesPayload,
+  type MonthlyScalarKey,
+} from '@/lib/gastos/monthlyOperationalCosts';
+import {
   fetchLatestFabricacionParams,
   insertFabricacionParamsVersion,
 } from '@/lib/supabase/services/fabricacionParametros.service';
+import {
+  fetchAllGastosMensuales,
+  upsertGastosMensuales,
+} from '@/lib/supabase/services/gastosMensuales.service';
+import { getApprovedUsers } from '@/lib/supabase/services/auth.service';
 
 export type { VariableCostsState };
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
 
-const STORAGE_KEY_FIXED = 'economia_fixed_monthly_cost_ars';
 const STORAGE_VARIABLE = 'gastos_variable_costs_v1';
-const STORAGE_MONTHLY = 'gastos_mensuales_v1';
-
-const MONTHLY_CATEGORIES = [
-  { key: 'publicidad', label: 'Publicidad' },
-  { key: 'envios', label: 'Envíos' },
-  { key: 'compra_dolares', label: 'Compra de dólares (ahorro de la empresa)' },
-  { key: 'inversiones_empresa', label: 'Inversiones que hace la empresa' },
-  { key: 'gastos_varios', label: 'Gastos varios' },
-  { key: 'automatizaciones', label: 'Automatizaciones' },
-  { key: 'impuestos', label: 'Impuestos' },
-  { key: 'remodelacion', label: 'Remodelación' },
-  { key: 'inversion_cyprea', label: 'Inversiones en Cyprea' },
-] as const;
-
-type MonthlyKey = (typeof MONTHLY_CATEGORIES)[number]['key'];
-
-type MonthlyExpensesRow = Record<MonthlyKey, number>;
-
-const emptyMonthlyRow = (): MonthlyExpensesRow =>
-  MONTHLY_CATEGORIES.reduce((acc, c) => {
-    acc[c.key] = 0;
-    return acc;
-  }, {} as MonthlyExpensesRow);
-
-const parseMonthlyStore = (raw: string | null): Record<string, MonthlyExpensesRow> => {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as Record<string, Partial<MonthlyExpensesRow>>;
-    const out: Record<string, MonthlyExpensesRow> = {};
-    for (const [month, row] of Object.entries(parsed)) {
-      const base = emptyMonthlyRow();
-      for (const c of MONTHLY_CATEGORIES) {
-        const v = row[c.key];
-        base[c.key] = typeof v === 'number' && !Number.isNaN(v) ? v : 0;
-      }
-      out[month] = base;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-};
+const STORAGE_MONTHLY_LEGACY = 'gastos_mensuales_v1';
 
 const currentMonthKey = () => {
   const d = new Date();
@@ -122,10 +96,12 @@ function NumberField({
 export default function GastosPage() {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const [fixedMonthly, setFixedMonthly] = useState(0);
   const [variable, setVariable] = useState<VariableCostsState>(DEFAULT_VARIABLE_COSTS);
-  const [monthlyByMonth, setMonthlyByMonth] = useState<Record<string, MonthlyExpensesRow>>({});
+  const [monthlyByMonth, setMonthlyByMonth] = useState<Record<string, MonthlyExpensesPayload>>({});
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
+  const [approvedUsers, setApprovedUsers] = useState<Array<{ id: string; name: string }>>([]);
+  const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const [monthlySaving, setMonthlySaving] = useState(false);
 
   const [paramsLoading, setParamsLoading] = useState(false);
   const [paramsSaving, setParamsSaving] = useState(false);
@@ -134,23 +110,68 @@ export default function GastosPage() {
 
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
-  useEffect(() => {
-    const fixedRaw = localStorage.getItem(STORAGE_KEY_FIXED);
-    if (fixedRaw) setFixedMonthly(Number(fixedRaw) || 0);
-    setMonthlyByMonth(parseMonthlyStore(localStorage.getItem(STORAGE_MONTHLY)));
-  }, []);
+  function tryImportLegacyLocal(): Record<string, MonthlyExpensesPayload> | null {
+    const raw = localStorage.getItem(STORAGE_MONTHLY_LEGACY);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const out: Record<string, MonthlyExpensesPayload> = {};
+      for (const [mk, row] of Object.entries(parsed)) {
+        out[mk] = mergeMonthlyPayload(row);
+      }
+      return out;
+    } catch {
+      return null;
+    }
+  }
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_FIXED, String(fixedMonthly));
-  }, [fixedMonthly]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_MONTHLY, JSON.stringify(monthlyByMonth));
-  }, [monthlyByMonth]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_VARIABLE, JSON.stringify(variable));
-  }, [variable]);
+    if (authLoading || !isAllowed) return;
+    let cancelled = false;
+    (async () => {
+      setMonthlyLoading(true);
+      try {
+        const [users, fromDb] = await Promise.all([getApprovedUsers(), fetchAllGastosMensuales()]);
+        if (cancelled) return;
+        setApprovedUsers(users);
+        if (Object.keys(fromDb).length > 0) {
+          setMonthlyByMonth(fromDb);
+        } else {
+          const legacy = tryImportLegacyLocal();
+          if (legacy && Object.keys(legacy).length > 0) {
+            setMonthlyByMonth(legacy);
+            toast({
+              title: 'Gastos importados del navegador',
+              description: 'Revisá los montos y tocá «Guardar este mes en Supabase» para cada mes que quieras persistir.',
+            });
+          }
+        }
+      } catch (e: unknown) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        const legacy = tryImportLegacyLocal();
+        if (legacy && Object.keys(legacy).length > 0) {
+          setMonthlyByMonth(legacy);
+          toast({
+            title: 'No se pudieron cargar gastos desde Supabase',
+            description: `${msg} · Mostrando datos guardados en este navegador.`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'No se pudieron cargar gastos desde Supabase',
+            description: msg,
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        if (!cancelled) setMonthlyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAllowed, toast]);
 
   useEffect(() => {
     if (authLoading || !isAllowed) return;
@@ -199,28 +220,66 @@ export default function GastosPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, isAllowed]);
+  }, [authLoading, isAllowed, toast]);
 
   const currentRow = useMemo(() => {
-    return monthlyByMonth[selectedMonth] ?? emptyMonthlyRow();
-  }, [monthlyByMonth, selectedMonth]);
+    const base = monthlyByMonth[selectedMonth] ?? emptyMonthlyPayload();
+    const sueldos = { ...base.sueldos_por_usuario };
+    for (const u of approvedUsers) {
+      if (sueldos[u.id] === undefined) sueldos[u.id] = 0;
+    }
+    return { ...base, sueldos_por_usuario: sueldos };
+  }, [monthlyByMonth, selectedMonth, approvedUsers]);
 
-  const setCategory = (key: MonthlyKey, value: number) => {
+  const setScalar = (key: MonthlyScalarKey, value: number) => {
     setMonthlyByMonth((prev) => ({
       ...prev,
       [selectedMonth]: {
-        ...(prev[selectedMonth] ?? emptyMonthlyRow()),
+        ...(prev[selectedMonth] ?? emptyMonthlyPayload()),
         [key]: value,
       },
     }));
   };
 
-  const monthlyTotal = useMemo(() => {
-    return MONTHLY_CATEGORIES.reduce((sum, c) => sum + (currentRow[c.key] || 0), 0);
-  }, [currentRow]);
+  const setSueldoUsuario = (userId: string, value: number) => {
+    setMonthlyByMonth((prev) => {
+      const row = prev[selectedMonth] ?? emptyMonthlyPayload();
+      return {
+        ...prev,
+        [selectedMonth]: {
+          ...row,
+          sueldos_por_usuario: { ...row.sueldos_por_usuario, [userId]: value },
+        },
+      };
+    });
+  };
+
+  const monthlyTotal = useMemo(() => totalGastosMensuales(currentRow), [currentRow]);
 
   const updateVariable = (patch: Partial<VariableCostsState>) => {
     setVariable((v) => ({ ...v, ...patch }));
+  };
+
+  const handleGuardarGastosMes = async () => {
+    setMonthlySaving(true);
+    try {
+      await upsertGastosMensuales(selectedMonth, currentRow);
+      const fresh = await fetchAllGastosMensuales();
+      setMonthlyByMonth(fresh);
+      toast({
+        title: 'Gastos guardados',
+        description: `Mes ${selectedMonth} guardado en Supabase.`,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast({
+        title: 'Error al guardar gastos',
+        description: msg,
+        variant: 'destructive',
+      });
+    } finally {
+      setMonthlySaving(false);
+    }
   };
 
   const handleGuardarCostosDb = async () => {
@@ -253,6 +312,10 @@ export default function GastosPage() {
     }
   };
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_VARIABLE, JSON.stringify(variable));
+  }, [variable]);
+
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   }
@@ -262,6 +325,7 @@ export default function GastosPage() {
   }
 
   const paramsDisabled = paramsLoading || paramsSaving;
+  const monthlyDisabled = monthlyLoading || monthlySaving;
 
   return (
     <div className="min-h-screen bg-background">
@@ -270,22 +334,9 @@ export default function GastosPage() {
         <div>
           <h1 className="text-2xl font-semibold">Gastos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configuración de costos fijos, parámetros de fabricación (Supabase) y gastos operativos por mes (solo tu
-            usuario).
+            Parámetros de fabricación (Supabase) y gastos mensuales operativos guardados en base de datos.
           </p>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Gastos fijos mensuales</CardTitle>
-            <CardDescription>
-              Se usa también en la vista Economía (mismo valor guardado en este navegador).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="max-w-xs">
-            <NumberField label="Monto mensual (ARS)" value={fixedMonthly} onChange={setFixedMonthly} />
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader>
@@ -379,16 +430,27 @@ export default function GastosPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Gastos del mes</CardTitle>
-            <CardDescription>Montos en pesos por categoría (solo en este navegador). Elegí el mes arriba.</CardDescription>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>Gastos mensuales</CardTitle>
+                <CardDescription>
+                  Suma de todas las categorías del mes (incluye sueldos, aguinaldo provisionado y rubros fijos). Elegí el
+                  mes, editá y guardá en Supabase. Podés volver a meses anteriores para cargar o corregir.
+                </CardDescription>
+              </div>
+              <Button type="button" onClick={handleGuardarGastosMes} disabled={monthlyDisabled}>
+                {monthlySaving ? 'Guardando…' : monthlyLoading ? 'Cargando…' : 'Guardar este mes en Supabase'}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Mes</Label>
                 <input
-                  className="bg-background border rounded-md px-3 py-2 text-sm"
+                  className="bg-background border rounded-md px-3 py-2 text-sm disabled:opacity-50"
                   type="month"
+                  disabled={monthlyDisabled}
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
                 />
@@ -404,9 +466,51 @@ export default function GastosPage() {
                   key={c.key}
                   label={c.label}
                   value={currentRow[c.key]}
-                  onChange={(n) => setCategory(c.key, n)}
+                  onChange={(n) => setScalar(c.key, n)}
+                  disabled={monthlyDisabled}
                 />
               ))}
+            </div>
+
+            <div className="pt-2 border-t border-border">
+              <h3 className="text-sm font-medium mb-3">Otros gastos fijos del mes</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {MONTHLY_EXTRA_CATEGORIES.map((c) => (
+                  <NumberField
+                    key={c.key}
+                    label={c.label}
+                    value={currentRow[c.key]}
+                    onChange={(n) => setScalar(c.key, n)}
+                    disabled={monthlyDisabled}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border">
+              <h3 className="text-sm font-medium mb-3">Sueldos (usuarios de la app)</h3>
+              {approvedUsers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No hay usuarios aprobados o aún se están cargando.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {approvedUsers.map((u) => (
+                    <NumberField
+                      key={u.id}
+                      label={`Sueldo — ${u.name}`}
+                      value={currentRow.sueldos_por_usuario[u.id] ?? 0}
+                      onChange={(n) => setSueldoUsuario(u.id, n)}
+                      disabled={monthlyDisabled}
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="mt-4 rounded-md border bg-muted/30 px-3 py-3 space-y-1">
+                <p className="text-xs text-muted-foreground">Aguinaldo (provisión mensual)</p>
+                <p className="text-lg font-semibold">{formatArs(aguinaldoMensual(currentRow))}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Suma de sueldos ({formatArs(sumSueldos(currentRow))}) ÷ 12. Ya está incluido en el total del mes.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

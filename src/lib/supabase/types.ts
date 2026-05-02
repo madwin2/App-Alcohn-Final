@@ -185,6 +185,22 @@ export interface Database {
           updated_at: string;
         }>;
       };
+      gastos_mensuales: {
+        Row: {
+          mes: string;
+          data: Record<string, unknown>;
+          updated_at: string;
+        };
+        Insert: {
+          mes: string;
+          data: Record<string, unknown>;
+          updated_at?: string;
+        };
+        Update: Partial<{
+          data: Record<string, unknown>;
+          updated_at: string;
+        }>;
+      };
     };
   };
 }
