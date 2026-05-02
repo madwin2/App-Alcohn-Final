@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Upload } from 'lucide-react';
+import { Download, Upload } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Order } from '@/lib/types/index';
@@ -10,6 +10,7 @@ import {
   parseTrackingPdf,
   TrackingPdfEntry,
 } from '@/lib/utils/trackingPdfParser';
+import { enrichShippingLabelsPdf } from '@/lib/utils/enrichShippingLabelsPdf';
 
 interface TrackingMatch {
   order: Order;
@@ -76,6 +77,8 @@ export function UploadTrackingDialog({
   const [isParsing, setIsParsing] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [manualAssignments, setManualAssignments] = useState<Record<string, string>>({});
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [isEnriching, setIsEnriching] = useState(false);
 
   const candidateOrders = useMemo(
     () =>
@@ -231,13 +234,31 @@ export function UploadTrackingDialog({
     };
   }, [orders, entries]);
 
+  const entryKey = (entry: TrackingPdfEntry) =>
+    `${entry.pageNumber}::${entry.fullName}::${entry.trackingNumber}`;
+
+  const allMatches = useMemo((): TrackingMatch[] => {
+    const manualMatches: TrackingMatch[] = [];
+    for (const entry of unmatched) {
+      const selectedOrderId = manualAssignments[entryKey(entry)];
+      if (!selectedOrderId) continue;
+      const order = manualCandidateOrders.find((c) => c.id === selectedOrderId);
+      if (!order) continue;
+      manualMatches.push({
+        order,
+        trackingNumber: entry.trackingNumber,
+        sourceName: entry.fullName,
+      });
+    }
+    return [...exactMatches, ...manualMatches];
+  }, [exactMatches, unmatched, manualAssignments, manualCandidateOrders]);
+
   const resetState = () => {
     setFileName('');
     setEntries([]);
     setManualAssignments({});
+    setPdfFile(null);
   };
-
-  const entryKey = (entry: TrackingPdfEntry) => `${entry.fullName}::${entry.trackingNumber}`;
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -257,6 +278,7 @@ export function UploadTrackingDialog({
     try {
       const parsed = await parseTrackingPdf(file);
       setEntries(parsed);
+      setPdfFile(file);
       setManualAssignments({});
       toast({
         title: 'PDF procesado',
@@ -264,6 +286,7 @@ export function UploadTrackingDialog({
       });
     } catch (error) {
       setEntries([]);
+      setPdfFile(null);
       toast({
         title: 'Error al procesar PDF',
         description: error instanceof Error ? error.message : 'No se pudo leer el archivo.',
@@ -276,22 +299,6 @@ export function UploadTrackingDialog({
   };
 
   const applyMatches = async () => {
-    const manualMatches: TrackingMatch[] = unmatched
-      .map((entry) => {
-        const selectedOrderId = manualAssignments[entryKey(entry)];
-        if (!selectedOrderId) return null;
-        const order = manualCandidateOrders.find((candidate) => candidate.id === selectedOrderId);
-        if (!order) return null;
-        return {
-          order,
-          trackingNumber: entry.trackingNumber,
-          sourceName: entry.fullName,
-        } satisfies TrackingMatch;
-      })
-      .filter((match): match is TrackingMatch => Boolean(match));
-
-    const allMatches = [...exactMatches, ...manualMatches];
-
     if (allMatches.length === 0) {
       toast({
         title: 'Sin coincidencias',
@@ -333,6 +340,47 @@ export function UploadTrackingDialog({
     }
   };
 
+  const handleDownloadEnrichedPdf = async () => {
+    if (!pdfFile || allMatches.length === 0) {
+      toast({
+        title: 'No se puede generar el PDF',
+        description: 'Necesitás el PDF cargado y al menos un pedido emparejado con seguimiento.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsEnriching(true);
+    try {
+      const bytes = await pdfFile.arrayBuffer();
+      const map = new Map<string, Order>();
+      for (const m of allMatches) {
+        map.set(m.trackingNumber, m.order);
+      }
+      const out = await enrichShippingLabelsPdf(bytes, map);
+      const blob = new Blob([out], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `etiquetas-con-previews-${Date.now()}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({
+        title: 'PDF generado',
+        description: 'Se descargó una copia con previews en la franja inferior.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error al enriquecer PDF',
+        description:
+          error instanceof Error ? error.message : 'Revisá que las URLs de preview permitan descarga (CORS).',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsEnriching(false);
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -346,7 +394,9 @@ export function UploadTrackingDialog({
           <DialogTitle>Subir seguimientos</DialogTitle>
           <p className="text-sm text-muted-foreground">
             Cargá el PDF de etiquetas. Se tomará el número después de TN y se hará match por
-            nombre y apellido con pedidos pendientes de despacho.
+            nombre y apellido con pedidos pendientes de despacho. Podés generar una copia con
+            miniaturas de los diseños y accesorios (p. ej. mango de golpe) en la franja inferior
+            de cada etiqueta.
           </p>
         </DialogHeader>
 
@@ -470,8 +520,18 @@ export function UploadTrackingDialog({
             </div>
           )}
 
-          <div className="flex justify-end">
-            <Button onClick={applyMatches} disabled={isApplying || isParsing}>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleDownloadEnrichedPdf}
+              disabled={isApplying || isParsing || isEnriching || !pdfFile || allMatches.length === 0}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              {isEnriching ? 'Generando...' : 'Descargar PDF con previews'}
+            </Button>
+            <Button onClick={applyMatches} disabled={isApplying || isParsing || isEnriching}>
               {isApplying ? 'Aplicando...' : 'Aplicar seguimientos'}
             </Button>
           </div>

@@ -9,43 +9,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 export interface TrackingPdfEntry {
   fullName: string;
   trackingNumber: string;
+  /** Página 1-based en el PDF de etiquetas (una etiqueta por página). */
+  pageNumber: number;
 }
 
-const NAME_LINE_REGEX = /^[A-Za-zÁÉÍÓÚÑáéíóúñ'`.-]+(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñ'`.-]+){1,3}$/;
 const TRACKING_REGEX = /\bTN\s*([A-Z0-9]{10,})\b/i;
-const INVALID_NAME_WORDS = [
-  'DESTINATARIO',
-  'REMITENTE',
-  'BUENOS',
-  'AIRES',
-  'BARRIO',
-  'CALLE',
-  'AV',
-  'PISO',
-  'DPTO',
-  'CP',
-  'DOM',
-  'SUCURSAL',
-];
-const INVALID_NAME_PHRASES = [
-  'SAN SALVADOR',
-  'BUENOS AIRES',
-  'MAR DEL PLATA',
-  'CORDOBA CAPITAL',
-];
 
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
-
-const looksLikeName = (line: string): boolean => {
-  const clean = normalizeWhitespace(line);
-  if (!clean || clean.length < 5) return false;
-  if (/\d/.test(clean)) return false;
-  if (!NAME_LINE_REGEX.test(clean)) return false;
-  const upper = clean.toUpperCase();
-  if (INVALID_NAME_WORDS.some((word) => upper.includes(word))) return false;
-  if (INVALID_NAME_PHRASES.some((phrase) => upper.includes(phrase))) return false;
-  return true;
-};
 
 const extractLikelyName = (line: string): string | null => {
   const clean = normalizeWhitespace(line);
@@ -96,12 +66,59 @@ const dedupeEntries = (entries: TrackingPdfEntry[]): TrackingPdfEntry[] => {
   const seen = new Set<string>();
   const output: TrackingPdfEntry[] = [];
   for (const entry of entries) {
-    const key = `${entry.trackingNumber}::${entry.fullName.toUpperCase()}`;
+    const key = `${entry.pageNumber}::${entry.trackingNumber}`;
     if (seen.has(key)) continue;
     seen.add(key);
     output.push(entry);
   }
   return output;
+};
+
+/** Primera etiqueta válida detectada en el texto de una página (orden MiCorreo / TCPDF). */
+export const extractTrackingEntryFromLines = (
+  lines: string[]
+): Pick<TrackingPdfEntry, 'fullName' | 'trackingNumber'> | null => {
+  const destinatarioIndexes = lines
+    .map((line, index) => (line.toUpperCase().includes('DESTINATARIO') ? index : -1))
+    .filter((index) => index >= 0);
+
+  for (const idx of destinatarioIndexes) {
+    const fullName = idx + 1 <= lines.length - 1 ? extractLikelyName(lines[idx + 1]) : null;
+    if (!fullName) continue;
+
+    let trackingNumber: string | null = null;
+    for (let i = Math.max(0, idx - 10); i <= Math.min(lines.length - 1, idx + 4); i += 1) {
+      const tn = lines[i].match(TRACKING_REGEX)?.[1];
+      if (tn) {
+        trackingNumber = tn.trim();
+      }
+    }
+
+    if (trackingNumber) {
+      return { fullName, trackingNumber };
+    }
+  }
+  return null;
+};
+
+/** Una entrada por página (índice 0 = página 1); `null` si no se pudo leer la etiqueta. */
+export const listTrackingNumbersByPage = async (
+  buffer: ArrayBuffer
+): Promise<(string | null)[]> => {
+  const loadingTask = pdfjsLib.getDocument({ data: buffer });
+  const pdf = await loadingTask.promise;
+  const out: (string | null)[] = [];
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const items = textContent.items.filter((i): i is TextItem => 'str' in i);
+    const lines = pageItemsToLines(items);
+    const entry = extractTrackingEntryFromLines(lines);
+    out.push(entry?.trackingNumber ?? null);
+  }
+
+  return out;
 };
 
 export const parseTrackingPdf = async (file: File): Promise<TrackingPdfEntry[]> => {
@@ -116,27 +133,9 @@ export const parseTrackingPdf = async (file: File): Promise<TrackingPdfEntry[]> 
     const items = textContent.items.filter((i): i is TextItem => 'str' in i);
     const lines = pageItemsToLines(items);
 
-    const destinatarioIndexes = lines
-      .map((line, index) => (line.toUpperCase().includes('DESTINATARIO') ? index : -1))
-      .filter((index) => index >= 0);
-
-    for (const idx of destinatarioIndexes) {
-      // Regla estricta: usar SOLO la primera línea después de DESTINATARIO
-      const fullName = idx + 1 <= lines.length - 1 ? extractLikelyName(lines[idx + 1]) : null;
-      if (!fullName) continue;
-
-      let trackingNumber: string | null = null;
-      // Correo Argentino suele poner TN arriba del destinatario
-      for (let i = Math.max(0, idx - 10); i <= Math.min(lines.length - 1, idx + 4); i += 1) {
-        const tn = lines[i].match(TRACKING_REGEX)?.[1];
-        if (tn) {
-          trackingNumber = tn.trim();
-        }
-      }
-
-      if (trackingNumber) {
-        matches.push({ fullName, trackingNumber });
-      }
+    const entry = extractTrackingEntryFromLines(lines);
+    if (entry) {
+      matches.push({ ...entry, pageNumber });
     }
   }
 
