@@ -12,6 +12,16 @@ export function CellDisenio({ item }: CellDisenioProps) {
     MANGO_GOLPE: 'Mango de golpe',
     BASE_REMACHADORA: 'Base de remachadora',
   };
+
+  if (item.itemType === 'SOLDADOR') {
+    const label = `Soldador ${item.itemConfig?.soldadorPower || ''}`.trim();
+    return (
+      <div className="text-sm font-medium">
+        {label}
+      </div>
+    );
+  }
+
   const displayName = item.designName?.trim() && item.designName.toLowerCase() !== 'sin diseño'
     ? item.designName
     : (item.itemType ? fallbackByType[item.itemType] || 'Sello' : 'Sello');

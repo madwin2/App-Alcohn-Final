@@ -191,6 +191,13 @@ export interface ProductionItem {
   notes?: string;
   deadline?: string | null; // Fecha límite del sello
   takenBy?: { id: string; name: string } | null; // Usuario que subió el pedido
+  itemConfig?: {
+    soldadorPower?: SoldadorPower;
+    abecedarioTipografia?: string;
+    abecedarioAlturaMm?: number;
+    abecedarioCase?: AbecedarioCase;
+    abecedarioExtraLetters?: string;
+  };
   files?: {
     baseUrl?: string;
     vectorUrl?: string;

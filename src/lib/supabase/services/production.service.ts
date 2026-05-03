@@ -87,6 +87,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         es_prioritario,
         estado_vectorizacion,
         programa_nombre,
+        item_config,
         ordenes!inner (
           id,
           taken_by,
@@ -208,6 +209,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         date: dateStr ?? undefined,
         itemType,
         designName: resolveDisplayDesignName(sello.diseno, itemType),
+        itemConfig: ((sello as any).item_config as ProductionItem['itemConfig'] | null) || undefined,
         requestedWidthMm: widthMm,
         requestedHeightMm: heightMm,
         stampType,
@@ -470,6 +472,7 @@ export const updateProductionItem = async (
       date: dateStr,
       itemType,
       designName: resolveDisplayDesignName(updatedSello.diseno, itemType),
+      itemConfig: ((updatedSello as any).item_config as ProductionItem['itemConfig'] | null) || undefined,
       requestedWidthMm: widthMm,
       requestedHeightMm: heightMm,
       stampType,
