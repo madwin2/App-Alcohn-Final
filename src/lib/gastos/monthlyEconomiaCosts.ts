@@ -44,6 +44,55 @@ export function newSalaryEntry(): SalaryEntry {
   return { id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), nombre: '', monto: 0 };
 }
 
+/**
+ * Una fila por usuario de la app (`id` = `user_id` de Supabase). Conserva montos; empareja por id o por nombre único.
+ * El resto de filas (sueldos extra) se mantienen al final.
+ */
+export function ensureSueldosForUsers(
+  sueldos: SalaryEntry[],
+  appUsers: Array<{ id: string; name: string }>,
+): SalaryEntry[] {
+  if (!appUsers.length) return sueldos;
+
+  const byId = new Map(sueldos.map((s) => [s.id, s]));
+  const consumed = new Set<string>();
+  const out: SalaryEntry[] = [];
+
+  for (const u of appUsers) {
+    let row = byId.get(u.id);
+    if (!row) {
+      const candidates = sueldos.filter(
+        (s) =>
+          !consumed.has(s.id) && s.nombre.trim().toLowerCase() === u.name.trim().toLowerCase(),
+      );
+      if (candidates.length === 1) row = candidates[0];
+    }
+    if (row) {
+      consumed.add(row.id);
+      out.push({ id: u.id, nombre: u.name, monto: Number(row.monto) || 0 });
+    } else {
+      out.push({ id: u.id, nombre: u.name, monto: 0 });
+    }
+  }
+
+  for (const s of sueldos) {
+    if (!consumed.has(s.id)) {
+      consumed.add(s.id);
+      out.push(s);
+    }
+  }
+
+  return out;
+}
+
+export function sueldosListsEqual(a: SalaryEntry[], b: SalaryEntry[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id || a[i].nombre !== b[i].nombre || a[i].monto !== b[i].monto) return false;
+  }
+  return true;
+}
+
 export function emptyFixed(): FixedCostsMonth {
   return {
     monotributos: 0,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -14,11 +14,13 @@ import {
 import {
   aguinaldoFromSueldos,
   emptyBundle,
+  ensureSueldosForUsers,
   gastosExtrasParaTabla,
   getBundleForMonth,
   loadAllMonthlyCosts,
   newSalaryEntry,
   saveAllMonthlyCosts,
+  sueldosListsEqual,
   sumSueldos,
   totalFixedCosts,
   type ExtrasMonth,
@@ -26,6 +28,7 @@ import {
   type MonthCostsBundle,
   type SalaryEntry,
 } from '@/lib/gastos/monthlyEconomiaCosts';
+import { getApprovedUsers } from '@/lib/supabase/services/auth.service';
 import {
   fetchLatestFabricacionParams,
   insertFabricacionParamsVersion,
@@ -125,11 +128,67 @@ export default function GastosPage() {
   const [lastSynced, setLastSynced] = useState<{ effectiveFrom: string; note: string | null } | null>(null);
   const [vigenteDesdeLocal, setVigenteDesdeLocal] = useState('');
 
+  const [approvedUsers, setApprovedUsers] = useState<Array<{ id: string; name: string }>>([]);
+  const [approvedUsersLoading, setApprovedUsersLoading] = useState(true);
+
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
+
+  const appUserIdSet = useMemo(() => new Set(approvedUsers.map((u) => u.id)), [approvedUsers]);
+
+  const isAppUserSueldo = useCallback((sueldoId: string) => appUserIdSet.has(sueldoId), [appUserIdSet]);
 
   useEffect(() => {
     setMonthlyByMonth(loadAllMonthlyCosts());
   }, []);
+
+  useEffect(() => {
+    if (!isAllowed) {
+      setApprovedUsers([]);
+      setApprovedUsersLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setApprovedUsersLoading(true);
+    getApprovedUsers()
+      .then((users) => {
+        if (!cancelled) setApprovedUsers(users);
+      })
+      .catch(() => {
+        if (!cancelled) setApprovedUsers([]);
+      })
+      .finally(() => {
+        if (!cancelled) setApprovedUsersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAllowed]);
+
+  useEffect(() => {
+    if (!isAllowed || approvedUsers.length === 0) return;
+
+    setMonthlyByMonth((prev) => {
+      const cur = getBundleForMonth(prev, selectedMonth);
+      const nextFixedSueldos = ensureSueldosForUsers(cur.fixed.sueldos, approvedUsers);
+      const nextRealSueldos = ensureSueldosForUsers(cur.realFixed.sueldos, approvedUsers);
+
+      if (
+        sueldosListsEqual(cur.fixed.sueldos, nextFixedSueldos) &&
+        sueldosListsEqual(cur.realFixed.sueldos, nextRealSueldos)
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [selectedMonth]: {
+          ...cur,
+          fixed: { ...cur.fixed, sueldos: nextFixedSueldos },
+          realFixed: { ...cur.realFixed, sueldos: nextRealSueldos },
+        },
+      };
+    });
+  }, [approvedUsers, selectedMonth, isAllowed]);
 
   useEffect(() => {
     saveAllMonthlyCosts(monthlyByMonth);
@@ -400,41 +459,63 @@ export default function GastosPage() {
 
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-medium">Sueldos (por persona)</h3>
+                <div>
+                  <h3 className="text-sm font-medium">Sueldos (por persona)</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Una fila por usuario aprobado en la app (nombre fijo). Podés sumar otros sueldos con el botón.
+                  </p>
+                </div>
                 <Button type="button" variant="outline" size="sm" onClick={addSueldo}>
-                  Agregar sueldo
+                  Agregar otro sueldo
                 </Button>
               </div>
-              {bundle.fixed.sueldos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No hay sueldos cargados.</p>
+              {approvedUsersLoading ? (
+                <p className="text-sm text-muted-foreground">Cargando usuarios de la app…</p>
+              ) : bundle.fixed.sueldos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No hay sueldos cargados. Si no hay usuarios aprobados en la app, usá «Agregar otro sueldo».
+                </p>
               ) : (
                 <div className="space-y-3">
-                  {bundle.fixed.sueldos.map((s) => (
-                    <div key={s.id} className="flex flex-col gap-2 sm:flex-row sm:items-end border rounded-md p-3">
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-xs text-muted-foreground">Nombre</Label>
-                        <input
-                          className="w-full bg-background border rounded-md px-3 py-2 text-sm"
-                          value={s.nombre}
-                          onChange={(e) => patchSueldo(s.id, { nombre: e.target.value })}
-                          placeholder="Ej. Juan"
-                        />
+                  {bundle.fixed.sueldos.map((s) => {
+                    const appRow = isAppUserSueldo(s.id);
+                    return (
+                      <div key={s.id} className="flex flex-col gap-2 sm:flex-row sm:items-end border rounded-md p-3">
+                        <div className="flex-1 space-y-1">
+                          <Label className="text-xs text-muted-foreground">
+                            Nombre
+                            {appRow ? (
+                              <span className="ml-1.5 text-[10px] font-normal text-primary">(usuario app)</span>
+                            ) : null}
+                          </Label>
+                          <input
+                            className="w-full bg-background border rounded-md px-3 py-2 text-sm disabled:opacity-70"
+                            value={s.nombre}
+                            disabled={appRow}
+                            onChange={(e) => patchSueldo(s.id, { nombre: e.target.value })}
+                            placeholder="Ej. Juan"
+                          />
+                        </div>
+                        <div className="w-full sm:w-40 space-y-1">
+                          <Label className="text-xs text-muted-foreground">Monto (ARS)</Label>
+                          <input
+                            className="w-full bg-background border rounded-md px-3 py-2 text-sm"
+                            type="number"
+                            inputMode="decimal"
+                            value={s.monto}
+                            onChange={(e) => patchSueldo(s.id, { monto: Number(e.target.value) || 0 })}
+                          />
+                        </div>
+                        {!appRow ? (
+                          <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => removeSueldo(s.id)}>
+                            Quitar
+                          </Button>
+                        ) : (
+                          <span className="shrink-0 w-[72px]" aria-hidden />
+                        )}
                       </div>
-                      <div className="w-full sm:w-40 space-y-1">
-                        <Label className="text-xs text-muted-foreground">Monto (ARS)</Label>
-                        <input
-                          className="w-full bg-background border rounded-md px-3 py-2 text-sm"
-                          type="number"
-                          inputMode="decimal"
-                          value={s.monto}
-                          onChange={(e) => patchSueldo(s.id, { monto: Number(e.target.value) || 0 })}
-                        />
-                      </div>
-                      <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => removeSueldo(s.id)}>
-                        Quitar
-                      </Button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -621,41 +702,63 @@ export default function GastosPage() {
 
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="text-sm font-medium">Sueldos reales (por persona)</h4>
+                  <div>
+                    <h4 className="text-sm font-medium">Sueldos reales (por persona)</h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Mismos usuarios de la app que en fijos ideales; acá cargás lo efectivamente pagado.
+                    </p>
+                  </div>
                   <Button type="button" variant="outline" size="sm" onClick={addRealSueldo}>
-                    Agregar sueldo
+                    Agregar otro sueldo
                   </Button>
                 </div>
-                {bundle.realFixed.sueldos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No hay sueldos reales cargados.</p>
+                {approvedUsersLoading ? (
+                  <p className="text-sm text-muted-foreground">Cargando usuarios de la app…</p>
+                ) : bundle.realFixed.sueldos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No hay sueldos reales cargados. Si no hay usuarios aprobados en la app, usá «Agregar otro sueldo».
+                  </p>
                 ) : (
                   <div className="space-y-3">
-                    {bundle.realFixed.sueldos.map((s) => (
-                      <div key={s.id} className="flex flex-col gap-2 sm:flex-row sm:items-end border rounded-md p-3">
-                        <div className="flex-1 space-y-1">
-                          <Label className="text-xs text-muted-foreground">Nombre</Label>
-                          <input
-                            className="w-full bg-background border rounded-md px-3 py-2 text-sm"
-                            value={s.nombre}
-                            onChange={(e) => patchRealSueldo(s.id, { nombre: e.target.value })}
-                            placeholder="Ej. Juan"
-                          />
+                    {bundle.realFixed.sueldos.map((s) => {
+                      const appRow = isAppUserSueldo(s.id);
+                      return (
+                        <div key={s.id} className="flex flex-col gap-2 sm:flex-row sm:items-end border rounded-md p-3">
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-xs text-muted-foreground">
+                              Nombre
+                              {appRow ? (
+                                <span className="ml-1.5 text-[10px] font-normal text-primary">(usuario app)</span>
+                              ) : null}
+                            </Label>
+                            <input
+                              className="w-full bg-background border rounded-md px-3 py-2 text-sm disabled:opacity-70"
+                              value={s.nombre}
+                              disabled={appRow}
+                              onChange={(e) => patchRealSueldo(s.id, { nombre: e.target.value })}
+                              placeholder="Ej. Juan"
+                            />
+                          </div>
+                          <div className="w-full sm:w-40 space-y-1">
+                            <Label className="text-xs text-muted-foreground">Monto (ARS)</Label>
+                            <input
+                              className="w-full bg-background border rounded-md px-3 py-2 text-sm"
+                              type="number"
+                              inputMode="decimal"
+                              value={s.monto}
+                              onChange={(e) => patchRealSueldo(s.id, { monto: Number(e.target.value) || 0 })}
+                            />
+                          </div>
+                          {!appRow ? (
+                            <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => removeRealSueldo(s.id)}>
+                              Quitar
+                            </Button>
+                          ) : (
+                            <span className="shrink-0 w-[72px]" aria-hidden />
+                          )}
                         </div>
-                        <div className="w-full sm:w-40 space-y-1">
-                          <Label className="text-xs text-muted-foreground">Monto (ARS)</Label>
-                          <input
-                            className="w-full bg-background border rounded-md px-3 py-2 text-sm"
-                            type="number"
-                            inputMode="decimal"
-                            value={s.monto}
-                            onChange={(e) => patchRealSueldo(s.id, { monto: Number(e.target.value) || 0 })}
-                          />
-                        </div>
-                        <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => removeRealSueldo(s.id)}>
-                          Quitar
-                        </Button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
