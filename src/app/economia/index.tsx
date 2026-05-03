@@ -30,7 +30,9 @@ import { useToast } from '@/components/ui/use-toast';
 import type { Order, OrderItem } from '@/lib/types';
 import {
   GASTOS_MONTHLY_UPDATED_EVENT,
-  gastosExtrasParaTabla,
+  gananciaInversionesExtrasArs,
+  gastosExtrasEnviosManual,
+  gastosExtrasSinEnvioParaEconomia,
   getBundleForMonth,
   getFixedTotalForMonth,
   loadAllMonthlyCosts,
@@ -57,16 +59,14 @@ type MonthlyRow = {
   costosVentas: number;
   gastosExtras: number;
   publicidad: number;
-  sellos: number;
-  soldadores: number;
-  mangos: number;
-  abecedarios: number;
-  bases: number;
-  unidades: number;
+  enviosManual: number;
+  rentabilidadPesos: number;
+  rentabilidadUsd: number;
+  gananciaInversionesArs: number;
+  gananciaInversionesUsd: number;
   transferido: number;
   pendiente: number;
-  gananciaPesos: number;
-  gananciaUsd: number;
+  unidades: number;
   pedidos: number;
 };
 
@@ -309,8 +309,10 @@ export default function EconomiaPage() {
       const key = orderMonthKey(order);
       const bundle = getBundleForMonth(gastosPorMes, key);
       const costosFijosMes = getFixedTotalForMonth(bundle, legacyFixed);
-      const gastosExtrasMes = gastosExtrasParaTabla(bundle.extras);
+      const gastosExtrasSinEnvioMes = gastosExtrasSinEnvioParaEconomia(bundle.extras);
       const publicidadMes = Number(bundle.extras.publicidad) || 0;
+      const enviosManualMes = gastosExtrasEnviosManual(bundle.extras);
+      const gananciaInvArs = gananciaInversionesExtrasArs(bundle.extras);
 
       const row =
         byMonth.get(key) ||
@@ -320,18 +322,16 @@ export default function EconomiaPage() {
           ventasBrutas: 0,
           costosFijos: costosFijosMes,
           costosVentas: 0,
-          gastosExtras: gastosExtrasMes,
+          gastosExtras: gastosExtrasSinEnvioMes,
           publicidad: publicidadMes,
-          sellos: 0,
-          soldadores: 0,
-          mangos: 0,
-          abecedarios: 0,
-          bases: 0,
-          unidades: 0,
+          enviosManual: enviosManualMes,
+          rentabilidadPesos: 0,
+          rentabilidadUsd: 0,
+          gananciaInversionesArs: gananciaInvArs,
+          gananciaInversionesUsd: 0,
           transferido: 0,
           pendiente: 0,
-          gananciaPesos: 0,
-          gananciaUsd: 0,
+          unidades: 0,
           pedidos: 0,
         } satisfies MonthlyRow);
 
@@ -341,17 +341,14 @@ export default function EconomiaPage() {
       const envio = shippingCostByOrderId[order.id] ?? ECONOMIA_ENVIO_SIN_TIPO_ARS;
       row.costosVentas += fab + envio;
       row.costosFijos = costosFijosMes;
-      row.gastosExtras = gastosExtrasMes;
+      row.gastosExtras = gastosExtrasSinEnvioMes;
       row.publicidad = publicidadMes;
+      row.enviosManual = enviosManualMes;
+      row.gananciaInversionesArs = gananciaInvArs;
+      row.gananciaInversionesUsd = usdRate > 0 ? gananciaInvArs / usdRate : 0;
 
       for (const item of order.items) {
         row.unidades += 1;
-        const t = itemTypeOf(item);
-        if (t === 'SELLO') row.sellos += 1;
-        if (t === 'SOLDADOR') row.soldadores += 1;
-        if (t === 'MANGO_GOLPE') row.mangos += 1;
-        if (t === 'ABECEDARIO') row.abecedarios += 1;
-        if (t === 'BASE_REMACHADORA') row.bases += 1;
 
         const value = Number(item.itemValue || 0);
         if (item.saleState === 'TRANSFERIDO') {
@@ -360,13 +357,14 @@ export default function EconomiaPage() {
       }
 
       row.pendiente = row.ventasBrutas - row.transferido;
-      row.gananciaPesos =
+      row.rentabilidadPesos =
         row.ventasBrutas -
         row.costosFijos -
         row.costosVentas -
         row.gastosExtras -
-        row.publicidad;
-      row.gananciaUsd = usdRate > 0 ? row.gananciaPesos / usdRate : 0;
+        row.publicidad -
+        row.enviosManual;
+      row.rentabilidadUsd = usdRate > 0 ? row.rentabilidadPesos / usdRate : 0;
 
       byMonth.set(key, row);
     }
@@ -382,17 +380,14 @@ export default function EconomiaPage() {
         acc.costosVentas += r.costosVentas;
         acc.gastosExtras += r.gastosExtras;
         acc.publicidad += r.publicidad;
-        acc.gananciaPesos += r.gananciaPesos;
-        acc.gananciaUsd += r.gananciaUsd;
+        acc.enviosManual += r.enviosManual;
+        acc.rentabilidadPesos += r.rentabilidadPesos;
+        acc.gananciaInversionesArs += r.gananciaInversionesArs;
+        acc.gananciaInversionesUsd += r.gananciaInversionesUsd;
         acc.transferido += r.transferido;
         acc.pendiente += r.pendiente;
         acc.unidades += r.unidades;
         acc.pedidos += r.pedidos;
-        acc.sellos += r.sellos;
-        acc.soldadores += r.soldadores;
-        acc.mangos += r.mangos;
-        acc.abecedarios += r.abecedarios;
-        acc.bases += r.bases;
         return acc;
       },
       {
@@ -401,17 +396,14 @@ export default function EconomiaPage() {
         costosVentas: 0,
         gastosExtras: 0,
         publicidad: 0,
-        gananciaPesos: 0,
-        gananciaUsd: 0,
+        enviosManual: 0,
+        rentabilidadPesos: 0,
+        gananciaInversionesArs: 0,
+        gananciaInversionesUsd: 0,
         transferido: 0,
         pendiente: 0,
         unidades: 0,
         pedidos: 0,
-        sellos: 0,
-        soldadores: 0,
-        mangos: 0,
-        abecedarios: 0,
-        bases: 0,
       },
     );
   }, [monthly]);
@@ -450,7 +442,7 @@ export default function EconomiaPage() {
       if (m.type === 'USD_PURCHASE') usdPurchased += Number(m.amountUsd || 0);
     }
     const totalAdjustmentsArs = byType.USD_PURCHASE + byType.INV_EMPRESA + byType.INV_CYPREA;
-    const gananciaRealArs = totals.gananciaPesos - totalAdjustmentsArs;
+    const gananciaRealArs = totals.rentabilidadPesos - totalAdjustmentsArs;
     const gananciaRealUsd = usdRate > 0 ? gananciaRealArs / usdRate : 0;
     return {
       byType,
@@ -459,7 +451,7 @@ export default function EconomiaPage() {
       gananciaRealArs,
       gananciaRealUsd,
     };
-  }, [realMovements, totals.gananciaPesos, usdRate]);
+  }, [realMovements, totals.rentabilidadPesos, usdRate]);
   const pendingBreakdown = useMemo(() => {
     const byState = {
       DEUDOR: { amount: 0, count: 0 },
@@ -550,14 +542,12 @@ export default function EconomiaPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <p className="text-sm text-muted-foreground">
-                    Los <strong>costos fijos ideales</strong> (desglose), <strong>gastos extras</strong> y publicidad por
-                    mes se cargan en <span className="font-medium text-foreground">Gastos</span>. La ganancia del mes
-                    resta ventas brutas menos esos costos fijos, costos de venta (fabricación + envío por pedido), gastos
-                    extras y publicidad. El envío usa la tabla de costos si el pedido tiene método cargado; si no, se
-                    imputan {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} por orden.{' '}
-                    En Gastos también podés cargar <strong>gastos reales</strong> (mismas categorías que fijos + extras) solo
-                    como registro; no cambian esta tabla. Si un mes no tiene desglose de fijos, se usa el respaldo
-                    histórico (monto único guardado antes).
+                    Costos fijos y extras por mes se cargan en <span className="font-medium text-foreground">Gastos</span>.
+                    En <strong>Costos ventas</strong> se suma fabricación más envío estimado por pedido (tabla de costos o{' '}
+                    {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método cargado). <strong>Envíos</strong> en la tabla
+                    mensual es el monto manual en Gastos (no ese envío automático). <strong>Rentabilidad</strong> = ventas
+                    − fijos − costos ventas − gastos extras − publicidad − envíos manual. <strong>Ganancia</strong> =
+                    inversiones empresa + compra dólares (mismo mes en Gastos).
                   </p>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -582,33 +572,33 @@ export default function EconomiaPage() {
             </Card>
             <Card>
               <CardHeader>
-                <CardDescription>Ganancia total</CardDescription>
-                <CardTitle className="text-2xl">{formatArs(totals.gananciaPesos)}</CardTitle>
-                <CardDescription>Real: {formatArs(realSummary.gananciaRealArs)}</CardDescription>
+                <CardDescription>Rentabilidad total</CardDescription>
+                <CardTitle className="text-2xl">{formatArs(totals.rentabilidadPesos)}</CardTitle>
+                <CardDescription>Tras ajustes: {formatArs(realSummary.gananciaRealArs)}</CardDescription>
               </CardHeader>
             </Card>
             <Dialog>
               <DialogTrigger asChild>
                 <Card className="cursor-pointer transition-colors hover:bg-muted/30">
                   <CardHeader>
-                    <CardDescription>Ganancia en USD</CardDescription>
-                    <CardTitle className="text-2xl">{formatUsd(totals.gananciaUsd)}</CardTitle>
-                    <CardDescription>Real: {formatUsd(realSummary.gananciaRealUsd)} · click para ajustar</CardDescription>
+                    <CardDescription>Rentabilidad USD</CardDescription>
+                    <CardTitle className="text-2xl">{formatUsd(totals.rentabilidadPesos / (usdRate || 1))}</CardTitle>
+                    <CardDescription>Tras ajustes: {formatUsd(realSummary.gananciaRealUsd)} · click para ajustar</CardDescription>
                   </CardHeader>
                 </Card>
               </DialogTrigger>
               <DialogContent className="max-w-3xl">
                 <DialogHeader>
-                  <DialogTitle>Ganancia real (ajustes)</DialogTitle>
+                  <DialogTitle>Rentabilidad tras ajustes</DialogTitle>
                   <DialogDescription>
-                    Registrá compras de USD e inversiones para pasar de ganancia teórica a ganancia real.
+                    Registrá compras de USD e inversiones para ver la rentabilidad después de esos movimientos.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   <Card>
                     <CardContent className="py-4">
-                      <p className="text-xs text-muted-foreground">Ganancia teórica</p>
-                      <p className="text-lg font-semibold">{formatArs(totals.gananciaPesos)}</p>
+                      <p className="text-xs text-muted-foreground">Rentabilidad teórica</p>
+                      <p className="text-lg font-semibold">{formatArs(totals.rentabilidadPesos)}</p>
                     </CardContent>
                   </Card>
                   <Card>
@@ -619,7 +609,7 @@ export default function EconomiaPage() {
                   </Card>
                   <Card>
                     <CardContent className="py-4">
-                      <p className="text-xs text-muted-foreground">Ganancia real</p>
+                      <p className="text-xs text-muted-foreground">Rentabilidad real</p>
                       <p className="text-lg font-semibold">{formatArs(realSummary.gananciaRealArs)}</p>
                       <p className="text-xs text-muted-foreground">{formatUsd(realSummary.gananciaRealUsd)}</p>
                     </CardContent>
@@ -818,15 +808,15 @@ export default function EconomiaPage() {
                 <CardHeader>
                   <CardTitle>Registro por mes</CardTitle>
                   <CardDescription>
-                    Evolución mensual de ventas, costos y resultado. En <strong>Costos ventas</strong> se suma el costo
-                    de fabricación de cada pedido más un <strong>envío estimado</strong>: si no hay empresa/servicio
-                    cargado se imputan{' '}
-                    <strong>{formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)}</strong> por pedido; si hay, el monto activo de{' '}
-                    <code className="text-xs bg-muted px-1 rounded">costos_de_envio</code> (p. ej. domicilio vs sucursal).
+                    <strong>Costos ventas</strong>: fabricación + envío estimado por pedido (tabla{' '}
+                    <code className="text-xs bg-muted px-1 rounded">costos_de_envio</code> o{' '}
+                    {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método). <strong>Envíos</strong>: solo lo cargado a
+                    mano en Gastos. <strong>Rentabilidad</strong> = ventas − costos listados. <strong>Ganancia</strong> =
+                    inversiones empresa + compra dólares (Gastos, mismo mes).
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-auto">
-                  <table className="w-full min-w-[1200px] text-sm">
+                  <table className="w-full min-w-[1100px] text-sm">
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="py-2 pr-3">Mes</th>
@@ -835,15 +825,12 @@ export default function EconomiaPage() {
                         <th className="py-2 pr-3 text-right">Costos Ventas</th>
                         <th className="py-2 pr-3 text-right">Gastos extras</th>
                         <th className="py-2 pr-3 text-right">Publicidad</th>
-                        <th className="py-2 pr-3 text-center">Sellos</th>
-                        <th className="py-2 pr-3 text-center">Soldadores</th>
-                        <th className="py-2 pr-3 text-center">Mangos</th>
-                        <th className="py-2 pr-3 text-center">Abecedarios</th>
-                        <th className="py-2 pr-3 text-center">Bases</th>
+                        <th className="py-2 pr-3 text-right">Envíos</th>
+                        <th className="py-2 pr-3 text-right">Rentabilidad</th>
+                        <th className="py-2 pr-3 text-right">Transferido</th>
+                        <th className="py-2 pr-3 text-right">Pendiente</th>
                         <th className="py-2 pr-3 text-right">Ganancia $</th>
                         <th className="py-2 pr-3 text-right">Ganancia USD</th>
-                        <th className="py-2 pr-3 text-right">Transferido</th>
-                        <th className="py-2 text-right">Pendiente</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -857,15 +844,12 @@ export default function EconomiaPage() {
                           <td className="py-2 pr-3 text-right">{formatArs(r.costosVentas)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.gastosExtras)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.publicidad)}</td>
-                          <td className="py-2 pr-3 text-center">{r.sellos}</td>
-                          <td className="py-2 pr-3 text-center">{r.soldadores}</td>
-                          <td className="py-2 pr-3 text-center">{r.mangos}</td>
-                          <td className="py-2 pr-3 text-center">{r.abecedarios}</td>
-                          <td className="py-2 pr-3 text-center">{r.bases}</td>
-                          <td className="py-2 pr-3 text-right font-medium">{formatArs(r.gananciaPesos)}</td>
-                          <td className="py-2 pr-3 text-right">{formatUsd(r.gananciaUsd)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.enviosManual)}</td>
+                          <td className="py-2 pr-3 text-right font-medium">{formatArs(r.rentabilidadPesos)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.transferido)}</td>
-                          <td className="py-2 text-right">{formatArs(r.pendiente)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.pendiente)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.gananciaInversionesArs)}</td>
+                          <td className="py-2 pr-3 text-right">{formatUsd(r.gananciaInversionesUsd)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -935,11 +919,13 @@ export default function EconomiaPage() {
                 </Card>
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Ganancia USD</CardTitle>
-                    <CardDescription>{formatUsd(totals.gananciaUsd)} acumulado</CardDescription>
+                    <CardTitle className="text-base">Rentabilidad USD</CardTitle>
+                    <CardDescription>
+                      {formatUsd(usdRate > 0 ? totals.rentabilidadPesos / usdRate : 0)} referencia acumulada
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <TinyLineChart values={monthly.map((m) => m.gananciaUsd)} />
+                    <TinyLineChart values={monthly.map((m) => m.rentabilidadUsd)} />
                   </CardContent>
                 </Card>
                 <Card>

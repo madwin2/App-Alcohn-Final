@@ -15,7 +15,7 @@ import {
   aguinaldoFromSueldos,
   emptyBundle,
   ensureSueldosForUsers,
-  gastosExtrasParaTabla,
+  gastosExtrasSinEnvioParaEconomia,
   getBundleForMonth,
   loadAllMonthlyCosts,
   newSalaryEntry,
@@ -170,12 +170,8 @@ export default function GastosPage() {
     setMonthlyByMonth((prev) => {
       const cur = getBundleForMonth(prev, selectedMonth);
       const nextFixedSueldos = ensureSueldosForUsers(cur.fixed.sueldos, approvedUsers);
-      const nextRealSueldos = ensureSueldosForUsers(cur.realFixed.sueldos, approvedUsers);
 
-      if (
-        sueldosListsEqual(cur.fixed.sueldos, nextFixedSueldos) &&
-        sueldosListsEqual(cur.realFixed.sueldos, nextRealSueldos)
-      ) {
+      if (sueldosListsEqual(cur.fixed.sueldos, nextFixedSueldos)) {
         return prev;
       }
 
@@ -184,7 +180,6 @@ export default function GastosPage() {
         [selectedMonth]: {
           ...cur,
           fixed: { ...cur.fixed, sueldos: nextFixedSueldos },
-          realFixed: { ...cur.realFixed, sueldos: nextRealSueldos },
         },
       };
     });
@@ -265,10 +260,6 @@ export default function GastosPage() {
     setBundleForMonth((b) => ({ ...b, extras: { ...b.extras, ...patch } }));
   };
 
-  const updateRealFixed = (patch: Partial<FixedCostsMonth>) => {
-    setBundleForMonth((b) => ({ ...b, realFixed: { ...b.realFixed, ...patch } }));
-  };
-
   const setSueldos = (sueldos: SalaryEntry[]) => updateFixed({ sueldos });
 
   const addSueldo = () => {
@@ -283,30 +274,11 @@ export default function GastosPage() {
     setSueldos(bundle.fixed.sueldos.filter((s) => s.id !== id));
   };
 
-  const setRealSueldos = (sueldos: SalaryEntry[]) => updateRealFixed({ sueldos });
-
-  const addRealSueldo = () => {
-    setRealSueldos([...bundle.realFixed.sueldos, newSalaryEntry()]);
-  };
-
-  const patchRealSueldo = (id: string, patch: Partial<SalaryEntry>) => {
-    setRealSueldos(bundle.realFixed.sueldos.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  };
-
-  const removeRealSueldo = (id: string) => {
-    setRealSueldos(bundle.realFixed.sueldos.filter((s) => s.id !== id));
-  };
-
   const totalFijos = totalFixedCosts(bundle.fixed);
   const aguinaldo = aguinaldoFromSueldos(bundle.fixed.sueldos);
   const sueldosSum = sumSueldos(bundle.fixed.sueldos);
-  const extrasTabla = gastosExtrasParaTabla(bundle.extras);
+  const extrasSinEnvio = gastosExtrasSinEnvioParaEconomia(bundle.extras);
   const totalExtrasAll = EXTRA_FIELDS.reduce((s, f) => s + (bundle.extras[f.key] || 0), 0);
-
-  const totalRealesFijos = totalFixedCosts(bundle.realFixed);
-  const aguinaldoReal = aguinaldoFromSueldos(bundle.realFixed.sueldos);
-  const sueldosSumReal = sumSueldos(bundle.realFixed.sueldos);
-  const totalGastosRealesRegistrados = totalExtrasAll + totalRealesFijos;
 
   const mesActualKey = currentMonthKey();
   const esMesActual = selectedMonth === mesActualKey;
@@ -363,9 +335,8 @@ export default function GastosPage() {
         <div>
           <h1 className="text-2xl font-semibold">Gastos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Fijos ideales, gastos reales (extras + fijos reales) y mes calendario (elegís el mes arriba; por defecto el
-            actual). Parámetros de fabricación en Supabase. Solo tu usuario; los montos mensuales se guardan en este
-            navegador.
+            Costos fijos y extras por mes (elegís el mes arriba; por defecto el actual), parámetros de fabricación en
+            Supabase. Solo tu usuario; los montos mensuales se guardan en este navegador.
           </p>
         </div>
 
@@ -373,9 +344,8 @@ export default function GastosPage() {
           <CardHeader>
             <CardTitle>Mes a editar</CardTitle>
             <CardDescription>
-              Elegí un mes para ver y modificar <strong>fijos ideales</strong>, <strong>gastos reales del mes</strong> y
-              extras. En Economía la ganancia usa los <strong>fijos ideales</strong> y las categorías de extras; los
-              importes reales de fijos son solo registro. Por defecto abrís el <strong>mes actual</strong>.
+              Elegí un mes para cargar <strong>costos fijos</strong> y <strong>gastos extras</strong> que verás en
+              Economía. Por defecto abrís el <strong>mes actual</strong>.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-4">
@@ -416,12 +386,11 @@ export default function GastosPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Gastos fijos mensuales (ideal)</CardTitle>
+            <CardTitle>Gastos fijos mensuales</CardTitle>
             <CardDescription>
-              Presupuesto o plan del mes <strong>{etiquetaMesSeleccionado}</strong>
-              {esMesActual ? ' (mes actual)' : ''}. Se suman en Economía como <strong>Costos fijos</strong> en la fila de
-              ese mes. El aguinaldo es la suma de sueldos ÷ 12 (provisión mensual). Lo que realmente pagaste va en{' '}
-              <strong>Gastos reales del mes</strong> más abajo.
+              Mes <strong>{etiquetaMesSeleccionado}</strong>
+              {esMesActual ? ' (mes actual)' : ''}. Cargá acá los montos reales del mes; en Economía se muestran como{' '}
+              <strong>Costos fijos</strong>. El aguinaldo es la suma de sueldos ÷ 12 (provisión mensual).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -613,162 +582,38 @@ export default function GastosPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Gastos reales del mes</CardTitle>
+            <CardTitle>Gastos extras del mes</CardTitle>
             <CardDescription>
               Mes <strong>{etiquetaMesSeleccionado}</strong>
-              {esMesActual ? ' (mes actual)' : ''}. Acá registrás la <strong>verdad contable</strong>: las mismas
-              categorías diversas de siempre <em>más</em> un desglose como el de fijos, pero con lo efectivamente pagado.
-              No reemplaza a los fijos ideales de arriba: Economía sigue usando el <strong>ideal</strong> para costos
-              fijos y las categorías de la primera sección para <strong>Gastos extras</strong> y publicidad.
+              {esMesActual ? ' (mes actual)' : ''}. En Economía: <strong>Gastos extras</strong> (sin la fila Envíos),{' '}
+              <strong>Publicidad</strong>, <strong>Envíos</strong> (manual), y <strong>Ganancia</strong> = inversiones
+              empresa + compra dólares.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-10">
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold mb-1">Categorías diversas</h3>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Mismas categorías que usa Economía (gastos extras + publicidad). Los importes que cargás acá son los que
-                  entran en la ecuación de ganancia del mes.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                <span>
-                  Suma tabla extras + publicidad (referencia Economía):{' '}
-                  <strong className="text-foreground">{formatArs(extrasTabla + bundle.extras.publicidad)}</strong>
-                </span>
-                <span>
-                  Total categorías (todas): <strong className="text-foreground">{formatArs(totalExtrasAll)}</strong>
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {EXTRA_FIELDS.map((f) => (
-                  <NumberField
-                    key={f.key}
-                    label={f.label}
-                    value={bundle.extras[f.key]}
-                    onChange={(n) => updateExtras({ [f.key]: n } as Partial<ExtrasMonth>)}
-                  />
-                ))}
-              </div>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+              <span>
+                Extras sin envíos: <strong className="text-foreground">{formatArs(extrasSinEnvio)}</strong>
+              </span>
+              <span>
+                Envíos (manual): <strong className="text-foreground">{formatArs(bundle.extras.envios)}</strong>
+              </span>
+              <span>
+                + publicidad: <strong className="text-foreground">{formatArs(extrasSinEnvio + bundle.extras.envios + bundle.extras.publicidad)}</strong>
+              </span>
+              <span>
+                Total categorías (todas): <strong className="text-foreground">{formatArs(totalExtrasAll)}</strong>
+              </span>
             </div>
-
-            <div className="border-t pt-8 space-y-6">
-              <div>
-                <h3 className="text-sm font-semibold mb-1">Fijos reales (lo pagado)</h3>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Mismos rubros que en <strong>Gastos fijos (ideal)</strong>, pero independientes: acá va lo que salió de
-                  la cuenta, banco o facturas.
-                </p>
-              </div>
-              <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
-                <p>
-                  <span className="text-muted-foreground">Suma sueldos (real):</span>{' '}
-                  <span className="font-semibold">{formatArs(sueldosSumReal)}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Aguinaldo provisión (sueldos ÷ 12):</span>{' '}
-                  <span className="font-semibold">{formatArs(aguinaldoReal)}</span>
-                </p>
-                <p className="pt-1 border-t border-border/60">
-                  <span className="text-muted-foreground">Subtotal fijos reales ({etiquetaMesSeleccionado}):</span>{' '}
-                  <span className="font-semibold text-foreground">{formatArs(totalRealesFijos)}</span>
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {EXTRA_FIELDS.map((f) => (
                 <NumberField
-                  label="Monotributos (real)"
-                  value={bundle.realFixed.monotributos}
-                  onChange={(n) => updateRealFixed({ monotributos: n })}
+                  key={f.key}
+                  label={f.label}
+                  value={bundle.extras[f.key]}
+                  onChange={(n) => updateExtras({ [f.key]: n } as Partial<ExtrasMonth>)}
                 />
-                <NumberField label="Contador (real)" value={bundle.realFixed.contador} onChange={(n) => updateRealFixed({ contador: n })} />
-                <NumberField label="Alquiler (real)" value={bundle.realFixed.alquiler} onChange={(n) => updateRealFixed({ alquiler: n })} />
-                <NumberField label="Seguro (real)" value={bundle.realFixed.seguro} onChange={(n) => updateRealFixed({ seguro: n })} />
-                <NumberField label="Crédito (real)" value={bundle.realFixed.credito} onChange={(n) => updateRealFixed({ credito: n })} />
-              </div>
-
-              <div>
-                <h4 className="text-sm font-medium mb-2">Servicios (real)</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <NumberField
-                    label="Electricidad"
-                    value={bundle.realFixed.electricidad}
-                    onChange={(n) => updateRealFixed({ electricidad: n })}
-                  />
-                  <NumberField label="Agua" value={bundle.realFixed.agua} onChange={(n) => updateRealFixed({ agua: n })} />
-                  <NumberField label="Internet" value={bundle.realFixed.internet} onChange={(n) => updateRealFixed({ internet: n })} />
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h4 className="text-sm font-medium">Sueldos reales (por persona)</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Mismos usuarios de la app que en fijos ideales; acá cargás lo efectivamente pagado.
-                    </p>
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addRealSueldo}>
-                    Agregar otro sueldo
-                  </Button>
-                </div>
-                {approvedUsersLoading ? (
-                  <p className="text-sm text-muted-foreground">Cargando usuarios de la app…</p>
-                ) : bundle.realFixed.sueldos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No hay sueldos reales cargados. Si no hay usuarios aprobados en la app, usá «Agregar otro sueldo».
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {bundle.realFixed.sueldos.map((s) => {
-                      const appRow = isAppUserSueldo(s.id);
-                      return (
-                        <div key={s.id} className="flex flex-col gap-2 sm:flex-row sm:items-end border rounded-md p-3">
-                          <div className="flex-1 space-y-1">
-                            <Label className="text-xs text-muted-foreground">
-                              Nombre
-                              {appRow ? (
-                                <span className="ml-1.5 text-[10px] font-normal text-primary">(usuario app)</span>
-                              ) : null}
-                            </Label>
-                            <input
-                              className="w-full bg-background border rounded-md px-3 py-2 text-sm disabled:opacity-70"
-                              value={s.nombre}
-                              disabled={appRow}
-                              onChange={(e) => patchRealSueldo(s.id, { nombre: e.target.value })}
-                              placeholder="Ej. Juan"
-                            />
-                          </div>
-                          <div className="w-full sm:w-40 space-y-1">
-                            <Label className="text-xs text-muted-foreground">Monto (ARS)</Label>
-                            <input
-                              className="w-full bg-background border rounded-md px-3 py-2 text-sm"
-                              type="number"
-                              inputMode="decimal"
-                              value={s.monto}
-                              onChange={(e) => patchRealSueldo(s.id, { monto: Number(e.target.value) || 0 })}
-                            />
-                          </div>
-                          {!appRow ? (
-                            <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => removeRealSueldo(s.id)}>
-                              Quitar
-                            </Button>
-                          ) : (
-                            <span className="shrink-0 w-[72px]" aria-hidden />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm">
-              <p className="text-muted-foreground">
-                Total registrado en esta tarjeta (extras + fijos reales, referencia; no se usa en Economía):{' '}
-                <span className="font-semibold text-foreground">{formatArs(totalGastosRealesRegistrados)}</span>
-              </p>
+              ))}
             </div>
           </CardContent>
         </Card>

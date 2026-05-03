@@ -1,6 +1,5 @@
 /**
- * Gastos fijos ideales (`fixed`) + categorías extras (`extras`) por mes → Economía.
- * `realFixed`: mismo desglose que `fixed` pero con lo pagado de verdad; solo registro en Gastos (no altera Economía).
+ * Costos fijos (`fixed`) + categorías extras (`extras`) por mes → Economía (localStorage).
  */
 
 export const STORAGE_MONTHLY_V2 = 'gastos_mensuales_v2';
@@ -36,8 +35,6 @@ export type ExtrasMonth = {
 export type MonthCostsBundle = {
   fixed: FixedCostsMonth;
   extras: ExtrasMonth;
-  /** Misma estructura que `fixed`: montos reales pagados (no es el presupuesto de Economía). */
-  realFixed: FixedCostsMonth;
 };
 
 export function newSalaryEntry(): SalaryEntry {
@@ -122,7 +119,7 @@ export function emptyExtras(): ExtrasMonth {
 }
 
 export function emptyBundle(): MonthCostsBundle {
-  return { fixed: emptyFixed(), extras: emptyExtras(), realFixed: emptyFixed() };
+  return { fixed: emptyFixed(), extras: emptyExtras() };
 }
 
 export function sumSueldos(sueldos: SalaryEntry[]): number {
@@ -151,11 +148,29 @@ export function totalFixedCosts(f: FixedCostsMonth): number {
   );
 }
 
-/** Columna "Gastos extras" en Economía: envíos, gastos varios, automatizaciones, remodelaciones, impuestos */
-export function gastosExtrasParaTabla(e: ExtrasMonth): number {
+/** Gastos extras en Economía **sin** la fila «Envíos» (esa va en columna aparte). */
+export function gastosExtrasSinEnvioParaEconomia(e: ExtrasMonth): number {
   return (
-    e.envios + e.gastos_varios + e.automatizaciones + e.remodelaciones + e.impuestos
+    (Number(e.gastos_varios) || 0) +
+    (Number(e.automatizaciones) || 0) +
+    (Number(e.remodelaciones) || 0) +
+    (Number(e.impuestos) || 0)
   );
+}
+
+/** Envíos cargados a mano en Gastos (no el costo de envío por pedido en costos de venta). */
+export function gastosExtrasEnviosManual(e: ExtrasMonth): number {
+  return Number(e.envios) || 0;
+}
+
+/** Suma categorías «extras» que antes iban juntas (referencia en pantalla Gastos). */
+export function gastosExtrasParaTabla(e: ExtrasMonth): number {
+  return gastosExtrasSinEnvioParaEconomia(e) + gastosExtrasEnviosManual(e);
+}
+
+/** Inversiones + compra de USD (ARS) cargadas en extras; columna «Ganancia» en Economía mensual. */
+export function gananciaInversionesExtrasArs(e: ExtrasMonth): number {
+  return (Number(e.inversiones_empresa) || 0) + (Number(e.compra_dolares) || 0);
 }
 
 export function readLegacyFixedScalar(): number {
@@ -264,7 +279,6 @@ function normalizeBundle(raw: unknown): MonthCostsBundle {
     return {
       fixed: normalizeFixed(o.fixed),
       extras: normalizeExtras(o.extras),
-      realFixed: normalizeFixed(o.realFixed),
     };
   }
   return emptyBundle();
@@ -277,7 +291,7 @@ export function loadAllMonthlyCosts(): Record<string, MonthCostsBundle> {
   const v1Extras = parseV1Store(localStorage.getItem(STORAGE_MONTHLY_V1));
   const out: Record<string, MonthCostsBundle> = {};
   for (const [month, extras] of Object.entries(v1Extras)) {
-    out[month] = { fixed: emptyFixed(), extras, realFixed: emptyFixed() };
+    out[month] = { fixed: emptyFixed(), extras };
   }
   return out;
 }
@@ -310,6 +324,5 @@ export function getBundleForMonth(
   return {
     fixed: b.fixed,
     extras: b.extras,
-    realFixed: b.realFixed ?? emptyFixed(),
   };
 }
