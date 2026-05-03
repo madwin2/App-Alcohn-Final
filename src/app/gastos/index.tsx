@@ -103,6 +103,16 @@ const currentMonthKey = () => {
   return `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}`;
 };
 
+/** Ej. "2026-05" → "mayo de 2026" */
+function formatMonthKeyLong(key: string): string {
+  const [yStr, mStr] = key.split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return key;
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleString('es-AR', { month: 'long', year: 'numeric' });
+}
+
 export default function GastosPage() {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -216,6 +226,10 @@ export default function GastosPage() {
   const extrasTabla = gastosExtrasParaTabla(bundle.extras);
   const totalExtrasAll = EXTRA_FIELDS.reduce((s, f) => s + (bundle.extras[f.key] || 0), 0);
 
+  const mesActualKey = currentMonthKey();
+  const esMesActual = selectedMonth === mesActualKey;
+  const etiquetaMesSeleccionado = formatMonthKeyLong(selectedMonth);
+
   const updateVariable = (patch: Partial<VariableCostsState>) => {
     setVariable((v) => ({ ...v, ...patch }));
   };
@@ -267,29 +281,33 @@ export default function GastosPage() {
         <div>
           <h1 className="text-2xl font-semibold">Gastos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Costos fijos desglosados, parámetros de fabricación (Supabase) y gastos extras por mes (solo tu usuario,
-            guardado en este navegador).
+            Costos fijos y extras por mes calendario (elegís el mes arriba; por defecto el actual), parámetros de
+            fabricación en Supabase. Solo tu usuario; fijos y extras se guardan en este navegador.
           </p>
         </div>
 
-        <Card>
+        <Card className="sticky top-4 z-10 border-primary/20 shadow-sm bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <CardHeader>
-            <CardTitle>Mes de trabajo</CardTitle>
+            <CardTitle>Mes a editar (fijos y extras)</CardTitle>
             <CardDescription>
-              Los montos de <strong>gastos fijos</strong> y <strong>gastos extras</strong> son por mes. En Economía se
-              aplican al mes correspondiente.
+              Elegí un mes para ver y modificar sus <strong>gastos fijos</strong> y <strong>gastos extras</strong>. En
+              Economía cada fila mensual usa los valores cargados para ese mismo mes calendario. Por defecto abrís el{' '}
+              <strong>mes actual</strong>.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Mes</Label>
               <input
-                className="bg-background border rounded-md px-3 py-2 text-sm"
+                className="bg-background border rounded-md px-3 py-2 text-sm min-w-[11rem]"
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
               />
             </div>
+            <Button type="button" variant="secondary" size="sm" onClick={() => setSelectedMonth(mesActualKey)}>
+              Ir al mes actual
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -302,6 +320,14 @@ export default function GastosPage() {
             >
               Inicializar mes vacío
             </Button>
+            <p className="w-full text-sm text-muted-foreground">
+              Editando: <span className="font-medium text-foreground">{etiquetaMesSeleccionado}</span>
+              {esMesActual ? (
+                <span className="ml-2 rounded-md bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
+                  Mes actual
+                </span>
+              ) : null}
+            </p>
           </CardContent>
         </Card>
 
@@ -309,8 +335,9 @@ export default function GastosPage() {
           <CardHeader>
             <CardTitle>Gastos fijos mensuales</CardTitle>
             <CardDescription>
-              Se suman en Economía como <strong>Costos fijos</strong>. El aguinaldo es la suma de sueldos ÷ 12 (provisión
-              mensual).
+              Estos montos son del mes <strong>{etiquetaMesSeleccionado}</strong>
+              {esMesActual ? ' (mes actual)' : ''}. Se suman en Economía como <strong>Costos fijos</strong> en la fila de
+              ese mes. El aguinaldo es la suma de sueldos ÷ 12 (provisión mensual).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -324,7 +351,7 @@ export default function GastosPage() {
                 <span className="font-semibold">{formatArs(aguinaldo)}</span>
               </p>
               <p className="pt-1 border-t border-border/60">
-                <span className="text-muted-foreground">Total costos fijos (este mes):</span>{' '}
+                <span className="text-muted-foreground">Total costos fijos ({etiquetaMesSeleccionado}):</span>{' '}
                 <span className="font-semibold text-foreground">{formatArs(totalFijos)}</span>
               </p>
             </div>
@@ -482,9 +509,10 @@ export default function GastosPage() {
           <CardHeader>
             <CardTitle>Gastos extras del mes</CardTitle>
             <CardDescription>
-              En Economía, la columna <strong>Gastos extras</strong> suma: envíos, gastos varios, automatizaciones,
-              remodelaciones e impuestos. <strong>Publicidad</strong> va en columna aparte. El resto figura acá para
-              registro (inversiones, USD, Cyprea).
+              Mismo mes que arriba: <strong>{etiquetaMesSeleccionado}</strong>
+              {esMesActual ? ' (mes actual)' : ''}. En Economía, la columna <strong>Gastos extras</strong> suma: envíos,
+              gastos varios, automatizaciones, remodelaciones e impuestos. <strong>Publicidad</strong> va en columna
+              aparte. El resto figura acá para registro (inversiones, USD, Cyprea).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
