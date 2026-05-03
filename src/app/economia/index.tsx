@@ -73,6 +73,7 @@ type MonthlyRow = {
   rentabilidadUsd: number;
   gananciaInversionesArs: number;
   gananciaInversionesUsd: number;
+  /** Suma ítems en TRANSFERIDO + mismo envío imputado que en ventas (por orden, si ya despachado). */
   transferido: number;
   /** Transferido − (costos fijos + costos ventas + gastos extras + publicidad + envíos manual). */
   transferidoMenosGastos: number;
@@ -379,6 +380,7 @@ export default function EconomiaPage() {
           row.transferido += value;
         }
       }
+      row.transferido += envioImputadoVentas;
 
       row.pendiente = row.ventasBrutas - row.transferido;
       row.rentabilidadPesos =
@@ -582,8 +584,9 @@ export default function EconomiaPage() {
                     ya está <strong>Despachado</strong> o <strong>Seguimiento enviado</strong> en todos los ítems (tabla de
                     costos o {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método cargado). <strong>Costos ventas</strong>{' '}
                     es solo fabricación. <strong>Envíos</strong> en la tabla mensual es el monto manual en Gastos (no ese
-                    envío imputado). <strong>Rentabilidad</strong> = ventas − fijos − costos ventas − gastos extras −
-                    publicidad − envíos manual. <strong>Ganancia</strong> =
+                    envío imputado). <strong>Transferido</strong> suma lo cobrado por ítem en estado transferido más ese
+                    mismo envío imputado por pedido (alineado con ventas). <strong>Rentabilidad</strong> = ventas − fijos −
+                    costos ventas − gastos extras − publicidad − envíos manual. <strong>Ganancia</strong> =
                     inversiones empresa + compra dólares (mismo mes en Gastos).
                   </p>
                 </div>
@@ -850,7 +853,9 @@ export default function EconomiaPage() {
                     <code className="text-xs bg-muted px-1 rounded">costos_de_envio</code> o{' '}
                     {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método). <strong>Costos ventas</strong>: solo
                     fabricación. <strong>Envíos</strong>: solo lo cargado a mano en Gastos. <strong>Transf. − gastos</strong>{' '}
-                    = transferido cobrado − (fijos + ventas + extras + publicidad + envíos). <strong>Inversiones</strong> =
+                    = transferido cobrado − (fijos + ventas + extras + publicidad + envíos). <strong>Transferido</strong>{' '}
+                    incluye el mismo envío imputado que ventas (una vez por pedido despachado: tabla o{' '}
+                    {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay empresa/servicio). <strong>Inversiones</strong> =
                     inversión empresa + inversión Cyprea (Gastos, mismo mes). <strong>Rentabilidad</strong> = ventas −
                     costos listados. <strong>Ganancia</strong> = inversiones empresa + compra dólares (Gastos, mismo mes).
                   </CardDescription>
