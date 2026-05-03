@@ -79,10 +79,22 @@ type MonthlyRow = {
   transferidoMenosGastos: number;
   /** Inversiones empresa + Cyprea (extras Gastos). */
   inversionesArs: number;
+  /** Desglose extras Gastos (mismo mes). */
+  inversionEmpresaArs: number;
+  inversionCypreaArs: number;
+  compraDolaresArs: number;
   pendiente: number;
   unidades: number;
   pedidos: number;
 };
+
+function totalGastosOperativos(r: Pick<MonthlyRow, 'costosFijos' | 'costosVentas' | 'gastosExtras' | 'publicidad' | 'enviosManual'>): number {
+  return r.costosFijos + r.costosVentas + r.gastosExtras + r.publicidad + r.enviosManual;
+}
+
+function totalGananciasGrupoArs(r: Pick<MonthlyRow, 'inversionEmpresaArs' | 'inversionCypreaArs' | 'compraDolaresArs'>): number {
+  return r.inversionEmpresaArs + r.inversionCypreaArs + r.compraDolaresArs;
+}
 
 const monthLabel = (key: string) => {
   const [y, m] = key.split('-').map(Number);
@@ -238,6 +250,8 @@ export default function EconomiaPage() {
   const [usdBuyRate, setUsdBuyRate] = useState(usdRate);
   const [invEmpresaArs, setInvEmpresaArs] = useState(0);
   const [invCypreaArs, setInvCypreaArs] = useState(0);
+  const [mensualDetalleGastos, setMensualDetalleGastos] = useState(false);
+  const [mensualDetalleGanancias, setMensualDetalleGanancias] = useState(false);
 
   /** Monto de envío desde tabla (solo órdenes con carrier/servicio y ya despachadas): `costos_de_envio`. El default $5000 se aplica en el useMemo si corresponde. */
   const [shippingCostByOrderId, setShippingCostByOrderId] = useState<Record<string, number>>({});
@@ -331,6 +345,9 @@ export default function EconomiaPage() {
       const enviosManualMes = gastosExtrasEnviosManual(bundle.extras);
       const gananciaInvArs = gananciaInversionesExtrasArs(bundle.extras);
       const inversionesMes = inversionesExtrasArs(bundle.extras);
+      const invEmpresaMes = Number(bundle.extras.inversiones_empresa) || 0;
+      const invCypreaMes = Number(bundle.extras.inversion_cyprea) || 0;
+      const compraDolaresMes = Number(bundle.extras.compra_dolares) || 0;
 
       const row =
         byMonth.get(key) ||
@@ -350,6 +367,9 @@ export default function EconomiaPage() {
           transferido: 0,
           transferidoMenosGastos: 0,
           inversionesArs: inversionesMes,
+          inversionEmpresaArs: invEmpresaMes,
+          inversionCypreaArs: invCypreaMes,
+          compraDolaresArs: compraDolaresMes,
           pendiente: 0,
           unidades: 0,
           pedidos: 0,
@@ -371,6 +391,9 @@ export default function EconomiaPage() {
       row.gananciaInversionesArs = gananciaInvArs;
       row.gananciaInversionesUsd = usdRate > 0 ? gananciaInvArs / usdRate : 0;
       row.inversionesArs = inversionesMes;
+      row.inversionEmpresaArs = invEmpresaMes;
+      row.inversionCypreaArs = invCypreaMes;
+      row.compraDolaresArs = compraDolaresMes;
 
       for (const item of order.items) {
         row.unidades += 1;
@@ -420,6 +443,9 @@ export default function EconomiaPage() {
         acc.transferido += r.transferido;
         acc.transferidoMenosGastos += r.transferidoMenosGastos;
         acc.inversionesArs += r.inversionesArs;
+        acc.inversionEmpresaArs += r.inversionEmpresaArs;
+        acc.inversionCypreaArs += r.inversionCypreaArs;
+        acc.compraDolaresArs += r.compraDolaresArs;
         acc.pendiente += r.pendiente;
         acc.unidades += r.unidades;
         acc.pedidos += r.pedidos;
@@ -438,12 +464,18 @@ export default function EconomiaPage() {
         transferido: 0,
         transferidoMenosGastos: 0,
         inversionesArs: 0,
+        inversionEmpresaArs: 0,
+        inversionCypreaArs: 0,
+        compraDolaresArs: 0,
         pendiente: 0,
         unidades: 0,
         pedidos: 0,
       },
     );
   }, [monthly]);
+
+  const mensualTablaCols =
+    2 + (mensualDetalleGastos ? 5 : 1) + 4 + (mensualDetalleGanancias ? 4 : 1);
 
   const itemBreakdown = useMemo(() => {
     const map = new Map<string, { unidades: number; ventas: number; costos: number; ganancia: number }>();
@@ -858,29 +890,98 @@ export default function EconomiaPage() {
                     {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay empresa/servicio). <strong>Inversiones</strong> =
                     inversión empresa + inversión Cyprea (Gastos, mismo mes). <strong>Rentabilidad</strong> = ventas −
                     costos listados. <strong>Ganancia</strong> = inversiones empresa + compra dólares (Gastos, mismo mes).
+                    Podés expandir <strong>Gastos</strong> y <strong>Ganancias</strong> tocando el encabezado de la columna;
+                    el desglose se muestra en gris. Al final hay una fila <strong>Total</strong>.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-auto">
-                  <table className="w-full min-w-[1320px] text-sm">
+                  <table
+                    className={`w-full text-sm ${mensualDetalleGastos || mensualDetalleGanancias ? 'min-w-[1280px]' : 'min-w-[880px]'}`}
+                  >
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="py-2 pr-3">Mes</th>
-                        <th className="py-2 pr-3 text-right">Ventas Brutas</th>
-                        <th className="py-2 pr-3 text-right">Costos Fijos</th>
-                        <th className="py-2 pr-3 text-right">Costos Ventas</th>
-                        <th className="py-2 pr-3 text-right">Gastos extras</th>
-                        <th className="py-2 pr-3 text-right">Publicidad</th>
-                        <th className="py-2 pr-3 text-right">Envíos</th>
+                        <th className="py-2 pr-3 text-right">Ventas brutas</th>
+                        {mensualDetalleGastos ? (
+                          <>
+                            <th className="py-2 pr-2 text-right text-xs font-normal text-muted-foreground">Costos fijos</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal text-muted-foreground">Costos ventas</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal text-muted-foreground">Gastos extras</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal text-muted-foreground">Publicidad</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal text-muted-foreground">Envíos</th>
+                          </>
+                        ) : (
+                          <th className="py-2 pr-3 text-right">
+                            <button
+                              type="button"
+                              className="inline-flex w-full flex-col items-end gap-0.5 rounded-md px-1 py-0.5 text-right font-medium text-foreground hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              onClick={() => setMensualDetalleGastos(true)}
+                              aria-expanded={mensualDetalleGastos}
+                            >
+                              <span>Gastos</span>
+                              <span className="text-[10px] font-normal text-muted-foreground">Mostrar desglose</span>
+                            </button>
+                          </th>
+                        )}
                         <th className="py-2 pr-3 text-right">Rentabilidad</th>
                         <th className="py-2 pr-3 text-right">Transferido</th>
-                        <th className="py-2 pr-3 text-right" title="Transferido − (fijos + ventas + extras + publicidad + envíos)">
+                        <th
+                          className="py-2 pr-3 text-right"
+                          title="Transferido − (fijos + ventas + extras + publicidad + envíos)"
+                        >
                           Transf. − gastos
                         </th>
                         <th className="py-2 pr-3 text-right">Pendiente</th>
-                        <th className="py-2 pr-3 text-right">Inversiones</th>
-                        <th className="py-2 pr-3 text-right">Ganancia $</th>
-                        <th className="py-2 pr-3 text-right">Ganancia USD</th>
+                        {mensualDetalleGanancias ? (
+                          <>
+                            <th className="py-2 pr-2 text-right text-xs font-normal text-muted-foreground">Inv. Cyprea</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal text-muted-foreground">Inv. empresa</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal text-muted-foreground">Compra USD</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal text-muted-foreground">Ganancia USD</th>
+                          </>
+                        ) : (
+                          <th className="py-2 pr-3 text-right">
+                            <button
+                              type="button"
+                              className="inline-flex w-full flex-col items-end gap-0.5 rounded-md px-1 py-0.5 text-right font-medium text-foreground hover:bg-muted/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              onClick={() => setMensualDetalleGanancias(true)}
+                              aria-expanded={mensualDetalleGanancias}
+                            >
+                              <span>Ganancias</span>
+                              <span className="text-[10px] font-normal text-muted-foreground">Mostrar desglose</span>
+                            </button>
+                          </th>
+                        )}
                       </tr>
+                      {(mensualDetalleGastos || mensualDetalleGanancias) && (
+                        <tr className="border-b bg-muted/30">
+                          <th
+                            colSpan={mensualTablaCols}
+                            className="py-1.5 px-3 text-left text-xs font-normal text-muted-foreground"
+                          >
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                              {mensualDetalleGastos && (
+                                <button
+                                  type="button"
+                                  className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                                  onClick={() => setMensualDetalleGastos(false)}
+                                >
+                                  Ocultar desglose de gastos
+                                </button>
+                              )}
+                              {mensualDetalleGanancias && (
+                                <button
+                                  type="button"
+                                  className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                                  onClick={() => setMensualDetalleGanancias(false)}
+                                >
+                                  Ocultar desglose de ganancias
+                                </button>
+                              )}
+                            </div>
+                          </th>
+                        </tr>
+                      )}
                     </thead>
                     <tbody>
                       {monthly.map((r) => (
@@ -889,21 +990,93 @@ export default function EconomiaPage() {
                             <Badge variant="outline">{r.label}</Badge>
                           </td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.ventasBrutas)}</td>
-                          <td className="py-2 pr-3 text-right">{formatArs(r.costosFijos)}</td>
-                          <td className="py-2 pr-3 text-right">{formatArs(r.costosVentas)}</td>
-                          <td className="py-2 pr-3 text-right">{formatArs(r.gastosExtras)}</td>
-                          <td className="py-2 pr-3 text-right">{formatArs(r.publicidad)}</td>
-                          <td className="py-2 pr-3 text-right">{formatArs(r.enviosManual)}</td>
+                          {mensualDetalleGastos ? (
+                            <>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.costosFijos)}</td>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.costosVentas)}</td>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.gastosExtras)}</td>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.publicidad)}</td>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.enviosManual)}</td>
+                            </>
+                          ) : (
+                            <td className="py-2 pr-3 text-right font-medium">{formatArs(totalGastosOperativos(r))}</td>
+                          )}
                           <td className="py-2 pr-3 text-right font-medium">{formatArs(r.rentabilidadPesos)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.transferido)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.transferidoMenosGastos)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.pendiente)}</td>
-                          <td className="py-2 pr-3 text-right">{formatArs(r.inversionesArs)}</td>
-                          <td className="py-2 pr-3 text-right">{formatArs(r.gananciaInversionesArs)}</td>
-                          <td className="py-2 pr-3 text-right">{formatUsd(r.gananciaInversionesUsd)}</td>
+                          {mensualDetalleGanancias ? (
+                            <>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.inversionCypreaArs)}</td>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.inversionEmpresaArs)}</td>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.compraDolaresArs)}</td>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatUsd(r.gananciaInversionesUsd)}</td>
+                            </>
+                          ) : (
+                            <td className="py-2 pr-3 text-right">
+                              <div className="flex flex-col items-end gap-0.5 leading-tight">
+                                <span className="font-medium">{formatArs(totalGananciasGrupoArs(r))}</span>
+                                <span className="text-[11px] text-muted-foreground">{formatUsd(r.gananciaInversionesUsd)}</span>
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-border bg-muted/40 font-semibold">
+                        <td className="py-2 pr-3">
+                          <span className="text-foreground">Total</span>
+                        </td>
+                        <td className="py-2 pr-3 text-right">{formatArs(totals.ventasBrutas)}</td>
+                        {mensualDetalleGastos ? (
+                          <>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.costosFijos)}</td>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.costosVentas)}</td>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.gastosExtras)}</td>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.publicidad)}</td>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.enviosManual)}</td>
+                          </>
+                        ) : (
+                          <td className="py-2 pr-3 text-right">
+                            {formatArs(
+                              totals.costosFijos +
+                                totals.costosVentas +
+                                totals.gastosExtras +
+                                totals.publicidad +
+                                totals.enviosManual,
+                            )}
+                          </td>
+                        )}
+                        <td className="py-2 pr-3 text-right">{formatArs(totals.rentabilidadPesos)}</td>
+                        <td className="py-2 pr-3 text-right">{formatArs(totals.transferido)}</td>
+                        <td className="py-2 pr-3 text-right">{formatArs(totals.transferidoMenosGastos)}</td>
+                        <td className="py-2 pr-3 text-right">{formatArs(totals.pendiente)}</td>
+                        {mensualDetalleGanancias ? (
+                          <>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.inversionCypreaArs)}</td>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.inversionEmpresaArs)}</td>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.compraDolaresArs)}</td>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">{formatUsd(totals.gananciaInversionesUsd)}</td>
+                          </>
+                        ) : (
+                          <td className="py-2 pr-3 text-right">
+                            <div className="flex flex-col items-end gap-0.5 leading-tight">
+                              <span>
+                                {formatArs(
+                                  totals.inversionEmpresaArs +
+                                    totals.inversionCypreaArs +
+                                    totals.compraDolaresArs,
+                                )}
+                              </span>
+                              <span className="text-[11px] font-normal text-muted-foreground">
+                                {formatUsd(totals.gananciaInversionesUsd)}
+                              </span>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    </tfoot>
                   </table>
                 </CardContent>
               </Card>
