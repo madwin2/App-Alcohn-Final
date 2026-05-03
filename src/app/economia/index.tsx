@@ -35,6 +35,7 @@ import {
   gastosExtrasSinEnvioParaEconomia,
   getBundleForMonth,
   getFixedTotalForMonth,
+  inversionesExtrasArs,
   loadAllMonthlyCosts,
   readLegacyFixedScalar,
 } from '@/lib/gastos/monthlyEconomiaCosts';
@@ -73,6 +74,10 @@ type MonthlyRow = {
   gananciaInversionesArs: number;
   gananciaInversionesUsd: number;
   transferido: number;
+  /** Transferido − (costos fijos + costos ventas + gastos extras + publicidad + envíos manual). */
+  transferidoMenosGastos: number;
+  /** Inversiones empresa + Cyprea (extras Gastos). */
+  inversionesArs: number;
   pendiente: number;
   unidades: number;
   pedidos: number;
@@ -324,6 +329,7 @@ export default function EconomiaPage() {
       const publicidadMes = Number(bundle.extras.publicidad) || 0;
       const enviosManualMes = gastosExtrasEnviosManual(bundle.extras);
       const gananciaInvArs = gananciaInversionesExtrasArs(bundle.extras);
+      const inversionesMes = inversionesExtrasArs(bundle.extras);
 
       const row =
         byMonth.get(key) ||
@@ -341,6 +347,8 @@ export default function EconomiaPage() {
           gananciaInversionesArs: gananciaInvArs,
           gananciaInversionesUsd: 0,
           transferido: 0,
+          transferidoMenosGastos: 0,
+          inversionesArs: inversionesMes,
           pendiente: 0,
           unidades: 0,
           pedidos: 0,
@@ -361,6 +369,7 @@ export default function EconomiaPage() {
       row.enviosManual = enviosManualMes;
       row.gananciaInversionesArs = gananciaInvArs;
       row.gananciaInversionesUsd = usdRate > 0 ? gananciaInvArs / usdRate : 0;
+      row.inversionesArs = inversionesMes;
 
       for (const item of order.items) {
         row.unidades += 1;
@@ -380,6 +389,13 @@ export default function EconomiaPage() {
         row.publicidad -
         row.enviosManual;
       row.rentabilidadUsd = usdRate > 0 ? row.rentabilidadPesos / usdRate : 0;
+      const gastosDesdeTransferido =
+        row.costosFijos +
+        row.costosVentas +
+        row.gastosExtras +
+        row.publicidad +
+        row.enviosManual;
+      row.transferidoMenosGastos = row.transferido - gastosDesdeTransferido;
 
       byMonth.set(key, row);
     }
@@ -400,6 +416,8 @@ export default function EconomiaPage() {
         acc.gananciaInversionesArs += r.gananciaInversionesArs;
         acc.gananciaInversionesUsd += r.gananciaInversionesUsd;
         acc.transferido += r.transferido;
+        acc.transferidoMenosGastos += r.transferidoMenosGastos;
+        acc.inversionesArs += r.inversionesArs;
         acc.pendiente += r.pendiente;
         acc.unidades += r.unidades;
         acc.pedidos += r.pedidos;
@@ -416,6 +434,8 @@ export default function EconomiaPage() {
         gananciaInversionesArs: 0,
         gananciaInversionesUsd: 0,
         transferido: 0,
+        transferidoMenosGastos: 0,
+        inversionesArs: 0,
         pendiente: 0,
         unidades: 0,
         pedidos: 0,
@@ -829,13 +849,14 @@ export default function EconomiaPage() {
                     Seguimiento enviado (tabla{' '}
                     <code className="text-xs bg-muted px-1 rounded">costos_de_envio</code> o{' '}
                     {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método). <strong>Costos ventas</strong>: solo
-                    fabricación. <strong>Envíos</strong>: solo lo cargado a mano en Gastos. <strong>Rentabilidad</strong> =
-                    ventas − costos listados. <strong>Ganancia</strong> = inversiones empresa + compra dólares (Gastos,
-                    mismo mes).
+                    fabricación. <strong>Envíos</strong>: solo lo cargado a mano en Gastos. <strong>Transf. − gastos</strong>{' '}
+                    = transferido cobrado − (fijos + ventas + extras + publicidad + envíos). <strong>Inversiones</strong> =
+                    inversión empresa + inversión Cyprea (Gastos, mismo mes). <strong>Rentabilidad</strong> = ventas −
+                    costos listados. <strong>Ganancia</strong> = inversiones empresa + compra dólares (Gastos, mismo mes).
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-auto">
-                  <table className="w-full min-w-[1100px] text-sm">
+                  <table className="w-full min-w-[1320px] text-sm">
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="py-2 pr-3">Mes</th>
@@ -847,7 +868,11 @@ export default function EconomiaPage() {
                         <th className="py-2 pr-3 text-right">Envíos</th>
                         <th className="py-2 pr-3 text-right">Rentabilidad</th>
                         <th className="py-2 pr-3 text-right">Transferido</th>
+                        <th className="py-2 pr-3 text-right" title="Transferido − (fijos + ventas + extras + publicidad + envíos)">
+                          Transf. − gastos
+                        </th>
                         <th className="py-2 pr-3 text-right">Pendiente</th>
+                        <th className="py-2 pr-3 text-right">Inversiones</th>
                         <th className="py-2 pr-3 text-right">Ganancia $</th>
                         <th className="py-2 pr-3 text-right">Ganancia USD</th>
                       </tr>
@@ -866,7 +891,9 @@ export default function EconomiaPage() {
                           <td className="py-2 pr-3 text-right">{formatArs(r.enviosManual)}</td>
                           <td className="py-2 pr-3 text-right font-medium">{formatArs(r.rentabilidadPesos)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.transferido)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.transferidoMenosGastos)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.pendiente)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.inversionesArs)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.gananciaInversionesArs)}</td>
                           <td className="py-2 pr-3 text-right">{formatUsd(r.gananciaInversionesUsd)}</td>
                         </tr>

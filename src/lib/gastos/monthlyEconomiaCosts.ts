@@ -173,6 +173,11 @@ export function gananciaInversionesExtrasArs(e: ExtrasMonth): number {
   return (Number(e.inversiones_empresa) || 0) + (Number(e.compra_dolares) || 0);
 }
 
+/** Inversiones explícitas en extras (empresa + Cyprea); columna «Inversiones» en Economía mensual. */
+export function inversionesExtrasArs(e: ExtrasMonth): number {
+  return (Number(e.inversiones_empresa) || 0) + (Number(e.inversion_cyprea) || 0);
+}
+
 export function readLegacyFixedScalar(): number {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_FIXED_LEGACY);
