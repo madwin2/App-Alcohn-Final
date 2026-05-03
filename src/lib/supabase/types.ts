@@ -185,6 +185,37 @@ export interface Database {
           updated_at: string;
         }>;
       };
+      economia_settings: {
+        Row: {
+          user_id: string;
+          usd_reference: number;
+          caja_efectivo: number;
+          caja_mercadopago: number;
+          caja_santander_catalina: number;
+          caja_santander_julian: number;
+          caja_bbva: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          usd_reference?: number;
+          caja_efectivo?: number;
+          caja_mercadopago?: number;
+          caja_santander_catalina?: number;
+          caja_santander_julian?: number;
+          caja_bbva?: number;
+          updated_at?: string;
+        };
+        Update: Partial<{
+          usd_reference: number;
+          caja_efectivo: number;
+          caja_mercadopago: number;
+          caja_santander_catalina: number;
+          caja_santander_julian: number;
+          caja_bbva: number;
+          updated_at: string;
+        }>;
+      };
     };
   };
 }

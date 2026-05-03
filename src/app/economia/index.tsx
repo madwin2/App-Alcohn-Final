@@ -23,6 +23,14 @@ import {
   type RealMovement,
   type RealMovementType,
 } from '@/lib/supabase/services/economiaMovimientos.service';
+import {
+  clearLegacyEconomiaLocalStorage,
+  emptyEconomiaCaja,
+  fetchEconomiaSettings,
+  readLegacyEconomiaLocalStorage,
+  upsertEconomiaSettings,
+  type EconomiaCajaRow,
+} from '@/lib/supabase/services/economiaSettings.service';
 import { getShippingCost } from '@/lib/supabase/services/orders.service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
@@ -41,7 +49,6 @@ import {
 } from '@/lib/gastos/monthlyEconomiaCosts';
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
-const STORAGE_KEY_USD = 'economia_usd_rate';
 
 /** Si la orden no tiene empresa/servicio de envío cargado, imputamos este costo (todo se envía). */
 const ECONOMIA_ENVIO_SIN_TIPO_ARS = 5000;
@@ -240,6 +247,8 @@ export default function EconomiaPage() {
   const { user, loading: authLoading } = useAuth();
   const { orders, loading } = useOrders();
   const { toast } = useToast();
+  const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
+
   const [usdRate, setUsdRate] = useState(1200);
   const [gastosStorageTick, setGastosStorageTick] = useState(0);
   const [realMovements, setRealMovements] = useState<RealMovement[]>([]);
@@ -252,18 +261,70 @@ export default function EconomiaPage() {
   const [invCypreaArs, setInvCypreaArs] = useState(0);
   const [mensualDetalleGastos, setMensualDetalleGastos] = useState(false);
   const [mensualDetalleGanancias, setMensualDetalleGanancias] = useState(false);
+  const [cajaBalances, setCajaBalances] = useState<EconomiaCajaRow>(() => emptyEconomiaCaja());
+  const [economiaSettingsLoading, setEconomiaSettingsLoading] = useState(true);
+  const [economiaSettingsHydrated, setEconomiaSettingsHydrated] = useState(false);
 
   /** Monto de envío desde tabla (solo órdenes con carrier/servicio y ya despachadas): `costos_de_envio`. El default $5000 se aplica en el useMemo si corresponde. */
   const [shippingCostByOrderId, setShippingCostByOrderId] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    const usdRaw = localStorage.getItem(STORAGE_KEY_USD);
-    if (usdRaw) setUsdRate(Number(usdRaw) || 1200);
-  }, []);
+    if (authLoading || !isAllowed || !user?.id) {
+      setEconomiaSettingsLoading(false);
+      setEconomiaSettingsHydrated(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setEconomiaSettingsLoading(true);
+      try {
+        let row = await fetchEconomiaSettings(user.id);
+        if (cancelled) return;
+        if (!row) {
+          const legacy = readLegacyEconomiaLocalStorage();
+          if (legacy) {
+            await upsertEconomiaSettings(user.id, {
+              usdReference: legacy.usdReference,
+              caja: legacy.caja,
+            });
+            clearLegacyEconomiaLocalStorage();
+            row = await fetchEconomiaSettings(user.id);
+          }
+        }
+        if (cancelled) return;
+        if (row) {
+          setUsdRate(row.usdReference);
+          setCajaBalances(row.caja);
+        }
+        if (!cancelled) setEconomiaSettingsHydrated(true);
+      } catch (e) {
+        toast({
+          title: 'No se pudieron cargar los ajustes de Economía',
+          description: e instanceof Error ? e.message : String(e),
+          variant: 'destructive',
+        });
+      } finally {
+        if (!cancelled) setEconomiaSettingsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAllowed, user?.id, toast]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_USD, String(usdRate));
-  }, [usdRate]);
+    if (!economiaSettingsHydrated || !isAllowed || !user?.id) return;
+    const t = window.setTimeout(() => {
+      void upsertEconomiaSettings(user.id, { usdReference: usdRate, caja: cajaBalances }).catch((e) => {
+        toast({
+          title: 'No se pudo guardar en la base de datos',
+          description: e instanceof Error ? e.message : String(e),
+          variant: 'destructive',
+        });
+      });
+    }, 600);
+    return () => window.clearTimeout(t);
+  }, [usdRate, cajaBalances, economiaSettingsHydrated, isAllowed, user?.id, toast]);
 
   useEffect(() => {
     const bump = () => setGastosStorageTick((t) => t + 1);
@@ -274,8 +335,6 @@ export default function EconomiaPage() {
       window.removeEventListener('storage', bump);
     };
   }, []);
-
-  const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
   useEffect(() => {
     if (authLoading || !isAllowed) return;
@@ -477,6 +536,16 @@ export default function EconomiaPage() {
   const mensualTablaCols =
     2 + (mensualDetalleGastos ? 5 : 1) + 4 + (mensualDetalleGanancias ? 4 : 1);
 
+  const totalCajaArs = useMemo(
+    () =>
+      cajaBalances.efectivo +
+      cajaBalances.mercadopago +
+      cajaBalances.santanderCatalina +
+      cajaBalances.santanderJulian +
+      cajaBalances.bbva,
+    [cajaBalances],
+  );
+
   const itemBreakdown = useMemo(() => {
     const map = new Map<string, { unidades: number; ventas: number; costos: number; ganancia: number }>();
     for (const order of orders) {
@@ -628,14 +697,16 @@ export default function EconomiaPage() {
                     id="usd-rate"
                     type="number"
                     value={usdRate}
+                    disabled={economiaSettingsLoading}
                     onChange={(e) => setUsdRate(Number(e.target.value || 1))}
                   />
+                  <p className="text-xs text-muted-foreground">Se guarda en Supabase (misma cuenta que los movimientos).</p>
                 </div>
               </div>
             </CardHeader>
           </Card>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <Card>
               <CardHeader>
                 <CardDescription>Ventas brutas</CardDescription>
@@ -862,6 +933,60 @@ export default function EconomiaPage() {
                         <p className="text-lg font-semibold">{formatArs(totals.pendiente)}</p>
                       </CardContent>
                     </Card>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Card className="cursor-pointer transition-colors hover:bg-muted/30">
+                  <CardHeader>
+                    <CardDescription>Flujo / caja</CardDescription>
+                    <CardTitle className="text-2xl">
+                      {economiaSettingsLoading ? '…' : formatArs(totalCajaArs)}
+                    </CardTitle>
+                    <CardDescription>Click para cargar montos (Supabase)</CardDescription>
+                  </CardHeader>
+                </Card>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Flujo / caja</DialogTitle>
+                  <DialogDescription>
+                    Montos en pesos por canal. Se guardan automáticamente en la base de datos.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-3">
+                  {(
+                    [
+                      { key: 'efectivo' as const, label: 'Dinero en efectivo', id: 'caja-efectivo' },
+                      { key: 'mercadopago' as const, label: 'Dinero Mercadopago', id: 'caja-mp' },
+                      { key: 'santanderCatalina' as const, label: 'Dinero Santander Catalina', id: 'caja-sant-cat' },
+                      { key: 'santanderJulian' as const, label: 'Dinero Santander Julian', id: 'caja-sant-jul' },
+                      { key: 'bbva' as const, label: 'Dinero BBVA', id: 'caja-bbva' },
+                    ] as const
+                  ).map(({ key, label, id }) => (
+                    <div key={key} className="flex flex-col gap-1.5">
+                      <Label htmlFor={id}>{label}</Label>
+                      <Input
+                        id={id}
+                        type="number"
+                        inputMode="decimal"
+                        disabled={economiaSettingsLoading}
+                        value={cajaBalances[key]}
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          setCajaBalances((prev) => ({
+                            ...prev,
+                            [key]: Number.isFinite(n) ? n : 0,
+                          }));
+                        }}
+                      />
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between border-t pt-3 text-sm">
+                    <span className="font-medium text-foreground">Total</span>
+                    <span className="text-lg font-semibold">{formatArs(totalCajaArs)}</span>
                   </div>
                 </div>
               </DialogContent>
