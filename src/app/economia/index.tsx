@@ -51,6 +51,14 @@ function orderHasShippingCarrierAndService(order: Order): boolean {
   return Boolean(c && c !== 'OTRO' && s);
 }
 
+/** Envío imputado a ventas solo si ya salió el envío (no antes, para no inflar plata). Todos los ítems deben estar en Despachado o Seguimiento enviado. */
+function economiaPedidoListoParaImputarEnvio(order: Order): boolean {
+  if (!order.items.length) return false;
+  return order.items.every(
+    (it) => it.shippingState === 'DESPACHADO' || it.shippingState === 'SEGUIMIENTO_ENVIADO',
+  );
+}
+
 type MonthlyRow = {
   key: string;
   label: string;
@@ -225,7 +233,7 @@ export default function EconomiaPage() {
   const [invEmpresaArs, setInvEmpresaArs] = useState(0);
   const [invCypreaArs, setInvCypreaArs] = useState(0);
 
-  /** Costo de envío por orden (fabricación no lo incluye): tabla `costos_de_envio` o $5000 si no hay método cargado. */
+  /** Monto de envío desde tabla (solo órdenes con carrier/servicio y ya despachadas): `costos_de_envio`. El default $5000 se aplica en el useMemo si corresponde. */
   const [shippingCostByOrderId, setShippingCostByOrderId] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -279,15 +287,18 @@ export default function EconomiaPage() {
       setShippingCostByOrderId({});
       return;
     }
+    const conEnvioCargado = orders.filter(
+      (o) => orderHasShippingCarrierAndService(o) && economiaPedidoListoParaImputarEnvio(o),
+    );
+    if (!conEnvioCargado.length) {
+      setShippingCostByOrderId({});
+      return;
+    }
     let cancelled = false;
-    const optimistic = Object.fromEntries(orders.map((o) => [o.id, ECONOMIA_ENVIO_SIN_TIPO_ARS]));
-    setShippingCostByOrderId(optimistic);
-
     (async () => {
-      const out: Record<string, number> = { ...optimistic };
+      const out: Record<string, number> = {};
       await Promise.all(
-        orders.map(async (o) => {
-          if (!orderHasShippingCarrierAndService(o)) return;
+        conEnvioCargado.map(async (o) => {
           const n = Number(await getShippingCost(o.shipping!.carrier, o.shipping!.service));
           if (!cancelled && n > 0) out[o.id] = n;
         }),
@@ -336,10 +347,14 @@ export default function EconomiaPage() {
         } satisfies MonthlyRow);
 
       row.pedidos += 1;
-      row.ventasBrutas += Number(order.totalValue || 0);
       const fab = Number(order.fabricationCostTotal || 0);
-      const envio = shippingCostByOrderId[order.id] ?? ECONOMIA_ENVIO_SIN_TIPO_ARS;
-      row.costosVentas += fab + envio;
+      const envioImputadoVentas = economiaPedidoListoParaImputarEnvio(order)
+        ? orderHasShippingCarrierAndService(order)
+          ? (shippingCostByOrderId[order.id] ?? ECONOMIA_ENVIO_SIN_TIPO_ARS)
+          : ECONOMIA_ENVIO_SIN_TIPO_ARS
+        : 0;
+      row.ventasBrutas += Number(order.totalValue || 0) + envioImputadoVentas;
+      row.costosVentas += fab;
       row.costosFijos = costosFijosMes;
       row.gastosExtras = gastosExtrasSinEnvioMes;
       row.publicidad = publicidadMes;
@@ -543,10 +558,12 @@ export default function EconomiaPage() {
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <p className="text-sm text-muted-foreground">
                     Costos fijos y extras por mes se cargan en <span className="font-medium text-foreground">Gastos</span>.
-                    En <strong>Costos ventas</strong> se suma fabricación más envío estimado por pedido (tabla de costos o{' '}
-                    {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método cargado). <strong>Envíos</strong> en la tabla
-                    mensual es el monto manual en Gastos (no ese envío automático). <strong>Rentabilidad</strong> = ventas
-                    − fijos − costos ventas − gastos extras − publicidad − envíos manual. <strong>Ganancia</strong> =
+                    En <strong>Ventas brutas</strong> se suma el total del pedido más envío imputado solo cuando el pedido
+                    ya está <strong>Despachado</strong> o <strong>Seguimiento enviado</strong> en todos los ítems (tabla de
+                    costos o {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método cargado). <strong>Costos ventas</strong>{' '}
+                    es solo fabricación. <strong>Envíos</strong> en la tabla mensual es el monto manual en Gastos (no ese
+                    envío imputado). <strong>Rentabilidad</strong> = ventas − fijos − costos ventas − gastos extras −
+                    publicidad − envíos manual. <strong>Ganancia</strong> =
                     inversiones empresa + compra dólares (mismo mes en Gastos).
                   </p>
                 </div>
@@ -808,11 +825,13 @@ export default function EconomiaPage() {
                 <CardHeader>
                   <CardTitle>Registro por mes</CardTitle>
                   <CardDescription>
-                    <strong>Costos ventas</strong>: fabricación + envío estimado por pedido (tabla{' '}
+                    <strong>Ventas brutas</strong>: total pedido + envío imputado solo con todos los ítems en Despachado o
+                    Seguimiento enviado (tabla{' '}
                     <code className="text-xs bg-muted px-1 rounded">costos_de_envio</code> o{' '}
-                    {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método). <strong>Envíos</strong>: solo lo cargado a
-                    mano en Gastos. <strong>Rentabilidad</strong> = ventas − costos listados. <strong>Ganancia</strong> =
-                    inversiones empresa + compra dólares (Gastos, mismo mes).
+                    {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método). <strong>Costos ventas</strong>: solo
+                    fabricación. <strong>Envíos</strong>: solo lo cargado a mano en Gastos. <strong>Rentabilidad</strong> =
+                    ventas − costos listados. <strong>Ganancia</strong> = inversiones empresa + compra dólares (Gastos,
+                    mismo mes).
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-auto">
