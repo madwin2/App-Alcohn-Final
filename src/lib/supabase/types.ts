@@ -216,6 +216,25 @@ export interface Database {
           updated_at: string;
         }>;
       };
+      economia_gastos_mensuales: {
+        Row: {
+          user_id: string;
+          months: Record<string, unknown>;
+          legacy_fixed_scalar: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          months?: Record<string, unknown>;
+          legacy_fixed_scalar?: number;
+          updated_at?: string;
+        };
+        Update: Partial<{
+          months: Record<string, unknown>;
+          legacy_fixed_scalar: number;
+          updated_at: string;
+        }>;
+      };
     };
   };
 }

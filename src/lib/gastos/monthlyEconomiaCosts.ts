@@ -1,10 +1,13 @@
 /**
- * Costos fijos (`fixed`) + categorías extras (`extras`) por mes → Economía (localStorage).
+ * Costos fijos (`fixed`) + categorías extras (`extras`) por mes → Economía.
+ * Los datos viven en Supabase; esta capa mantiene una caché en memoria sincronizada con Gastos/Economía.
  */
 
 export const STORAGE_MONTHLY_V2 = 'gastos_mensuales_v2';
 export const STORAGE_MONTHLY_V1 = 'gastos_mensuales_v1';
 export const STORAGE_KEY_FIXED_LEGACY = 'economia_fixed_monthly_cost_ars';
+
+export const GASTOS_MONTHLY_UPDATED_EVENT = 'alcohn-gastos-monthly';
 
 export type SalaryEntry = { id: string; nombre: string; monto: number };
 
@@ -178,12 +181,72 @@ export function inversionesExtrasArs(e: ExtrasMonth): number {
   return (Number(e.inversiones_empresa) || 0) + (Number(e.inversion_cyprea) || 0);
 }
 
+let remoteMonths: Record<string, MonthCostsBundle> = {};
+let remoteLegacyFixed = 0;
+
+/** Normaliza el JSON devuelto por Supabase (`months`). */
+export function normalizeMonthsFromUnknown(raw: unknown): Record<string, MonthCostsBundle> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<string, MonthCostsBundle> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    out[k] = normalizeBundle(v);
+  }
+  return out;
+}
+
+export function hydrateMonthlyCostsRuntime(
+  months: Record<string, MonthCostsBundle>,
+  legacyFixed: number,
+): void {
+  remoteMonths = { ...months };
+  remoteLegacyFixed = Number(legacyFixed) || 0;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(GASTOS_MONTHLY_UPDATED_EVENT));
+  }
+}
+
+/** Costo fijo único legado (fallback cuando el desglose del mes da 0). Viene de Supabase vía caché. */
 export function readLegacyFixedScalar(): number {
+  return remoteLegacyFixed;
+}
+
+/** Lee v1/v2/legado del navegador para migración única a Supabase. */
+export function tryReadLegacyMonthlyFromLocalStorage(): {
+  months: Record<string, MonthCostsBundle>;
+  legacyFixed: number;
+} | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_FIXED_LEGACY);
-    return raw ? Number(raw) || 0 : 0;
+    let legacyFixed = 0;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_FIXED_LEGACY);
+      legacyFixed = raw ? Number(raw) || 0 : 0;
+    } catch {
+      legacyFixed = 0;
+    }
+    const v2 = parseV2Store(localStorage.getItem(STORAGE_MONTHLY_V2));
+    if (v2 && Object.keys(v2).length > 0) {
+      return { months: v2, legacyFixed };
+    }
+    const v1Extras = parseV1Store(localStorage.getItem(STORAGE_MONTHLY_V1));
+    const keys = Object.keys(v1Extras);
+    if (keys.length === 0 && legacyFixed <= 0) return null;
+    const out: Record<string, MonthCostsBundle> = {};
+    for (const [month, extras] of Object.entries(v1Extras)) {
+      out[month] = { fixed: emptyFixed(), extras };
+    }
+    return { months: out, legacyFixed };
   } catch {
-    return 0;
+    return null;
+  }
+}
+
+export function clearLegacyMonthlyLocalStorage(): void {
+  try {
+    localStorage.removeItem(STORAGE_MONTHLY_V2);
+    localStorage.removeItem(STORAGE_MONTHLY_V1);
+    localStorage.removeItem(STORAGE_KEY_FIXED_LEGACY);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -289,22 +352,14 @@ function normalizeBundle(raw: unknown): MonthCostsBundle {
   return emptyBundle();
 }
 
-/** Carga todos los meses: v2, o migración desde v1 + fijos vacíos */
+/** Caché en memoria (rellenada desde Supabase al cargar Gastos o Economía). */
 export function loadAllMonthlyCosts(): Record<string, MonthCostsBundle> {
-  const v2 = parseV2Store(localStorage.getItem(STORAGE_MONTHLY_V2));
-  if (v2 && Object.keys(v2).length > 0) return v2;
-  const v1Extras = parseV1Store(localStorage.getItem(STORAGE_MONTHLY_V1));
-  const out: Record<string, MonthCostsBundle> = {};
-  for (const [month, extras] of Object.entries(v1Extras)) {
-    out[month] = { fixed: emptyFixed(), extras };
-  }
-  return out;
+  return { ...remoteMonths };
 }
 
-export const GASTOS_MONTHLY_UPDATED_EVENT = 'alcohn-gastos-monthly';
-
+/** Actualiza solo la caché local y notifica a Economía; el guardado en BD lo hace la pantalla Gastos. */
 export function saveAllMonthlyCosts(data: Record<string, MonthCostsBundle>) {
-  localStorage.setItem(STORAGE_MONTHLY_V2, JSON.stringify(data));
+  remoteMonths = { ...data };
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(GASTOS_MONTHLY_UPDATED_EVENT));
   }

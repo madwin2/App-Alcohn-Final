@@ -31,6 +31,7 @@ import {
   upsertEconomiaSettings,
   type EconomiaCajaRow,
 } from '@/lib/supabase/services/economiaSettings.service';
+import { loadGastosMensualesIntoCache } from '@/lib/supabase/services/gastosMensuales.service';
 import { getShippingCost } from '@/lib/supabase/services/orders.service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
@@ -335,6 +336,17 @@ export default function EconomiaPage() {
       window.removeEventListener('storage', bump);
     };
   }, []);
+
+  useEffect(() => {
+    if (authLoading || !isAllowed || !user?.id) return;
+    void loadGastosMensualesIntoCache(user.id).catch((e) => {
+      toast({
+        title: 'No se pudieron cargar los gastos mensuales',
+        description: e instanceof Error ? e.message : String(e),
+        variant: 'destructive',
+      });
+    });
+  }, [authLoading, isAllowed, user?.id, toast]);
 
   useEffect(() => {
     if (authLoading || !isAllowed) return;
@@ -680,7 +692,8 @@ export default function EconomiaPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <p className="text-sm text-muted-foreground">
-                    Costos fijos y extras por mes se cargan en <span className="font-medium text-foreground">Gastos</span>.
+                    Costos fijos y extras por mes se cargan en <span className="font-medium text-foreground">Gastos</span> y se
+                    guardan en <span className="font-medium text-foreground">Supabase</span>.
                     En <strong>Ventas brutas</strong> se suma el total del pedido más envío imputado solo cuando el pedido
                     ya está <strong>Despachado</strong> o <strong>Seguimiento enviado</strong> en todos los ítems (tabla de
                     costos o {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método cargado). <strong>Costos ventas</strong>{' '}

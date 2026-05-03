@@ -17,9 +17,8 @@ import {
   ensureSueldosForUsers,
   gastosExtrasSinEnvioParaEconomia,
   getBundleForMonth,
-  loadAllMonthlyCosts,
+  hydrateMonthlyCostsRuntime,
   newSalaryEntry,
-  saveAllMonthlyCosts,
   sueldosListsEqual,
   sumSueldos,
   totalFixedCosts,
@@ -33,6 +32,7 @@ import {
   fetchLatestFabricacionParams,
   insertFabricacionParamsVersion,
 } from '@/lib/supabase/services/fabricacionParametros.service';
+import { loadGastosMensualesIntoCache, upsertGastosMensuales } from '@/lib/supabase/services/gastosMensuales.service';
 
 export type { VariableCostsState };
 
@@ -121,6 +121,8 @@ export default function GastosPage() {
   const { toast } = useToast();
   const [variable, setVariable] = useState<VariableCostsState>(DEFAULT_VARIABLE_COSTS);
   const [monthlyByMonth, setMonthlyByMonth] = useState<Record<string, MonthCostsBundle>>({});
+  const [legacyFixedScalar, setLegacyFixedScalar] = useState(0);
+  const [monthlyFromDbReady, setMonthlyFromDbReady] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey);
 
   const [paramsLoading, setParamsLoading] = useState(false);
@@ -138,8 +140,33 @@ export default function GastosPage() {
   const isAppUserSueldo = useCallback((sueldoId: string) => appUserIdSet.has(sueldoId), [appUserIdSet]);
 
   useEffect(() => {
-    setMonthlyByMonth(loadAllMonthlyCosts());
-  }, []);
+    if (authLoading || !isAllowed || !user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await loadGastosMensualesIntoCache(user.id);
+        if (cancelled) return;
+        setMonthlyByMonth(data.months);
+        setLegacyFixedScalar(data.legacyFixedScalar);
+      } catch (e: unknown) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        hydrateMonthlyCostsRuntime({}, 0);
+        setMonthlyByMonth({});
+        setLegacyFixedScalar(0);
+        toast({
+          title: 'No se pudieron cargar los gastos mensuales',
+          description: msg,
+          variant: 'destructive',
+        });
+      } finally {
+        if (!cancelled) setMonthlyFromDbReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isAllowed, user?.id, toast]);
 
   useEffect(() => {
     if (!isAllowed) {
@@ -165,7 +192,7 @@ export default function GastosPage() {
   }, [isAllowed]);
 
   useEffect(() => {
-    if (!isAllowed || approvedUsers.length === 0) return;
+    if (!isAllowed || !monthlyFromDbReady || approvedUsers.length === 0) return;
 
     setMonthlyByMonth((prev) => {
       const cur = getBundleForMonth(prev, selectedMonth);
@@ -183,11 +210,27 @@ export default function GastosPage() {
         },
       };
     });
-  }, [approvedUsers, selectedMonth, isAllowed]);
+  }, [approvedUsers, selectedMonth, isAllowed, monthlyFromDbReady]);
 
   useEffect(() => {
-    saveAllMonthlyCosts(monthlyByMonth);
-  }, [monthlyByMonth]);
+    if (!monthlyFromDbReady) return;
+    hydrateMonthlyCostsRuntime(monthlyByMonth, legacyFixedScalar);
+  }, [monthlyByMonth, legacyFixedScalar, monthlyFromDbReady]);
+
+  useEffect(() => {
+    if (!monthlyFromDbReady || !isAllowed || !user?.id) return;
+    const t = window.setTimeout(() => {
+      void upsertGastosMensuales(user.id, monthlyByMonth, legacyFixedScalar).catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast({
+          title: 'No se pudieron guardar los gastos mensuales',
+          description: msg,
+          variant: 'destructive',
+        });
+      });
+    }, 800);
+    return () => window.clearTimeout(t);
+  }, [monthlyByMonth, legacyFixedScalar, monthlyFromDbReady, isAllowed, user?.id, toast]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_VARIABLE, JSON.stringify(variable));
@@ -336,7 +379,7 @@ export default function GastosPage() {
           <h1 className="text-2xl font-semibold">Gastos</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Costos fijos y extras por mes (elegís el mes arriba; por defecto el actual), parámetros de fabricación en
-            Supabase. Solo tu usuario; los montos mensuales se guardan en este navegador.
+            Supabase. Los gastos mensuales se guardan en la base de datos (misma cuenta).
           </p>
         </div>
 
