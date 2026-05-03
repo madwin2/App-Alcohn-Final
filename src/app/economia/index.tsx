@@ -509,10 +509,12 @@ export default function EconomiaPage() {
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1 sm:col-span-2">
                   <p className="text-sm text-muted-foreground">
-                    Costos fijos (desglose), gastos extras y publicidad por mes se cargan en{' '}
-                    <span className="font-medium text-foreground">Gastos</span>. La ganancia del mes resta ventas brutas
-                    menos costos fijos, costos de venta (variables), gastos extras y publicidad. Si un mes no tiene
-                    desglose de fijos, se usa el valor de respaldo histórico (monto único guardado antes).
+                    Los <strong>costos fijos ideales</strong> (desglose), <strong>gastos extras</strong> y publicidad por
+                    mes se cargan en <span className="font-medium text-foreground">Gastos</span>. La ganancia del mes
+                    resta ventas brutas menos esos costos fijos, costos de venta (variables), gastos extras y publicidad.
+                    En Gastos también podés cargar <strong>gastos reales</strong> (mismas categorías que fijos + extras) solo
+                    como registro; no cambian esta tabla. Si un mes no tiene desglose de fijos, se usa el respaldo
+                    histórico (monto único guardado antes).
                   </p>
                 </div>
                 <div className="flex flex-col gap-1">

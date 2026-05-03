@@ -1,4 +1,7 @@
-/** Gastos fijos desglosados + extras por mes (localStorage, compartido Gastos ↔ Economía). */
+/**
+ * Gastos fijos ideales (`fixed`) + categorías extras (`extras`) por mes → Economía.
+ * `realFixed`: mismo desglose que `fixed` pero con lo pagado de verdad; solo registro en Gastos (no altera Economía).
+ */
 
 export const STORAGE_MONTHLY_V2 = 'gastos_mensuales_v2';
 export const STORAGE_MONTHLY_V1 = 'gastos_mensuales_v1';
@@ -30,7 +33,12 @@ export type ExtrasMonth = {
   inversion_cyprea: number;
 };
 
-export type MonthCostsBundle = { fixed: FixedCostsMonth; extras: ExtrasMonth };
+export type MonthCostsBundle = {
+  fixed: FixedCostsMonth;
+  extras: ExtrasMonth;
+  /** Misma estructura que `fixed`: montos reales pagados (no es el presupuesto de Economía). */
+  realFixed: FixedCostsMonth;
+};
 
 export function newSalaryEntry(): SalaryEntry {
   return { id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), nombre: '', monto: 0 };
@@ -65,7 +73,7 @@ export function emptyExtras(): ExtrasMonth {
 }
 
 export function emptyBundle(): MonthCostsBundle {
-  return { fixed: emptyFixed(), extras: emptyExtras() };
+  return { fixed: emptyFixed(), extras: emptyExtras(), realFixed: emptyFixed() };
 }
 
 export function sumSueldos(sueldos: SalaryEntry[]): number {
@@ -203,10 +211,11 @@ function normalizeExtras(raw: unknown): ExtrasMonth {
 function normalizeBundle(raw: unknown): MonthCostsBundle {
   if (!raw || typeof raw !== 'object') return emptyBundle();
   const o = raw as Record<string, unknown>;
-  if ('fixed' in o || 'extras' in o) {
+  if ('fixed' in o || 'extras' in o || 'realFixed' in o) {
     return {
       fixed: normalizeFixed(o.fixed),
       extras: normalizeExtras(o.extras),
+      realFixed: normalizeFixed(o.realFixed),
     };
   }
   return emptyBundle();
@@ -219,7 +228,7 @@ export function loadAllMonthlyCosts(): Record<string, MonthCostsBundle> {
   const v1Extras = parseV1Store(localStorage.getItem(STORAGE_MONTHLY_V1));
   const out: Record<string, MonthCostsBundle> = {};
   for (const [month, extras] of Object.entries(v1Extras)) {
-    out[month] = { fixed: emptyFixed(), extras };
+    out[month] = { fixed: emptyFixed(), extras, realFixed: emptyFixed() };
   }
   return out;
 }
@@ -247,5 +256,11 @@ export function getBundleForMonth(
   byMonth: Record<string, MonthCostsBundle>,
   monthKey: string,
 ): MonthCostsBundle {
-  return byMonth[monthKey] ?? emptyBundle();
+  const b = byMonth[monthKey];
+  if (!b) return emptyBundle();
+  return {
+    fixed: b.fixed,
+    extras: b.extras,
+    realFixed: b.realFixed ?? emptyFixed(),
+  };
 }
