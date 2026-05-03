@@ -23,11 +23,18 @@ import {
   type RealMovement,
   type RealMovementType,
 } from '@/lib/supabase/services/economiaMovimientos.service';
-import { fetchTotalesGastosMensualesPorMes } from '@/lib/supabase/services/gastosMensuales.service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import type { Order, OrderItem } from '@/lib/types';
+import {
+  GASTOS_MONTHLY_UPDATED_EVENT,
+  gastosExtrasParaTabla,
+  getBundleForMonth,
+  getFixedTotalForMonth,
+  loadAllMonthlyCosts,
+  readLegacyFixedScalar,
+} from '@/lib/gastos/monthlyEconomiaCosts';
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
 const STORAGE_KEY_USD = 'economia_usd_rate';
@@ -38,6 +45,8 @@ type MonthlyRow = {
   ventasBrutas: number;
   costosFijos: number;
   costosVentas: number;
+  gastosExtras: number;
+  publicidad: number;
   sellos: number;
   soldadores: number;
   mangos: number;
@@ -195,9 +204,8 @@ export default function EconomiaPage() {
   const { user, loading: authLoading } = useAuth();
   const { orders, loading } = useOrders();
   const { toast } = useToast();
-  const [gastosTotalesPorMes, setGastosTotalesPorMes] = useState<Record<string, number>>({});
-  const [gastosMensualesLoading, setGastosMensualesLoading] = useState(false);
   const [usdRate, setUsdRate] = useState(1200);
+  const [gastosStorageTick, setGastosStorageTick] = useState(0);
   const [realMovements, setRealMovements] = useState<RealMovement[]>([]);
   const [movementsLoading, setMovementsLoading] = useState(false);
 
@@ -215,6 +223,16 @@ export default function EconomiaPage() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_USD, String(usdRate));
   }, [usdRate]);
+
+  useEffect(() => {
+    const bump = () => setGastosStorageTick((t) => t + 1);
+    window.addEventListener(GASTOS_MONTHLY_UPDATED_EVENT, bump);
+    window.addEventListener('storage', bump);
+    return () => {
+      window.removeEventListener(GASTOS_MONTHLY_UPDATED_EVENT, bump);
+      window.removeEventListener('storage', bump);
+    };
+  }, []);
 
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
@@ -243,44 +261,28 @@ export default function EconomiaPage() {
     };
   }, [authLoading, isAllowed, toast]);
 
-  useEffect(() => {
-    if (authLoading || !isAllowed) return;
-    let cancelled = false;
-    (async () => {
-      setGastosMensualesLoading(true);
-      try {
-        const map = await fetchTotalesGastosMensualesPorMes();
-        if (!cancelled) setGastosTotalesPorMes(map);
-      } catch (error) {
-        if (!cancelled) {
-          toast({
-            title: 'No se pudieron cargar los gastos mensuales',
-            description: error instanceof Error ? error.message : String(error),
-            variant: 'destructive',
-          });
-        }
-      } finally {
-        if (!cancelled) setGastosMensualesLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, isAllowed, toast]);
-
   const monthly = useMemo<MonthlyRow[]>(() => {
+    const gastosPorMes = loadAllMonthlyCosts();
+    const legacyFixed = readLegacyFixedScalar();
     const byMonth = new Map<string, MonthlyRow>();
 
     for (const order of orders) {
       const key = orderMonthKey(order);
+      const bundle = getBundleForMonth(gastosPorMes, key);
+      const costosFijosMes = getFixedTotalForMonth(bundle, legacyFixed);
+      const gastosExtrasMes = gastosExtrasParaTabla(bundle.extras);
+      const publicidadMes = Number(bundle.extras.publicidad) || 0;
+
       const row =
         byMonth.get(key) ||
-        {
+        ({
           key,
           label: monthLabel(key),
           ventasBrutas: 0,
-          costosFijos: gastosTotalesPorMes[key] ?? 0,
+          costosFijos: costosFijosMes,
           costosVentas: 0,
+          gastosExtras: gastosExtrasMes,
+          publicidad: publicidadMes,
           sellos: 0,
           soldadores: 0,
           mangos: 0,
@@ -292,11 +294,14 @@ export default function EconomiaPage() {
           gananciaPesos: 0,
           gananciaUsd: 0,
           pedidos: 0,
-        };
+        } satisfies MonthlyRow);
 
       row.pedidos += 1;
       row.ventasBrutas += Number(order.totalValue || 0);
       row.costosVentas += Number(order.fabricationCostTotal || 0);
+      row.costosFijos = costosFijosMes;
+      row.gastosExtras = gastosExtrasMes;
+      row.publicidad = publicidadMes;
 
       for (const item of order.items) {
         row.unidades += 1;
@@ -314,14 +319,19 @@ export default function EconomiaPage() {
       }
 
       row.pendiente = row.ventasBrutas - row.transferido;
-      row.gananciaPesos = row.ventasBrutas - row.costosVentas - row.costosFijos;
+      row.gananciaPesos =
+        row.ventasBrutas -
+        row.costosFijos -
+        row.costosVentas -
+        row.gastosExtras -
+        row.publicidad;
       row.gananciaUsd = usdRate > 0 ? row.gananciaPesos / usdRate : 0;
 
       byMonth.set(key, row);
     }
 
     return Array.from(byMonth.values()).sort((a, b) => a.key.localeCompare(b.key));
-  }, [orders, gastosTotalesPorMes, usdRate]);
+  }, [orders, usdRate, gastosStorageTick]);
 
   const totals = useMemo(() => {
     return monthly.reduce(
@@ -329,6 +339,8 @@ export default function EconomiaPage() {
         acc.ventasBrutas += r.ventasBrutas;
         acc.costosFijos += r.costosFijos;
         acc.costosVentas += r.costosVentas;
+        acc.gastosExtras += r.gastosExtras;
+        acc.publicidad += r.publicidad;
         acc.gananciaPesos += r.gananciaPesos;
         acc.gananciaUsd += r.gananciaUsd;
         acc.transferido += r.transferido;
@@ -346,6 +358,8 @@ export default function EconomiaPage() {
         ventasBrutas: 0,
         costosFijos: 0,
         costosVentas: 0,
+        gastosExtras: 0,
+        publicidad: 0,
         gananciaPesos: 0,
         gananciaUsd: 0,
         transferido: 0,
@@ -493,13 +507,12 @@ export default function EconomiaPage() {
                 <CardDescription>Vista consolidada de ventas, costos, márgenes y tendencias.</CardDescription>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <Label>Gastos mensuales (por mes)</Label>
-                  <p className="text-sm text-muted-foreground leading-snug">
-                    El total por mes (categorías, sueldos, aguinaldo, etc.) se define en{' '}
-                    <span className="text-foreground font-medium">Gastos</span> y se guarda en Supabase. Cada fila de la
-                    tabla usa el mes del pedido.
-                    {gastosMensualesLoading ? ' Cargando totales…' : ''}
+                <div className="flex flex-col gap-1 sm:col-span-2">
+                  <p className="text-sm text-muted-foreground">
+                    Costos fijos (desglose), gastos extras y publicidad por mes se cargan en{' '}
+                    <span className="font-medium text-foreground">Gastos</span>. La ganancia del mes resta ventas brutas
+                    menos costos fijos, costos de venta (variables), gastos extras y publicidad. Si un mes no tiene
+                    desglose de fijos, se usa el valor de respaldo histórico (monto único guardado antes).
                   </p>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -762,13 +775,15 @@ export default function EconomiaPage() {
                   <CardDescription>Evolución mensual de ventas, costos y resultado.</CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-auto">
-                  <table className="w-full min-w-[980px] text-sm">
+                  <table className="w-full min-w-[1200px] text-sm">
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="py-2 pr-3">Mes</th>
                         <th className="py-2 pr-3 text-right">Ventas Brutas</th>
                         <th className="py-2 pr-3 text-right">Costos Fijos</th>
                         <th className="py-2 pr-3 text-right">Costos Ventas</th>
+                        <th className="py-2 pr-3 text-right">Gastos extras</th>
+                        <th className="py-2 pr-3 text-right">Publicidad</th>
                         <th className="py-2 pr-3 text-center">Sellos</th>
                         <th className="py-2 pr-3 text-center">Soldadores</th>
                         <th className="py-2 pr-3 text-center">Mangos</th>
@@ -789,6 +804,8 @@ export default function EconomiaPage() {
                           <td className="py-2 pr-3 text-right">{formatArs(r.ventasBrutas)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.costosFijos)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.costosVentas)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.gastosExtras)}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(r.publicidad)}</td>
                           <td className="py-2 pr-3 text-center">{r.sellos}</td>
                           <td className="py-2 pr-3 text-center">{r.soldadores}</td>
                           <td className="py-2 pr-3 text-center">{r.mangos}</td>
