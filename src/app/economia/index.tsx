@@ -23,6 +23,7 @@ import {
   type RealMovement,
   type RealMovementType,
 } from '@/lib/supabase/services/economiaMovimientos.service';
+import { getShippingCost } from '@/lib/supabase/services/orders.service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
@@ -38,6 +39,15 @@ import {
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
 const STORAGE_KEY_USD = 'economia_usd_rate';
+
+/** Si la orden no tiene empresa/servicio de envío cargado, imputamos este costo (todo se envía). */
+const ECONOMIA_ENVIO_SIN_TIPO_ARS = 5000;
+
+function orderHasShippingCarrierAndService(order: Order): boolean {
+  const c = order.shipping?.carrier;
+  const s = order.shipping?.service;
+  return Boolean(c && c !== 'OTRO' && s);
+}
 
 type MonthlyRow = {
   key: string;
@@ -215,6 +225,9 @@ export default function EconomiaPage() {
   const [invEmpresaArs, setInvEmpresaArs] = useState(0);
   const [invCypreaArs, setInvCypreaArs] = useState(0);
 
+  /** Costo de envío por orden (fabricación no lo incluye): tabla `costos_de_envio` o $5000 si no hay método cargado. */
+  const [shippingCostByOrderId, setShippingCostByOrderId] = useState<Record<string, number>>({});
+
   useEffect(() => {
     const usdRaw = localStorage.getItem(STORAGE_KEY_USD);
     if (usdRaw) setUsdRate(Number(usdRaw) || 1200);
@@ -261,6 +274,32 @@ export default function EconomiaPage() {
     };
   }, [authLoading, isAllowed, toast]);
 
+  useEffect(() => {
+    if (!orders.length) {
+      setShippingCostByOrderId({});
+      return;
+    }
+    let cancelled = false;
+    const optimistic = Object.fromEntries(orders.map((o) => [o.id, ECONOMIA_ENVIO_SIN_TIPO_ARS]));
+    setShippingCostByOrderId(optimistic);
+
+    (async () => {
+      const out: Record<string, number> = { ...optimistic };
+      await Promise.all(
+        orders.map(async (o) => {
+          if (!orderHasShippingCarrierAndService(o)) return;
+          const n = Number(await getShippingCost(o.shipping!.carrier, o.shipping!.service));
+          if (!cancelled && n > 0) out[o.id] = n;
+        }),
+      );
+      if (!cancelled) setShippingCostByOrderId(out);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orders]);
+
   const monthly = useMemo<MonthlyRow[]>(() => {
     const gastosPorMes = loadAllMonthlyCosts();
     const legacyFixed = readLegacyFixedScalar();
@@ -298,7 +337,9 @@ export default function EconomiaPage() {
 
       row.pedidos += 1;
       row.ventasBrutas += Number(order.totalValue || 0);
-      row.costosVentas += Number(order.fabricationCostTotal || 0);
+      const fab = Number(order.fabricationCostTotal || 0);
+      const envio = shippingCostByOrderId[order.id] ?? ECONOMIA_ENVIO_SIN_TIPO_ARS;
+      row.costosVentas += fab + envio;
       row.costosFijos = costosFijosMes;
       row.gastosExtras = gastosExtrasMes;
       row.publicidad = publicidadMes;
@@ -331,7 +372,7 @@ export default function EconomiaPage() {
     }
 
     return Array.from(byMonth.values()).sort((a, b) => a.key.localeCompare(b.key));
-  }, [orders, usdRate, gastosStorageTick]);
+  }, [orders, usdRate, gastosStorageTick, shippingCostByOrderId]);
 
   const totals = useMemo(() => {
     return monthly.reduce(
@@ -511,7 +552,9 @@ export default function EconomiaPage() {
                   <p className="text-sm text-muted-foreground">
                     Los <strong>costos fijos ideales</strong> (desglose), <strong>gastos extras</strong> y publicidad por
                     mes se cargan en <span className="font-medium text-foreground">Gastos</span>. La ganancia del mes
-                    resta ventas brutas menos esos costos fijos, costos de venta (variables), gastos extras y publicidad.
+                    resta ventas brutas menos esos costos fijos, costos de venta (fabricación + envío por pedido), gastos
+                    extras y publicidad. El envío usa la tabla de costos si el pedido tiene método cargado; si no, se
+                    imputan {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} por orden.{' '}
                     En Gastos también podés cargar <strong>gastos reales</strong> (mismas categorías que fijos + extras) solo
                     como registro; no cambian esta tabla. Si un mes no tiene desglose de fijos, se usa el respaldo
                     histórico (monto único guardado antes).
@@ -774,7 +817,13 @@ export default function EconomiaPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Registro por mes</CardTitle>
-                  <CardDescription>Evolución mensual de ventas, costos y resultado.</CardDescription>
+                  <CardDescription>
+                    Evolución mensual de ventas, costos y resultado. En <strong>Costos ventas</strong> se suma el costo
+                    de fabricación de cada pedido más un <strong>envío estimado</strong>: si no hay empresa/servicio
+                    cargado se imputan{' '}
+                    <strong>{formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)}</strong> por pedido; si hay, el monto activo de{' '}
+                    <code className="text-xs bg-muted px-1 rounded">costos_de_envio</code> (p. ej. domicilio vs sucursal).
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-auto">
                   <table className="w-full min-w-[1200px] text-sm">
