@@ -14,6 +14,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { BarChart3 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import {
@@ -33,6 +34,7 @@ import {
   totalFixedCosts,
   type ExtrasMonth,
   type FixedCostsMonth,
+  type GastosPagosTracking,
   type MonthCostsBundle,
   type SalaryEntry,
 } from '@/lib/gastos/monthlyEconomiaCosts';
@@ -61,16 +63,61 @@ const EXTRA_FIELDS: { key: keyof ExtrasMonth; label: string }[] = [
   { key: 'inversion_cyprea', label: 'Inversiones en Cyprea' },
 ];
 
+const FIXED_MONTO_ROWS: { key: keyof FixedCostsMonth; label: string }[] = [
+  { key: 'monotributos', label: 'Monotributos' },
+  { key: 'contador', label: 'Contador' },
+  { key: 'alquiler', label: 'Alquiler' },
+  { key: 'seguro', label: 'Seguro' },
+  { key: 'credito', label: 'Crédito' },
+];
+
+const SERVICIO_ROWS: { key: keyof FixedCostsMonth; label: string }[] = [
+  { key: 'electricidad', label: 'Electricidad' },
+  { key: 'agua', label: 'Agua' },
+  { key: 'internet', label: 'Internet' },
+];
+
 const formatArs = (value: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
 
 function formatEffectiveLabel(iso: string) {
   try {
     const d = new Date(iso);
+    if (Number.isNaN(d.getTime()) || d.getUTCFullYear() < 2000) return 'Sin fecha de vigencia';
     return d.toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' });
   } catch {
     return iso;
   }
+}
+
+function packPagos(
+  fixed: Record<string, boolean>,
+  sueldos: Record<string, boolean>,
+  extras: Partial<Record<keyof ExtrasMonth, boolean>>,
+): GastosPagosTracking | undefined {
+  const f = Object.fromEntries(Object.entries(fixed).filter(([, v]) => v === true));
+  const s = Object.fromEntries(Object.entries(sueldos).filter(([, v]) => v === true));
+  const e = Object.fromEntries(Object.entries(extras).filter(([, v]) => v === true)) as Partial<
+    Record<keyof ExtrasMonth, boolean>
+  >;
+  if (!Object.keys(f).length && !Object.keys(s).length && !Object.keys(e).length) return undefined;
+  return { fixed: f, sueldos: s, extras: e };
+}
+
+function withPagos(
+  b: MonthCostsBundle,
+  fn: (
+    fixed: Record<string, boolean>,
+    sueldos: Record<string, boolean>,
+    extras: Partial<Record<keyof ExtrasMonth, boolean>>,
+  ) => void,
+): MonthCostsBundle {
+  const fixed = { ...(b.pagos?.fixed ?? {}) };
+  const sueldos = { ...(b.pagos?.sueldos ?? {}) };
+  const extras = { ...(b.pagos?.extras ?? {}) } as Partial<Record<keyof ExtrasMonth, boolean>>;
+  fn(fixed, sueldos, extras);
+  const pagos = packPagos(fixed, sueldos, extras);
+  return { ...b, pagos };
 }
 
 /** Convierte valor de input datetime-local a ISO; vacío = undefined (usa ahora al guardar). */
@@ -106,6 +153,47 @@ function NumberField({
         onChange={(e) => onChange(Number(e.target.value) || 0)}
       />
       {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
+    </div>
+  );
+}
+
+function GastoMontoRow({
+  label,
+  value,
+  onChange,
+  hint,
+  disabled,
+  paid,
+  onPaidChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  hint?: string;
+  disabled?: boolean;
+  paid?: boolean;
+  onPaidChange?: (paid: boolean) => void;
+}) {
+  return (
+    <div className="flex gap-2 rounded-md border border-border/50 bg-muted/5 p-2 sm:items-end">
+      <div className="min-w-0 flex-1 space-y-1">
+        <Label className="text-xs text-muted-foreground">{label}</Label>
+        <input
+          className="w-full bg-background border rounded-md px-2.5 py-1.5 text-sm disabled:opacity-50"
+          type="number"
+          inputMode="decimal"
+          disabled={disabled}
+          value={Number.isFinite(value) ? value : 0}
+          onChange={(e) => onChange(Number(e.target.value) || 0)}
+        />
+        {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
+      </div>
+      {onPaidChange ? (
+        <label className="flex shrink-0 cursor-pointer flex-col items-center gap-1 border-l border-border/40 pl-2 pt-0.5 text-muted-foreground select-none">
+          <Checkbox checked={!!paid} onCheckedChange={(c) => onPaidChange(c === true)} disabled={disabled} />
+          <span className="text-[10px] leading-tight">Pagado</span>
+        </label>
+      ) : null}
     </div>
   );
 }
@@ -334,6 +422,25 @@ export default function GastosPage() {
   const totalExtrasAll = EXTRA_FIELDS.reduce((s, f) => s + (bundle.extras[f.key] || 0), 0);
   const totalProyectadoMes = totalFijos + totalExtrasAll;
 
+  const pagosResumen = useMemo(() => {
+    const pg = bundle.pagos;
+    let total = 0;
+    let paid = 0;
+    let montoPendiente = 0;
+    const bump = (amount: number, isPaid: boolean) => {
+      if (amount <= 0) return;
+      total += 1;
+      if (isPaid) paid += 1;
+      else montoPendiente += amount;
+    };
+    for (const { key } of FIXED_MONTO_ROWS) bump(Number(bundle.fixed[key]) || 0, !!pg?.fixed?.[key as string]);
+    for (const { key } of SERVICIO_ROWS) bump(Number(bundle.fixed[key]) || 0, !!pg?.fixed?.[key as string]);
+    bump(aguinaldo, !!pg?.fixed?.aguinaldo);
+    for (const s of bundle.fixed.sueldos) bump(Number(s.monto) || 0, !!pg?.sueldos?.[s.id]);
+    for (const f of EXTRA_FIELDS) bump(Number(bundle.extras[f.key]) || 0, !!pg?.extras?.[f.key]);
+    return { total, paid, montoPendiente };
+  }, [bundle, aguinaldo]);
+
   const mesActualKey = currentMonthKey();
   const esMesActual = selectedMonth === mesActualKey;
   const etiquetaMesSeleccionado = formatMonthKeyLong(selectedMonth);
@@ -387,22 +494,11 @@ export default function GastosPage() {
       <Sidebar />
       <div className="ml-20 flex min-h-screen flex-1 flex-col">
         <div className="w-full max-w-[1920px] flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-          <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-1.5">
-              <h1 className="text-3xl font-semibold tracking-tight">Gastos</h1>
-              <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-                <span className="font-medium text-foreground">1.</span> Costos fijos y extras del mes (se guardan en
-                Supabase y alimentan Economía). <span className="font-medium text-foreground">2.</span> Parámetros de
-                fabricación (tarifas por ítem, otra tabla).
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-              <Button type="button" className="gap-2" onClick={() => setProyeccionOpen(true)}>
-                <BarChart3 className="size-4" aria-hidden />
-                Proyección del mes
-              </Button>
-              <p className="text-xs text-muted-foreground">Suma fijos + extras del mes elegido</p>
-            </div>
+          <header className="flex flex-col gap-1 border-b border-border pb-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+            <h1 className="text-3xl font-semibold tracking-tight">Gastos</h1>
+            <p className="truncate text-sm text-muted-foreground sm:max-w-xl sm:text-right">
+              Fijos y extras por mes (Economía) · Tarifas de fabricación en otra tabla.
+            </p>
           </header>
 
           <Dialog open={proyeccionOpen} onOpenChange={setProyeccionOpen}>
@@ -458,7 +554,12 @@ export default function GastosPage() {
                   <ul className="space-y-1.5 rounded-lg border bg-muted/20 px-3 py-2">
                     {EXTRA_FIELDS.map((f) => (
                       <li key={f.key} className="flex justify-between gap-3">
-                        <span className="text-muted-foreground">{f.label}</span>
+                        <span className="text-muted-foreground">
+                          {f.label}
+                          {bundle.pagos?.extras?.[f.key] ? (
+                            <span className="ml-1.5 text-[10px] font-normal text-emerald-500">pagado</span>
+                          ) : null}
+                        </span>
                         <span className="font-mono tabular-nums">{formatArs(bundle.extras[f.key] || 0)}</span>
                       </li>
                     ))}
@@ -477,153 +578,242 @@ export default function GastosPage() {
             </DialogContent>
           </Dialog>
 
-          <Card className="sticky top-3 z-10 border-primary/25 shadow-md bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
-            <CardHeader className="pb-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="text-lg">Mes a editar</CardTitle>
-                  <CardDescription className="mt-1 max-w-2xl">
-                    Elegí el mes de los <strong>costos fijos</strong> y <strong>gastos extras</strong> (Economía usa el
-                    mismo mes en sus totales).
-                  </CardDescription>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-5 lg:items-stretch">
+            <Card className="border-border/70 shadow-sm lg:col-span-1">
+              <CardHeader className="space-y-0 p-3 pb-2">
+                <CardTitle className="text-sm font-semibold leading-none">Mes a editar</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 p-3 pt-0">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Calendario</Label>
+                  <input
+                    className="w-full min-w-0 rounded-md border bg-background px-2 py-1.5 text-sm"
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                  />
                 </div>
-                {esMesActual ? (
-                  <Badge variant="secondary" className="w-fit">
+                <div className="flex flex-wrap gap-1.5">
+                  <Button type="button" variant="secondary" size="sm" className="h-8 flex-1 text-xs" onClick={() => setSelectedMonth(mesActualKey)}>
                     Mes actual
-                  </Badge>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent className="flex flex-wrap items-end gap-3 sm:gap-4">
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Mes</Label>
-                <input
-                  className="min-w-[11rem] rounded-md border bg-background px-3 py-2 text-sm"
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                />
-              </div>
-              <Button type="button" variant="secondary" size="sm" onClick={() => setSelectedMonth(mesActualKey)}>
-                Ir al mes actual
-              </Button>
-              <Button
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 flex-1 text-xs"
+                    onClick={() => {
+                      if (!monthlyByMonth[selectedMonth]) {
+                        setMonthlyByMonth((m) => ({ ...m, [selectedMonth]: emptyBundle() }));
+                      }
+                    }}
+                  >
+                    Inicializar vacío
+                  </Button>
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-2 text-xs text-muted-foreground">
+                  <span className="truncate font-medium text-foreground">{etiquetaMesSeleccionado}</span>
+                  {esMesActual ? (
+                    <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px]">
+                      Actual
+                    </Badge>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex flex-col gap-3 lg:col-span-4 lg:grid lg:grid-cols-2 lg:gap-3">
+              <button
                 type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  if (!monthlyByMonth[selectedMonth]) {
-                    setMonthlyByMonth((m) => ({ ...m, [selectedMonth]: emptyBundle() }));
-                  }
-                }}
+                onClick={() => setProyeccionOpen(true)}
+                className="flex flex-col rounded-lg border border-primary/30 bg-card p-4 text-left shadow-sm outline-none ring-offset-background transition hover:border-primary/50 hover:bg-muted/20 focus-visible:ring-2 focus-visible:ring-ring"
               >
-                Inicializar mes vacío
-              </Button>
-              <p className="w-full text-sm text-muted-foreground sm:ml-auto sm:w-auto">
-                Editando: <span className="font-medium text-foreground">{etiquetaMesSeleccionado}</span>
-              </p>
-            </CardContent>
-          </Card>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Gasto proyectado</span>
+                  <BarChart3 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                </div>
+                <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-foreground sm:text-3xl">{formatArs(totalProyectadoMes)}</p>
+                <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                  Fijos + extras del mes · Click para desglose (fabricación no entra).
+                </p>
+              </button>
+
+              <Card className="border-border/70 shadow-sm">
+                <CardHeader className="space-y-0 p-3 pb-1">
+                  <CardTitle className="text-sm font-semibold">Seguimiento de pagos</CardTitle>
+                  <CardDescription className="text-[11px] leading-snug">
+                    Marcá «Pagado» en cada rubro; es registro interno (no modifica totales de Economía).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 p-3 pt-0 text-sm">
+                  <div className="flex justify-between gap-2 rounded-md bg-muted/30 px-2 py-1.5">
+                    <span className="text-muted-foreground">Rubros con monto</span>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {pagosResumen.paid}/{pagosResumen.total}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Monto sin marcar pagado: <span className="font-medium text-foreground">{formatArs(pagosResumen.montoPendiente)}</span>
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
 
           <div className="grid gap-6 lg:grid-cols-2 lg:items-start 2xl:gap-8">
-            <Card className="min-w-0 border-border/80 shadow-sm">
-              <CardHeader className="border-b border-border/60 bg-muted/20 pb-4">
-                <CardTitle className="text-xl">Gastos fijos mensuales</CardTitle>
-                <CardDescription className="mt-1.5 max-w-2xl">
-                  Mes <strong>{etiquetaMesSeleccionado}</strong>
-                  {esMesActual ? ' (mes actual)' : ''}. Cargá acá los montos reales del mes; en Economía se muestran como{' '}
-                  <strong>Costos fijos</strong>. El aguinaldo es la suma de sueldos ÷ 12 (provisión mensual).
+            <Card className="min-w-0 border-border/70 shadow-sm">
+              <CardHeader className="border-b border-border/50 bg-muted/15 px-4 py-3">
+                <CardTitle className="text-lg">Gastos fijos mensuales</CardTitle>
+                <CardDescription className="text-xs leading-snug text-muted-foreground">
+                  {etiquetaMesSeleccionado}
+                  {esMesActual ? ' · mes actual' : ''} · En Economía como costos fijos (aguinaldo = sueldos ÷ 12).
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
-                  <p>
-                    <span className="text-muted-foreground">Suma sueldos:</span>{' '}
-                    <span className="font-semibold">{formatArs(sueldosSum)}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Aguinaldo (sueldos ÷ 12):</span>{' '}
-                    <span className="font-semibold">{formatArs(aguinaldo)}</span>
-                  </p>
-                  <p className="pt-1 border-t border-border/60">
-                    <span className="text-muted-foreground">Total costos fijos ({etiquetaMesSeleccionado}):</span>{' '}
-                    <span className="font-semibold text-foreground">{formatArs(totalFijos)}</span>
-                  </p>
+              <CardContent className="space-y-4 px-4 py-4">
+                <div className="grid gap-2 rounded-lg border border-border/50 bg-muted/20 p-3 text-xs sm:grid-cols-3">
+                  <div>
+                    <span className="text-muted-foreground">Sueldos</span>
+                    <p className="font-semibold tabular-nums text-foreground">{formatArs(sueldosSum)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Aguinaldo ÷12</span>
+                    <p className="font-semibold tabular-nums text-foreground">{formatArs(aguinaldo)}</p>
+                  </div>
+                  <div className="sm:text-right">
+                    <span className="text-muted-foreground">Total fijos</span>
+                    <p className="text-base font-bold tabular-nums text-foreground">{formatArs(totalFijos)}</p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                  <NumberField label="Monotributos" value={bundle.fixed.monotributos} onChange={(n) => updateFixed({ monotributos: n })} />
-                  <NumberField label="Contador" value={bundle.fixed.contador} onChange={(n) => updateFixed({ contador: n })} />
-                  <NumberField label="Alquiler" value={bundle.fixed.alquiler} onChange={(n) => updateFixed({ alquiler: n })} />
-                  <NumberField label="Seguro" value={bundle.fixed.seguro} onChange={(n) => updateFixed({ seguro: n })} />
-                  <NumberField label="Crédito" value={bundle.fixed.credito} onChange={(n) => updateFixed({ credito: n })} />
+                {aguinaldo > 0 ? (
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2 text-sm">
+                    <span className="text-muted-foreground">Provisión aguinaldo (solo control de pago)</span>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground select-none">
+                      <Checkbox
+                        checked={!!bundle.pagos?.fixed?.aguinaldo}
+                        onCheckedChange={(c) =>
+                          setBundleForMonth((b) =>
+                            withPagos(b, (fixed) => {
+                              if (c === true) fixed.aguinaldo = true;
+                              else delete fixed.aguinaldo;
+                            }),
+                          )
+                        }
+                      />
+                      Pagado
+                    </label>
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  {FIXED_MONTO_ROWS.map(({ key, label }) => (
+                    <GastoMontoRow
+                      key={key}
+                      label={label}
+                      value={Number(bundle.fixed[key]) || 0}
+                      onChange={(n) => updateFixed({ [key]: n } as Partial<FixedCostsMonth>)}
+                      paid={!!bundle.pagos?.fixed?.[key as string]}
+                      onPaidChange={(v) =>
+                        setBundleForMonth((b) =>
+                          withPagos(b, (fixed) => {
+                            if (v) fixed[key as string] = true;
+                            else delete fixed[key as string];
+                          }),
+                        )
+                      }
+                    />
+                  ))}
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">Servicios</h3>
-                  <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                    <NumberField label="Electricidad" value={bundle.fixed.electricidad} onChange={(n) => updateFixed({ electricidad: n })} />
-                    <NumberField label="Agua" value={bundle.fixed.agua} onChange={(n) => updateFixed({ agua: n })} />
-                    <NumberField label="Internet" value={bundle.fixed.internet} onChange={(n) => updateFixed({ internet: n })} />
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Servicios</h3>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {SERVICIO_ROWS.map(({ key, label }) => (
+                      <GastoMontoRow
+                        key={key}
+                        label={label}
+                        value={Number(bundle.fixed[key]) || 0}
+                        onChange={(n) => updateFixed({ [key]: n } as Partial<FixedCostsMonth>)}
+                        paid={!!bundle.pagos?.fixed?.[key as string]}
+                        onPaidChange={(v) =>
+                          setBundleForMonth((b) =>
+                            withPagos(b, (fixed) => {
+                              if (v) fixed[key as string] = true;
+                              else delete fixed[key as string];
+                            }),
+                          )
+                        }
+                      />
+                    ))}
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground">Sueldos (por persona)</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Una fila por usuario aprobado en la app (nombre fijo). Podés sumar otros sueldos con el botón.
-                      </p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" onClick={addSueldo}>
-                      Agregar otro sueldo
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sueldos</h3>
+                    <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={addSueldo}>
+                      + Sueldo
                     </Button>
                   </div>
+                  <p className="text-[11px] text-muted-foreground">Usuarios app = nombre fijo; el resto editable.</p>
                   {approvedUsersLoading ? (
-                    <p className="text-sm text-muted-foreground">Cargando usuarios de la app…</p>
+                    <p className="text-sm text-muted-foreground">Cargando usuarios…</p>
                   ) : bundle.fixed.sueldos.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No hay sueldos cargados. Si no hay usuarios aprobados en la app, usá «Agregar otro sueldo».
-                    </p>
+                    <p className="text-sm text-muted-foreground">No hay filas. Usá «+ Sueldo».</p>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                       {bundle.fixed.sueldos.map((s) => {
                         const appRow = isAppUserSueldo(s.id);
                         return (
-                          <div key={s.id} className="flex flex-col gap-2 sm:flex-row sm:items-end border rounded-md p-3">
-                            <div className="flex-1 space-y-1">
-                              <Label className="text-xs text-muted-foreground">
-                                Nombre
-                                {appRow ? (
-                                  <span className="ml-1.5 text-[10px] font-normal text-primary">(usuario app)</span>
-                                ) : null}
-                              </Label>
-                              <input
-                                className="w-full bg-background border rounded-md px-3 py-2 text-sm disabled:opacity-70"
-                                value={s.nombre}
-                                disabled={appRow}
-                                onChange={(e) => patchSueldo(s.id, { nombre: e.target.value })}
-                                placeholder="Ej. Juan"
-                              />
+                          <div key={s.id} className="flex gap-2 rounded-md border border-border/50 bg-muted/5 p-2">
+                            <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">
+                                  Nombre
+                                  {appRow ? <span className="text-primary"> · app</span> : null}
+                                </Label>
+                                <input
+                                  className="w-full bg-background border rounded-md px-2 py-1.5 text-sm disabled:opacity-70"
+                                  value={s.nombre}
+                                  disabled={appRow}
+                                  onChange={(e) => patchSueldo(s.id, { nombre: e.target.value })}
+                                  placeholder="Nombre"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[11px] text-muted-foreground">Monto ARS</Label>
+                                <input
+                                  className="w-full bg-background border rounded-md px-2 py-1.5 text-sm"
+                                  type="number"
+                                  inputMode="decimal"
+                                  value={s.monto}
+                                  onChange={(e) => patchSueldo(s.id, { monto: Number(e.target.value) || 0 })}
+                                />
+                              </div>
                             </div>
-                            <div className="w-full sm:w-40 space-y-1">
-                              <Label className="text-xs text-muted-foreground">Monto (ARS)</Label>
-                              <input
-                                className="w-full bg-background border rounded-md px-3 py-2 text-sm"
-                                type="number"
-                                inputMode="decimal"
-                                value={s.monto}
-                                onChange={(e) => patchSueldo(s.id, { monto: Number(e.target.value) || 0 })}
-                              />
+                            <div className="flex shrink-0 flex-col items-center justify-between gap-1 border-l border-border/40 pl-2">
+                              <label className="flex flex-col items-center gap-0.5 text-[10px] text-muted-foreground select-none">
+                                <Checkbox
+                                  checked={!!bundle.pagos?.sueldos?.[s.id]}
+                                  onCheckedChange={(c) =>
+                                    setBundleForMonth((b) =>
+                                      withPagos(b, (_f, sueldos) => {
+                                        if (c === true) sueldos[s.id] = true;
+                                        else delete sueldos[s.id];
+                                      }),
+                                    )
+                                  }
+                                />
+                                Pago
+                              </label>
+                              {!appRow ? (
+                                <Button type="button" variant="ghost" size="sm" className="h-7 px-1 text-[11px]" onClick={() => removeSueldo(s.id)}>
+                                  Quitar
+                                </Button>
+                              ) : (
+                                <span className="h-7 w-8" aria-hidden />
+                              )}
                             </div>
-                            {!appRow ? (
-                              <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => removeSueldo(s.id)}>
-                                Quitar
-                              </Button>
-                            ) : (
-                              <span className="shrink-0 w-[72px]" aria-hidden />
-                            )}
                           </div>
                         );
                       })}
@@ -633,18 +823,16 @@ export default function GastosPage() {
               </CardContent>
             </Card>
 
-            <Card className="min-w-0 border-border/80 shadow-sm">
-              <CardHeader className="border-b border-border/60 bg-muted/20 pb-4">
-                <CardTitle className="text-xl">Gastos extras del mes</CardTitle>
-                <CardDescription className="mt-1.5 max-w-2xl">
-                  Mes <strong>{etiquetaMesSeleccionado}</strong>
-                  {esMesActual ? ' (mes actual)' : ''}. En Economía se desglosan como <strong>Gastos extras</strong>,{' '}
-                  <strong>Publicidad</strong>, <strong>Envíos</strong> y categorías de <strong>Ganancia</strong>{' '}
-                  (inversiones empresa + compra dólares).
+            <Card className="min-w-0 border-border/70 shadow-sm">
+              <CardHeader className="border-b border-border/50 bg-muted/15 px-4 py-3">
+                <CardTitle className="text-lg">Gastos extras del mes</CardTitle>
+                <CardDescription className="text-xs leading-snug">
+                  {etiquetaMesSeleccionado}
+                  {esMesActual ? ' · actual' : ''} · Economía usa publicidad, envíos e inversiones según categoría.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-2 rounded-lg border bg-muted/15 p-3 text-sm sm:grid-cols-2">
+              <CardContent className="space-y-3 px-4 py-4">
+                <div className="grid gap-2 rounded-lg border border-border/50 bg-muted/20 p-3 text-xs sm:grid-cols-2">
                   <div className="flex justify-between gap-2">
                     <span className="text-muted-foreground">Extras sin envíos</span>
                     <span className="font-semibold tabular-nums">{formatArs(extrasSinEnvio)}</span>
@@ -664,13 +852,22 @@ export default function GastosPage() {
                     <span className="text-lg font-bold tabular-nums text-foreground">{formatArs(totalExtrasAll)}</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
                   {EXTRA_FIELDS.map((f) => (
-                    <NumberField
+                    <GastoMontoRow
                       key={f.key}
                       label={f.label}
                       value={bundle.extras[f.key]}
                       onChange={(n) => updateExtras({ [f.key]: n } as Partial<ExtrasMonth>)}
+                      paid={!!bundle.pagos?.extras?.[f.key]}
+                      onPaidChange={(v) =>
+                        setBundleForMonth((b) =>
+                          withPagos(b, (_f, _s, extras) => {
+                            if (v) extras[f.key] = true;
+                            else delete extras[f.key];
+                          }),
+                        )
+                      }
                     />
                   ))}
                 </div>
@@ -678,44 +875,46 @@ export default function GastosPage() {
             </Card>
           </div>
 
-          <Card className="w-full border-border/80 shadow-sm">
-            <CardHeader className="border-b border-border/60 bg-muted/20 pb-4">
-              <CardTitle className="text-xl">Costos variables de fabricación</CardTitle>
-              <CardDescription className="mt-1.5 max-w-4xl">
-                Sincronizado con la tabla <code className="text-xs bg-muted px-1 rounded">fabricacion_parametros</code> en
-                Supabase. Al guardar se inserta una <strong>nueva versión</strong> con fecha de vigencia; el trigger de
-                costos usa la tarifa correspondiente al{' '}
-                <code className="text-xs bg-muted px-1 rounded">created_at</code> de cada sello.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b pb-4">
-                <div className="flex flex-col gap-2 sm:items-end shrink-0 w-full sm:w-auto">
+          <Card className="w-full border-border/70 shadow-sm">
+            <CardHeader className="space-y-4 border-b border-border/50 bg-muted/15 px-4 py-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <CardTitle className="text-lg">Costos variables de fabricación</CardTitle>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Tabla <code className="rounded bg-muted px-1 py-px text-[11px]">fabricacion_parametros</code>: nueva
+                    versión al guardar; los sellos usan la tarifa vigente según su <code className="rounded bg-muted px-1 py-px text-[11px]">created_at</code>.
+                  </p>
+                </div>
+                <Button type="button" className="h-9 shrink-0 self-start lg:self-center" onClick={handleGuardarCostosDb} disabled={paramsDisabled}>
+                  {paramsSaving ? 'Guardando…' : paramsLoading ? 'Cargando…' : 'Guardar en Supabase'}
+                </Button>
+              </div>
+              <div className="grid gap-4 rounded-lg border border-border/50 bg-background/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-1 sm:col-span-2 lg:col-span-2">
+                  <Label className="text-[11px] text-muted-foreground">Última versión en base</Label>
                   {lastSynced ? (
-                    <p className="text-xs text-muted-foreground max-w-[280px] sm:text-right">
-                      Última versión cargada: <span className="text-foreground">{formatEffectiveLabel(lastSynced.effectiveFrom)}</span>
-                      {lastSynced.note ? ` · ${lastSynced.note}` : ''}
+                    <p className="text-sm text-foreground">
+                      <span className="font-medium">{formatEffectiveLabel(lastSynced.effectiveFrom)}</span>
+                      {lastSynced.note ? <span className="text-muted-foreground"> · {lastSynced.note}</span> : null}
                     </p>
                   ) : (
-                    <p className="text-xs text-muted-foreground sm:text-right">Aún no hay datos en la tabla o falló la carga.</p>
+                    <p className="text-sm text-muted-foreground">Sin datos o error de carga.</p>
                   )}
-                  <div className="flex flex-col gap-1 w-full sm:w-auto">
-                    <Label className="text-xs text-muted-foreground">Vigente desde (opcional)</Label>
-                    <input
-                      type="datetime-local"
-                      className="bg-background border rounded-md px-3 py-2 text-sm w-full sm:w-[220px] disabled:opacity-50"
-                      disabled={paramsDisabled}
-                      value={vigenteDesdeLocal}
-                      onChange={(e) => setVigenteDesdeLocal(e.target.value)}
-                    />
-                    <p className="text-[11px] text-muted-foreground">Vacío = momento del guardado (ahora).</p>
-                  </div>
-                  <Button type="button" onClick={handleGuardarCostosDb} disabled={paramsDisabled}>
-                    {paramsSaving ? 'Guardando…' : paramsLoading ? 'Cargando…' : 'Guardar en Supabase'}
-                  </Button>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Vigente desde (opcional)</Label>
+                  <input
+                    type="datetime-local"
+                    className="w-full rounded-md border bg-background px-2 py-1.5 text-sm disabled:opacity-50"
+                    disabled={paramsDisabled}
+                    value={vigenteDesdeLocal}
+                    onChange={(e) => setVigenteDesdeLocal(e.target.value)}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Vacío = al guardar (ahora).</p>
                 </div>
               </div>
-
+            </CardHeader>
+            <CardContent className="space-y-8 px-4 py-6">
               <div>
                 <h3 className="text-sm font-medium mb-3">Ítems terminados</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

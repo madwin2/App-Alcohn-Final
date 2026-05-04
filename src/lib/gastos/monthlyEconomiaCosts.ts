@@ -35,9 +35,17 @@ export type ExtrasMonth = {
   inversion_cyprea: number;
 };
 
+/** Solo en JSON: claves con `true` = rubro marcado como pagado (no afecta totales de Economía). */
+export type GastosPagosTracking = {
+  fixed?: Record<string, boolean>;
+  sueldos?: Record<string, boolean>;
+  extras?: Partial<Record<keyof ExtrasMonth, boolean>>;
+};
+
 export type MonthCostsBundle = {
   fixed: FixedCostsMonth;
   extras: ExtrasMonth;
+  pagos?: GastosPagosTracking;
 };
 
 export function newSalaryEntry(): SalaryEntry {
@@ -340,13 +348,56 @@ function normalizeExtras(raw: unknown): ExtrasMonth {
   return e;
 }
 
+function readBoolMap(raw: unknown): Record<string, boolean> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (v === true) out[k] = true;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+const EXTRAS_PAGO_KEYS: (keyof ExtrasMonth)[] = [
+  'publicidad',
+  'envios',
+  'inversiones_empresa',
+  'compra_dolares',
+  'gastos_varios',
+  'automatizaciones',
+  'remodelaciones',
+  'impuestos',
+  'inversion_cyprea',
+];
+
+function normalizeExtrasPagos(raw: unknown): Partial<Record<keyof ExtrasMonth, boolean>> | undefined {
+  const m = readBoolMap(raw);
+  if (!m) return undefined;
+  const out: Partial<Record<keyof ExtrasMonth, boolean>> = {};
+  for (const k of EXTRAS_PAGO_KEYS) {
+    if (m[k]) out[k] = true;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function normalizePagos(raw: unknown): GastosPagosTracking | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const fixed = readBoolMap(o.fixed);
+  const sueldos = readBoolMap(o.sueldos);
+  const extras = normalizeExtrasPagos(o.extras);
+  if (!fixed && !sueldos && !extras) return undefined;
+  return { ...(fixed ? { fixed } : {}), ...(sueldos ? { sueldos } : {}), ...(extras ? { extras } : {}) };
+}
+
 function normalizeBundle(raw: unknown): MonthCostsBundle {
   if (!raw || typeof raw !== 'object') return emptyBundle();
   const o = raw as Record<string, unknown>;
   if ('fixed' in o || 'extras' in o || 'realFixed' in o) {
+    const pagos = normalizePagos(o.pagos);
     return {
       fixed: normalizeFixed(o.fixed),
       extras: normalizeExtras(o.extras),
+      ...(pagos ? { pagos } : {}),
     };
   }
   return emptyBundle();
@@ -384,5 +435,6 @@ export function getBundleForMonth(
   return {
     fixed: b.fixed,
     extras: b.extras,
+    ...(b.pagos ? { pagos: b.pagos } : {}),
   };
 }
