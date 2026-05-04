@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { BarChart3, CheckCircle2, ListChecks } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import {
   DEFAULT_VARIABLE_COSTS,
@@ -76,12 +76,6 @@ const SERVICIO_ROWS: { key: keyof FixedCostsMonth; label: string }[] = [
   { key: 'agua', label: 'Agua' },
   { key: 'internet', label: 'Internet' },
 ];
-
-type PagoBucketStats = { total: number; paid: number; pendienteArs: number };
-
-function emptyPagoBucket(): PagoBucketStats {
-  return { total: 0, paid: 0, pendienteArs: 0 };
-}
 
 const formatArs = (value: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
@@ -430,79 +424,22 @@ export default function GastosPage() {
 
   const pagosResumen = useMemo(() => {
     const pg = bundle.pagos;
-    let total = 0;
-    let paid = 0;
-    let montoPendiente = 0;
-    const operativos = emptyPagoBucket();
-    const sueldosB = emptyPagoBucket();
-    const extrasB = emptyPagoBucket();
-    const pendientes: { label: string; amount: number }[] = [];
-
-    const bumpGlobal = (amount: number, isPaid: boolean) => {
-      if (amount <= 0) return;
-      total += 1;
-      if (isPaid) paid += 1;
-      else montoPendiente += amount;
+    let totalAPagarArs = 0;
+    let totalPagadoArs = 0;
+    const add = (amount: number, isPaid: boolean) => {
+      const a = Number(amount) || 0;
+      if (a <= 0) return;
+      totalAPagarArs += a;
+      if (isPaid) totalPagadoArs += a;
     };
-
-    const bumpOperativo = (amount: number, isPaid: boolean, label: string) => {
-      if (amount <= 0) return;
-      operativos.total += 1;
-      if (isPaid) operativos.paid += 1;
-      else {
-        operativos.pendienteArs += amount;
-        pendientes.push({ label, amount });
-      }
-      bumpGlobal(amount, isPaid);
-    };
-
-    const bumpSueldo = (amount: number, isPaid: boolean, label: string) => {
-      if (amount <= 0) return;
-      sueldosB.total += 1;
-      if (isPaid) sueldosB.paid += 1;
-      else {
-        sueldosB.pendienteArs += amount;
-        pendientes.push({ label, amount });
-      }
-      bumpGlobal(amount, isPaid);
-    };
-
-    const bumpExtra = (amount: number, isPaid: boolean, label: string) => {
-      if (amount <= 0) return;
-      extrasB.total += 1;
-      if (isPaid) extrasB.paid += 1;
-      else {
-        extrasB.pendienteArs += amount;
-        pendientes.push({ label, amount });
-      }
-      bumpGlobal(amount, isPaid);
-    };
-
-    for (const { key, label } of FIXED_MONTO_ROWS) {
-      bumpOperativo(Number(bundle.fixed[key]) || 0, !!pg?.fixed?.[key as string], label);
-    }
-    for (const { key, label } of SERVICIO_ROWS) {
-      bumpOperativo(Number(bundle.fixed[key]) || 0, !!pg?.fixed?.[key as string], label);
-    }
-    bumpOperativo(aguinaldo, !!pg?.fixed?.aguinaldo, 'Aguinaldo (provisión)');
-    for (const s of bundle.fixed.sueldos) {
-      bumpSueldo(Number(s.monto) || 0, !!pg?.sueldos?.[s.id], s.nombre.trim() || 'Sueldo');
-    }
-    for (const f of EXTRA_FIELDS) {
-      bumpExtra(Number(bundle.extras[f.key]) || 0, !!pg?.extras?.[f.key], f.label);
-    }
-
-    pendientes.sort((a, b) => b.amount - a.amount);
-    const topUnpaid = pendientes.slice(0, 6);
-    const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
-    return {
-      total,
-      paid,
-      montoPendiente,
-      pct,
-      buckets: { operativos, sueldos: sueldosB, extras: extrasB },
-      topUnpaid,
-    };
+    for (const { key } of FIXED_MONTO_ROWS) add(Number(bundle.fixed[key]) || 0, !!pg?.fixed?.[key as string]);
+    for (const { key } of SERVICIO_ROWS) add(Number(bundle.fixed[key]) || 0, !!pg?.fixed?.[key as string]);
+    add(aguinaldo, !!pg?.fixed?.aguinaldo);
+    for (const s of bundle.fixed.sueldos) add(Number(s.monto) || 0, !!pg?.sueldos?.[s.id]);
+    for (const f of EXTRA_FIELDS) add(Number(bundle.extras[f.key]) || 0, !!pg?.extras?.[f.key]);
+    const pctMonto =
+      totalAPagarArs > 0 ? Math.min(100, Math.round((totalPagadoArs / totalAPagarArs) * 100)) : 0;
+    return { totalAPagarArs, totalPagadoArs, pctMonto };
   }, [bundle, aguinaldo]);
 
   const mesActualKey = currentMonthKey();
@@ -702,154 +639,44 @@ export default function GastosPage() {
                 </p>
               </button>
 
-              <Card className="overflow-hidden border-border/60 shadow-md ring-1 ring-emerald-500/10">
-                <CardHeader className="space-y-0 border-b border-border/40 bg-gradient-to-br from-emerald-950/25 via-card to-card px-4 py-3.5 dark:from-emerald-950/40">
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 shadow-inner dark:text-emerald-400">
-                      <ListChecks className="size-5" aria-hidden />
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <CardTitle className="text-base font-semibold tracking-tight">Seguimiento de pagos</CardTitle>
-                        {pagosResumen.total > 0 && pagosResumen.paid === pagosResumen.total ? (
-                          <Badge className="gap-1 border-0 bg-emerald-600 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-emerald-600">
-                            <CheckCircle2 className="size-3.5" aria-hidden />
-                            Al día
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <CardDescription className="text-xs leading-relaxed text-muted-foreground">
-                        Marcá «Pagado» en cada rubro más abajo. Solo registro interno; no cambia Economía.
-                      </CardDescription>
-                    </div>
-                  </div>
+              <Card className="border-border/60 shadow-sm">
+                <CardHeader className="space-y-0 border-b border-border/40 px-3 py-2">
+                  <CardTitle className="text-sm font-medium">Seguimiento de pagos</CardTitle>
+                  <CardDescription className="text-[10px] leading-tight">
+                    Marcá «Pagado» abajo · no afecta Economía
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4 p-4">
-                  {pagosResumen.total === 0 ? (
-                    <p className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-4 text-center text-sm text-muted-foreground">
-                      No hay montos cargados este mes. Cuando cargues importes, aparecerá el avance acá.
-                    </p>
+                <CardContent className="space-y-3 p-3">
+                  {pagosResumen.totalAPagarArs <= 0 ? (
+                    <p className="py-1 text-center text-xs text-muted-foreground">Sin montos este mes</p>
                   ) : (
                     <>
-                      <div className="flex items-stretch gap-4">
+                      <div
+                        className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                        role="progressbar"
+                        aria-valuenow={pagosResumen.pctMonto}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label="Porcentaje del monto marcado como pagado"
+                      >
                         <div
-                          className="relative grid size-[4.25rem] shrink-0 place-items-center rounded-full p-[3px] shadow-sm"
-                          style={{
-                            background: `conic-gradient(from -90deg, rgb(16 185 129 / 0.92) ${pagosResumen.pct}%, rgb(63 63 70 / 0.45) 0)`,
-                          }}
-                          aria-valuenow={pagosResumen.pct}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                          role="progressbar"
-                          aria-label={`${pagosResumen.paid} de ${pagosResumen.total} rubros marcados como pagados`}
-                        >
-                          <div className="flex size-full flex-col items-center justify-center rounded-full bg-card text-center leading-none">
-                            <span className="text-lg font-bold tabular-nums text-foreground">{pagosResumen.pct}%</span>
-                            <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">listo</span>
-                          </div>
+                          className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                          style={{ width: `${pagosResumen.pctMonto}%` }}
+                        />
+                      </div>
+                      <div className="flex items-end justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Total pago</p>
+                          <p className="truncate text-xl font-bold tabular-nums text-foreground">{formatArs(pagosResumen.totalPagadoArs)}</p>
                         </div>
-                        <div className="min-w-0 flex-1 space-y-2">
-                          <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-                            <div
-                              className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-[width] duration-500 ease-out"
-                              style={{ width: `${pagosResumen.pct}%` }}
-                            />
-                          </div>
-                          <p className="text-sm text-foreground">
-                            <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{pagosResumen.paid}</span>
-                            <span className="text-muted-foreground"> de </span>
-                            <span className="font-semibold tabular-nums">{pagosResumen.total}</span>
-                            <span className="text-muted-foreground"> rubros con monto</span>
+                        <div className="min-w-0 text-right">
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Total a pagar</p>
+                          <p className="truncate text-xl font-semibold tabular-nums text-muted-foreground">
+                            {formatArs(pagosResumen.totalAPagarArs)}
                           </p>
-                          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2 dark:bg-amber-500/10">
-                            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Sin marcar pagado</span>
-                            <span className="text-base font-bold tabular-nums text-amber-700 dark:text-amber-400">
-                              {formatArs(pagosResumen.montoPendiente)}
-                            </span>
-                          </div>
                         </div>
                       </div>
-
-                      <div className="space-y-3 rounded-lg border border-border/50 bg-muted/15 p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Por bloque</p>
-                        <div className="space-y-2.5">
-                          {pagosResumen.buckets.operativos.total > 0 ? (
-                            <div className="space-y-1">
-                              <div className="flex justify-between gap-2 text-[11px]">
-                                <span className="text-muted-foreground">Fijos y servicios + aguinaldo</span>
-                                <span className="shrink-0 tabular-nums text-foreground">
-                                  {pagosResumen.buckets.operativos.paid}/{pagosResumen.buckets.operativos.total}
-                                </span>
-                              </div>
-                              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className="h-full rounded-full bg-emerald-500/70 transition-all"
-                                  style={{
-                                    width: `${pagosResumen.buckets.operativos.total ? Math.round((pagosResumen.buckets.operativos.paid / pagosResumen.buckets.operativos.total) * 100) : 0}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ) : null}
-                          {pagosResumen.buckets.sueldos.total > 0 ? (
-                            <div className="space-y-1">
-                              <div className="flex justify-between gap-2 text-[11px]">
-                                <span className="text-muted-foreground">Sueldos</span>
-                                <span className="shrink-0 tabular-nums text-foreground">
-                                  {pagosResumen.buckets.sueldos.paid}/{pagosResumen.buckets.sueldos.total}
-                                </span>
-                              </div>
-                              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className="h-full rounded-full bg-sky-500/70 transition-all"
-                                  style={{
-                                    width: `${pagosResumen.buckets.sueldos.total ? Math.round((pagosResumen.buckets.sueldos.paid / pagosResumen.buckets.sueldos.total) * 100) : 0}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ) : null}
-                          {pagosResumen.buckets.extras.total > 0 ? (
-                            <div className="space-y-1">
-                              <div className="flex justify-between gap-2 text-[11px]">
-                                <span className="text-muted-foreground">Extras del mes</span>
-                                <span className="shrink-0 tabular-nums text-foreground">
-                                  {pagosResumen.buckets.extras.paid}/{pagosResumen.buckets.extras.total}
-                                </span>
-                              </div>
-                              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className="h-full rounded-full bg-violet-500/70 transition-all"
-                                  style={{
-                                    width: `${pagosResumen.buckets.extras.total ? Math.round((pagosResumen.buckets.extras.paid / pagosResumen.buckets.extras.total) * 100) : 0}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      {pagosResumen.topUnpaid.length > 0 ? (
-                        <div className="space-y-2">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            Pendientes más altos (marcá abajo «Pagado»)
-                          </p>
-                          <ul className="divide-y divide-border/50 rounded-lg border border-border/40 bg-background/50">
-                            {pagosResumen.topUnpaid.map((row, i) => (
-                              <li key={`${row.label}-${i}`} className="flex items-center justify-between gap-2 px-2.5 py-2 text-xs">
-                                <span className="min-w-0 truncate text-muted-foreground">{row.label}</span>
-                                <span className="shrink-0 font-medium tabular-nums text-foreground">{formatArs(row.amount)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : pagosResumen.paid === pagosResumen.total ? (
-                        <p className="flex items-center justify-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/5 py-3 text-sm text-emerald-800 dark:text-emerald-300">
-                          <CheckCircle2 className="size-4 shrink-0" aria-hidden />
-                          Todos los rubros con monto están marcados como pagados.
-                        </p>
-                      ) : null}
+                      <p className="text-center text-sm font-semibold tabular-nums text-muted-foreground">{pagosResumen.pctMonto}%</p>
                     </>
                   )}
                 </CardContent>
