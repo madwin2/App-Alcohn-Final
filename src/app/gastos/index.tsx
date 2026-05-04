@@ -3,9 +3,18 @@ import { Navigate } from 'react-router-dom';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Toaster } from '@/components/ui/toaster';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { BarChart3 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import {
   DEFAULT_VARIABLE_COSTS,
@@ -132,6 +141,7 @@ export default function GastosPage() {
 
   const [approvedUsers, setApprovedUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [approvedUsersLoading, setApprovedUsersLoading] = useState(true);
+  const [proyeccionOpen, setProyeccionOpen] = useState(false);
 
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
@@ -322,6 +332,7 @@ export default function GastosPage() {
   const sueldosSum = sumSueldos(bundle.fixed.sueldos);
   const extrasSinEnvio = gastosExtrasSinEnvioParaEconomia(bundle.extras);
   const totalExtrasAll = EXTRA_FIELDS.reduce((s, f) => s + (bundle.extras[f.key] || 0), 0);
+  const totalProyectadoMes = totalFijos + totalExtrasAll;
 
   const mesActualKey = currentMonthKey();
   const esMesActual = selectedMonth === mesActualKey;
@@ -374,294 +385,390 @@ export default function GastosPage() {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <div className="ml-20 p-6 space-y-6 max-w-5xl">
-        <div>
-          <h1 className="text-2xl font-semibold">Gastos</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Costos fijos y extras por mes (elegís el mes arriba; por defecto el actual), parámetros de fabricación en
-            Supabase. Los gastos mensuales se guardan en la base de datos (misma cuenta).
-          </p>
-        </div>
-
-        <Card className="sticky top-4 z-10 border-primary/20 shadow-sm bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-          <CardHeader>
-            <CardTitle>Mes a editar</CardTitle>
-            <CardDescription>
-              Elegí un mes para cargar <strong>costos fijos</strong> y <strong>gastos extras</strong> que verás en
-              Economía. Por defecto abrís el <strong>mes actual</strong>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-end gap-4">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Mes</Label>
-              <input
-                className="bg-background border rounded-md px-3 py-2 text-sm min-w-[11rem]"
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-              />
-            </div>
-            <Button type="button" variant="secondary" size="sm" onClick={() => setSelectedMonth(mesActualKey)}>
-              Ir al mes actual
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (!monthlyByMonth[selectedMonth]) {
-                  setMonthlyByMonth((m) => ({ ...m, [selectedMonth]: emptyBundle() }));
-                }
-              }}
-            >
-              Inicializar mes vacío
-            </Button>
-            <p className="w-full text-sm text-muted-foreground">
-              Editando: <span className="font-medium text-foreground">{etiquetaMesSeleccionado}</span>
-              {esMesActual ? (
-                <span className="ml-2 rounded-md bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
-                  Mes actual
-                </span>
-              ) : null}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Gastos fijos mensuales</CardTitle>
-            <CardDescription>
-              Mes <strong>{etiquetaMesSeleccionado}</strong>
-              {esMesActual ? ' (mes actual)' : ''}. Cargá acá los montos reales del mes; en Economía se muestran como{' '}
-              <strong>Costos fijos</strong>. El aguinaldo es la suma de sueldos ÷ 12 (provisión mensual).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
-              <p>
-                <span className="text-muted-foreground">Suma sueldos:</span>{' '}
-                <span className="font-semibold">{formatArs(sueldosSum)}</span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Aguinaldo (sueldos ÷ 12):</span>{' '}
-                <span className="font-semibold">{formatArs(aguinaldo)}</span>
-              </p>
-              <p className="pt-1 border-t border-border/60">
-                <span className="text-muted-foreground">Total costos fijos ({etiquetaMesSeleccionado}):</span>{' '}
-                <span className="font-semibold text-foreground">{formatArs(totalFijos)}</span>
+      <div className="ml-20 flex min-h-screen flex-1 flex-col">
+        <div className="w-full max-w-[1920px] flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
+          <header className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1.5">
+              <h1 className="text-3xl font-semibold tracking-tight">Gastos</h1>
+              <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                <span className="font-medium text-foreground">1.</span> Costos fijos y extras del mes (se guardan en
+                Supabase y alimentan Economía). <span className="font-medium text-foreground">2.</span> Parámetros de
+                fabricación (tarifas por ítem, otra tabla).
               </p>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <NumberField label="Monotributos" value={bundle.fixed.monotributos} onChange={(n) => updateFixed({ monotributos: n })} />
-              <NumberField label="Contador" value={bundle.fixed.contador} onChange={(n) => updateFixed({ contador: n })} />
-              <NumberField label="Alquiler" value={bundle.fixed.alquiler} onChange={(n) => updateFixed({ alquiler: n })} />
-              <NumberField label="Seguro" value={bundle.fixed.seguro} onChange={(n) => updateFixed({ seguro: n })} />
-              <NumberField label="Crédito" value={bundle.fixed.credito} onChange={(n) => updateFixed({ credito: n })} />
+            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+              <Button type="button" className="gap-2" onClick={() => setProyeccionOpen(true)}>
+                <BarChart3 className="size-4" aria-hidden />
+                Proyección del mes
+              </Button>
+              <p className="text-xs text-muted-foreground">Suma fijos + extras del mes elegido</p>
             </div>
+          </header>
 
-            <div>
-              <h3 className="text-sm font-medium mb-2">Servicios</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <NumberField label="Electricidad" value={bundle.fixed.electricidad} onChange={(n) => updateFixed({ electricidad: n })} />
-                <NumberField label="Agua" value={bundle.fixed.agua} onChange={(n) => updateFixed({ agua: n })} />
-                <NumberField label="Internet" value={bundle.fixed.internet} onChange={(n) => updateFixed({ internet: n })} />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-medium">Sueldos (por persona)</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Una fila por usuario aprobado en la app (nombre fijo). Podés sumar otros sueldos con el botón.
-                  </p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={addSueldo}>
-                  Agregar otro sueldo
-                </Button>
-              </div>
-              {approvedUsersLoading ? (
-                <p className="text-sm text-muted-foreground">Cargando usuarios de la app…</p>
-              ) : bundle.fixed.sueldos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No hay sueldos cargados. Si no hay usuarios aprobados en la app, usá «Agregar otro sueldo».
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {bundle.fixed.sueldos.map((s) => {
-                    const appRow = isAppUserSueldo(s.id);
-                    return (
-                      <div key={s.id} className="flex flex-col gap-2 sm:flex-row sm:items-end border rounded-md p-3">
-                        <div className="flex-1 space-y-1">
-                          <Label className="text-xs text-muted-foreground">
-                            Nombre
-                            {appRow ? (
-                              <span className="ml-1.5 text-[10px] font-normal text-primary">(usuario app)</span>
-                            ) : null}
-                          </Label>
-                          <input
-                            className="w-full bg-background border rounded-md px-3 py-2 text-sm disabled:opacity-70"
-                            value={s.nombre}
-                            disabled={appRow}
-                            onChange={(e) => patchSueldo(s.id, { nombre: e.target.value })}
-                            placeholder="Ej. Juan"
-                          />
-                        </div>
-                        <div className="w-full sm:w-40 space-y-1">
-                          <Label className="text-xs text-muted-foreground">Monto (ARS)</Label>
-                          <input
-                            className="w-full bg-background border rounded-md px-3 py-2 text-sm"
-                            type="number"
-                            inputMode="decimal"
-                            value={s.monto}
-                            onChange={(e) => patchSueldo(s.id, { monto: Number(e.target.value) || 0 })}
-                          />
-                        </div>
-                        {!appRow ? (
-                          <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => removeSueldo(s.id)}>
-                            Quitar
-                          </Button>
-                        ) : (
-                          <span className="shrink-0 w-[72px]" aria-hidden />
+          <Dialog open={proyeccionOpen} onOpenChange={setProyeccionOpen}>
+            <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto sm:max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Proyección de gasto — {etiquetaMesSeleccionado}</DialogTitle>
+                <DialogDescription>
+                  Total mensual operativo según lo cargado abajo (costos fijos del mes + todas las categorías extras).
+                  Los costos variables de fabricación son montos por unidad y no se suman acá.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-6 text-sm">
+                <section className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Costos fijos</h4>
+                  <ul className="space-y-1.5 rounded-lg border bg-muted/20 px-3 py-2">
+                    <li className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">Monotributos</span>
+                      <span className="font-mono tabular-nums">{formatArs(bundle.fixed.monotributos)}</span>
+                    </li>
+                    <li className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">Contador + alquiler + seguro + crédito</span>
+                      <span className="font-mono tabular-nums">
+                        {formatArs(
+                          bundle.fixed.contador +
+                            bundle.fixed.alquiler +
+                            bundle.fixed.seguro +
+                            bundle.fixed.credito,
                         )}
-                      </div>
-                    );
-                  })}
+                      </span>
+                    </li>
+                    <li className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">Electricidad + agua + internet</span>
+                      <span className="font-mono tabular-nums">
+                        {formatArs(bundle.fixed.electricidad + bundle.fixed.agua + bundle.fixed.internet)}
+                      </span>
+                    </li>
+                    <li className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">Sueldos (suma)</span>
+                      <span className="font-mono tabular-nums">{formatArs(sueldosSum)}</span>
+                    </li>
+                    <li className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">Aguinaldo (sueldos ÷ 12)</span>
+                      <span className="font-mono tabular-nums">{formatArs(aguinaldo)}</span>
+                    </li>
+                    <li className="flex justify-between gap-3 border-t border-border pt-2 font-semibold">
+                      <span>Subtotal costos fijos</span>
+                      <span className="font-mono tabular-nums text-foreground">{formatArs(totalFijos)}</span>
+                    </li>
+                  </ul>
+                </section>
+                <section className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Gastos extras</h4>
+                  <ul className="space-y-1.5 rounded-lg border bg-muted/20 px-3 py-2">
+                    {EXTRA_FIELDS.map((f) => (
+                      <li key={f.key} className="flex justify-between gap-3">
+                        <span className="text-muted-foreground">{f.label}</span>
+                        <span className="font-mono tabular-nums">{formatArs(bundle.extras[f.key] || 0)}</span>
+                      </li>
+                    ))}
+                    <li className="flex justify-between gap-3 border-t border-border pt-2 font-semibold">
+                      <span>Subtotal extras</span>
+                      <span className="font-mono tabular-nums text-foreground">{formatArs(totalExtrasAll)}</span>
+                    </li>
+                  </ul>
+                </section>
+                <div className="rounded-lg bg-primary/10 px-4 py-3 text-center">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Gasto mensual proyectado</p>
+                  <p className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{formatArs(totalProyectadoMes)}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Fijos + extras (todas las categorías)</p>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+            </DialogContent>
+          </Dialog>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Costos variables de fabricación</CardTitle>
-            <CardDescription className="mt-1.5">
-              Sincronizado con la tabla <code className="text-xs bg-muted px-1 rounded">fabricacion_parametros</code> en
-              Supabase. Al guardar se inserta una <strong>nueva versión</strong> con fecha de vigencia; el trigger de
-              costos usa la tarifa correspondiente al{' '}
-              <code className="text-xs bg-muted px-1 rounded">created_at</code> de cada sello.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-8">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b pb-4">
-              <div className="flex flex-col gap-2 sm:items-end shrink-0 w-full sm:w-auto">
-                {lastSynced ? (
-                  <p className="text-xs text-muted-foreground max-w-[280px] sm:text-right">
-                    Última versión cargada: <span className="text-foreground">{formatEffectiveLabel(lastSynced.effectiveFrom)}</span>
-                    {lastSynced.note ? ` · ${lastSynced.note}` : ''}
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground sm:text-right">Aún no hay datos en la tabla o falló la carga.</p>
-                )}
-                <div className="flex flex-col gap-1 w-full sm:w-auto">
-                  <Label className="text-xs text-muted-foreground">Vigente desde (opcional)</Label>
-                  <input
-                    type="datetime-local"
-                    className="bg-background border rounded-md px-3 py-2 text-sm w-full sm:w-[220px] disabled:opacity-50"
-                    disabled={paramsDisabled}
-                    value={vigenteDesdeLocal}
-                    onChange={(e) => setVigenteDesdeLocal(e.target.value)}
-                  />
-                  <p className="text-[11px] text-muted-foreground">Vacío = momento del guardado (ahora).</p>
+          <Card className="sticky top-3 z-10 border-primary/25 shadow-md bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="text-lg">Mes a editar</CardTitle>
+                  <CardDescription className="mt-1 max-w-2xl">
+                    Elegí el mes de los <strong>costos fijos</strong> y <strong>gastos extras</strong> (Economía usa el
+                    mismo mes en sus totales).
+                  </CardDescription>
                 </div>
-                <Button type="button" onClick={handleGuardarCostosDb} disabled={paramsDisabled}>
-                  {paramsSaving ? 'Guardando…' : paramsLoading ? 'Cargando…' : 'Guardar en Supabase'}
-                </Button>
+                {esMesActual ? (
+                  <Badge variant="secondary" className="w-fit">
+                    Mes actual
+                  </Badge>
+                ) : null}
               </div>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-medium mb-3">Ítems terminados</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="Soldador 100W (sin amort.)" value={variable.soldador100} onChange={(n) => updateVariable({ soldador100: n })} disabled={paramsDisabled} />
-                <NumberField label="Soldador 200W (sin amort.)" value={variable.soldador200} onChange={(n) => updateVariable({ soldador200: n })} disabled={paramsDisabled} />
-                <NumberField label="Base remachadora (sin amort.)" value={variable.baseRemachadora} onChange={(n) => updateVariable({ baseRemachadora: n })} disabled={paramsDisabled} />
-                <NumberField label="Mango de golpe (total)" value={variable.mangoGolpe} onChange={(n) => updateVariable({ mangoGolpe: n })} disabled={paramsDisabled} />
-                <NumberField label="Amortización fresa (resto de ítems)" value={variable.amortFresa} onChange={(n) => updateVariable({ amortFresa: n })} hint="En DB no aplica a mango de golpe." disabled={paramsDisabled} />
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-medium mb-3">Bronce / planchuela ($ por cm)</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="12 mm" value={variable.planchuela12} onChange={(n) => updateVariable({ planchuela12: n })} disabled={paramsDisabled} />
-                <NumberField label="20 mm" value={variable.planchuela20} onChange={(n) => updateVariable({ planchuela20: n })} disabled={paramsDisabled} />
-                <NumberField label="25 mm" value={variable.planchuela25} onChange={(n) => updateVariable({ planchuela25: n })} disabled={paramsDisabled} />
-                <NumberField label="40 mm" value={variable.planchuela40} onChange={(n) => updateVariable({ planchuela40: n })} disabled={paramsDisabled} />
-                <NumberField label="63 mm" value={variable.planchuela63} onChange={(n) => updateVariable({ planchuela63: n })} disabled={paramsDisabled} />
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-medium mb-3">Packaging</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="Tubo" value={variable.tubo} onChange={(n) => updateVariable({ tubo: n })} disabled={paramsDisabled} />
-                <NumberField label="Caja plástico abecedario" value={variable.cajaAbc} onChange={(n) => updateVariable({ cajaAbc: n })} disabled={paramsDisabled} />
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-medium mb-3">Piezas — sello</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="Mango madera" value={variable.mangoMadera} onChange={(n) => updateVariable({ mangoMadera: n })} disabled={paramsDisabled} />
-                <NumberField label="Varilla" value={variable.varilla} onChange={(n) => updateVariable({ varilla: n })} disabled={paramsDisabled} />
-                <NumberField label="Prisionero" value={variable.prisionero} onChange={(n) => updateVariable({ prisionero: n })} disabled={paramsDisabled} />
-                <NumberField label="Pérdida corte sello (cm)" value={variable.selloPerdidaCorteCm} onChange={(n) => updateVariable({ selloPerdidaCorteCm: n })} hint="Ej. 0,8 cm = 8 mm sumados al largo." disabled={paramsDisabled} />
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-medium mb-3">Piezas — abecedario</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <NumberField label="Soporte ABC" value={variable.soporteAbc} onChange={(n) => updateVariable({ soporteAbc: n })} disabled={paramsDisabled} />
-                <NumberField label="Cm material mayús. / minús. (una)" value={variable.abcCmSimple} onChange={(n) => updateVariable({ abcCmSimple: n })} disabled={paramsDisabled} />
-                <NumberField label="Cm material mayús. + minús. (ambas)" value={variable.abcCmAmbas} onChange={(n) => updateVariable({ abcCmAmbas: n })} disabled={paramsDisabled} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Gastos extras del mes</CardTitle>
-            <CardDescription>
-              Mes <strong>{etiquetaMesSeleccionado}</strong>
-              {esMesActual ? ' (mes actual)' : ''}. En Economía: <strong>Gastos extras</strong> (sin la fila Envíos),{' '}
-              <strong>Publicidad</strong>, <strong>Envíos</strong> (manual), y <strong>Ganancia</strong> = inversiones
-              empresa + compra dólares.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-              <span>
-                Extras sin envíos: <strong className="text-foreground">{formatArs(extrasSinEnvio)}</strong>
-              </span>
-              <span>
-                Envíos (manual): <strong className="text-foreground">{formatArs(bundle.extras.envios)}</strong>
-              </span>
-              <span>
-                + publicidad: <strong className="text-foreground">{formatArs(extrasSinEnvio + bundle.extras.envios + bundle.extras.publicidad)}</strong>
-              </span>
-              <span>
-                Total categorías (todas): <strong className="text-foreground">{formatArs(totalExtrasAll)}</strong>
-              </span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {EXTRA_FIELDS.map((f) => (
-                <NumberField
-                  key={f.key}
-                  label={f.label}
-                  value={bundle.extras[f.key]}
-                  onChange={(n) => updateExtras({ [f.key]: n } as Partial<ExtrasMonth>)}
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-end gap-3 sm:gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Mes</Label>
+                <input
+                  className="min-w-[11rem] rounded-md border bg-background px-3 py-2 text-sm"
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
                 />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setSelectedMonth(mesActualKey)}>
+                Ir al mes actual
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!monthlyByMonth[selectedMonth]) {
+                    setMonthlyByMonth((m) => ({ ...m, [selectedMonth]: emptyBundle() }));
+                  }
+                }}
+              >
+                Inicializar mes vacío
+              </Button>
+              <p className="w-full text-sm text-muted-foreground sm:ml-auto sm:w-auto">
+                Editando: <span className="font-medium text-foreground">{etiquetaMesSeleccionado}</span>
+              </p>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-start 2xl:gap-8">
+            <Card className="min-w-0 border-border/80 shadow-sm">
+              <CardHeader className="border-b border-border/60 bg-muted/20 pb-4">
+                <CardTitle className="text-xl">Gastos fijos mensuales</CardTitle>
+                <CardDescription className="mt-1.5 max-w-2xl">
+                  Mes <strong>{etiquetaMesSeleccionado}</strong>
+                  {esMesActual ? ' (mes actual)' : ''}. Cargá acá los montos reales del mes; en Economía se muestran como{' '}
+                  <strong>Costos fijos</strong>. El aguinaldo es la suma de sueldos ÷ 12 (provisión mensual).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
+                  <p>
+                    <span className="text-muted-foreground">Suma sueldos:</span>{' '}
+                    <span className="font-semibold">{formatArs(sueldosSum)}</span>
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Aguinaldo (sueldos ÷ 12):</span>{' '}
+                    <span className="font-semibold">{formatArs(aguinaldo)}</span>
+                  </p>
+                  <p className="pt-1 border-t border-border/60">
+                    <span className="text-muted-foreground">Total costos fijos ({etiquetaMesSeleccionado}):</span>{' '}
+                    <span className="font-semibold text-foreground">{formatArs(totalFijos)}</span>
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  <NumberField label="Monotributos" value={bundle.fixed.monotributos} onChange={(n) => updateFixed({ monotributos: n })} />
+                  <NumberField label="Contador" value={bundle.fixed.contador} onChange={(n) => updateFixed({ contador: n })} />
+                  <NumberField label="Alquiler" value={bundle.fixed.alquiler} onChange={(n) => updateFixed({ alquiler: n })} />
+                  <NumberField label="Seguro" value={bundle.fixed.seguro} onChange={(n) => updateFixed({ seguro: n })} />
+                  <NumberField label="Crédito" value={bundle.fixed.credito} onChange={(n) => updateFixed({ credito: n })} />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Servicios</h3>
+                  <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                    <NumberField label="Electricidad" value={bundle.fixed.electricidad} onChange={(n) => updateFixed({ electricidad: n })} />
+                    <NumberField label="Agua" value={bundle.fixed.agua} onChange={(n) => updateFixed({ agua: n })} />
+                    <NumberField label="Internet" value={bundle.fixed.internet} onChange={(n) => updateFixed({ internet: n })} />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Sueldos (por persona)</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Una fila por usuario aprobado en la app (nombre fijo). Podés sumar otros sueldos con el botón.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={addSueldo}>
+                      Agregar otro sueldo
+                    </Button>
+                  </div>
+                  {approvedUsersLoading ? (
+                    <p className="text-sm text-muted-foreground">Cargando usuarios de la app…</p>
+                  ) : bundle.fixed.sueldos.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No hay sueldos cargados. Si no hay usuarios aprobados en la app, usá «Agregar otro sueldo».
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {bundle.fixed.sueldos.map((s) => {
+                        const appRow = isAppUserSueldo(s.id);
+                        return (
+                          <div key={s.id} className="flex flex-col gap-2 sm:flex-row sm:items-end border rounded-md p-3">
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-xs text-muted-foreground">
+                                Nombre
+                                {appRow ? (
+                                  <span className="ml-1.5 text-[10px] font-normal text-primary">(usuario app)</span>
+                                ) : null}
+                              </Label>
+                              <input
+                                className="w-full bg-background border rounded-md px-3 py-2 text-sm disabled:opacity-70"
+                                value={s.nombre}
+                                disabled={appRow}
+                                onChange={(e) => patchSueldo(s.id, { nombre: e.target.value })}
+                                placeholder="Ej. Juan"
+                              />
+                            </div>
+                            <div className="w-full sm:w-40 space-y-1">
+                              <Label className="text-xs text-muted-foreground">Monto (ARS)</Label>
+                              <input
+                                className="w-full bg-background border rounded-md px-3 py-2 text-sm"
+                                type="number"
+                                inputMode="decimal"
+                                value={s.monto}
+                                onChange={(e) => patchSueldo(s.id, { monto: Number(e.target.value) || 0 })}
+                              />
+                            </div>
+                            {!appRow ? (
+                              <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={() => removeSueldo(s.id)}>
+                                Quitar
+                              </Button>
+                            ) : (
+                              <span className="shrink-0 w-[72px]" aria-hidden />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="min-w-0 border-border/80 shadow-sm">
+              <CardHeader className="border-b border-border/60 bg-muted/20 pb-4">
+                <CardTitle className="text-xl">Gastos extras del mes</CardTitle>
+                <CardDescription className="mt-1.5 max-w-2xl">
+                  Mes <strong>{etiquetaMesSeleccionado}</strong>
+                  {esMesActual ? ' (mes actual)' : ''}. En Economía se desglosan como <strong>Gastos extras</strong>,{' '}
+                  <strong>Publicidad</strong>, <strong>Envíos</strong> y categorías de <strong>Ganancia</strong>{' '}
+                  (inversiones empresa + compra dólares).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-2 rounded-lg border bg-muted/15 p-3 text-sm sm:grid-cols-2">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Extras sin envíos</span>
+                    <span className="font-semibold tabular-nums">{formatArs(extrasSinEnvio)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Envíos (manual)</span>
+                    <span className="font-semibold tabular-nums">{formatArs(bundle.extras.envios)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2 sm:col-span-2">
+                    <span className="text-muted-foreground">Total extras + publicidad + envíos</span>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {formatArs(extrasSinEnvio + bundle.extras.envios + bundle.extras.publicidad)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2 border-t border-border/60 pt-2 sm:col-span-2">
+                    <span className="font-medium">Suma todas las categorías</span>
+                    <span className="text-lg font-bold tabular-nums text-foreground">{formatArs(totalExtrasAll)}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {EXTRA_FIELDS.map((f) => (
+                    <NumberField
+                      key={f.key}
+                      label={f.label}
+                      value={bundle.extras[f.key]}
+                      onChange={(n) => updateExtras({ [f.key]: n } as Partial<ExtrasMonth>)}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="w-full border-border/80 shadow-sm">
+            <CardHeader className="border-b border-border/60 bg-muted/20 pb-4">
+              <CardTitle className="text-xl">Costos variables de fabricación</CardTitle>
+              <CardDescription className="mt-1.5 max-w-4xl">
+                Sincronizado con la tabla <code className="text-xs bg-muted px-1 rounded">fabricacion_parametros</code> en
+                Supabase. Al guardar se inserta una <strong>nueva versión</strong> con fecha de vigencia; el trigger de
+                costos usa la tarifa correspondiente al{' '}
+                <code className="text-xs bg-muted px-1 rounded">created_at</code> de cada sello.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b pb-4">
+                <div className="flex flex-col gap-2 sm:items-end shrink-0 w-full sm:w-auto">
+                  {lastSynced ? (
+                    <p className="text-xs text-muted-foreground max-w-[280px] sm:text-right">
+                      Última versión cargada: <span className="text-foreground">{formatEffectiveLabel(lastSynced.effectiveFrom)}</span>
+                      {lastSynced.note ? ` · ${lastSynced.note}` : ''}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground sm:text-right">Aún no hay datos en la tabla o falló la carga.</p>
+                  )}
+                  <div className="flex flex-col gap-1 w-full sm:w-auto">
+                    <Label className="text-xs text-muted-foreground">Vigente desde (opcional)</Label>
+                    <input
+                      type="datetime-local"
+                      className="bg-background border rounded-md px-3 py-2 text-sm w-full sm:w-[220px] disabled:opacity-50"
+                      disabled={paramsDisabled}
+                      value={vigenteDesdeLocal}
+                      onChange={(e) => setVigenteDesdeLocal(e.target.value)}
+                    />
+                    <p className="text-[11px] text-muted-foreground">Vacío = momento del guardado (ahora).</p>
+                  </div>
+                  <Button type="button" onClick={handleGuardarCostosDb} disabled={paramsDisabled}>
+                    {paramsSaving ? 'Guardando…' : paramsLoading ? 'Cargando…' : 'Guardar en Supabase'}
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium mb-3">Ítems terminados</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <NumberField label="Soldador 100W (sin amort.)" value={variable.soldador100} onChange={(n) => updateVariable({ soldador100: n })} disabled={paramsDisabled} />
+                  <NumberField label="Soldador 200W (sin amort.)" value={variable.soldador200} onChange={(n) => updateVariable({ soldador200: n })} disabled={paramsDisabled} />
+                  <NumberField label="Base remachadora (sin amort.)" value={variable.baseRemachadora} onChange={(n) => updateVariable({ baseRemachadora: n })} disabled={paramsDisabled} />
+                  <NumberField label="Mango de golpe (total)" value={variable.mangoGolpe} onChange={(n) => updateVariable({ mangoGolpe: n })} disabled={paramsDisabled} />
+                  <NumberField label="Amortización fresa (resto de ítems)" value={variable.amortFresa} onChange={(n) => updateVariable({ amortFresa: n })} hint="En DB no aplica a mango de golpe." disabled={paramsDisabled} />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium mb-3">Bronce / planchuela ($ por cm)</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <NumberField label="12 mm" value={variable.planchuela12} onChange={(n) => updateVariable({ planchuela12: n })} disabled={paramsDisabled} />
+                  <NumberField label="20 mm" value={variable.planchuela20} onChange={(n) => updateVariable({ planchuela20: n })} disabled={paramsDisabled} />
+                  <NumberField label="25 mm" value={variable.planchuela25} onChange={(n) => updateVariable({ planchuela25: n })} disabled={paramsDisabled} />
+                  <NumberField label="40 mm" value={variable.planchuela40} onChange={(n) => updateVariable({ planchuela40: n })} disabled={paramsDisabled} />
+                  <NumberField label="63 mm" value={variable.planchuela63} onChange={(n) => updateVariable({ planchuela63: n })} disabled={paramsDisabled} />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium mb-3">Packaging</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <NumberField label="Tubo" value={variable.tubo} onChange={(n) => updateVariable({ tubo: n })} disabled={paramsDisabled} />
+                  <NumberField label="Caja plástico abecedario" value={variable.cajaAbc} onChange={(n) => updateVariable({ cajaAbc: n })} disabled={paramsDisabled} />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium mb-3">Piezas — sello</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <NumberField label="Mango madera" value={variable.mangoMadera} onChange={(n) => updateVariable({ mangoMadera: n })} disabled={paramsDisabled} />
+                  <NumberField label="Varilla" value={variable.varilla} onChange={(n) => updateVariable({ varilla: n })} disabled={paramsDisabled} />
+                  <NumberField label="Prisionero" value={variable.prisionero} onChange={(n) => updateVariable({ prisionero: n })} disabled={paramsDisabled} />
+                  <NumberField label="Pérdida corte sello (cm)" value={variable.selloPerdidaCorteCm} onChange={(n) => updateVariable({ selloPerdidaCorteCm: n })} hint="Ej. 0,8 cm = 8 mm sumados al largo." disabled={paramsDisabled} />
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium mb-3">Piezas — abecedario</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <NumberField label="Soporte ABC" value={variable.soporteAbc} onChange={(n) => updateVariable({ soporteAbc: n })} disabled={paramsDisabled} />
+                  <NumberField label="Cm material mayús. / minús. (una)" value={variable.abcCmSimple} onChange={(n) => updateVariable({ abcCmSimple: n })} disabled={paramsDisabled} />
+                  <NumberField label="Cm material mayús. + minús. (ambas)" value={variable.abcCmAmbas} onChange={(n) => updateVariable({ abcCmAmbas: n })} disabled={paramsDisabled} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
       </div>
       <Toaster />
+    </div>
     </div>
   );
 }
