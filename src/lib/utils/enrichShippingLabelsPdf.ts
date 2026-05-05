@@ -10,6 +10,8 @@ const CAPTION_LINE_HEIGHT = 7;
 const IMAGE_MAX_HEIGHT = 48;
 const IMAGE_GAP = 5;
 const MAX_PREVIEWS = 4;
+const LOGO_MAX_H = 18;
+const LOGO_MAX_W = 48;
 
 const itemTypeShortLabel = (item: OrderItem): string | null => {
   switch (item.itemType) {
@@ -38,24 +40,52 @@ const buildFooterContent = (order: Order): { imageUrls: string[]; caption: strin
       imageUrls.push(url);
     }
 
-    const accessory =
-      item.itemType === 'MANGO_GOLPE' ||
-      item.itemType === 'SOLDADOR' ||
-      item.itemType === 'BASE_REMACHADORA';
-
-    if (accessory) {
-      const t = itemTypeShortLabel(item);
-      if (t) captionBits.push(t);
-    } else if (!url) {
-      const t = itemTypeShortLabel(item);
-      if (t) captionBits.push(t);
-    }
+    // Siempre mostrar etiquetas de items (aunque haya preview), así el PDF enriquecido nunca queda "igual".
+    const t = itemTypeShortLabel(item);
+    if (t) captionBits.push(t);
   }
 
   return {
     imageUrls: imageUrls.slice(0, MAX_PREVIEWS),
     caption: [...new Set(captionBits)].join(' · '),
   };
+};
+
+const svgUrlToPngBytes = async (svgUrl: string, pixelW = 256): Promise<Uint8Array | null> => {
+  try {
+    const res = await fetch(svgUrl);
+    if (!res.ok) return null;
+    const svgText = await res.text();
+    const svgBlob = new Blob([svgText], { type: 'image/svg+xml' });
+    const objectUrl = URL.createObjectURL(svgBlob);
+
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = objectUrl;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('No se pudo cargar el SVG del logo.'));
+    });
+
+    const ratio = img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1;
+    const w = Math.max(1, Math.round(pixelW));
+    const h = Math.max(1, Math.round(w / ratio));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+
+    URL.revokeObjectURL(objectUrl);
+
+    const pngBlob: Blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
+    const ab = await pngBlob.arrayBuffer();
+    return new Uint8Array(ab);
+  } catch {
+    return null;
+  }
 };
 
 const embedPreviewImage = async (pdfDoc: PDFDocument, url: string) => {
@@ -101,6 +131,10 @@ export const enrichShippingLabelsPdf = async (
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const pages = pdfDoc.getPages();
 
+  // Logo (SVG -> PNG) embebido una sola vez.
+  const logoPngBytes = await svgUrlToPngBytes('/isologo-pagina.svg');
+  const embeddedLogo = logoPngBytes ? await pdfDoc.embedPng(logoPngBytes) : null;
+
   for (let i = 0; i < pages.length; i++) {
     const tn = trackingPerPage[i] ?? null;
     if (!tn) continue;
@@ -112,7 +146,7 @@ export const enrichShippingLabelsPdf = async (
     const { width } = page.getSize();
     const { imageUrls, caption } = buildFooterContent(order);
 
-    if (imageUrls.length === 0 && !caption) continue;
+    if (imageUrls.length === 0 && !caption && !embeddedLogo) continue;
 
     const innerLeft = FOOTER_MARGIN_X;
     const innerRight = width - FOOTER_MARGIN_X;
@@ -121,6 +155,19 @@ export const enrichShippingLabelsPdf = async (
     /** Leyenda pegada al borde inferior de la franja; las imágenes van encima. */
     const captionBaselineY = FOOTER_BOTTOM_Y + 5;
     const imageStackBottom = FOOTER_BOTTOM_Y + 22;
+
+    // Logo a la izquierda, arriba de la leyenda.
+    if (embeddedLogo) {
+      const scale = Math.min(LOGO_MAX_W / embeddedLogo.width, LOGO_MAX_H / embeddedLogo.height);
+      const dw = embeddedLogo.width * scale;
+      const dh = embeddedLogo.height * scale;
+      page.drawImage(embeddedLogo, {
+        x: innerLeft,
+        y: imageStackBottom + IMAGE_MAX_HEIGHT - dh,
+        width: dw,
+        height: dh,
+      });
+    }
 
     if (caption) {
       page.drawText(caption, {
