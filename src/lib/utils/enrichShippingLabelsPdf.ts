@@ -12,6 +12,8 @@ const IMAGE_GAP = 5;
 const MAX_PREVIEWS = 4;
 const LOGO_MAX_H = 18;
 const LOGO_MAX_W = 48;
+const PREVIEW_SLOT_W = 72;
+const PREVIEW_START_Y = FOOTER_BOTTOM_Y + 6;
 
 const itemTypeShortLabel = (item: OrderItem): string | null => {
   switch (item.itemType) {
@@ -30,15 +32,15 @@ const itemTypeShortLabel = (item: OrderItem): string | null => {
   }
 };
 
-const buildFooterContent = (order: Order): { imageUrls: string[]; caption: string } => {
-  const imageUrls: string[] = [];
+const buildFooterContent = (order: Order): { imageCandidates: string[][]; caption: string } => {
+  const imageCandidates: string[][] = [];
   const captionBits: string[] = [];
 
   for (const item of order.items) {
-    const url = item.files?.vectorPreviewUrl || item.files?.photoUrl;
-    if (url && /^https?:\/\//i.test(url)) {
-      imageUrls.push(url);
-    }
+    // Priorizar archivo base y luego preview vectorial.
+    const candidates = [item.files?.baseUrl, item.files?.vectorPreviewUrl]
+      .filter((u): u is string => Boolean(u) && /^https?:\/\//i.test(u));
+    if (candidates.length > 0) imageCandidates.push(candidates);
 
     // Siempre mostrar etiquetas de items (aunque haya preview), así el PDF enriquecido nunca queda "igual".
     const t = itemTypeShortLabel(item);
@@ -46,7 +48,7 @@ const buildFooterContent = (order: Order): { imageUrls: string[]; caption: strin
   }
 
   return {
-    imageUrls: imageUrls.slice(0, MAX_PREVIEWS),
+    imageCandidates: imageCandidates.slice(0, MAX_PREVIEWS),
     caption: [...new Set(captionBits)].join(' · '),
   };
 };
@@ -144,9 +146,9 @@ export const enrichShippingLabelsPdf = async (
 
     const page = pages[i];
     const { width } = page.getSize();
-    const { imageUrls, caption } = buildFooterContent(order);
+    const { imageCandidates, caption } = buildFooterContent(order);
 
-    if (imageUrls.length === 0 && !caption && !embeddedLogo) continue;
+    if (imageCandidates.length === 0 && !caption && !embeddedLogo) continue;
 
     const innerLeft = FOOTER_MARGIN_X;
     const innerRight = width - FOOTER_MARGIN_X;
@@ -154,7 +156,7 @@ export const enrichShippingLabelsPdf = async (
 
     /** Leyenda pegada al borde inferior de la franja; las imágenes van encima. */
     const captionBaselineY = FOOTER_BOTTOM_Y + 5;
-    const imageStackBottom = FOOTER_BOTTOM_Y + 22;
+    const imageStackBottom = PREVIEW_START_Y;
 
     // Logo a la izquierda, arriba de la leyenda.
     if (embeddedLogo) {
@@ -180,14 +182,20 @@ export const enrichShippingLabelsPdf = async (
         lineHeight: CAPTION_LINE_HEIGHT,
       });
     }
-    const n = imageUrls.length;
+    const n = imageCandidates.length;
     if (n === 0) continue;
 
-    const slotW = (innerWidth - (n - 1) * IMAGE_GAP) / n;
-    const maxSlotW = Math.min(slotW, 130);
+    // Alinear previews hacia la izquierda, debajo de la etiqueta.
+    const slotW = PREVIEW_SLOT_W;
+    const maxSlotW = PREVIEW_SLOT_W;
+    const startX = innerLeft;
 
     for (let j = 0; j < n; j++) {
-      const embedded = await embedPreviewImage(pdfDoc, imageUrls[j]);
+      let embedded = null;
+      for (const candidateUrl of imageCandidates[j]) {
+        embedded = await embedPreviewImage(pdfDoc, candidateUrl);
+        if (embedded) break;
+      }
       if (!embedded) continue;
 
       const iw = embedded.width;
@@ -195,7 +203,7 @@ export const enrichShippingLabelsPdf = async (
       const scale = Math.min(maxSlotW / iw, IMAGE_MAX_HEIGHT / ih);
       const dw = iw * scale;
       const dh = ih * scale;
-      const slotLeft = innerLeft + j * (slotW + IMAGE_GAP);
+      const slotLeft = startX + j * (slotW + IMAGE_GAP);
       const x = slotLeft + (slotW - dw) / 2;
 
       page.drawImage(embedded, {
