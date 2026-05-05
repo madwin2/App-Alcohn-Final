@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
@@ -17,7 +18,7 @@ import {
 } from '@/components/ui/dialog';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { formatDate, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
-import { Order } from '@/lib/types';
+import { Order, ShippingState } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
@@ -61,6 +62,14 @@ const emptyForm: ShippingFormData = {
   email: '',
   phone: '',
 };
+
+const shippingStateOptions: ShippingState[] = [
+  'SIN_ENVIO',
+  'HACER_ETIQUETA',
+  'ETIQUETA_LISTA',
+  'DESPACHADO',
+  'SEGUIMIENTO_ENVIADO',
+];
 
 const mergeShippingData = (
   fallbackData: ParsedShippingData,
@@ -140,6 +149,29 @@ export default function EnviosPage() {
       toast({
         title: 'No se pudo actualizar',
         description: 'Hubo un error cambiando el tipo de envío.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleShippingStateChange = async (order: Order, newState: ShippingState) => {
+    try {
+      await updateOrder(order.id, {
+        items: order.items.map((item) => ({
+          id: item.id,
+          shippingState: newState,
+        })) as any,
+      });
+
+      await fetchOrders();
+      toast({
+        title: 'Estado de envío actualizado',
+        description: `La orden quedó en ${getShippingLabel(newState)}.`,
+      });
+    } catch (stateError) {
+      toast({
+        title: 'No se pudo actualizar el estado',
+        description: stateError instanceof Error ? stateError.message : 'Hubo un error cambiando el estado de envío.',
         variant: 'destructive',
       });
     }
@@ -503,11 +535,7 @@ export default function EnviosPage() {
     const isDomicilio = order.shipping.service === 'DOMICILIO';
     const hasShippingTypeSelected = isSucursal || isDomicilio;
     const shippingState = order.items[0]?.shippingState;
-    const showShippingChip =
-      shippingState === 'HACER_ETIQUETA' || shippingState === 'ETIQUETA_LISTA';
-    const shippingChipVisual = showShippingChip
-      ? getShippingChipVisual(shippingState)
-      : null;
+    const shippingChipVisual = getShippingChipVisual(shippingState || 'SIN_ENVIO');
 
     return (
       <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
@@ -546,22 +574,52 @@ export default function EnviosPage() {
                 Sucursal
               </Button>
             </div>
-            {showShippingChip && shippingChipVisual ? (
-              <span
-                className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${shippingChipVisual.textClass}`}
-                style={{
-                  backgroundImage: shippingChipVisual.backgroundImage,
-                  backgroundColor: shippingChipVisual.backgroundColor,
-                  boxShadow: shippingChipVisual.boxShadow,
-                  borderColor: shippingChipVisual.borderColor,
-                  backdropFilter: 'saturate(140%) blur(3px)',
-                  color: shippingChipVisual.textColor,
-                  minWidth: shippingChipVisual.width,
-                }}
-              >
-                {getShippingLabel(shippingState)}
-              </span>
-            ) : null}
+            <Select
+              value={shippingState || 'SIN_ENVIO'}
+              onValueChange={(value) => handleShippingStateChange(order, value as ShippingState)}
+            >
+              <SelectTrigger className="h-auto w-auto min-w-[132px] border-none bg-transparent p-0 shadow-none hover:bg-transparent focus:ring-0 focus:ring-offset-0">
+                <SelectValue>
+                  <span
+                    className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${shippingChipVisual.textClass}`}
+                    style={{
+                      backgroundImage: shippingChipVisual.backgroundImage,
+                      backgroundColor: shippingChipVisual.backgroundColor,
+                      boxShadow: shippingChipVisual.boxShadow,
+                      borderColor: shippingChipVisual.borderColor,
+                      backdropFilter: 'saturate(140%) blur(3px)',
+                      color: shippingChipVisual.textColor,
+                      minWidth: shippingChipVisual.width,
+                    }}
+                  >
+                    {getShippingLabel(shippingState || 'SIN_ENVIO')}
+                  </span>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {shippingStateOptions.map((stateOption) => {
+                  const optionVisual = getShippingChipVisual(stateOption);
+                  return (
+                    <SelectItem key={stateOption} value={stateOption} className="text-xs">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-3 py-1 text-xs ${optionVisual.textClass}`}
+                        style={{
+                          backgroundImage: optionVisual.backgroundImage,
+                          backgroundColor: optionVisual.backgroundColor,
+                          boxShadow: optionVisual.boxShadow,
+                          borderColor: optionVisual.borderColor,
+                          backdropFilter: 'saturate(140%) blur(3px)',
+                          color: optionVisual.textColor,
+                          minWidth: optionVisual.width,
+                        }}
+                      >
+                        {getShippingLabel(stateOption)}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
           </div>
         </td>
         <td className="px-4 py-3">

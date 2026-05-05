@@ -260,6 +260,34 @@ export function UploadTrackingDialog({
     setPdfFile(null);
   };
 
+  const downloadEnrichedPdf = async (showSuccessToast = true) => {
+    if (!pdfFile || allMatches.length === 0) {
+      throw new Error('Necesitás el PDF cargado y al menos un pedido emparejado con seguimiento.');
+    }
+
+    const bytes = await pdfFile.arrayBuffer();
+    const map = new Map<string, Order>();
+    for (const match of allMatches) {
+      map.set(match.trackingNumber, match.order);
+    }
+
+    const out = await enrichShippingLabelsPdf(bytes, map);
+    const blob = new Blob([out], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `etiquetas-con-previews-${Date.now()}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (showSuccessToast) {
+      toast({
+        title: 'PDF generado',
+        description: 'Se descargó una copia con previews en la franja inferior.',
+      });
+    }
+  };
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -323,9 +351,27 @@ export function UploadTrackingDialog({
     setIsApplying(true);
     try {
       await onApply(allMatches);
+      if (pdfFile) {
+        try {
+          await downloadEnrichedPdf(false);
+        } catch (pdfError) {
+          toast({
+            title: 'Seguimientos actualizados',
+            description:
+              pdfError instanceof Error
+                ? `Se actualizaron ${allMatches.length} pedidos, pero no se pudo descargar el PDF: ${pdfError.message}`
+                : `Se actualizaron ${allMatches.length} pedidos, pero no se pudo descargar el PDF.`,
+          });
+          resetState();
+          onOpenChange(false);
+          return;
+        }
+      }
       toast({
         title: 'Seguimientos actualizados',
-        description: `Se actualizaron ${allMatches.length} pedidos.`,
+        description: pdfFile
+          ? `Se actualizaron ${allMatches.length} pedidos y se descargó el PDF automáticamente.`
+          : `Se actualizaron ${allMatches.length} pedidos.`,
       });
       resetState();
       onOpenChange(false);
@@ -352,23 +398,7 @@ export function UploadTrackingDialog({
 
     setIsEnriching(true);
     try {
-      const bytes = await pdfFile.arrayBuffer();
-      const map = new Map<string, Order>();
-      for (const m of allMatches) {
-        map.set(m.trackingNumber, m.order);
-      }
-      const out = await enrichShippingLabelsPdf(bytes, map);
-      const blob = new Blob([out], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `etiquetas-con-previews-${Date.now()}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast({
-        title: 'PDF generado',
-        description: 'Se descargó una copia con previews en la franja inferior.',
-      });
+      await downloadEnrichedPdf();
     } catch (error) {
       toast({
         title: 'Error al enriquecer PDF',
