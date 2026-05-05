@@ -103,9 +103,10 @@ export const extractTrackingEntryFromLines = (
 
 /** Una entrada por página (índice 0 = página 1); `null` si no se pudo leer la etiqueta. */
 export const listTrackingNumbersByPage = async (
-  buffer: ArrayBuffer
+  buffer: ArrayBuffer | Uint8Array
 ): Promise<(string | null)[]> => {
-  const loadingTask = pdfjsLib.getDocument({ data: buffer });
+  const data = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const loadingTask = pdfjsLib.getDocument({ data });
   const pdf = await loadingTask.promise;
   const out: (string | null)[] = [];
 

@@ -91,8 +91,13 @@ export const enrichShippingLabelsPdf = async (
   pdfBytes: ArrayBuffer,
   trackingToOrder: Map<string, Order>
 ): Promise<Uint8Array> => {
-  const trackingPerPage = await listTrackingNumbersByPage(pdfBytes);
-  const pdfDoc = await PDFDocument.load(pdfBytes);
+  // Usamos copias separadas del PDF para pdfjs y pdf-lib para evitar errores de ArrayBuffer "detached".
+  const asUint8 = new Uint8Array(pdfBytes);
+  const bytesForPdfJs = asUint8.slice();
+  const bytesForPdfLib = asUint8.slice();
+
+  const trackingPerPage = await listTrackingNumbersByPage(bytesForPdfJs);
+  const pdfDoc = await PDFDocument.load(bytesForPdfLib);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const pages = pdfDoc.getPages();
 
