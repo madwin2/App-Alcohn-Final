@@ -1,8 +1,15 @@
-import { Upload, Loader2, Download, Trash2 } from 'lucide-react';
+import { Upload, Loader2, Download, Trash2, FileType2 } from 'lucide-react';
 import { Order } from '@/lib/types/index';
 import { useOrdersStore } from '@/lib/state/orders.store';
 import { useState, useRef } from 'react';
-import { uploadFile, generateFilePath, uploadVectorFileWithPreview, deleteFile, downloadFile, getFilePathFromUrl } from '@/lib/supabase/services/storage.service';
+import {
+  uploadFile,
+  generateFilePath,
+  uploadVectorFileWithPreview,
+  deleteFile,
+  downloadFile,
+  getFilePathFromUrl,
+} from '@/lib/supabase/services/storage.service';
 import { useToast } from '@/components/ui/use-toast';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 
@@ -23,8 +30,9 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
 
   const hasFile = item.files?.vectorUrl;
   const previewUrl = item.files?.vectorPreviewUrl;
-  const isEps = hasFile?.toLowerCase().includes('.eps');
-  const displayUrl = (isEps && previewUrl) ? previewUrl : hasFile;
+  const isEps = Boolean(hasFile && hasFile.toLowerCase().includes('.eps'));
+  const epsSinPreview = isEps && hasFile && !previewUrl;
+  const displayUrl = isEps && previewUrl ? previewUrl : !isEps ? hasFile : undefined;
   
   // Si es un archivo resumido (para pedidos con múltiples items)
   if (hasFile === 'summary') {
@@ -65,12 +73,21 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
       
       let result: { originalUrl: string; previewUrl?: string };
       if (isEpsFile) {
-        // Si es EPS, usar la función que genera preview
-        result = await uploadVectorFileWithPreview('vector', file, filePath);
         toast({
-          title: 'Convirtiendo EPS...',
-          description: 'Generando preview del archivo',
+          title: 'Subiendo EPS...',
+          description: 'Intentando generar vista previa (si la API alcanza el límite, igual queda guardado para descargar).',
         });
+        try {
+          result = await uploadVectorFileWithPreview('vector', file, filePath);
+        } catch {
+          const fileUrl = await uploadFile('vector', file, filePath);
+          result = { originalUrl: fileUrl };
+          toast({
+            title: 'EPS guardado sin preview',
+            description: 'No se pudo convertir el EPS; igual podés descargarlo con el ícono o clic derecho.',
+            variant: 'destructive',
+          });
+        }
       } else {
         // Para otros formatos, subir normalmente
         const fileUrl = await uploadFile('vector', file, filePath);
@@ -95,9 +112,12 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
       
       toast({
         title: 'Archivo subido',
-        description: isEpsFile && result.previewUrl 
-          ? 'El archivo vector y su preview se subieron correctamente'
-          : 'El archivo vector se subió correctamente',
+        description:
+          isEpsFile && result.previewUrl
+            ? 'El vector y la vista previa se subieron correctamente.'
+            : isEpsFile
+              ? 'El EPS quedó guardado; si no ves miniatura, descargalo con el ícono.'
+              : 'El archivo vector se subió correctamente',
       });
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -182,13 +202,13 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     // Descargar el archivo original (EPS), no el preview
-    const fileToDownload = hasFile || displayUrl;
+    const fileToDownload = hasFile || previewUrl || displayUrl;
     if (!fileToDownload) return;
 
     try {
       // Extraer el nombre del archivo de la URL
       const urlParts = fileToDownload.split('/');
-      const filename = urlParts[urlParts.length - 1] || 'archivo-vector.eps';
+      const filename = decodeURIComponent(urlParts[urlParts.length - 1] || '') || 'archivo-vector.eps';
       
       await downloadFile(fileToDownload, filename);
       
@@ -206,7 +226,7 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
     }
   };
 
-  if (!showPreviews || !displayUrl) {
+  if (!showPreviews) {
     return (
       <>
         <input
@@ -216,12 +236,51 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
           onChange={handleFileSelect}
           className="hidden"
         />
-        <div 
+        {epsSinPreview ? (
+          <button
+            type="button"
+            title="EPS sin vista previa — clic para descargar"
+            onClick={(e) => {
+              e.stopPropagation();
+              void handleDownload(e);
+            }}
+            className="relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40"
+          >
+            <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
+            <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
+          </button>
+        ) : (
+          <div
+            onClick={handleClick}
+            className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors ${uploading ? 'cursor-not-allowed opacity-50' : ''}`}
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <Upload className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if (!displayUrl && !epsSinPreview) {
+    return (
+      <>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".svg,.eps,.pdf,.ai,image/svg+xml,application/pdf,application/postscript,application/illustrator"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <div
           onClick={handleClick}
-          className={`flex items-center justify-center w-10 h-10 border-2 border-dashed border-muted-foreground/25 rounded cursor-pointer hover:border-primary/50 transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors ${uploading ? 'cursor-not-allowed opacity-50' : ''}`}
         >
           {uploading ? (
-            <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : (
             <Upload className="h-4 w-4 text-muted-foreground" />
           )}
@@ -241,34 +300,58 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
       />
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div 
-            onClick={handleClick}
-            onContextMenu={(e) => e.stopPropagation()} // Prevenir que se propague al menú del pedido
-            className={`w-10 h-10 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity relative ${uploading ? 'opacity-50' : ''}`}
-          >
-            {uploading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
-                <Loader2 className="h-4 w-4 animate-spin" />
+          {epsSinPreview ? (
+            <button
+              type="button"
+              title="EPS — clic para otro archivo; derecho para descargar"
+              onClick={handleClick}
+              onContextMenu={(e) => e.stopPropagation()}
+              className={`relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 ${uploading ? 'opacity-50' : ''}`}
+            >
+              {uploading && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center rounded bg-background/80">
+                  <Loader2 className="size-4 animate-spin" />
+                </div>
+              )}
+              <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
+              <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
+            </button>
+          ) : (
+            <div
+              onClick={handleClick}
+              onContextMenu={(e) => e.stopPropagation()}
+              className={`relative h-10 w-10 cursor-pointer overflow-hidden rounded border transition-opacity hover:opacity-80 ${uploading ? 'opacity-50' : ''}`}
+            >
+              {uploading && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              )}
+              <div className={`h-full w-full ${isEps && previewUrl ? 'bg-white' : ''}`}>
+                {displayUrl ? (
+                  <img
+                    src={displayUrl}
+                    alt={isEps ? 'Vector EPS Preview' : 'Vector'}
+                    className={`h-full w-full ${isEps && previewUrl ? 'object-contain' : 'object-cover'}`}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                      if (fb) {
+                        fb.classList.remove('hidden');
+                        fb.classList.add('flex');
+                      }
+                    }}
+                  />
+                ) : null}
               </div>
-            )}
-            <div className={`w-full h-full ${isEps && previewUrl ? 'bg-white' : ''}`}>
-              <img
-                src={displayUrl}
-                alt={isEps ? "Vector EPS Preview" : "Vector"}
-                className={`w-full h-full ${isEps && previewUrl ? 'object-contain' : 'object-cover'}`}
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                }}
-              />
+              <div className="hidden h-full w-full items-center justify-center bg-muted">
+                <Upload className="h-4 w-4 text-muted-foreground" />
+              </div>
             </div>
-            <div className="hidden w-full h-full flex items-center justify-center bg-muted">
-              <Upload className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </div>
+          )}
         </ContextMenuTrigger>
         <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-          <ContextMenuItem onClick={handleDownload}>
+          <ContextMenuItem onClick={(e) => void handleDownload(e)}>
             <Download className="mr-2 h-4 w-4" />
             Descargar archivo
           </ContextMenuItem>

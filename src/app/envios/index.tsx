@@ -22,7 +22,7 @@ import { Order, ShippingState } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
-import { canonicalizeProvince, normalizeLocality, normalizePhoneDigits } from '@/lib/utils/shippingNormalization';
+import { canonicalizeProvince, normalizeLocality, normalizePhoneDigitsForEnvios } from '@/lib/utils/shippingNormalization';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 const isEligibleForShipping = (order: Order): boolean => {
@@ -99,7 +99,7 @@ const normalizeShippingFormData = (data: ShippingFormData): ShippingFormData => 
   ...data,
   province: canonicalizeProvince(data.province),
   locality: normalizeLocality(data.locality),
-  phone: normalizePhoneDigits(data.phone),
+  phone: normalizePhoneDigitsForEnvios(data.phone),
 });
 
 export default function EnviosPage() {
@@ -140,6 +140,15 @@ export default function EnviosPage() {
     [eligibleOrders],
   );
 
+  /** Índice de fila tal como sale en el CSV (fila 1 = encabezado → primera orden es 2). */
+  const csvLineNumberByOrderId = useMemo(() => {
+    const m = new Map<string, number>();
+    csvOrders.forEach((order, index) => m.set(order.id, index + 2));
+    return m;
+  }, [csvOrders]);
+
+  const [isBulkResettingEnvio, setIsBulkResettingEnvio] = useState(false);
+
   const handleToggleShippingType = async (order: Order, type: 'DOMICILIO' | 'SUCURSAL') => {
     try {
       await updateOrder(order.id, {
@@ -159,6 +168,41 @@ export default function EnviosPage() {
         description: 'Hubo un error cambiando el tipo de envío.',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleBulkResetSinEnvioConDatos = async () => {
+    if (!ordersConDatosEnvio.length) return;
+    const n = ordersConDatosEnvio.length;
+    if (
+      !window.confirm(
+        `¿Marcar «Sin envío» en todos los sellos de las ${n} órdenes de esta tabla? (Útil si hubo error en el CSV y querés recomenzar.)`,
+      )
+    ) {
+      return;
+    }
+    setIsBulkResettingEnvio(true);
+    try {
+      for (const order of ordersConDatosEnvio) {
+        await updateOrder(order.id, {
+          items: order.items.map((item) => ({
+            id: item.id,
+            shippingState: 'SIN_ENVIO',
+          })) as any,
+        });
+      }
+      toast({
+        title: 'Estados reiniciados',
+        description: `Se actualizaron ${n} órdenes a Sin envío.`,
+      });
+    } catch (bulkError) {
+      toast({
+        title: 'No se pudo reiniciar',
+        description: bulkError instanceof Error ? bulkError.message : 'Error desconocido.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkResettingEnvio(false);
     }
   };
 
@@ -355,7 +399,7 @@ export default function EnviosPage() {
       ...emptyForm,
       fullName: `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim(),
       email: order.customer.email || '',
-      phone: order.customer.phoneE164 || '',
+      phone: normalizePhoneDigitsForEnvios(order.customer.phoneE164 || ''),
     });
     setShowParseConfirmation(false);
 
@@ -378,7 +422,7 @@ export default function EnviosPage() {
         address: existingAddress?.domicilio || '',
         postalCode: existingAddress?.codigo_postal || '',
         email: order.customer.email || '',
-        phone: normalizePhoneDigits(existingAddress?.telefono || order.customer.phoneE164 || ''),
+        phone: normalizePhoneDigitsForEnvios(existingAddress?.telefono || order.customer.phoneE164 || ''),
       });
     } catch (existingAddressLoadError) {
       toast({
@@ -489,7 +533,7 @@ export default function EnviosPage() {
           domicilio: normalizedForm.address || 'SIN DEFINIR',
           nombre: firstName,
           apellido: lastName,
-          telefono: normalizePhoneDigits(normalizedForm.phone) || null,
+          telefono: normalizePhoneDigitsForEnvios(normalizedForm.phone) || null,
           dni: null,
         })
         .select('id')
@@ -578,7 +622,7 @@ export default function EnviosPage() {
     }
   };
 
-  const renderOrderRow = (order: Order) => {
+  const renderOrderRow = (order: Order, opts?: { showCsvLine?: boolean }) => {
     const item = getRepresentativeItem(order);
     const availablePreview =
       item?.files?.baseUrl || item?.files?.vectorPreviewUrl || item?.files?.vectorUrl;
@@ -588,8 +632,15 @@ export default function EnviosPage() {
     const shippingState = order.items[0]?.shippingState;
     const shippingChipVisual = getShippingChipVisual(shippingState || 'SIN_ENVIO');
 
+    const csvLine = opts?.showCsvLine ? csvLineNumberByOrderId.get(order.id) : undefined;
+
     return (
       <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+        {opts?.showCsvLine ? (
+          <td className="px-3 py-3 text-center tabular-nums text-muted-foreground">
+            {csvLine !== undefined ? csvLine : '—'}
+          </td>
+        ) : null}
         <td className="px-4 py-3">{formatDate(order.orderDate)}</td>
         <td className="px-4 py-3 font-medium">
           {`${order.customer.firstName} ${order.customer.lastName}`.trim()}
@@ -690,9 +741,15 @@ export default function EnviosPage() {
   };
 
   const tableClass = 'w-full text-sm';
-  const tableHead = (
+
+  const tableHead = (showCsvLine: boolean) => (
     <thead className="sticky top-0 bg-background z-10 border-b">
       <tr className="text-left text-muted-foreground">
+        {showCsvLine ? (
+          <th className="px-3 py-3 font-medium w-14 text-center" title="Número de fila en el CSV (la 1 es el encabezado)">
+            CSV
+          </th>
+        ) : null}
         <th className="px-4 py-3 font-medium">Fecha</th>
         <th className="px-4 py-3 font-medium">Cliente</th>
         <th className="px-4 py-3 font-medium">Items</th>
@@ -735,7 +792,7 @@ export default function EnviosPage() {
           ) : (
             <>
               <div className="space-y-2 min-h-0 flex flex-col flex-1">
-                <div className="flex items-baseline justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => setIsConDatosExpanded((prev) => !prev)}
@@ -744,14 +801,26 @@ export default function EnviosPage() {
                     {isConDatosExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     Con datos de envío (listos para etiqueta / CSV)
                   </button>
-                  <span className="text-xs text-muted-foreground tabular-nums">{ordersConDatosEnvio.length}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      disabled={!ordersConDatosEnvio.length || isBulkResettingEnvio}
+                      onClick={() => void handleBulkResetSinEnvioConDatos()}
+                    >
+                      {isBulkResettingEnvio ? 'Aplicando…' : 'Todos → Sin envío'}
+                    </Button>
+                    <span className="text-xs text-muted-foreground tabular-nums">{ordersConDatosEnvio.length}</span>
+                  </div>
                 </div>
                 <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
                   {isConDatosExpanded ? (
                     <div className="overflow-auto max-h-[min(50vh,420px)]">
                       <table className={tableClass}>
-                        {tableHead}
-                        <tbody>{ordersConDatosEnvio.map(renderOrderRow)}</tbody>
+                        {tableHead(true)}
+                        <tbody>{ordersConDatosEnvio.map((o) => renderOrderRow(o, { showCsvLine: true }))}</tbody>
                       </table>
                     </div>
                   ) : null}
@@ -781,8 +850,8 @@ export default function EnviosPage() {
                   {isPendientesExpanded ? (
                     <div className="overflow-auto max-h-[min(50vh,420px)]">
                       <table className={tableClass}>
-                        {tableHead}
-                        <tbody>{ordersPendientesDatos.map(renderOrderRow)}</tbody>
+                        {tableHead(false)}
+                        <tbody>{ordersPendientesDatos.map((o) => renderOrderRow(o))}</tbody>
                       </table>
                     </div>
                   ) : null}
@@ -924,7 +993,7 @@ export default function EnviosPage() {
                     onChange={(event) =>
                       setShippingForm((prev) => ({
                         ...prev,
-                        phone: normalizePhoneDigits(event.target.value),
+                        phone: normalizePhoneDigitsForEnvios(event.target.value),
                       }))
                     }
                   />

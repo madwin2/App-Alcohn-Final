@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -230,6 +230,8 @@ export default function GastosPage() {
   const [approvedUsers, setApprovedUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [approvedUsersLoading, setApprovedUsersLoading] = useState(true);
   const [proyeccionOpen, setProyeccionOpen] = useState(false);
+  const latestMonthlyRef = useRef<Record<string, MonthCostsBundle>>({});
+  const latestLegacyRef = useRef(0);
 
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
@@ -316,9 +318,19 @@ export default function GastosPage() {
   }, [monthlyByMonth, legacyFixedScalar, monthlyFromDbReady]);
 
   useEffect(() => {
+    latestMonthlyRef.current = monthlyByMonth;
+    latestLegacyRef.current = legacyFixedScalar;
+  }, [monthlyByMonth, legacyFixedScalar]);
+
+  const persistMonthlyNow = useCallback(async () => {
+    if (!monthlyFromDbReady || !isAllowed || !user?.id) return;
+    await upsertGastosMensuales(user.id, latestMonthlyRef.current, latestLegacyRef.current);
+  }, [monthlyFromDbReady, isAllowed, user?.id]);
+
+  useEffect(() => {
     if (!monthlyFromDbReady || !isAllowed || !user?.id) return;
     const t = window.setTimeout(() => {
-      void upsertGastosMensuales(user.id, monthlyByMonth, legacyFixedScalar).catch((e: unknown) => {
+      void persistMonthlyNow().catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
         toast({
           title: 'No se pudieron guardar los gastos mensuales',
@@ -328,7 +340,27 @@ export default function GastosPage() {
       });
     }, 800);
     return () => window.clearTimeout(t);
-  }, [monthlyByMonth, legacyFixedScalar, monthlyFromDbReady, isAllowed, user?.id, toast]);
+  }, [monthlyByMonth, legacyFixedScalar, monthlyFromDbReady, isAllowed, user?.id, toast, persistMonthlyNow]);
+
+  useEffect(() => {
+    if (!monthlyFromDbReady || !isAllowed || !user?.id) return;
+
+    const flushOnBackground = () => {
+      if (document.visibilityState === 'hidden') {
+        void persistMonthlyNow();
+      }
+    };
+    const flushOnPageHide = () => {
+      void persistMonthlyNow();
+    };
+
+    document.addEventListener('visibilitychange', flushOnBackground);
+    window.addEventListener('pagehide', flushOnPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', flushOnBackground);
+      window.removeEventListener('pagehide', flushOnPageHide);
+    };
+  }, [monthlyFromDbReady, isAllowed, user?.id, persistMonthlyNow]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_VARIABLE, JSON.stringify(variable));

@@ -112,3 +112,14 @@ export const normalizeLocality = (value: string): string => {
 
 export const normalizePhoneDigits = (value: string): string => value.replace(/\D/g, '');
 
+/** Quita el prefijo 549 (Argentina móvil en formato internacional E.164). */
+export const stripLeading549FromDigits = (digits: string): string => {
+  const d = (digits || '').replace(/\D/g, '');
+  if (d.startsWith('549') && d.length > 3) return d.slice(3);
+  return d;
+};
+
+/** Dígitos locales para Correo / formulario Envíos (sin 549 inicial). */
+export const normalizePhoneDigitsForEnvios = (value: string): string =>
+  stripLeading549FromDigits(normalizePhoneDigits(value));
+
