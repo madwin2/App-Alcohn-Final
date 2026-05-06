@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Search, Filter, ArrowUpDown, Plus, Image, Download, FileUp } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, Plus, Image, Download, FileUp, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StateChips } from './StateChips';
@@ -30,12 +30,12 @@ export function OrdersHeader({
   onStateFilter,
   activeStates 
 }: OrdersHeaderProps) {
-  const { searchQuery, setSearchQuery, filters, sort } = useOrdersStore();
+  const { searchQuery, setSearchQuery, searchAcrossDatabase, setSearchAcrossDatabase, filters, sort } = useOrdersStore();
   
   // Filtrar pedidos según los filtros aplicados
   const filteredOrders = useMemo(() => {
-    return filterOrders(orders, searchQuery, filters, sort);
-  }, [orders, searchQuery, filters, sort]);
+    return filterOrders(orders, searchQuery, filters, sort, searchAcrossDatabase);
+  }, [orders, searchQuery, filters, sort, searchAcrossDatabase]);
   
   const activeOrdersCount = filteredOrders.length;
   const counts = getFabricationCounts(filteredOrders);
@@ -58,12 +58,23 @@ export function OrdersHeader({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar pedidos..."
+              placeholder={searchAcrossDatabase ? 'Buscar en toda la base (mín. 4 letras)...' : 'Buscar pedidos...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 w-64"
             />
           </div>
+
+          <Button
+            variant={searchAcrossDatabase ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSearchAcrossDatabase(!searchAcrossDatabase)}
+            className="gap-2"
+            title="Buscar en toda la base ignorando filtros"
+          >
+            <Database className="h-4 w-4" />
+            Toda la base
+          </Button>
 
           {/* Ordenar */}
           <Button
@@ -135,6 +146,11 @@ export function OrdersHeader({
           </Button>
         </div>
       </div>
+      {searchAcrossDatabase && searchQuery.trim().length > 0 && searchQuery.trim().length < 4 ? (
+        <p className="text-xs text-muted-foreground">
+          Para buscar en toda la base, ingresá al menos 4 caracteres.
+        </p>
+      ) : null}
 
     </div>
   );

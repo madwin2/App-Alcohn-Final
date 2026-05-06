@@ -18,6 +18,16 @@ interface TrackingMatch {
   sourceName: string;
 }
 
+interface ApplyTrackingError {
+  match: TrackingMatch;
+  reason: string;
+}
+
+interface ApplyTrackingResult {
+  appliedMatches: TrackingMatch[];
+  failed: ApplyTrackingError[];
+}
+
 interface AlreadyAssignedMatch {
   order: Order;
   sourceName: string;
@@ -61,7 +71,7 @@ interface UploadTrackingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   orders: Order[];
-  onApply: (matches: TrackingMatch[]) => Promise<void>;
+  onApply: (matches: TrackingMatch[]) => Promise<ApplyTrackingResult>;
 }
 
 export function UploadTrackingDialog({
@@ -260,14 +270,14 @@ export function UploadTrackingDialog({
     setPdfFile(null);
   };
 
-  const downloadEnrichedPdf = async (showSuccessToast = true) => {
-    if (!pdfFile || allMatches.length === 0) {
+  const downloadEnrichedPdf = async (showSuccessToast = true, matchesToUse: TrackingMatch[] = allMatches) => {
+    if (!pdfFile || matchesToUse.length === 0) {
       throw new Error('Necesitás el PDF cargado y al menos un pedido emparejado con seguimiento.');
     }
 
     const bytes = await pdfFile.arrayBuffer();
     const map = new Map<string, Order>();
-    for (const match of allMatches) {
+    for (const match of matchesToUse) {
       map.set(match.trackingNumber, match.order);
     }
 
@@ -350,17 +360,19 @@ export function UploadTrackingDialog({
 
     setIsApplying(true);
     try {
-      await onApply(allMatches);
-      if (pdfFile) {
+      const result = await onApply(allMatches);
+      const appliedMatches = result.appliedMatches || [];
+      const failedMatches = result.failed || [];
+      if (pdfFile && appliedMatches.length > 0) {
         try {
-          await downloadEnrichedPdf(false);
+          await downloadEnrichedPdf(false, appliedMatches);
         } catch (pdfError) {
           toast({
             title: 'Seguimientos actualizados',
             description:
               pdfError instanceof Error
-                ? `Se actualizaron ${allMatches.length} pedidos, pero no se pudo descargar el PDF: ${pdfError.message}`
-                : `Se actualizaron ${allMatches.length} pedidos, pero no se pudo descargar el PDF.`,
+                ? `Se actualizaron ${appliedMatches.length} pedidos, pero no se pudo descargar el PDF: ${pdfError.message}`
+                : `Se actualizaron ${appliedMatches.length} pedidos, pero no se pudo descargar el PDF.`,
           });
           resetState();
           onOpenChange(false);
@@ -368,10 +380,14 @@ export function UploadTrackingDialog({
         }
       }
       toast({
-        title: 'Seguimientos actualizados',
-        description: pdfFile
-          ? `Se actualizaron ${allMatches.length} pedidos y se descargó el PDF automáticamente.`
-          : `Se actualizaron ${allMatches.length} pedidos.`,
+        title: failedMatches.length > 0 ? 'Seguimientos aplicados con incidencias' : 'Seguimientos actualizados',
+        description:
+          failedMatches.length > 0
+            ? `Se actualizaron ${appliedMatches.length} pedidos y ${failedMatches.length} quedaron con error.`
+            : pdfFile
+              ? `Se actualizaron ${appliedMatches.length} pedidos y se descargó el PDF automáticamente.`
+              : `Se actualizaron ${appliedMatches.length} pedidos.`,
+        ...(failedMatches.length > 0 ? { variant: 'destructive' as const } : {}),
       });
       resetState();
       onOpenChange(false);

@@ -91,27 +91,31 @@ const svgUrlToPngBytes = async (svgUrl: string, pixelW = 256): Promise<Uint8Arra
 };
 
 const embedPreviewImage = async (pdfDoc: PDFDocument, url: string) => {
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const bytes = await res.arrayBuffer();
-  const ct = (res.headers.get('content-type') || '').toLowerCase();
-  if (ct.includes('svg') || url.toLowerCase().includes('.svg')) {
-    return null;
-  }
   try {
-    if (ct.includes('png') || url.toLowerCase().includes('.png')) {
-      return await pdfDoc.embedPng(bytes);
-    }
-    if (ct.includes('jpeg') || ct.includes('jpg') || /\.jpe?g$/i.test(url)) {
-      return await pdfDoc.embedJpg(bytes);
-    }
-    return await pdfDoc.embedPng(bytes);
-  } catch {
-    try {
-      return await pdfDoc.embedJpg(bytes);
-    } catch {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const bytes = await res.arrayBuffer();
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (ct.includes('svg') || url.toLowerCase().includes('.svg')) {
       return null;
     }
+    try {
+      if (ct.includes('png') || url.toLowerCase().includes('.png')) {
+        return await pdfDoc.embedPng(bytes);
+      }
+      if (ct.includes('jpeg') || ct.includes('jpg') || /\.jpe?g$/i.test(url)) {
+        return await pdfDoc.embedJpg(bytes);
+      }
+      return await pdfDoc.embedPng(bytes);
+    } catch {
+      try {
+        return await pdfDoc.embedJpg(bytes);
+      } catch {
+        return null;
+      }
+    }
+  } catch {
+    return null;
   }
 };
 

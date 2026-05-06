@@ -15,6 +15,7 @@ interface OrdersStore {
   sidebarHovered: boolean;
   showPreviews: boolean;
   searchQuery: string;
+  searchAcrossDatabase: boolean;
   editingRowId: string | null;
   configLoaded: boolean;
   
@@ -32,6 +33,7 @@ interface OrdersStore {
   setSidebarHovered: (hovered: boolean) => void;
   setShowPreviews: (show: boolean) => void;
   setSearchQuery: (query: string) => void;
+  setSearchAcrossDatabase: (enabled: boolean) => void;
   setEditingRow: (id: string | null) => void;
   setConfigLoaded: (loaded: boolean) => void;
   loadConfig: (config: { columns?: ColumnState[]; filters?: Filters; sort?: SortState; showPreviews?: boolean }) => void;
@@ -84,6 +86,7 @@ export const useOrdersStore = create<OrdersStore>((set, get) => ({
   sidebarHovered: false,
   showPreviews: true,
   searchQuery: '',
+  searchAcrossDatabase: false,
   editingRowId: null,
   configLoaded: false,
   columns: createInitialColumns(),
@@ -95,6 +98,7 @@ export const useOrdersStore = create<OrdersStore>((set, get) => ({
   setSidebarHovered: (hovered) => set({ sidebarHovered: hovered }),
   setShowPreviews: (show) => set({ showPreviews: show }),
   setSearchQuery: (query) => set({ searchQuery: query }),
+  setSearchAcrossDatabase: (enabled) => set({ searchAcrossDatabase: enabled }),
   setEditingRow: (id) => set({ editingRowId: id }),
   setConfigLoaded: (loaded) => set({ configLoaded: loaded }),
   

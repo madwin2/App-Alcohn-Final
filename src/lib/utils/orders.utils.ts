@@ -27,14 +27,22 @@ export const filterOrders = (
   orders: Order[],
   searchQuery: string,
   filters: Filters,
-  sort?: SortState
+  sort?: SortState,
+  searchAcrossDatabase = false
 ): Order[] => {
   let result = orders;
 
   // Aplicar búsqueda por texto
   if (searchQuery) {
-    const searchLower = searchQuery.toLowerCase();
+    const searchLower = searchQuery.toLowerCase().trim().replace(/\s+/g, ' ');
+    if (searchAcrossDatabase && searchLower.length < 4) {
+      return [];
+    }
     result = result.filter(order =>
+      `${order.customer.firstName} ${order.customer.lastName}`
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .includes(searchLower) ||
       order.customer.firstName.toLowerCase().includes(searchLower) ||
       order.customer.lastName.toLowerCase().includes(searchLower) ||
       order.customer.email?.toLowerCase().includes(searchLower) ||
@@ -43,7 +51,7 @@ export const filterOrders = (
   }
 
   // Aplicar filtros del store
-  if (filters.dateRange?.from || filters.dateRange?.to) {
+  if (!searchAcrossDatabase && (filters.dateRange?.from || filters.dateRange?.to)) {
     const fromStr = filters.dateRange?.from;
     const toStr = filters.dateRange?.to;
     const fromDate = fromStr ? new Date(fromStr + 'T00:00:00') : null;
@@ -61,32 +69,32 @@ export const filterOrders = (
     }
   }
 
-  if (filters.fabrication && filters.fabrication.length > 0) {
+  if (!searchAcrossDatabase && filters.fabrication && filters.fabrication.length > 0) {
     result = result.filter(order =>
       order.items.some(item => filters.fabrication!.includes(item.fabricationState))
     );
   }
 
-  if (filters.sale && filters.sale.length > 0) {
+  if (!searchAcrossDatabase && filters.sale && filters.sale.length > 0) {
     result = result.filter(order =>
       order.items.some(item => filters.sale!.includes(item.saleState)) ||
       (order.saleStateOrder && filters.sale!.includes(order.saleStateOrder))
     );
   }
 
-  if (filters.shipping && filters.shipping.length > 0) {
+  if (!searchAcrossDatabase && filters.shipping && filters.shipping.length > 0) {
     result = result.filter(order =>
       order.items.some(item => filters.shipping!.includes(item.shippingState))
     );
   }
 
-  if (filters.types && filters.types.length > 0) {
+  if (!searchAcrossDatabase && filters.types && filters.types.length > 0) {
     result = result.filter(order =>
       order.items.some(item => filters.types!.includes(item.stampType))
     );
   }
 
-  if (filters.channels && filters.channels.length > 0) {
+  if (!searchAcrossDatabase && filters.channels && filters.channels.length > 0) {
     result = result.filter(order =>
       order.items.some(item => {
         const channel = item.contact.channel;
@@ -95,7 +103,7 @@ export const filterOrders = (
     );
   }
 
-  if (filters.uploaders && filters.uploaders.length > 0) {
+  if (!searchAcrossDatabase && filters.uploaders && filters.uploaders.length > 0) {
     result = result.filter(order => {
       const uploaderName = order.takenBy?.name;
       return uploaderName && filters.uploaders!.includes(uploaderName);

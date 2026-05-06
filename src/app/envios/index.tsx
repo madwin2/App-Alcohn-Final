@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
 import { canonicalizeProvince, normalizeLocality, normalizePhoneDigits } from '@/lib/utils/shippingNormalization';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 const isEligibleForShipping = (order: Order): boolean => {
   if (!order.items.length) return false;
@@ -40,6 +41,13 @@ const isEligibleForShipping = (order: Order): boolean => {
 const getRepresentativeItem = (order: Order) => {
   if (!order.items.length) return null;
   return order.items.find((item) => item.files?.baseUrl || item.files?.vectorPreviewUrl) || order.items[0];
+};
+
+const isSaleReadyForShippingData = (order: Order): boolean => {
+  if (!order.items.length) return false;
+  return order.items.every(
+    (item) => item.saleState === 'FOTO_ENVIADA' || item.saleState === 'TRANSFERIDO'
+  );
 };
 
 
@@ -107,6 +115,9 @@ export default function EnviosPage() {
   const [isParsingWithAi, setIsParsingWithAi] = useState(false);
   const [isLoadingExistingShippingData, setIsLoadingExistingShippingData] = useState(false);
   const [lastCsvSkipped, setLastCsvSkipped] = useState<Array<{ orderId: string; reason: string }>>([]);
+  const [isConDatosExpanded, setIsConDatosExpanded] = useState(true);
+  const [isPendientesExpanded, setIsPendientesExpanded] = useState(true);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   const eligibleOrders = useMemo(() => {
     return orders.filter(isEligibleForShipping);
@@ -125,22 +136,19 @@ export default function EnviosPage() {
     [eligibleOrders],
   );
   const ordersPendientesDatos = useMemo(
-    () => eligibleOrders.filter((order) => !order.direccionId),
+    () => eligibleOrders.filter((order) => !order.direccionId && isSaleReadyForShippingData(order)),
     [eligibleOrders],
   );
 
   const handleToggleShippingType = async (order: Order, type: 'DOMICILIO' | 'SUCURSAL') => {
     try {
-      const tipoEnvioDb = type === 'SUCURSAL' ? 'Sucursal' : 'Domicilio';
-      const { error } = await supabase
-        .from('ordenes')
-        .update({
-          empresa_envio: 'Correo Argentino',
-          tipo_envio: tipoEnvioDb,
-        })
-        .eq('id', order.id);
-      if (error) throw error;
-      await fetchOrders();
+      await updateOrder(order.id, {
+        shipping: {
+          ...order.shipping,
+          carrier: 'CORREO_ARGENTINO',
+          service: type,
+        },
+      });
       toast({
         title: 'Tipo de envío actualizado',
         description: `La orden quedó en ${type === 'DOMICILIO' ? 'Domicilio' : 'Sucursal'} con Correo Argentino.`,
@@ -156,14 +164,23 @@ export default function EnviosPage() {
 
   const handleShippingStateChange = async (order: Order, newState: ShippingState) => {
     try {
-      await updateOrder(order.id, {
+      const updates: Parameters<typeof updateOrder>[1] = {
         items: order.items.map((item) => ({
           id: item.id,
           shippingState: newState,
         })) as any,
-      });
+      };
 
-      await fetchOrders();
+      if (newState === 'SEGUIMIENTO_ENVIADO') {
+        updates.saleStateOrder = 'TRANSFERIDO';
+        updates.items = order.items.map((item) => ({
+          id: item.id,
+          shippingState: newState,
+          saleState: item.saleState === 'TRANSFERIDO' ? item.saleState : 'TRANSFERIDO',
+        })) as any;
+      }
+
+      await updateOrder(order.id, updates);
       toast({
         title: 'Estado de envío actualizado',
         description: `La orden quedó en ${getShippingLabel(newState)}.`,
@@ -527,6 +544,40 @@ export default function EnviosPage() {
     }
   };
 
+  const handleContinueToConfirmation = async () => {
+    if (!selectedOrder) return;
+    try {
+      const normalizedForm = normalizeShippingFormData(shippingForm);
+      const csvRow = await createCorreoCsvRow({
+        provincia: normalizedForm.province || '',
+        localidad: normalizedForm.locality || '',
+        domicilio: normalizedForm.address || '',
+        codigoPostal: normalizedForm.postalCode || '',
+        nombreCompleto: normalizedForm.fullName || `${selectedOrder.customer.firstName} ${selectedOrder.customer.lastName}`,
+        email: normalizedForm.email || selectedOrder.customer.email || '',
+        telefono: normalizedForm.phone || selectedOrder.customer.phoneE164 || '',
+        tipoEnvio: shippingTypeDraft === 'SUCURSAL' ? 'Sucursal' : 'Domicilio',
+      });
+
+      if (!csvRow.ok) {
+        toast({
+          title: 'Dato inválido para CSV',
+          description: csvRow.reason,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setShowParseConfirmation(true);
+    } catch (validationError) {
+      toast({
+        title: 'Error validando datos',
+        description: validationError instanceof Error ? validationError.message : 'No se pudo validar la dirección.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const renderOrderRow = (order: Order) => {
     const item = getRepresentativeItem(order);
     const availablePreview =
@@ -550,7 +601,8 @@ export default function EnviosPage() {
             <img
               src={availablePreview}
               alt="Preview archivo"
-              className="h-12 w-12 rounded-md object-cover border"
+              className="h-12 w-12 rounded-md object-contain border bg-white p-1 cursor-zoom-in"
+              onClick={() => setPreviewImageUrl(availablePreview)}
             />
           ) : (
             <Badge variant="secondary">Sin preview</Badge>
@@ -684,16 +736,25 @@ export default function EnviosPage() {
             <>
               <div className="space-y-2 min-h-0 flex flex-col flex-1">
                 <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="text-sm font-medium text-foreground">Con datos de envío (listos para etiqueta / CSV)</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsConDatosExpanded((prev) => !prev)}
+                    className="inline-flex items-center gap-1 text-sm font-medium text-foreground"
+                  >
+                    {isConDatosExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    Con datos de envío (listos para etiqueta / CSV)
+                  </button>
                   <span className="text-xs text-muted-foreground tabular-nums">{ordersConDatosEnvio.length}</span>
                 </div>
                 <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
-                  <div className="overflow-auto max-h-[min(50vh,420px)]">
-                    <table className={tableClass}>
-                      {tableHead}
-                      <tbody>{ordersConDatosEnvio.map(renderOrderRow)}</tbody>
-                    </table>
-                  </div>
+                  {isConDatosExpanded ? (
+                    <div className="overflow-auto max-h-[min(50vh,420px)]">
+                      <table className={tableClass}>
+                        {tableHead}
+                        <tbody>{ordersConDatosEnvio.map(renderOrderRow)}</tbody>
+                      </table>
+                    </div>
+                  ) : null}
                   {!ordersConDatosEnvio.length ? (
                     <div className="p-6 text-center text-sm text-muted-foreground border-t">
                       {eligibleOrders.length
@@ -706,19 +767,28 @@ export default function EnviosPage() {
 
               <div className="space-y-2 min-h-0 flex flex-col flex-1">
                 <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="text-sm font-medium text-foreground">Pendientes de cargar datos de envío</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsPendientesExpanded((prev) => !prev)}
+                    className="inline-flex items-center gap-1 text-sm font-medium text-foreground"
+                  >
+                    {isPendientesExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    Pendientes de cargar datos de envío
+                  </button>
                   <span className="text-xs text-muted-foreground tabular-nums">{ordersPendientesDatos.length}</span>
                 </div>
                 <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
-                  <div className="overflow-auto max-h-[min(50vh,420px)]">
-                    <table className={tableClass}>
-                      {tableHead}
-                      <tbody>{ordersPendientesDatos.map(renderOrderRow)}</tbody>
-                    </table>
-                  </div>
+                  {isPendientesExpanded ? (
+                    <div className="overflow-auto max-h-[min(50vh,420px)]">
+                      <table className={tableClass}>
+                        {tableHead}
+                        <tbody>{ordersPendientesDatos.map(renderOrderRow)}</tbody>
+                      </table>
+                    </div>
+                  ) : null}
                   {!ordersPendientesDatos.length && eligibleOrders.length > 0 ? (
                     <div className="p-6 text-center text-sm text-muted-foreground border-t">
-                      Todos los pedidos de esta lista ya tienen datos de envío.
+                      No hay pedidos pendientes con venta en Foto enviada o Transferido.
                     </div>
                   ) : null}
                   {!eligibleOrders.length ? (
@@ -881,7 +951,7 @@ export default function EnviosPage() {
               Cancelar
             </Button>
             {!showParseConfirmation ? (
-              <Button onClick={() => setShowParseConfirmation(true)} disabled={isLoadingExistingShippingData}>
+              <Button onClick={handleContinueToConfirmation} disabled={isLoadingExistingShippingData}>
                 Continuar con confirmación
               </Button>
             ) : (
@@ -890,6 +960,23 @@ export default function EnviosPage() {
               </Button>
             )}
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!previewImageUrl} onOpenChange={(open) => !open && setPreviewImageUrl(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Vista previa del archivo</DialogTitle>
+          </DialogHeader>
+          {previewImageUrl ? (
+            <div className="w-full max-h-[70vh] overflow-auto rounded-md border bg-white p-4">
+              <img
+                src={previewImageUrl}
+                alt="Preview ampliado"
+                className="mx-auto h-auto max-h-[65vh] w-auto object-contain"
+              />
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 

@@ -138,36 +138,57 @@ export default function PedidosPage() {
         onOpenChange={setShowUploadTracking}
         orders={orders}
         onApply={async (matches) => {
-          for (const match of matches) {
-            const hasNonTransferredItems = match.order.items.some((item) => item.saleState !== 'TRANSFERIDO');
+          const appliedMatches: typeof matches = [];
+          const failed: Array<{ match: (typeof matches)[number]; reason: string }> = [];
 
-            // 1) Primero venta -> TRANSFERIDO (solo si hace falta)
-            if (hasNonTransferredItems) {
+          for (const match of matches) {
+            try {
+              const hasNonTransferredItems = match.order.items.some((item) => item.saleState !== 'TRANSFERIDO');
+
+              // 1) Primero venta -> TRANSFERIDO (solo si hace falta)
+              if (hasNonTransferredItems) {
+                await updateOrder(match.order.id, {
+                  items: match.order.items.map((item) => ({
+                    id: item.id,
+                    saleState: 'TRANSFERIDO',
+                  })) as any,
+                });
+              }
+
+              // 2) Luego completar seguimiento
+              await updateOrder(match.order.id, {
+                shipping: {
+                  ...match.order.shipping,
+                  trackingNumber: match.trackingNumber,
+                },
+              });
+
+              // 3) Por último pasar envío a DESPACHADO
               await updateOrder(match.order.id, {
                 items: match.order.items.map((item) => ({
                   id: item.id,
-                  saleState: 'TRANSFERIDO',
+                  shippingState: 'DESPACHADO',
                 })) as any,
               });
+
+              appliedMatches.push(match);
+            } catch (error) {
+              failed.push({
+                match,
+                reason: error instanceof Error ? error.message : 'Error desconocido al aplicar el seguimiento.',
+              });
             }
-
-            // 2) Luego completar seguimiento
-            await updateOrder(match.order.id, {
-              shipping: {
-                ...match.order.shipping,
-                trackingNumber: match.trackingNumber,
-              },
-            });
-
-            // 3) Por último pasar envío a DESPACHADO
-            await updateOrder(match.order.id, {
-              items: match.order.items.map((item) => ({
-                id: item.id,
-                shippingState: 'DESPACHADO',
-              })) as any,
-            });
           }
-          await fetchOrders();
+
+          if (appliedMatches.length > 0) {
+            await fetchOrders({ silent: true });
+          }
+
+          if (appliedMatches.length === 0) {
+            throw new Error(failed[0]?.reason || 'No se pudo aplicar ningún seguimiento.');
+          }
+
+          return { appliedMatches, failed };
         }}
       />
 

@@ -39,6 +39,7 @@ interface OrdersTableProps {
 export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteStamp }: OrdersTableProps) {
   const { 
     searchQuery, 
+    searchAcrossDatabase,
     setEditingRow, 
     editingRowId, 
     columns, 
@@ -72,8 +73,8 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
   }, [setEditingRow]);
 
   const filteredOrders = useMemo(() => {
-    return filterOrders(orders, searchQuery, filters, sort);
-  }, [orders, searchQuery, filters, sort]);
+    return filterOrders(orders, searchQuery, filters, sort, searchAcrossDatabase);
+  }, [orders, searchQuery, filters, sort, searchAcrossDatabase]);
 
   const handleUpdate = async (orderId: string, patch: Partial<Order>) => {
     if (!onUpdate) {
