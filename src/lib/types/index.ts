@@ -249,6 +249,8 @@ export interface Program {
 
 // Form Types
 export interface NewOrderFormData {
+  /** Solo alta manual: si es true, no se invoca el webhook de confirmación al cliente. */
+  skipConfirmationWebhook?: boolean;
   customer: {
     firstName: string;
     lastName: string;

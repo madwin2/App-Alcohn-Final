@@ -46,12 +46,14 @@ export function NewOrderDialog({
   const fetchOrders = fetchOrdersProp ?? ordersApi.fetchOrders;
   const [currentStep, setCurrentStep] = useState(1);
   const [customerData, setCustomerData] = useState<NewOrderFormData['customer'] | null>(null);
+  const [skipConfirmationWebhook, setSkipConfirmationWebhook] = useState(false);
   const [designs, setDesigns] = useState<DesignData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleStepSubmit = (stepData: any, step: number, shouldCreateOrder: boolean = false) => {
     if (step === 1) {
       setCustomerData(stepData.customer);
+      setSkipConfirmationWebhook(stepData.skipConfirmationWebhook === true);
       setCurrentStep(2);
     } else if (step === 2) {
       // Agregar diseño a la lista
@@ -200,8 +202,10 @@ export function NewOrderDialog({
       // Esto asegura que el estado local tenga todos los datos actualizados
       await fetchOrders();
 
-      // Notificar al bot recién cuando el pedido ya quedó completo (todos los ítems cargados)
-      await notifyOrderRegistered(createdOrder);
+      // Notificar al bot recién cuando el pedido ya quedó completo (opcional si no se silenció en paso 1)
+      if (!skipConfirmationWebhook) {
+        await notifyOrderRegistered(createdOrder);
+      }
       
       // Reproducir sonido de éxito
       playSound('success');
@@ -214,6 +218,7 @@ export function NewOrderDialog({
       // Reset form
       setCurrentStep(1);
       setCustomerData(null);
+      setSkipConfirmationWebhook(false);
       setDesigns([]);
       onOpenChange(false);
     } catch (error) {
@@ -231,6 +236,7 @@ export function NewOrderDialog({
   const handleCancel = () => {
     setCurrentStep(1);
     setCustomerData(null);
+    setSkipConfirmationWebhook(false);
     setDesigns([]);
     onOpenChange(false);
   };
@@ -288,7 +294,10 @@ export function NewOrderDialog({
           onBack={handleBack}
           onAddDesign={handleAddDesign}
           onCreateOrder={handleCreateOrder}
-          initialData={customerData ? { customer: customerData } : {}}
+          initialData={{
+            ...(customerData ? { customer: customerData } : {}),
+            skipConfirmationWebhook,
+          }}
           designsCount={designs.length}
           isSubmitting={isSubmitting}
         />

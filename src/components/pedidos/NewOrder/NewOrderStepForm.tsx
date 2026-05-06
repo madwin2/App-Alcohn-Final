@@ -22,6 +22,8 @@ const customerSchema = z.object({
     email: z.string().email('Email inválido').optional().or(z.literal('')),
     channel: z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'OTRO']),
   }),
+  /** No enviar webhook de pedido registrado (alta tardía manual). */
+  skipConfirmationWebhook: z.boolean().optional(),
 });
 
 // Schema para el paso 2 (Información del pedido)
@@ -177,8 +179,28 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         channel: 'WHATSAPP',
         ...initialData.customer,
       },
+      skipConfirmationWebhook: initialData.skipConfirmationWebhook ?? false,
     },
   });
+
+  const prevStepRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevStepRef.current;
+    prevStepRef.current = currentStep;
+    if (prev === 2 && currentStep === 1 && initialData.customer) {
+      customerForm.reset({
+        customer: {
+          channel: initialData.customer.channel ?? 'WHATSAPP',
+          firstName: initialData.customer.firstName ?? '',
+          lastName: initialData.customer.lastName ?? '',
+          phoneE164: initialData.customer.phoneE164 ?? '',
+          email: initialData.customer.email ?? '',
+        },
+        skipConfirmationWebhook: initialData.skipConfirmationWebhook ?? false,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset al volver del paso 2
+  }, [currentStep, initialData.customer, initialData.skipConfirmationWebhook]);
 
   // Observar cambios en el teléfono para autocompletar
   const watchedPhone = customerForm.watch('customer.phoneE164');
@@ -417,7 +439,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 <p className="text-xs text-red-500 mt-1">{customerForm.formState.errors.customer.email.message}</p>
               )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2">
               <Label htmlFor="channel">Canal de contacto</Label>
               <Select onValueChange={(value) => customerForm.setValue('customer.channel', value as any)}>
                 <SelectTrigger>
@@ -433,6 +455,19 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
               </Select>
             </div>
           </div>
+        </div>
+
+        <div className="flex items-start gap-3 rounded-lg border border-white/15 bg-white/[0.03] px-4 py-3">
+          <Checkbox
+            id="skipConfirmationWebhook"
+            checked={!!customerForm.watch('skipConfirmationWebhook')}
+            onCheckedChange={(c) =>
+              customerForm.setValue('skipConfirmationWebhook', c === true, { shouldDirty: true })
+            }
+          />
+          <Label htmlFor="skipConfirmationWebhook" className="cursor-pointer text-sm font-normal leading-snug text-muted-foreground">
+            No enviar aviso de confirmación al cliente (solo este pedido). Útil si cargás un alta manual tarde y no querés que se dispare el mensaje automático.
+          </Label>
         </div>
 
         <div className="flex justify-end gap-4 pt-6 border-t">
