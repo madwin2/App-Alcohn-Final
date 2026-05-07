@@ -21,6 +21,7 @@ import { runMigrations } from '../migrations';
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
+const ORDERS_IN_QUERY_CHUNK_SIZE = 150;
 
 const ORDER_REGISTERED_WEBHOOK_FN =
   (import.meta as any)?.env?.VITE_ORDER_WEBHOOK_FUNCTION_NAME || 'webhook-bot';
@@ -77,26 +78,34 @@ export const getOrders = async (): Promise<Order[]> => {
       return [];
     }
 
-    const sellosQuery = supabase.from('sellos').select('*');
-    const { data: sellos, error: sellosError } =
-      ordenIds.length === 1
-        ? await sellosQuery.eq('orden_id', ordenIds[0])
-        : await sellosQuery.in('orden_id', ordenIds);
+    // Evitar URLs gigantes con in(...) cuando hay muchas órdenes.
+    // Consultamos en bloques para no romper PostgREST con 400.
+    const sellos: SelloRow[] = [];
+    const tareas: any[] = [];
 
-    if (sellosError) throw sellosError;
+    for (let i = 0; i < ordenIds.length; i += ORDERS_IN_QUERY_CHUNK_SIZE) {
+      const idsChunk = ordenIds.slice(i, i + ORDERS_IN_QUERY_CHUNK_SIZE);
 
-    // Obtener todas las tareas para todas las órdenes (solo tareas de pedidos)
-    const tareasBaseQuery = supabase
-      .from('tareas')
-      .select('*')
-      .eq('contexto', 'PEDIDOS');
+      const { data: sellosChunk, error: sellosError } = await supabase
+        .from('sellos')
+        .select('*')
+        .in('orden_id', idsChunk);
+      if (sellosError) throw sellosError;
+      if (sellosChunk?.length) {
+        sellos.push(...sellosChunk);
+      }
 
-    const { data: tareas, error: tareasError } =
-      ordenIds.length === 1
-        ? await tareasBaseQuery.eq('orden_id', ordenIds[0])
-        : await tareasBaseQuery.in('orden_id', ordenIds);
-
-    if (tareasError) throw tareasError;
+      // Obtener todas las tareas para todas las órdenes (solo tareas de pedidos)
+      const { data: tareasChunk, error: tareasError } = await supabase
+        .from('tareas')
+        .select('*')
+        .eq('contexto', 'PEDIDOS')
+        .in('orden_id', idsChunk);
+      if (tareasError) throw tareasError;
+      if (tareasChunk?.length) {
+        tareas.push(...tareasChunk);
+      }
+    }
 
     // Obtener información de usuarios únicos que han creado pedidos (si existe taken_by)
     const takenByUserIds = [...new Set(ordenes.map(o => (o as any).taken_by).filter(Boolean))];
@@ -125,7 +134,7 @@ export const getOrders = async (): Promise<Order[]> => {
 
     // Agrupar sellos por orden
     const sellosPorOrden = new Map<string, SelloRow[]>();
-    sellos?.forEach(sello => {
+    sellos.forEach(sello => {
       const lista = sellosPorOrden.get(sello.orden_id) || [];
       lista.push(sello);
       sellosPorOrden.set(sello.orden_id, lista);
@@ -133,7 +142,7 @@ export const getOrders = async (): Promise<Order[]> => {
 
     // Agrupar tareas por orden
     const tareasPorOrden = new Map<string, any[]>();
-    tareas?.forEach(tarea => {
+    tareas.forEach(tarea => {
       const lista = tareasPorOrden.get(tarea.orden_id) || [];
       lista.push(tarea);
       tareasPorOrden.set(tarea.orden_id, lista);
