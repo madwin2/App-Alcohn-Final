@@ -70,23 +70,31 @@ export const getOrders = async (): Promise<Order[]> => {
     if (!ordenes) return [];
 
     // Obtener todos los sellos para todas las órdenes
-    const ordenIds = ordenes.map(o => o.id).filter(Boolean);
+    const ordenIds = ordenes
+      .map(o => (typeof o.id === 'string' ? o.id.trim() : ''))
+      .filter((id): id is string => Boolean(id));
     if (ordenIds.length === 0) {
       return [];
     }
-    const { data: sellos, error: sellosError } = await supabase
-      .from('sellos')
-      .select('*')
-      .in('orden_id', ordenIds);
+
+    const sellosQuery = supabase.from('sellos').select('*');
+    const { data: sellos, error: sellosError } =
+      ordenIds.length === 1
+        ? await sellosQuery.eq('orden_id', ordenIds[0])
+        : await sellosQuery.in('orden_id', ordenIds);
 
     if (sellosError) throw sellosError;
 
     // Obtener todas las tareas para todas las órdenes (solo tareas de pedidos)
-    const { data: tareas, error: tareasError } = await supabase
+    const tareasBaseQuery = supabase
       .from('tareas')
       .select('*')
-      .in('orden_id', ordenIds)
       .eq('contexto', 'PEDIDOS');
+
+    const { data: tareas, error: tareasError } =
+      ordenIds.length === 1
+        ? await tareasBaseQuery.eq('orden_id', ordenIds[0])
+        : await tareasBaseQuery.in('orden_id', ordenIds);
 
     if (tareasError) throw tareasError;
 
