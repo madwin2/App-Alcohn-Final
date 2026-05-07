@@ -70,7 +70,10 @@ export const getOrders = async (): Promise<Order[]> => {
     if (!ordenes) return [];
 
     // Obtener todos los sellos para todas las órdenes
-    const ordenIds = ordenes.map(o => o.id);
+    const ordenIds = ordenes.map(o => o.id).filter(Boolean);
+    if (ordenIds.length === 0) {
+      return [];
+    }
     const { data: sellos, error: sellosError } = await supabase
       .from('sellos')
       .select('*')
