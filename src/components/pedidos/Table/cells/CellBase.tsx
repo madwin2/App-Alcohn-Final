@@ -1,4 +1,4 @@
-import { Upload, Loader2, Download, Trash2 } from 'lucide-react';
+import { Upload, Loader2, Download, Trash2, FileType2 } from 'lucide-react';
 import { Order } from '@/lib/types/index';
 import { useOrdersStore } from '@/lib/state/orders.store';
 import { useState, useRef } from 'react';
@@ -22,6 +22,7 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
   if (!item) return null;
 
   const hasFile = item.files?.baseUrl;
+  const isPdfUrl = Boolean(hasFile && typeof hasFile === 'string' && hasFile.toLowerCase().includes('.pdf'));
   
   // Si es un archivo resumido (para pedidos con múltiples items)
   if (hasFile === 'summary') {
@@ -42,14 +43,14 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
     if (!file || !onUpdate) return;
 
     // Validar tipo de archivo: jpg, jpeg, png
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-    const allowedExtensions = ['.jpg', '.jpeg', '.png'];
+    const allowedMime = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.pdf'];
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
     
-    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
+    if (!allowedMime.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
       toast({
         title: 'Tipo de archivo no válido',
-        description: 'Solo se permiten archivos JPG, JPEG o PNG',
+        description: 'Solo se permiten archivos JPG, JPEG, PNG o PDF',
         variant: 'destructive',
       });
       return;
@@ -166,13 +167,13 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
     }
   };
 
-  if (!showPreviews || !hasFile) {
+  if (!hasFile) {
     return (
       <>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+          accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
           onChange={handleFileSelect}
           className="hidden"
         />
@@ -190,17 +191,98 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
     );
   }
 
+  if (!showPreviews && isPdfUrl) {
+    return (
+      <>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <button
+              type="button"
+              title="PDF — clic para reemplazar; derecho para descargar"
+              onClick={handleClick}
+              onContextMenu={(e) => e.stopPropagation()}
+              className={`relative flex size-10 items-center justify-center rounded border border-blue-500/55 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 ${uploading ? 'opacity-50' : ''}`}
+            >
+              <FileType2 className="size-5 text-blue-700 dark:text-blue-300" />
+              <Download className="pointer-events-none absolute bottom-0.5 right-0.5 size-3 text-blue-600" aria-hidden />
+            </button>
+          </ContextMenuTrigger>
+          <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+            <ContextMenuItem onClick={(e) => void handleDownload(e)}>
+              <Download className="mr-2 h-4 w-4" />
+              Descargar archivo
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Eliminar archivo
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      </>
+    );
+  }
+
+  if (!showPreviews) {
+    return (
+      <>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <div 
+          onClick={handleClick}
+          className={`flex items-center justify-center w-10 h-10 border-2 border-dashed border-muted-foreground/25 rounded cursor-pointer hover:border-primary/50 transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          {uploading ? (
+            <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+          ) : (
+            <Upload className="h-4 w-4 text-muted-foreground" />
+          )}
+        </div>
+      </>
+    );
+  }
+
+  /** Imagen raster; PDF o error de miniatura muestran ícono de archivo arriba. */
   return (
     <>
       <input
         ref={fileInputRef}
         type="file"
-        accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+        accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
         onChange={handleFileSelect}
         className="hidden"
       />
       <ContextMenu>
         <ContextMenuTrigger asChild>
+          {isPdfUrl ? (
+            <button
+              type="button"
+              title="PDF — clic para reemplazar; derecho para descargar"
+              onClick={handleClick}
+              onContextMenu={(e) => e.stopPropagation()}
+              className={`relative flex size-10 items-center justify-center rounded border border-blue-500/55 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 ${uploading ? 'opacity-50' : ''}`}
+            >
+              {uploading ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center rounded bg-background/80">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : null}
+              <FileType2 className="size-5 text-blue-700 dark:text-blue-300" />
+              <Download className="pointer-events-none absolute bottom-0.5 right-0.5 size-3 text-blue-600" aria-hidden />
+            </button>
+          ) : (
           <div 
             onClick={handleClick}
             onContextMenu={(e) => e.stopPropagation()} // Prevenir que se propague al menú del pedido
@@ -217,13 +299,18 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
               className="w-full h-full object-cover"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
-                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                if (fb) {
+                  fb.classList.remove('hidden');
+                  fb.classList.add('flex');
+                }
               }}
             />
-            <div className="hidden w-full h-full flex items-center justify-center bg-muted">
-              <Upload className="h-4 w-4 text-muted-foreground" />
+            <div className="hidden h-full w-full items-center justify-center bg-muted">
+              <FileType2 className="h-5 w-5 text-muted-foreground" />
             </div>
           </div>
+          )}
         </ContextMenuTrigger>
         <ContextMenuContent onClick={(e) => e.stopPropagation()}>
           <ContextMenuItem onClick={handleDownload}>

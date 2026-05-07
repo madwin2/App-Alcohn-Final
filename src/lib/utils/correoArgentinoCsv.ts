@@ -79,6 +79,8 @@ export type CorreoAddressInput = {
   email: string;
   telefono: string;
   tipoEnvio: 'Domicilio' | 'Sucursal';
+  /** Si falla `buscarSucursalSmart`, el código de la oficina según MiCorreo (padrón o planilla). */
+  codigoSucursalManual?: string;
 };
 
 /**
@@ -115,26 +117,49 @@ export const createCorreoCsvRow = async (
   const domicilioRaw = (input.domicilio || '').trim();
 
   if (isSucursal) {
-    const smart = buscarSucursalSmart(
-      {
-        tipoEnvio: 'sucursal',
-        provincia: input.provincia,
-        localidad: locality,
-        direccion: domicilioRaw,
-      },
-      SUC,
-    );
-    if (!smart) {
-      return {
-        ok: false,
-        reason:
-          'Sucursal: en el padrón no hubo una sola coincidencia. Revisá provincia y localidad, y en «Dirección de la sucursal» la calle y el número exactos (como en el listado MiCorreo). Si hay varias sucursales en la misma localidad, sin esa dirección no se puede elegir el código.',
-      };
-    }
-    letraProvincia = obtenerCodigoProvincia(smart.provincia);
-    sucursalCode = sanitizeCsvValue(smart.codigo);
-    if (!sucursalCode) {
-      return { ok: false, reason: 'Sucursal encontrada en padrón pero sin código.' };
+    const manualRaw = (input.codigoSucursalManual || '').trim();
+    if (manualRaw) {
+      sucursalCode = sanitizeCsvValue(manualRaw).replace(/\s+/g, ' ').trim();
+      const codigoComparable = sanitizeCsvValue(manualRaw).replace(/\s/g, '').toUpperCase();
+      const foundByCode =
+        codigoComparable.length > 0
+          ? SUC.find(
+              (s) =>
+                sanitizeCsvValue(String(s.codigo || '')).replace(/\s/g, '').toUpperCase() === codigoComparable,
+            )
+          : undefined;
+      if (foundByCode) {
+        letraProvincia = obtenerCodigoProvincia(foundByCode.provincia);
+      }
+      if (!letraProvincia) {
+        const provFuente = canonicalizeProvince(input.provincia) || (input.provincia || '').trim();
+        letraProvincia = obtenerCodigoProvincia(provFuente);
+      }
+      if (!sucursalCode) {
+        return { ok: false, reason: 'Ingresá un código de sucursal válido (no puede quedar vacío).' };
+      }
+    } else {
+      const smart = buscarSucursalSmart(
+        {
+          tipoEnvio: 'sucursal',
+          provincia: input.provincia,
+          localidad: locality,
+          direccion: domicilioRaw,
+        },
+        SUC,
+      );
+      if (!smart) {
+        return {
+          ok: false,
+          reason:
+            'Sucursal: en el padrón no hubo una sola coincidencia. Revisá provincia y localidad, y en «Dirección de la sucursal» la calle y el número exactos (como en el listado MiCorreo), o cargá el código de sucursal a mano en el campo opcional.',
+        };
+      }
+      letraProvincia = obtenerCodigoProvincia(smart.provincia);
+      sucursalCode = sanitizeCsvValue(String(smart.codigo));
+      if (!sucursalCode) {
+        return { ok: false, reason: 'Sucursal encontrada en padrón pero sin código.' };
+      }
     }
   } else {
     const dePadron = buscarSucursal(locality, input.provincia, SUC);

@@ -14,6 +14,10 @@ const LOGO_MAX_H = 18;
 const LOGO_MAX_W = 48;
 const PREVIEW_SLOT_W = 72;
 const PREVIEW_START_Y = FOOTER_BOTTOM_Y + 6;
+/** Separación entre la franja gráfica (logo + previews) y la leyenda de texto. */
+const CAPTION_RIGHT_OF_GRAPHICS_GAP = 10;
+/** La leyenda va por encima de las miniaturas para que no pise los diseños. */
+const CAPTION_ABOVE_PREVIEWS = 14;
 
 const itemTypeShortLabel = (item: OrderItem): string | null => {
   switch (item.itemType) {
@@ -38,8 +42,10 @@ const buildFooterContent = (order: Order): { imageCandidates: string[][]; captio
 
   for (const item of order.items) {
     // Priorizar archivo base y luego preview vectorial.
-    const candidates = [item.files?.baseUrl, item.files?.vectorPreviewUrl]
-      .filter((u): u is string => Boolean(u) && /^https?:\/\//i.test(u));
+    const rawUrls = [item.files?.baseUrl, item.files?.vectorPreviewUrl];
+    const candidates = rawUrls.filter(
+      (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
+    );
     if (candidates.length > 0) imageCandidates.push(candidates);
 
     // Siempre mostrar etiquetas de items (aunque haya preview), así el PDF enriquecido nunca queda "igual".
@@ -156,13 +162,24 @@ export const enrichShippingLabelsPdf = async (
 
     const innerLeft = FOOTER_MARGIN_X;
     const innerRight = width - FOOTER_MARGIN_X;
-    const innerWidth = innerRight - innerLeft;
 
-    /** Leyenda pegada al borde inferior de la franja; las imágenes van encima. */
-    const captionBaselineY = FOOTER_BOTTOM_Y + 5;
     const imageStackBottom = PREVIEW_START_Y;
+    const n = imageCandidates.length;
 
-    // Logo a la izquierda, arriba de la leyenda.
+    /** Ancho ocupado por el isologo a la izquierda de las previews (sin solaparse con la primera). */
+    const logoColumnW = embeddedLogo ? LOGO_MAX_W + IMAGE_GAP : 0;
+    const previewsRowW =
+      n > 0 ? n * PREVIEW_SLOT_W + Math.max(0, n - 1) * IMAGE_GAP : 0;
+    const graphicsBlockEnd = innerLeft + logoColumnW + previewsRowW;
+
+    /** Leyenda: más arriba y a la derecha del bloque de imágenes para que sea legible. */
+    const captionBaselineY =
+      imageStackBottom + IMAGE_MAX_HEIGHT + CAPTION_ABOVE_PREVIEWS;
+    const captionX =
+      n > 0 || embeddedLogo ? graphicsBlockEnd + CAPTION_RIGHT_OF_GRAPHICS_GAP : innerLeft;
+    const captionMaxWidth = Math.max(80, innerRight - captionX);
+
+    // Logo a la izquierda de la hilera de previews (misma altura útil que las miniaturas).
     if (embeddedLogo) {
       const scale = Math.min(LOGO_MAX_W / embeddedLogo.width, LOGO_MAX_H / embeddedLogo.height);
       const dw = embeddedLogo.width * scale;
@@ -175,24 +192,9 @@ export const enrichShippingLabelsPdf = async (
       });
     }
 
-    if (caption) {
-      page.drawText(caption, {
-        x: innerLeft,
-        y: captionBaselineY,
-        size: CAPTION_FONT_SIZE,
-        font,
-        color: rgb(0.12, 0.12, 0.12),
-        maxWidth: innerWidth,
-        lineHeight: CAPTION_LINE_HEIGHT,
-      });
-    }
-    const n = imageCandidates.length;
-    if (n === 0) continue;
-
-    // Alinear previews hacia la izquierda, debajo de la etiqueta.
     const slotW = PREVIEW_SLOT_W;
     const maxSlotW = PREVIEW_SLOT_W;
-    const startX = innerLeft;
+    const startX = innerLeft + logoColumnW;
 
     for (let j = 0; j < n; j++) {
       let embedded = null;
@@ -215,6 +217,18 @@ export const enrichShippingLabelsPdf = async (
         y: imageStackBottom,
         width: dw,
         height: dh,
+      });
+    }
+
+    if (caption) {
+      page.drawText(caption, {
+        x: captionX,
+        y: captionBaselineY,
+        size: CAPTION_FONT_SIZE,
+        font,
+        color: rgb(0.12, 0.12, 0.12),
+        maxWidth: captionMaxWidth,
+        lineHeight: CAPTION_LINE_HEIGHT,
       });
     }
   }

@@ -31,8 +31,17 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   const hasFile = item.files?.vectorUrl;
   const previewUrl = item.files?.vectorPreviewUrl;
   const isEps = Boolean(hasFile && hasFile.toLowerCase().includes('.eps'));
+  const isPdf = Boolean(hasFile && hasFile.toLowerCase().includes('.pdf'));
   const epsSinPreview = isEps && hasFile && !previewUrl;
-  const displayUrl = isEps && previewUrl ? previewUrl : !isEps ? hasFile : undefined;
+  const archivoVectorSinMiniatura =
+    epsSinPreview || Boolean(isPdf && hasFile);
+  const displayUrl = archivoVectorSinMiniatura
+    ? undefined
+    : isEps && previewUrl
+      ? previewUrl
+      : !isPdf
+        ? hasFile
+        : undefined;
   
   // Si es un archivo resumido (para pedidos con múltiples items)
   if (hasFile === 'summary') {
@@ -236,10 +245,12 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
           onChange={handleFileSelect}
           className="hidden"
         />
-        {epsSinPreview ? (
+        {archivoVectorSinMiniatura ? (
           <button
             type="button"
-            title="EPS sin vista previa — clic para descargar"
+            title={
+              isPdf ? 'PDF — clic para descargar' : 'EPS sin vista previa — clic para descargar'
+            }
             onClick={(e) => {
               e.stopPropagation();
               void handleDownload(e);
@@ -265,7 +276,7 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
     );
   }
 
-  if (!displayUrl && !epsSinPreview) {
+  if (!displayUrl && !archivoVectorSinMiniatura) {
     return (
       <>
         <input
@@ -300,10 +311,14 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
       />
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          {epsSinPreview ? (
+          {archivoVectorSinMiniatura ? (
             <button
               type="button"
-              title="EPS — clic para otro archivo; derecho para descargar"
+              title={
+                isPdf
+                  ? 'PDF — clic para otro archivo; derecho para descargar'
+                  : 'EPS — clic para otro archivo; derecho para descargar'
+              }
               onClick={handleClick}
               onContextMenu={(e) => e.stopPropagation()}
               className={`relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 ${uploading ? 'opacity-50' : ''}`}
@@ -329,23 +344,25 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
               )}
               <div className={`h-full w-full ${isEps && previewUrl ? 'bg-white' : ''}`}>
                 {displayUrl ? (
-                  <img
-                    src={displayUrl}
-                    alt={isEps ? 'Vector EPS Preview' : 'Vector'}
-                    className={`h-full w-full ${isEps && previewUrl ? 'object-contain' : 'object-cover'}`}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
-                      if (fb) {
-                        fb.classList.remove('hidden');
-                        fb.classList.add('flex');
-                      }
-                    }}
-                  />
+                  <>
+                    <img
+                      src={displayUrl}
+                      alt={isEps ? 'Vector EPS Preview' : 'Vector'}
+                      className={`h-full w-full ${isEps && previewUrl ? 'object-contain' : 'object-cover'}`}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                        if (fb) {
+                          fb.classList.remove('hidden');
+                          fb.classList.add('flex');
+                        }
+                      }}
+                    />
+                    <div className="hidden h-full w-full items-center justify-center bg-muted">
+                      <FileType2 className="h-5 w-5 text-muted-foreground" aria-hidden />
+                    </div>
+                  </>
                 ) : null}
-              </div>
-              <div className="hidden h-full w-full items-center justify-center bg-muted">
-                <Upload className="h-4 w-4 text-muted-foreground" />
               </div>
             </div>
           )}

@@ -16,8 +16,13 @@ export function CellVector({ item }: CellVectorProps) {
   const hasFile = item.files?.vectorUrl;
   const previewUrl = item.files?.vectorPreviewUrl;
   const isEps = Boolean(hasFile?.toLowerCase().includes('.eps'));
+  const isPdf = Boolean(hasFile?.toLowerCase().includes('.pdf'));
   const epsSinPreview = Boolean(isEps && hasFile && !previewUrl);
-  const displayUrl = previewUrl || (!isEps ? hasFile : undefined);
+  const archivoVectorSinMiniatura =
+    epsSinPreview || Boolean(isPdf && hasFile);
+  const displayUrl = archivoVectorSinMiniatura
+    ? undefined
+    : previewUrl || (!isEps && !isPdf ? hasFile : undefined);
 
   const handleDownloadVector = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -25,7 +30,9 @@ export function CellVector({ item }: CellVectorProps) {
     if (!url) return;
     try {
       const safeName = (item.designName || 'vector').replace(/[^\w\s-]/g, '_').trim() || 'vector';
-      await downloadFile(url, `${safeName}_vector.eps`);
+      const lower = url.toLowerCase();
+      const ext = lower.includes('.pdf') ? 'pdf' : lower.includes('.svg') ? 'svg' : lower.includes('.eps') ? 'eps' : 'vector';
+      await downloadFile(url, `${safeName}_vector.${ext}`);
       toast({ title: 'Descarga iniciada', description: 'Se está descargando el archivo vector.' });
     } catch (error) {
       toast({
@@ -37,12 +44,12 @@ export function CellVector({ item }: CellVectorProps) {
   };
 
   if (!showPreviews) {
-    if (epsSinPreview && hasFile) {
+    if (archivoVectorSinMiniatura && hasFile) {
       return (
         <div className="flex h-full w-full items-center justify-center">
           <button
             type="button"
-            title="EPS — clic para descargar"
+            title={isPdf ? 'PDF — clic para descargar' : 'EPS — clic para descargar'}
             onClick={(e) => void handleDownloadVector(e)}
             className="relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40"
           >
@@ -61,12 +68,12 @@ export function CellVector({ item }: CellVectorProps) {
         <div className="flex size-10 items-center justify-center rounded border-2 border-dashed border-muted-foreground/25">
           <Upload className="h-4 w-4 text-muted-foreground" />
         </div>
-      ) : epsSinPreview ? (
+      ) : archivoVectorSinMiniatura ? (
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <button
               type="button"
-              title="EPS sin vista previa — clic para descargar"
+              title={isPdf ? 'PDF sin miniatura — clic para descargar' : 'EPS sin vista previa — clic para descargar'}
               onClick={(e) => void handleDownloadVector(e)}
               className="relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40"
             >
@@ -77,23 +84,32 @@ export function CellVector({ item }: CellVectorProps) {
           <ContextMenuContent>
             <ContextMenuItem onClick={(e) => void handleDownloadVector(e)}>
               <Download className="mr-2 h-4 w-4" />
-              Descargar EPS
+              {isPdf ? 'Descargar PDF' : 'Descargar EPS'}
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
       ) : (
         <ContextMenu>
           <ContextMenuTrigger asChild>
-            <button type="button" className="size-10 overflow-hidden rounded border p-0" title="Vector">
+            <button type="button" className="relative size-10 overflow-hidden rounded border p-0" title="Vector">
               {displayUrl ? (
-                <img
-                  src={displayUrl}
-                  alt="Vector"
-                  className={`h-full w-full ${previewUrl ? 'object-contain' : 'object-cover'}`}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
+                <>
+                  <img
+                    src={displayUrl}
+                    alt="Vector"
+                    className={`h-full w-full ${previewUrl ? 'object-contain' : 'object-cover'}`}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                      if (fb) {
+                        fb.classList.remove('hidden');
+                      }
+                    }}
+                  />
+                  <div className="hidden absolute inset-0 flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
+                    <FileType2 className="size-6" aria-hidden />
+                  </div>
+                </>
               ) : null}
             </button>
           </ContextMenuTrigger>
