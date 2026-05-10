@@ -397,30 +397,30 @@ export default function HomePage() {
           {/* Columna izquierda: Objetivos */}
           <div className="flex flex-col gap-4 w-full xl:max-w-[320px]">
           {/* Objetivos */}
-          <div className="flex flex-col justify-center gap-3 text-xs min-w-[220px] h-[120px]">
+          <div className="flex flex-col justify-center gap-3 text-xs h-[120px] w-[220px]">
             <h2 className="text-lg font-semibold tracking-tight">Objetivos</h2>
-            <div className="space-y-1">
+            <div className="space-y-1 w-[220px]">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Ventas totales del mes</span>
                 <span className="text-[11px] text-muted-foreground">
                   {monthlyItems.toLocaleString('es-AR')} / {MONTHLY_GOAL.toLocaleString('es-AR')}
                 </span>
               </div>
-              <div className="relative h-2 rounded-full bg-zinc-800 overflow-hidden w-[180px]">
+              <div className="relative h-2 rounded-full bg-zinc-800 overflow-hidden w-full">
                 <div
                   className="absolute inset-y-0 left-0 bg-zinc-300 transition-all"
                   style={{ width: `${monthlyProgress}%` }}
                 />
               </div>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 w-[220px]">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Ventas del día</span>
                 <span className="text-[11px] text-muted-foreground">
                   {dailyItems.toLocaleString('es-AR')} / {DAILY_GOAL.toLocaleString('es-AR')}
                 </span>
               </div>
-              <div className="relative h-2 rounded-full bg-zinc-800 overflow-hidden w-[180px]">
+              <div className="relative h-2 rounded-full bg-zinc-800 overflow-hidden w-full">
                 <div
                   className="absolute inset-y-0 left-0 bg-red-500 transition-all"
                   style={{ width: `${dailyProgress}%` }}
@@ -445,7 +445,7 @@ export default function HomePage() {
 
             return (
               <div className="flex justify-center min-h-[120px]">
-                <div className="flex items-center gap-4 px-5 py-2 rounded-full border-2 border-white/15 bg-black/40 shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-sm max-w-full overflow-x-auto">
+                <div className="flex items-center gap-4 px-10 py-1.5 rounded-full border-2 border-white/15 bg-black/40 shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-sm max-w-full overflow-x-auto">
                   {usersWithPhoto.map((u) => (
                     <div
                       key={u.id}
