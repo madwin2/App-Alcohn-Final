@@ -450,7 +450,7 @@ export default function HomePage() {
                     <div
                       key={u.id}
                       title={u.name}
-                      className="group h-14 w-14 rounded-full overflow-hidden flex items-center justify-center bg-transparent cursor-pointer transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.18] hover:shadow-[0_8px_24px_rgba(0,0,0,0.55)] hover:z-10"
+                      className="group h-[72px] w-[72px] rounded-full overflow-hidden flex items-center justify-center bg-transparent cursor-pointer transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.18] hover:shadow-[0_8px_24px_rgba(0,0,0,0.55)] hover:z-10"
                     >
                       <img
                         src={u.profile}
