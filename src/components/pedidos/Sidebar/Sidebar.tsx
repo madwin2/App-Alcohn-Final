@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
+import { getUserProfileImage } from '@/lib/utils/userImages';
 
 const sidebarItems = [
   { icon: Home, label: 'Inicio', path: '/', disabled: false },
@@ -65,6 +66,7 @@ export function Sidebar() {
   const userName = user?.user_metadata?.nombre 
     ? `${user.user_metadata.nombre} ${user.user_metadata.apellido || ''}`.trim()
     : 'Usuario Actual';
+  const profileImage = getUserProfileImage(userName);
 
   return (
     <div 
@@ -151,8 +153,17 @@ export function Sidebar() {
       {/* User Profile */}
       <div className="border-t border-border/50 p-4 space-y-2">
         <div className="flex items-center gap-3 justify-start">
-          <div className="rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl h-10 w-10">
-            <User className="h-5 w-5 text-white" />
+          <div className="rounded-full overflow-hidden flex items-center justify-center shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl h-10 w-10 shrink-0 bg-gradient-to-br from-blue-500 to-purple-600">
+            {profileImage ? (
+              <img
+                src={profileImage}
+                alt={userName}
+                className="h-full w-full object-cover"
+                draggable={false}
+              />
+            ) : (
+              <User className="h-5 w-5 text-white" />
+            )}
           </div>
           <div className={cn(
             "transition-all duration-700 ease-in-out overflow-hidden",
