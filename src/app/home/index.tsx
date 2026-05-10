@@ -392,10 +392,10 @@ export default function HomePage() {
       <Sidebar />
 
       <div className="relative flex-1 flex flex-col ml-20 px-8 py-8 space-y-4">
-        {/* Primera fila: objetivos · usuarios · botones */}
-        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-10 w-full">
+        {/* Primera fila: objetivos · usuarios · botones (grid de 3 columnas iguales para que la cápsula quede centrada al viewport) */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10 w-full items-start">
           {/* Columna izquierda: Objetivos */}
-          <div className="flex flex-col gap-4 shrink-0 w-full xl:w-auto xl:max-w-[320px]">
+          <div className="flex flex-col gap-4 w-full xl:max-w-[320px]">
           {/* Objetivos */}
           <div className="flex flex-col justify-center gap-3 text-xs min-w-[220px] h-[120px]">
             <h2 className="text-lg font-semibold tracking-tight">Objetivos</h2>
@@ -440,12 +440,12 @@ export default function HomePage() {
               .filter((u): u is { id: string; name: string; profile: string } => !!u.profile);
 
             if (usersWithPhoto.length === 0) {
-              return <div className="flex-1 min-h-[120px]" />;
+              return <div className="min-h-[120px]" />;
             }
 
             return (
-              <div className="flex-1 flex justify-center min-h-[120px] xl:pt-0 xl:justify-center">
-                <div className="flex items-center gap-4 px-5 py-3 rounded-full border border-white/10 bg-black/40 shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-sm max-w-full overflow-x-auto">
+              <div className="flex justify-center min-h-[120px]">
+                <div className="flex items-center gap-4 px-5 py-2 rounded-full border-2 border-white/15 bg-black/40 shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-sm max-w-full overflow-x-auto">
                   {usersWithPhoto.map((u) => (
                     <div
                       key={u.id}
@@ -466,7 +466,7 @@ export default function HomePage() {
           })()}
 
           {/* Botones add - al mismo nivel que Objetivos y usuarios */}
-          <div className="flex items-center gap-2 min-h-[120px] shrink-0 justify-center xl:justify-end self-center xl:self-start">
+          <div className="flex items-center gap-2 min-h-[120px] justify-center xl:justify-end">
             <button
               type="button"
               onClick={() => setIsAdding(true)}
