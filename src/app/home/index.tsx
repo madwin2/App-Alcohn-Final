@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
+import { Package } from 'lucide-react';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -143,6 +144,56 @@ export default function HomePage() {
   const [colleagueTasks, setColleagueTasks] = useState<DashboardTask[]>([]);
   const [isAddToColleagueOpen, setIsAddToColleagueOpen] = useState(false);
   const [stockReplenishSyncedAt, setStockReplenishSyncedAt] = useState<Date | null>(null);
+  // Animación de entrada del saludo "Hola Nombre!" al cargar la página
+  const [greetingVisible, setGreetingVisible] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setGreetingVisible(true), 250);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  // Scroll por tandas (snap): 0 = vista inicial (cards laterales + saludo),
+  // 1 = Sellos Listos, 2 = Pedidos prioritarios.
+  // Cada gesto de scroll sube/baja una tanda (no es scroll libre).
+  const [tanda, setTanda] = useState(0);
+  const TOTAL_TANDAS = 3;
+  useEffect(() => {
+    let cooldown = false;
+    const handleWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) < 5) return;
+      e.preventDefault();
+      if (cooldown) return;
+      cooldown = true;
+      window.setTimeout(() => {
+        cooldown = false;
+      }, 750);
+      if (e.deltaY > 0) {
+        setTanda((p) => Math.min(p + 1, TOTAL_TANDAS - 1));
+      } else {
+        setTanda((p) => Math.max(p - 1, 0));
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+        e.preventDefault();
+        setTanda((p) => Math.min(p + 1, TOTAL_TANDAS - 1));
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault();
+        setTanda((p) => Math.max(p - 1, 0));
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        setTanda(0);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        setTanda(TOTAL_TANDAS - 1);
+      }
+    };
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const fetchColleagueTasks = useCallback(async () => {
     if (!user?.id || !isAuthenticated) return;
@@ -391,9 +442,12 @@ export default function HomePage() {
     <div className="min-h-screen bg-background">
       <Sidebar />
 
-      <div className="relative flex-1 flex flex-col ml-20 px-8 py-8 space-y-4">
+      <main className="ml-20 relative h-screen overflow-hidden">
+        {/* HERO siempre visible: top bar + 3 columnas (Stock | Personaje | Espacio).
+            No hay scroll de página: cada gesto de scroll dispara una tanda. */}
+        <section className="absolute inset-0 flex flex-col px-8 pt-8 pb-0 overflow-hidden">
         {/* Primera fila: objetivos · usuarios · botones (grid de 3 columnas iguales para que la cápsula quede centrada al viewport) */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10 w-full items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-10 w-full items-start shrink-0">
           {/* Columna izquierda: Objetivos */}
           <div className="flex flex-col gap-4 w-full xl:max-w-[320px]">
           {/* Objetivos */}
@@ -494,10 +548,10 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Sticky notes - posición absoluta, flotan sobre el contenido sin generar separación */}
+        {/* Sticky notes - posición absoluta dentro del hero, flotan sobre el contenido */}
         <div
           ref={containerRef}
-          className="absolute left-8 right-8 top-[136px] bottom-0 pointer-events-none z-20"
+          className="absolute left-8 right-8 top-[136px] bottom-[42vh] pointer-events-none z-30"
           style={{ minHeight: 200 }}
         >
             {/* Notas propias (grises) - arrastrables */}
@@ -649,147 +703,223 @@ export default function HomePage() {
           onTaskCreated={fetchColleagueTasks}
         />
 
-        {/* Bloque principal en 3 columnas: stock · bienvenida · espacio futuro */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch py-2">
-          <div className="xl:min-h-[320px]">
-            <StockReplenishSection
-              entries={stockReplenishVms}
-              lastSyncedAt={stockReplenishSyncedAt}
-              onCompleted={async () => {
-                await fetchColleagueTasks();
-              }}
-            />
-          </div>
+        {/* 3 columnas dentro del hero: Stock | Personaje | Espacio.
+            Las laterales se contraen verticalmente cuando tanda > 0. */}
+        {(() => {
+          const inicioImage = getUserInicioImage(userName);
+          const stockEmpty = stockReplenishVms.length === 0;
+          // Estilos compartidos: cards laterales se contraen al scrollear (tanda > 0).
+          const lateralCollapseStyle: React.CSSProperties = {
+            maxHeight: tanda === 0 ? '100%' : 0,
+            opacity: tanda === 0 ? 1 : 0,
+            transform: tanda === 0 ? 'translateY(0)' : 'translateY(-12px)',
+          };
+          // Placeholder vacío (sin borde ni fondo) para columnas que no tienen contenido.
+          const placeholderStyle: React.CSSProperties = {
+            ...lateralCollapseStyle,
+            border: 'none',
+            background: 'transparent',
+          };
 
-          {(() => {
-            const inicioImage = getUserInicioImage(userName);
-            return (
-              <div className="relative overflow-hidden xl:min-h-[480px] rounded-2xl flex items-center justify-center px-6 py-6">
-                {/* Glow radial detrás del personaje */}
+          return (
+            <div className="flex-1 grid grid-cols-1 xl:grid-cols-3 gap-6 min-h-0 mt-4 relative">
+              {/* Columna 1: Stock */}
+              <div
+                className="rounded-2xl overflow-hidden border border-white/10 bg-card/50 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+                style={lateralCollapseStyle}
+              >
+                <div className="h-full overflow-y-auto">
+                  {stockEmpty ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center px-6 py-10 gap-3">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+                        <Package className="h-7 w-7 text-emerald-300/90" strokeWidth={1.5} />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-base font-semibold tracking-tight text-white">El stock está al día</h3>
+                        <p className="text-xs text-muted-foreground max-w-[260px] mx-auto">
+                          No hay tareas de reposición pendientes. Volvé a chequear cuando haya nuevos envíos.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <StockReplenishSection
+                      entries={stockReplenishVms}
+                      lastSyncedAt={stockReplenishSyncedAt}
+                      onCompleted={async () => {
+                        await fetchColleagueTasks();
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Columna 2: Personaje grande, llega hasta el final del hero. Saludo superpuesto. */}
+              <div className="relative flex flex-col items-center overflow-hidden">
+                {/* Glow radial cálido de fondo */}
                 <div
                   aria-hidden
                   className="pointer-events-none absolute inset-0"
                   style={{
                     background:
-                      'radial-gradient(60% 55% at 50% 45%, rgba(255,210,140,0.18) 0%, rgba(255,170,90,0.08) 35%, rgba(0,0,0,0) 70%)',
+                      'radial-gradient(55% 55% at 50% 45%, rgba(255,210,140,0.22) 0%, rgba(255,170,90,0.08) 40%, rgba(0,0,0,0) 75%)',
                   }}
                 />
-                {/* Halo más intenso justo detrás del personaje */}
+                {/* Halo concentrado detrás del personaje */}
                 {inicioImage && (
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] rounded-full"
+                    className="pointer-events-none absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2 w-[460px] h-[460px] rounded-full"
                     style={{
                       background:
-                        'radial-gradient(circle, rgba(255,235,200,0.18) 0%, rgba(255,200,140,0.05) 40%, rgba(0,0,0,0) 70%)',
-                      filter: 'blur(8px)',
+                        'radial-gradient(circle, rgba(255,235,200,0.25) 0%, rgba(255,200,140,0.08) 40%, rgba(0,0,0,0) 70%)',
+                      filter: 'blur(10px)',
                     }}
                   />
                 )}
 
-                <div className="relative z-10 flex flex-col items-center w-full">
-                  <p className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground/80 mb-2">
-                    Visualizador del día
-                  </p>
-
-                  {inicioImage ? (
-                    <div className="relative flex items-end justify-center h-[340px] md:h-[400px] w-full">
-                      {/* Sombra de piso estática */}
-                      <div
-                        aria-hidden
-                        className="absolute bottom-2 left-1/2 -translate-x-1/2 w-[200px] h-[20px] rounded-[50%] bg-black/70 blur-xl opacity-55"
-                      />
-                      <img
-                        src={inicioImage}
-                        alt={userName}
-                        className="relative h-[340px] md:h-[400px] w-auto object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.55)] select-none"
-                        draggable={false}
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-[120px]" />
-                  )}
-
-                  <div className="text-center mt-2 space-y-1">
-                    <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
-                      Hola {userName.split(' ')[0]}!
-                    </h1>
-                    <p className="text-lg md:text-xl text-muted-foreground">
-                      Bienvenido a Alcohn.
-                    </p>
+                {/* Personaje grande, ocupa toda la columna y llega al ras del bottom del viewport.
+                    `-mt-16` lo sube un toque para que la cabeza quede más arriba en la pantalla. */}
+                {inicioImage && (
+                  <div className="absolute inset-0 flex items-start justify-center overflow-hidden pointer-events-none">
+                    <img
+                      src={inicioImage}
+                      alt={userName}
+                      className="h-[940px] md:h-[1140px] w-auto max-w-none object-contain object-top select-none drop-shadow-[0_24px_40px_rgba(0,0,0,0.55)] -mt-10"
+                      draggable={false}
+                    />
                   </div>
+                )}
+
+                {/* Fade inferior, da contraste al saludo sin tapar al personaje */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-[180px]"
+                  style={{
+                    background:
+                      'linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 55%, rgba(0,0,0,0) 100%)',
+                  }}
+                />
+
+                {/* Saludo SUPERPUESTO al personaje (absolute bottom). Aparece al cargar y desaparece al scrollear. */}
+                <div
+                  className="absolute inset-x-0 bottom-6 z-20 text-center px-4 space-y-1 will-change-transform pointer-events-none"
+                  style={{
+                    opacity: tanda === 0 && greetingVisible ? 1 : 0,
+                    transform:
+                      tanda === 0 && greetingVisible
+                        ? 'translateY(0)'
+                        : tanda === 0
+                          ? 'translateY(24px)'
+                          : 'translateY(-20px)',
+                    transition:
+                      'opacity 900ms cubic-bezier(0.22,1,0.36,1), transform 900ms cubic-bezier(0.22,1,0.36,1)',
+                  }}
+                >
+                  <h1 className="text-5xl md:text-7xl font-semibold tracking-tight drop-shadow-[0_4px_18px_rgba(0,0,0,0.75)]">
+                    Hola {userName.split(' ')[0]}!
+                  </h1>
+                  <p className="text-2xl md:text-3xl text-muted-foreground drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)]">
+                    Bienvenido a Alcohn.
+                  </p>
                 </div>
               </div>
-            );
-          })()}
 
-          <div className="xl:min-h-[320px] rounded-2xl bg-black/10 flex items-center justify-center">
-            <p className="text-sm text-muted-foreground">Espacio reservado para próxima tarjeta</p>
-          </div>
-        </div>
-
-        {/* Sellos listos */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold tracking-tight">Sellos Listos</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <SellosColumn
-              title="Enviar foto"
-              subtitle="Hecho · Venta: Señado"
-              orders={groupStampsByOrder(stampsEnviarFoto)}
-            />
-            <SellosColumn
-              title="Esperando pago"
-              subtitle="Hecho · Venta: Foto enviada"
-              orders={groupStampsByOrder(stampsEsperandoPago)}
-            />
-            <SellosColumn
-              title="Para enviar"
-              subtitle="Hecho · Venta: Transferido · Envío: Sin Envío"
-              orders={groupStampsByOrder(stampsParaEnviar)}
-            />
-            <SellosColumn
-              title="Deudores"
-              subtitle="Venta: Deudor"
-              orders={groupStampsByOrder(stampsDeudores)}
-            />
-          </div>
+              {/* Columna 3: Espacio futuro - sin borde (placeholder hasta agregar contenido) */}
+              <div
+                className="rounded-2xl overflow-hidden flex items-center justify-center transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+                style={placeholderStyle}
+              >
+                <p className="text-sm text-muted-foreground">Espacio reservado para próxima tarjeta</p>
+              </div>
+            </div>
+          );
+        })()}
         </section>
 
-        {/* Prioritarios y con fecha límite */}
-        <section className="space-y-3 pb-4">
-          <h2 className="text-lg font-semibold tracking-tight">Pedidos prioritarios y con fecha límite</h2>
-          <Card className="border border-white/10 bg-card/50">
-            <CardContent className="p-4 pt-2">
+        {/* Stack de tandas en la zona inferior del viewport. Cada una se controla con `tanda`.
+            Acumulación: cuando entra una nueva, la anterior se contrae hacia arriba.
+            Si no hay espacio, la más vieja desaparece. */}
+        <div className="absolute inset-x-0 bottom-0 z-10 px-8 pb-8 flex flex-col gap-4 pointer-events-none">
+          {/* Sellos listos: visible cuando tanda >= 1. Se contrae cuando llega Prioritarios (tanda=2).
+              Animamos solo max-height + translateY (sin opacity) para que el blur del glass se vea
+              desde el primer frame de la entrada. */}
+          <div
+            className="overflow-hidden transition-[max-height,transform] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] origin-top will-change-transform pointer-events-auto"
+            style={{
+              maxHeight: tanda === 1 ? '60vh' : tanda >= 2 ? '24vh' : 0,
+              transform: tanda >= 1 ? 'translateY(0)' : 'translateY(48px)',
+            }}
+          >
+            <section className="space-y-3 pt-2">
+              <h2 className="text-lg font-semibold tracking-tight">Sellos Listos</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <SellosColumn
+                  title="Enviar foto"
+                  subtitle="Hecho · Venta: Señado"
+                  orders={groupStampsByOrder(stampsEnviarFoto)}
+                  compact={tanda >= 2}
+                />
+                <SellosColumn
+                  title="Esperando pago"
+                  subtitle="Hecho · Venta: Foto enviada"
+                  orders={groupStampsByOrder(stampsEsperandoPago)}
+                  compact={tanda >= 2}
+                />
+                <SellosColumn
+                  title="Para enviar"
+                  subtitle="Hecho · Venta: Transferido · Envío: Sin Envío"
+                  orders={groupStampsByOrder(stampsParaEnviar)}
+                  compact={tanda >= 2}
+                />
+                <SellosColumn
+                  title="Deudores"
+                  subtitle="Venta: Deudor"
+                  orders={groupStampsByOrder(stampsDeudores)}
+                  compact={tanda >= 2}
+                />
+              </div>
+            </section>
+          </div>
+
+          {/* Prioritarios: visible cuando tanda >= 2. Mismo patrón que Sellos:
+              animamos solo max-height + translateY para que el glass de las cards aparezca íntegro. */}
+          <div
+            className="overflow-hidden transition-[max-height,transform] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] origin-top will-change-transform pointer-events-auto"
+            style={{
+              maxHeight: tanda >= 2 ? '50vh' : 0,
+              transform: tanda >= 2 ? 'translateY(0)' : 'translateY(48px)',
+            }}
+          >
+            <section className="space-y-3 pt-2">
+              <h2 className="text-lg font-semibold tracking-tight">Pedidos prioritarios y con fecha límite</h2>
               {groupStampsByOrder(priorityStamps).length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No hay pedidos prioritarios ni con fecha límite pendientes de envío.
                 </p>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-5">
                   {groupStampsByOrder(priorityStamps).map(({ order, items }) => {
                     const firstItem = items[0];
                     const thumb = firstItem.files?.vectorPreviewUrl || firstItem.files?.baseUrl;
                     return (
                       <div
                         key={order.id}
-                        className="rounded-lg border border-white/10 bg-background/80 p-2 text-xs"
+                        className="rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-2xl shadow-[0_12px_30px_-10px_rgba(0,0,0,0.6)] p-2 text-[11px]"
                       >
                         <div className="flex flex-col gap-1">
-                          <div
-                            className="w-full aspect-square rounded overflow-hidden bg-muted/30"
-                          >
+                          <div className="w-full aspect-square rounded-md overflow-hidden bg-muted/30">
                             {thumb ? (
-                              <img src={thumb} alt="" className="w-full h-full object-contain" />
+                              <img src={thumb} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-[10px] text-muted-foreground">
                                 —
                               </div>
                             )}
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{firstItem.designName}</p>
+                          <div className="min-w-0 px-0.5">
+                            <p className="font-medium truncate text-[11px]">{firstItem.designName}</p>
                             {order.deadlineAt && (
-                              <p className="text-[11px] text-muted-foreground">
+                              <p className="text-[10px] text-muted-foreground">
                                 Límite:{' '}
                                 {new Date(order.deadlineAt).toLocaleDateString('es-AR', {
                                   day: '2-digit',
@@ -804,10 +934,26 @@ export default function HomePage() {
                   })}
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </section>
-      </div>
+            </section>
+          </div>
+        </div>
+
+        {/* Indicador de tanda actual (puntitos a la derecha) */}
+        <div className="absolute right-6 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-2 pointer-events-auto">
+          {Array.from({ length: TOTAL_TANDAS }).map((_, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setTanda(idx)}
+              className={cn(
+                'h-2 rounded-full transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]',
+                tanda === idx ? 'bg-white w-6' : 'bg-white/30 hover:bg-white/60 w-2',
+              )}
+              aria-label={`Ir a tanda ${idx + 1}`}
+            />
+          ))}
+        </div>
+      </main>
 
       <Toaster />
     </div>
@@ -818,34 +964,39 @@ interface SellosColumnProps {
   title: string;
   subtitle: string;
   orders: OrderWithItems[];
+  /** Modo compacto cuando la tanda se contrae para dejar lugar a otra. */
+  compact?: boolean;
 }
 
-function SellosColumn({ title, subtitle, orders }: SellosColumnProps) {
+function SellosColumn({ title, subtitle, orders, compact = false }: SellosColumnProps) {
   return (
-    <Card className="border border-white/10 bg-card/50">
-      <CardHeader className="pb-3">
+    <Card className="border border-white/10 bg-white/[0.04] backdrop-blur-2xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.7)] transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]">
+      <CardHeader className={cn('pb-2 transition-all duration-500', compact && 'pb-1 pt-3')}>
         <CardTitle className="flex items-center justify-between text-base">
           <span>{title}</span>
           <Badge variant="outline" className="text-[11px] border-white/20 text-muted-foreground">
             {orders.length}
           </Badge>
         </CardTitle>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
+        {!compact && <p className="text-xs text-muted-foreground">{subtitle}</p>}
       </CardHeader>
       <CardContent className="pt-0">
         {orders.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-4">
+          <p className="text-xs text-muted-foreground py-2">
             No hay pedidos en este estado.
           </p>
         ) : (
-          <div className="h-40 pr-2 overflow-y-auto">
+          <div
+            className="pr-2 overflow-y-auto transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            style={{ height: compact ? 0 : '10rem' }}
+          >
             <div className="space-y-2 text-xs">
               {orders.map(({ order, items }) => {
                 const firstItem = items[0];
                 return (
                   <div
                     key={order.id}
-                    className="rounded-md border border-white/10 bg-background/80 px-3 py-2 space-y-2"
+                    className="rounded-md border border-white/10 bg-background/60 backdrop-blur-md px-3 py-2 space-y-2"
                   >
                     <div className="flex gap-2 items-start">
                       <div className="flex gap-0.5 shrink-0">
