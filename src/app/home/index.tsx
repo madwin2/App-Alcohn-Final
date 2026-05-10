@@ -30,7 +30,6 @@ import stickyNoteAddWorkmateSvg from '@/assets/sticky-notes/sticky-note-add-work
 import stickyNoteTaskWorkmateSvg from '@/assets/sticky-notes/sticky-note-task-workmate.svg';
 import {
   getUserInicioImage,
-  getUserInitials,
   getUserProfileImage,
 } from '@/lib/utils/userImages';
 
@@ -431,38 +430,40 @@ export default function HomePage() {
           </div>
           </div>
 
-          {/* Usuarios - cápsula con borde */}
-          <div className="flex-1 flex justify-center min-h-[120px] xl:pt-0 xl:justify-center">
-            <div className="flex items-center gap-6 px-6 py-3 rounded-full border border-white/10 bg-black/40 shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-sm max-w-full overflow-x-auto">
-              {(approvedUsers.length ? approvedUsers : [{ id: user?.id || 'me', name: userName }]).map(
-                (u) => {
-                  const profile = getUserProfileImage(u.name);
-                  return (
+          {/* Usuarios - cápsula con borde (solo los que tienen foto de perfil) */}
+          {(() => {
+            const baseUsers = approvedUsers.length
+              ? approvedUsers
+              : [{ id: user?.id || 'me', name: userName }];
+            const usersWithPhoto = baseUsers
+              .map((u) => ({ ...u, profile: getUserProfileImage(u.name) }))
+              .filter((u): u is { id: string; name: string; profile: string } => !!u.profile);
+
+            if (usersWithPhoto.length === 0) {
+              return <div className="flex-1 min-h-[120px]" />;
+            }
+
+            return (
+              <div className="flex-1 flex justify-center min-h-[120px] xl:pt-0 xl:justify-center">
+                <div className="flex items-center gap-4 px-5 py-3 rounded-full border border-white/10 bg-black/40 shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-sm max-w-full overflow-x-auto">
+                  {usersWithPhoto.map((u) => (
                     <div
                       key={u.id}
-                      className="flex flex-col items-center gap-1"
+                      title={u.name}
+                      className="group h-14 w-14 rounded-full overflow-hidden flex items-center justify-center bg-transparent cursor-pointer transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.18] hover:shadow-[0_8px_24px_rgba(0,0,0,0.55)] hover:z-10"
                     >
-                      <div className="h-10 w-10 rounded-full border border-white bg-transparent flex items-center justify-center text-sm font-semibold text-white overflow-hidden">
-                        {profile ? (
-                          <img
-                            src={profile}
-                            alt={u.name}
-                            className="h-full w-full object-cover"
-                            draggable={false}
-                          />
-                        ) : (
-                          getUserInitials(u.name)
-                        )}
-                      </div>
-                      <span className="text-[10px] text-muted-foreground max-w-[80px] truncate">
-                        {u.name}
-                      </span>
+                      <img
+                        src={u.profile}
+                        alt={u.name}
+                        className="h-full w-full object-cover transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-105"
+                        draggable={false}
+                      />
                     </div>
-                  );
-                },
-              )}
-            </div>
-          </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Botones add - al mismo nivel que Objetivos y usuarios */}
           <div className="flex items-center gap-2 min-h-[120px] shrink-0 justify-center xl:justify-end self-center xl:self-start">
@@ -660,33 +661,67 @@ export default function HomePage() {
             />
           </div>
 
-          <div className="xl:min-h-[320px] rounded-2xl bg-black/20 backdrop-blur-sm flex items-center justify-center px-6 py-4">
-            <div className="text-center flex flex-col items-center gap-3 w-full">
-              <p className="text-sm uppercase tracking-[0.25em] text-muted-foreground">
-                Visualizador del día
-              </p>
-              {(() => {
-                const inicioImage = getUserInicioImage(userName);
-                if (!inicioImage) return null;
-                return (
-                  <img
-                    src={inicioImage}
-                    alt={userName}
-                    className="h-40 md:h-48 w-auto object-contain drop-shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
-                    draggable={false}
+          {(() => {
+            const inicioImage = getUserInicioImage(userName);
+            return (
+              <div className="relative overflow-hidden xl:min-h-[480px] rounded-2xl flex items-center justify-center px-6 py-6">
+                {/* Glow radial detrás del personaje */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background:
+                      'radial-gradient(60% 55% at 50% 45%, rgba(255,210,140,0.18) 0%, rgba(255,170,90,0.08) 35%, rgba(0,0,0,0) 70%)',
+                  }}
+                />
+                {/* Halo más intenso justo detrás del personaje */}
+                {inicioImage && (
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] rounded-full"
+                    style={{
+                      background:
+                        'radial-gradient(circle, rgba(255,235,200,0.18) 0%, rgba(255,200,140,0.05) 40%, rgba(0,0,0,0) 70%)',
+                      filter: 'blur(8px)',
+                    }}
                   />
-                );
-              })()}
-              <div className="space-y-1">
-                <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
-                  Hola {userName.split(' ')[0]}!
-                </h1>
-                <p className="text-2xl md:text-3xl text-muted-foreground">
-                  Bienvenido a Alcohn.
-                </p>
+                )}
+
+                <div className="relative z-10 flex flex-col items-center w-full">
+                  <p className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground/80 mb-2">
+                    Visualizador del día
+                  </p>
+
+                  {inicioImage ? (
+                    <div className="relative flex items-end justify-center h-[340px] md:h-[400px] w-full">
+                      {/* Sombra de piso estática */}
+                      <div
+                        aria-hidden
+                        className="absolute bottom-2 left-1/2 -translate-x-1/2 w-[200px] h-[20px] rounded-[50%] bg-black/70 blur-xl opacity-55"
+                      />
+                      <img
+                        src={inicioImage}
+                        alt={userName}
+                        className="relative h-[340px] md:h-[400px] w-auto object-contain drop-shadow-[0_18px_30px_rgba(0,0,0,0.55)] select-none"
+                        draggable={false}
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-[120px]" />
+                  )}
+
+                  <div className="text-center mt-2 space-y-1">
+                    <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">
+                      Hola {userName.split(' ')[0]}!
+                    </h1>
+                    <p className="text-lg md:text-xl text-muted-foreground">
+                      Bienvenido a Alcohn.
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           <div className="xl:min-h-[320px] rounded-2xl bg-black/10 flex items-center justify-center">
             <p className="text-sm text-muted-foreground">Espacio reservado para próxima tarjeta</p>
