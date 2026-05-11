@@ -1105,9 +1105,6 @@ export default function EnviosPage() {
               <Button variant="outline" onClick={handleParse} disabled={isParsingWithAi}>
                 {isParsingWithAi ? 'Interpretando...' : 'Interpretar texto'}
               </Button>
-              {isLoadingExistingShippingData ? (
-                <p className="text-xs text-muted-foreground">Cargando datos actuales...</p>
-              ) : null}
             </div>
 
             <div className="space-y-3">
@@ -1123,7 +1120,10 @@ export default function EnviosPage() {
                 </Button>
                 <Button
                   variant={shippingTypeDraft === 'SUCURSAL' ? 'default' : 'outline'}
-                  onClick={() => setShippingTypeDraft('SUCURSAL')}
+                  onClick={() => {
+                    setShippingTypeDraft('SUCURSAL');
+                    setShippingForm((prev) => ({ ...prev, postalCode: '' }));
+                  }}
                 >
                   Sucursal
                 </Button>
@@ -1136,17 +1136,6 @@ export default function EnviosPage() {
                   onChange={(event) => setShippingForm((prev) => ({ ...prev, fullName: event.target.value }))}
                 />
               </div>
-              {isLoadingAddressCatalog ? (
-                <p className="text-xs text-muted-foreground">
-                  Cargando padrón Correo (`correo_sucursales`) y direcciones guardadas…
-                </p>
-              ) : null}
-              {!isLoadingAddressCatalog && !hasAddressCatalog ? (
-                <p className="text-xs text-muted-foreground">
-                  No hay filas en `correo_sucursales` (importá el CSV MiCorreo en Supabase) ni direcciones guardadas:
-                  podés completar a mano. Cuando exista el padrón, provincia, localidad y calle salen del listado Correo.
-                </p>
-              ) : null}
               <div className="space-y-2">
                 <Label>Provincia</Label>
                 {!hasAddressCatalog ? (
@@ -1162,12 +1151,7 @@ export default function EnviosPage() {
                       })
                     }
                   />
-                ) : provinceSelectOptions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No se pudo armar la lista de provincias. Revisá la carga del catálogo o interpretá el texto del
-                    cliente.
-                  </p>
-                ) : (
+                ) : provinceSelectOptions.length === 0 ? null : (
                   <Select
                     value={shippingForm.province || undefined}
                     onValueChange={(newProvince) => {
@@ -1231,9 +1215,7 @@ export default function EnviosPage() {
                       }))
                     }
                   />
-                ) : localitySelectOptions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Elegí una provincia para ver localidades conocidas.</p>
-                ) : (
+                ) : localitySelectOptions.length === 0 ? null : (
                   <Select
                     value={shippingForm.locality || undefined}
                     onValueChange={(newLoc) => {
@@ -1271,13 +1253,6 @@ export default function EnviosPage() {
                     </SelectContent>
                   </Select>
                 )}
-                {(canonicalizeProvince(shippingForm.province) || shippingForm.province.trim()) ===
-                'Capital Federal' ? (
-                  <p className="text-xs text-muted-foreground">
-                    CABA / Capital Federal se guarda como provincia «Capital Federal» y localidad «Ciudad Autónoma de
-                    Buenos Aires», como en Correo Argentino.
-                  </p>
-                ) : null}
               </div>
               <div className="space-y-2">
                 <Label>
@@ -1287,18 +1262,9 @@ export default function EnviosPage() {
                   <Input
                     value={shippingForm.address}
                     onChange={(event) => setShippingForm((prev) => ({ ...prev, address: event.target.value }))}
-                    placeholder={
-                      shippingTypeDraft === 'SUCURSAL'
-                        ? 'Calle y número de la oficina (ej. FRANCIA 1670), según el padrón de Correo'
-                        : 'Calle, número, piso…'
-                    }
+                    placeholder={shippingTypeDraft === 'SUCURSAL' ? 'Calle y número' : 'Calle, número, piso…'}
                   />
-                ) : addressSelectOptions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No hay calles guardadas para esta provincia y localidad. Elegí otra combinación o agregá la
-                    dirección guardando una vez con datos correctos.
-                  </p>
-                ) : (
+                ) : addressSelectOptions.length === 0 ? null : (
                   <Select
                     value={shippingForm.address || undefined}
                     onValueChange={(newAddr) => {
@@ -1335,12 +1301,6 @@ export default function EnviosPage() {
                     </SelectContent>
                   </Select>
                 )}
-                {shippingTypeDraft === 'SUCURSAL' ? (
-                  <p className="text-xs text-muted-foreground">
-                    Con sucursal usamos calle y número del padrón para asignar el código correcto; en una misma ciudad
-                    puede haber varias oficinas.
-                  </p>
-                ) : null}
               </div>
               {shippingTypeDraft === 'SUCURSAL' ? (
                 <div className="space-y-2">
@@ -1349,22 +1309,21 @@ export default function EnviosPage() {
                     id="manual-sucursal-code"
                     value={manualSucursalCode}
                     onChange={(event) => setManualSucursalCode(event.target.value)}
-                    placeholder="Solo si el mapeo automático falla (código MiCorreo)"
+                    placeholder="Código MiCorreo (opcional)"
                     autoComplete="off"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Si corre el validador pero no encuentra la oficina, ingresá el código de sucursal de la planilla Correo para armar igual la fila del CSV al confirmar.
-                  </p>
                 </div>
               ) : null}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-2">
-                  <Label>Código postal</Label>
-                  <Input
-                    value={shippingForm.postalCode}
-                    onChange={(event) => setShippingForm((prev) => ({ ...prev, postalCode: event.target.value }))}
-                  />
-                </div>
+              <div className={shippingTypeDraft === 'SUCURSAL' ? 'space-y-2' : 'grid grid-cols-2 gap-2'}>
+                {shippingTypeDraft === 'DOMICILIO' ? (
+                  <div className="space-y-2">
+                    <Label>Código postal</Label>
+                    <Input
+                      value={shippingForm.postalCode}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, postalCode: event.target.value }))}
+                    />
+                  </div>
+                ) : null}
                 <div className="space-y-2">
                   <Label>Teléfono</Label>
                   <Input
