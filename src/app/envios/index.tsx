@@ -16,6 +16,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { formatDate, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
 import { Order, ShippingState } from '@/lib/types';
@@ -96,6 +102,9 @@ const emptyForm: ShippingFormData = {
   phone: '',
 };
 
+/** Valor Radix para «dejar vacío» en desplegables de sucursal. */
+const SELECT_EMPTY_VALUE = '__empty__';
+
 const shippingStateOptions: ShippingState[] = [
   'SIN_ENVIO',
   'HACER_ETIQUETA',
@@ -153,8 +162,15 @@ export default function EnviosPage() {
   useEffect(() => {
     if (!selectedOrder) {
       setAddressCatalogRows([]);
+      setIsLoadingAddressCatalog(false);
       return;
     }
+    if (shippingTypeDraft === 'DOMICILIO') {
+      setAddressCatalogRows([]);
+      setIsLoadingAddressCatalog(false);
+      return;
+    }
+
     let cancelled = false;
     setIsLoadingAddressCatalog(true);
     void (async () => {
@@ -229,7 +245,7 @@ export default function EnviosPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedOrder]);
+  }, [selectedOrder, shippingTypeDraft]);
 
   const provinceSelectOptions = useMemo(() => {
     const base = catalogProvinceOptions(addressCatalogRows);
@@ -630,7 +646,18 @@ export default function EnviosPage() {
         phone: phoneFromParse.length > 0 ? phoneFromParse : phoneFromOrder,
       };
 
-      setShippingForm(normalizeShippingFormData(parsedData));
+      const normalized = normalizeShippingFormData(parsedData);
+      setShippingForm((prev) =>
+        shippingTypeDraft === 'SUCURSAL'
+          ? {
+              ...normalized,
+              province: prev.province,
+              locality: prev.locality,
+              address: prev.address,
+              postalCode: prev.postalCode,
+            }
+          : normalized,
+      );
       setShowParseConfirmation(false);
       toast({
         title: 'Parseo IA listo',
@@ -738,10 +765,51 @@ export default function EnviosPage() {
     }
   };
 
+  const handleClearShippingData = async (order: Order) => {
+    if (!order.direccionId) return;
+    if (
+      !window.confirm(
+        '¿Quitar los datos de envío de esta orden? La orden volverá a pendientes de cargar datos si corresponde.',
+      )
+    ) {
+      return;
+    }
+    try {
+      const { error } = await supabase.from('ordenes').update({ direccion_id: null }).eq('id', order.id);
+      if (error) throw error;
+      await fetchOrders();
+      toast({ title: 'Datos de envío quitados', description: 'La orden ya no tiene dirección vinculada.' });
+    } catch (e) {
+      toast({
+        title: 'No se pudo quitar',
+        description: e instanceof Error ? e.message : 'Error al actualizar la orden.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleContinueToConfirmation = async () => {
     if (!selectedOrder) return;
     try {
       const normalizedForm = normalizeShippingFormData(shippingForm);
+      if (shippingTypeDraft === 'SUCURSAL') {
+        const manual = manualSucursalCode.trim();
+        if (!manual) {
+          const missing =
+            !normalizedForm.province?.trim() ||
+            !normalizedForm.locality?.trim() ||
+            !normalizedForm.address?.trim();
+          if (missing) {
+            toast({
+              title: 'Sucursal incompleta',
+              description:
+                'Elegí provincia, localidad y oficina en los desplegables del padrón, o ingresá el código de sucursal MiCorreo a mano.',
+              variant: 'destructive',
+            });
+            return;
+          }
+        }
+      }
       const csvRow = await createCorreoCsvRow({
         provincia: normalizedForm.province || '',
         localidad: normalizedForm.locality || '',
@@ -791,7 +859,9 @@ export default function EnviosPage() {
     const phoneDigitsCopiar = normalizePhoneDigits(order.customer.phoneE164 || '');
 
     return (
-      <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+      <ContextMenu key={order.id}>
+        <ContextMenuTrigger asChild>
+      <tr className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
         {opts?.showCsvLine ? (
           <td className="px-3 py-3 text-center tabular-nums text-muted-foreground">
             {csvLine !== undefined ? csvLine : '—'}
@@ -927,6 +997,18 @@ export default function EnviosPage() {
           </Button>
         </td>
       </tr>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem
+            disabled={!order.direccionId}
+            onSelect={() => {
+              void handleClearShippingData(order);
+            }}
+          >
+            Quitar datos de envío
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     );
   };
 
@@ -1121,8 +1203,18 @@ export default function EnviosPage() {
                 <Button
                   variant={shippingTypeDraft === 'SUCURSAL' ? 'default' : 'outline'}
                   onClick={() => {
+                    if (shippingTypeDraft === 'DOMICILIO') {
+                      setShippingForm((prev) => ({
+                        ...prev,
+                        postalCode: '',
+                        province: '',
+                        locality: '',
+                        address: '',
+                      }));
+                    } else {
+                      setShippingForm((prev) => ({ ...prev, postalCode: '' }));
+                    }
                     setShippingTypeDraft('SUCURSAL');
-                    setShippingForm((prev) => ({ ...prev, postalCode: '' }));
                   }}
                 >
                   Sucursal
@@ -1136,172 +1228,201 @@ export default function EnviosPage() {
                   onChange={(event) => setShippingForm((prev) => ({ ...prev, fullName: event.target.value }))}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Provincia</Label>
-                {!hasAddressCatalog ? (
-                  <Input
-                    value={shippingForm.province}
-                    onChange={(event) =>
-                      setShippingForm((prev) => {
-                        const raw = event.target.value;
-                        const canon = canonicalizeProvince(raw);
-                        const provinceVal = canon || raw;
-                        const loc = normalizeLocalityForCorreo(canon, prev.locality);
-                        return { ...prev, province: provinceVal, locality: loc };
-                      })
-                    }
-                  />
-                ) : provinceSelectOptions.length === 0 ? null : (
-                  <Select
-                    value={shippingForm.province || undefined}
-                    onValueChange={(newProvince) => {
-                      setShippingForm((prev) => {
-                        const pCanon = canonicalizeProvince(newProvince) || newProvince.trim();
-                        const locMerged = mergeOption(
-                          catalogLocalityOptions(addressCatalogRows, pCanon),
-                          prev.locality,
-                        );
-                        const newLoc =
-                          pCanon === 'Capital Federal'
-                            ? getCorreoCapitalFederalLocality()
-                            : locMerged.includes(prev.locality)
-                              ? prev.locality
-                              : locMerged[0] ?? '';
-                        const locForAddr =
-                          pCanon === 'Capital Federal' ? getCorreoCapitalFederalLocality() : newLoc;
-                        const addrOpts = mergeOption(
-                          catalogAddressOptions(addressCatalogRows, pCanon, locForAddr),
-                          prev.address,
-                        );
-                        const newAddr = addrOpts.includes(prev.address) ? prev.address : addrOpts[0] ?? '';
-                        const cp = findPostalCodeInCatalog(
-                          addressCatalogRows,
-                          pCanon,
-                          locForAddr,
-                          newAddr,
-                        );
-                        return {
+              {shippingTypeDraft === 'DOMICILIO' ? (
+                <>
+                  <div className="space-y-2">
+                    <Label>Provincia</Label>
+                    <Input
+                      value={shippingForm.province}
+                      onChange={(event) =>
+                        setShippingForm((prev) => {
+                          const raw = event.target.value;
+                          const canon = canonicalizeProvince(raw);
+                          const provinceVal = canon || raw;
+                          const loc = normalizeLocalityForCorreo(canon, prev.locality);
+                          return { ...prev, province: provinceVal, locality: loc };
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Localidad</Label>
+                    <Input
+                      value={shippingForm.locality}
+                      onChange={(event) =>
+                        setShippingForm((prev) => ({
                           ...prev,
-                          province: newProvince,
-                          locality: newLoc,
-                          address: newAddr,
-                          postalCode: cp ?? prev.postalCode,
-                        };
-                      });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Elegí provincia" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[min(60vh,320px)]">
-                      {provinceSelectOptions.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Localidad</Label>
-                {!hasAddressCatalog ? (
-                  <Input
-                    value={shippingForm.locality}
-                    onChange={(event) =>
-                      setShippingForm((prev) => ({
-                        ...prev,
-                        locality: normalizeLocality(event.target.value),
-                      }))
-                    }
-                  />
-                ) : localitySelectOptions.length === 0 ? null : (
-                  <Select
-                    value={shippingForm.locality || undefined}
-                    onValueChange={(newLoc) => {
-                      setShippingForm((prev) => {
-                        const pCanon = canonicalizeProvince(prev.province) || prev.province.trim();
-                        const addrOpts = mergeOption(
-                          catalogAddressOptions(addressCatalogRows, pCanon, newLoc),
-                          prev.address,
-                        );
-                        const newAddr = addrOpts.includes(prev.address) ? prev.address : addrOpts[0] ?? '';
-                        const cp = findPostalCodeInCatalog(
-                          addressCatalogRows,
-                          pCanon,
-                          newLoc,
-                          newAddr,
-                        );
-                        return {
-                          ...prev,
-                          locality: newLoc,
-                          address: newAddr,
-                          postalCode: cp ?? prev.postalCode,
-                        };
-                      });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Elegí localidad" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[min(60vh,320px)]">
-                      {localitySelectOptions.map((loc) => (
-                        <SelectItem key={loc} value={loc}>
-                          {loc}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>
-                  {shippingTypeDraft === 'SUCURSAL' ? 'Dirección de la sucursal' : 'Domicilio (calle y número)'}
-                </Label>
-                {!hasAddressCatalog ? (
-                  <Input
-                    value={shippingForm.address}
-                    onChange={(event) => setShippingForm((prev) => ({ ...prev, address: event.target.value }))}
-                    placeholder={shippingTypeDraft === 'SUCURSAL' ? 'Calle y número' : 'Calle, número, piso…'}
-                  />
-                ) : addressSelectOptions.length === 0 ? null : (
-                  <Select
-                    value={shippingForm.address || undefined}
-                    onValueChange={(newAddr) => {
-                      setShippingForm((prev) => {
-                        const pCanon = canonicalizeProvince(prev.province) || prev.province.trim();
-                        const loc =
-                          pCanon === 'Capital Federal'
-                            ? getCorreoCapitalFederalLocality()
-                            : prev.locality.trim();
-                        const cp = findPostalCodeInCatalog(addressCatalogRows, pCanon, loc, newAddr);
-                        return {
-                          ...prev,
-                          address: newAddr,
-                          postalCode: cp ?? prev.postalCode,
-                        };
-                      });
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={
-                          shippingTypeDraft === 'SUCURSAL'
-                            ? 'Elegí calle y número (padrón Correo)'
-                            : 'Elegí domicilio'
+                          locality: normalizeLocality(event.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Domicilio (calle y número)</Label>
+                    <Input
+                      value={shippingForm.address}
+                      onChange={(event) => setShippingForm((prev) => ({ ...prev, address: event.target.value }))}
+                      placeholder="Calle, número, piso…"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {isLoadingAddressCatalog ? (
+                    <p className="text-xs text-muted-foreground">Cargando padrón…</p>
+                  ) : null}
+                  {!isLoadingAddressCatalog && !hasAddressCatalog ? (
+                    <p className="text-xs text-muted-foreground">Sin padrón en correo_sucursales. Usá código manual.</p>
+                  ) : null}
+                  <div className="space-y-2">
+                    <Label>Provincia</Label>
+                    <Select
+                      disabled={isLoadingAddressCatalog || !hasAddressCatalog}
+                      value={shippingForm.province.trim() ? shippingForm.province : SELECT_EMPTY_VALUE}
+                      onValueChange={(newProvince) => {
+                        if (newProvince === SELECT_EMPTY_VALUE) {
+                          setShippingForm((prev) => ({
+                            ...prev,
+                            province: '',
+                            locality: '',
+                            address: '',
+                            postalCode: '',
+                          }));
+                          return;
                         }
-                      />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[min(60vh,360px)]">
-                      {addressSelectOptions.map((addr) => (
-                        <SelectItem key={addr} value={addr} className="whitespace-normal">
-                          {addr}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+                        setShippingForm((prev) => {
+                          const pCanon = canonicalizeProvince(newProvince) || newProvince.trim();
+                          const locMerged = mergeOption(
+                            catalogLocalityOptions(addressCatalogRows, pCanon),
+                            prev.locality,
+                          );
+                          const newLoc =
+                            pCanon === 'Capital Federal'
+                              ? getCorreoCapitalFederalLocality()
+                              : locMerged.includes(prev.locality)
+                                ? prev.locality
+                                : locMerged[0] ?? '';
+                          const locForAddr =
+                            pCanon === 'Capital Federal' ? getCorreoCapitalFederalLocality() : newLoc;
+                          const addrOpts = mergeOption(
+                            catalogAddressOptions(addressCatalogRows, pCanon, locForAddr),
+                            prev.address,
+                          );
+                          const newAddr = addrOpts.includes(prev.address) ? prev.address : addrOpts[0] ?? '';
+                          const cp = findPostalCodeInCatalog(
+                            addressCatalogRows,
+                            pCanon,
+                            locForAddr,
+                            newAddr,
+                          );
+                          return {
+                            ...prev,
+                            province: newProvince,
+                            locality: newLoc,
+                            address: newAddr,
+                            postalCode: cp ?? prev.postalCode,
+                          };
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Provincia" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[min(60vh,320px)]">
+                        <SelectItem value={SELECT_EMPTY_VALUE}>(vacío)</SelectItem>
+                        {provinceSelectOptions.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Localidad</Label>
+                    <Select
+                      disabled={isLoadingAddressCatalog || !hasAddressCatalog}
+                      value={shippingForm.locality.trim() ? shippingForm.locality : SELECT_EMPTY_VALUE}
+                      onValueChange={(newLoc) => {
+                        if (newLoc === SELECT_EMPTY_VALUE) {
+                          setShippingForm((prev) => ({ ...prev, locality: '', address: '', postalCode: '' }));
+                          return;
+                        }
+                        setShippingForm((prev) => {
+                          const pCanon = canonicalizeProvince(prev.province) || prev.province.trim();
+                          const addrOpts = mergeOption(
+                            catalogAddressOptions(addressCatalogRows, pCanon, newLoc),
+                            prev.address,
+                          );
+                          const newAddr = addrOpts.includes(prev.address) ? prev.address : addrOpts[0] ?? '';
+                          const cp = findPostalCodeInCatalog(
+                            addressCatalogRows,
+                            pCanon,
+                            newLoc,
+                            newAddr,
+                          );
+                          return {
+                            ...prev,
+                            locality: newLoc,
+                            address: newAddr,
+                            postalCode: cp ?? prev.postalCode,
+                          };
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Localidad" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[min(60vh,320px)]">
+                        <SelectItem value={SELECT_EMPTY_VALUE}>(vacío)</SelectItem>
+                        {localitySelectOptions.map((loc) => (
+                          <SelectItem key={loc} value={loc}>
+                            {loc}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Dirección de la sucursal</Label>
+                    <Select
+                      disabled={isLoadingAddressCatalog || !hasAddressCatalog}
+                      value={shippingForm.address.trim() ? shippingForm.address : SELECT_EMPTY_VALUE}
+                      onValueChange={(newAddr) => {
+                        if (newAddr === SELECT_EMPTY_VALUE) {
+                          setShippingForm((prev) => ({ ...prev, address: '', postalCode: '' }));
+                          return;
+                        }
+                        setShippingForm((prev) => {
+                          const pCanon = canonicalizeProvince(prev.province) || prev.province.trim();
+                          const loc =
+                            pCanon === 'Capital Federal'
+                              ? getCorreoCapitalFederalLocality()
+                              : prev.locality.trim();
+                          const cp = findPostalCodeInCatalog(addressCatalogRows, pCanon, loc, newAddr);
+                          return {
+                            ...prev,
+                            address: newAddr,
+                            postalCode: cp ?? prev.postalCode,
+                          };
+                        });
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Calle y número (padrón)" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[min(60vh,360px)]">
+                        <SelectItem value={SELECT_EMPTY_VALUE}>(vacío)</SelectItem>
+                        {addressSelectOptions.map((addr) => (
+                          <SelectItem key={addr} value={addr} className="whitespace-normal">
+                            {addr}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
               {shippingTypeDraft === 'SUCURSAL' ? (
                 <div className="space-y-2">
                   <Label htmlFor="manual-sucursal-code">Código de sucursal (manual)</Label>
