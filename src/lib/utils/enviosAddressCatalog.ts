@@ -1,4 +1,11 @@
-import { canonicalizeProvince, getCorreoCapitalFederalLocality } from '@/lib/utils/shippingNormalization';
+import {
+  canonicalizeProvince,
+  getCorreoCapitalFederalLocality,
+  normalizeLocality,
+} from '@/lib/utils/shippingNormalization';
+
+/** Misma localidad con distinto casing / puntuación (ej. LA PLATA vs La Plata). */
+const localityKey = (localidad: string) => normalizeLocality(localidad);
 
 export type DireccionCatalogRow = {
   provincia: string;
@@ -38,7 +45,7 @@ export function catalogLocalityOptions(
   const s = new Set<string>();
   for (const r of rows) {
     if (provinceKey(r.provincia) !== p) continue;
-    const loc = (r.localidad || '').trim();
+    const loc = localityKey(r.localidad);
     if (loc) s.add(loc);
   }
   return Array.from(s).sort((a, b) => a.localeCompare(b, 'es'));
@@ -50,7 +57,7 @@ export function catalogAddressOptions(
   locality: string,
 ): string[] {
   const p = canonicalProvince.trim();
-  const loc = (locality || '').trim();
+  const locNorm = localityKey(locality);
   if (!p) return [];
   const s = new Set<string>();
   if (p === 'Capital Federal') {
@@ -61,10 +68,10 @@ export function catalogAddressOptions(
     }
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'es'));
   }
-  if (!loc) return [];
+  if (!locNorm) return [];
   for (const r of rows) {
     if (provinceKey(r.provincia) !== p) continue;
-    if ((r.localidad || '').trim() !== loc) continue;
+    if (localityKey(r.localidad) !== locNorm) continue;
     const dom = (r.domicilio || '').trim();
     if (dom) s.add(dom);
   }
@@ -79,7 +86,7 @@ export function findPostalCodeInCatalog(
   domicilio: string,
 ): string | null {
   const p = canonicalProvince.trim();
-  const loc = (locality || '').trim();
+  const locNorm = localityKey(locality);
   const dom = (domicilio || '').trim();
   if (!p || !dom) return null;
   for (const r of rows) {
@@ -88,7 +95,7 @@ export function findPostalCodeInCatalog(
     if (p === 'Capital Federal') {
       return (r.codigo_postal || '').trim() || null;
     }
-    if ((r.localidad || '').trim() === loc) {
+    if (localityKey(r.localidad) === locNorm) {
       return (r.codigo_postal || '').trim() || null;
     }
   }
