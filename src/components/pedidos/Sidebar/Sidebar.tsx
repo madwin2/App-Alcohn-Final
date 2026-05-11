@@ -13,6 +13,7 @@ import {
   LogOut,
   Wallet,
   Package,
+  Image,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SidebarItem } from './SidebarItem';
@@ -28,6 +29,7 @@ const sidebarItems = [
   { icon: ShoppingCart, label: 'Pedidos', path: '/pedidos', disabled: false },
   { icon: Truck, label: 'Envíos', path: '/envios', disabled: false },
   { icon: Package, label: 'Stock', path: '/stock', disabled: false },
+  { icon: Image, label: 'Mockups', path: '/mockups', disabled: false },
   { icon: Layers, label: 'Vectorización', path: '/vectorizacion', disabled: true },
   { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },
   { icon: Calendar, label: 'Programas', path: '/programas', disabled: true },

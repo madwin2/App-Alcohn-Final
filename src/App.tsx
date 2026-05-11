@@ -7,6 +7,7 @@ import EnviosPage from './app/envios/index'
 import StockPage from './app/stock/index'
 import EconomiaPage from './app/economia/index'
 import GastosPage from './app/gastos/index'
+import MockupsPage from './app/mockups/index'
 import LoginPage from './app/login/index'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -83,6 +84,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <GastosPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mockups"
+            element={
+              <ProtectedRoute>
+                <MockupsPage />
               </ProtectedRoute>
             }
           />
