@@ -1,4 +1,5 @@
 const OPENAI_IMAGE_API_URL = 'https://api.openai.com/v1/images/edits';
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_IMAGE_TIMEOUT_MS || 15000);
 
 function parseDataUrl(input) {
   if (typeof input !== 'string') return null;
@@ -35,13 +36,29 @@ async function callOpenAiEdit({ apiKey, model, inputBuffer, mime }) {
   form.append('size', '1024x1024');
   form.append('image', new Blob([inputBuffer], { type: mime || 'image/png' }), 'logo.png');
 
-  const response = await fetch(OPENAI_IMAGE_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: form,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(OPENAI_IMAGE_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: form,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    return {
+      ok: false,
+      status: 0,
+      raw: error instanceof Error ? error.message : 'OpenAI request failed',
+      json: null,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const raw = await response.text();
   let json = null;
@@ -97,7 +114,7 @@ export default async function handler(req, res) {
       res.status(502).json({
         error: 'OpenAI image edit failed',
         details: attempt.raw,
-        hint: 'Revisá OPENAI_API_KEY, OPENAI_IMAGE_MODEL y acceso al modelo en tu cuenta OpenAI.',
+        hint: 'Revisá OPENAI_API_KEY, OPENAI_IMAGE_MODEL, timeout y acceso al modelo en tu cuenta OpenAI.',
         triedModels: tried,
       });
       return;
