@@ -31,10 +31,17 @@ const PRICE_TABLE: Record<MockupMaterial, MockupMeasure[]> = {
   ],
 };
 
+/** Mismas rutas base que el ejemplo Sharp (`mockupGenerator.ts`). */
 const textureCandidates: Record<MockupMaterial, string[]> = {
   cuero: ['/mockup-textures/cuero.jpg.jpeg', '/mockup-textures/cuero.jpg', '/mockup-textures/cuero.jpeg'],
   madera: ['/mockup-textures/madera.jpg.jpeg', '/mockup-textures/madera.jpg', '/mockup-textures/madera.jpeg'],
 };
+
+/** Opcional: refuerzo de vetas (solo madera), muy suave encima de la base. */
+const MADERA_BURN_OVERLAY = '/mockup-textures/madera-quemada.png';
+
+/** Igual que `LOGO_SCALE` en `generador mockup ejemplo/mockupGenerator.ts`. */
+const LOGO_SCALE = 0.55;
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -54,15 +61,6 @@ const loadImage = (src: string): Promise<HTMLImageElement> =>
     img.onerror = () => reject(new Error(`No se pudo cargar imagen: ${src}`));
     img.src = src;
   });
-
-const getCanvas2D = (width: number, height: number): CanvasRenderingContext2D => {
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('No se pudo inicializar canvas');
-  return ctx;
-};
 
 const toBlob = (canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> =>
   new Promise((resolve, reject) => {
@@ -259,6 +257,51 @@ export async function optimizeLogoForMockup(file: File, designName: string): Pro
   return new File([optimizedBlob], `${safeName}_optimizado.png`, { type: 'image/png' });
 }
 
+/**
+ * Réplica del pipeline Sharp del ejemplo: greyscale → linear(1.35, -b) → brillo por material.
+ * Ver `generateWithSharp` en `mockupGenerator.ts`.
+ */
+function buildStampLayerCanvas(
+  logoImage: HTMLImageElement,
+  drawW: number,
+  drawH: number,
+  material: MockupMaterial,
+): HTMLCanvasElement {
+  const stamp = document.createElement('canvas');
+  stamp.width = drawW;
+  stamp.height = drawH;
+  const sctx = stamp.getContext('2d', { willReadFrequently: true });
+  if (!sctx) throw new Error('No se pudo crear capa sello');
+
+  sctx.imageSmoothingEnabled = true;
+  sctx.imageSmoothingQuality = 'high';
+  sctx.clearRect(0, 0, drawW, drawH);
+  sctx.drawImage(logoImage, 0, 0, drawW, drawH);
+
+  const linearB = material === 'madera' ? 50 : 40;
+  const brightnessMul = material === 'madera' ? 0.55 : 0.65;
+
+  const frame = sctx.getImageData(0, 0, drawW, drawH);
+  const px = frame.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const a = px[i + 3];
+    if (a < 4) continue;
+
+    const r = px[i];
+    const g = px[i + 1];
+    const b = px[i + 2];
+    const L = 0.299 * r + 0.587 * g + 0.114 * b;
+    let v = L * 1.35 - linearB;
+    v *= brightnessMul;
+    v = clamp(v, 0, 255);
+    px[i] = v;
+    px[i + 1] = v;
+    px[i + 2] = v;
+  }
+  sctx.putImageData(frame, 0, 0);
+  return stamp;
+}
+
 const paintProceduralTexture = (ctx: CanvasRenderingContext2D, material: MockupMaterial) => {
   const gradient = ctx.createLinearGradient(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
   if (material === 'madera') {
@@ -303,6 +346,26 @@ const drawTexture = async (ctx: CanvasRenderingContext2D, material: MockupMateri
   paintProceduralTexture(ctx, material);
 };
 
+/** Textura quemada encima de la madera base, como relieve (muy bajo). */
+async function drawMaderaBurnOverlay(ctx: CanvasRenderingContext2D) {
+  if (ctx.canvas.width !== OUTPUT_WIDTH || ctx.canvas.height !== OUTPUT_HEIGHT) return;
+  try {
+    const burn = await loadImage(MADERA_BURN_OVERLAY);
+    const scale = Math.max(OUTPUT_WIDTH / burn.naturalWidth, OUTPUT_HEIGHT / burn.naturalHeight);
+    const drawW = Math.round(burn.naturalWidth * scale);
+    const drawH = Math.round(burn.naturalHeight * scale);
+    const left = Math.round((OUTPUT_WIDTH - drawW) / 2);
+    const top = Math.round((OUTPUT_HEIGHT - drawH) / 2);
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(burn, left, top, drawW, drawH);
+    ctx.restore();
+  } catch {
+    // sin overlay si no hay archivo
+  }
+}
+
 export async function generateMockup(optimizedLogo: File, material: MockupMaterial): Promise<File> {
   const logoSrc = await fileToDataUrl(optimizedLogo);
   const logoImage = await loadImage(logoSrc);
@@ -314,35 +377,25 @@ export async function generateMockup(optimizedLogo: File, material: MockupMateri
   if (!ctx) throw new Error('No se pudo generar mockup');
 
   await drawTexture(ctx, material);
+  if (material === 'madera') {
+    await drawMaderaBurnOverlay(ctx);
+  }
 
-  const logoScale = 0.58;
-  const maxW = OUTPUT_WIDTH * logoScale;
-  const maxH = OUTPUT_HEIGHT * logoScale;
-  const fitScale = Math.min(maxW / logoImage.naturalWidth, maxH / logoImage.naturalHeight);
+  const targetLogoW = Math.round(OUTPUT_WIDTH * LOGO_SCALE);
+  const maxH = Math.round(OUTPUT_HEIGHT * LOGO_SCALE);
+  const fitScale = Math.min(targetLogoW / logoImage.naturalWidth, maxH / logoImage.naturalHeight);
   const drawW = Math.max(1, Math.round(logoImage.naturalWidth * fitScale));
   const drawH = Math.max(1, Math.round(logoImage.naturalHeight * fitScale));
   const left = Math.round((OUTPUT_WIDTH - drawW) / 2);
   const top = Math.round((OUTPUT_HEIGHT - drawH) / 2);
 
-  const stampCtx = getCanvas2D(OUTPUT_WIDTH, OUTPUT_HEIGHT);
-  stampCtx.clearRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-  stampCtx.drawImage(logoImage, left, top, drawW, drawH);
-  const stampCanvas = stampCtx.canvas;
+  const stampLayer = buildStampLayerCanvas(logoImage, drawW, drawH, material);
 
-  stampCtx.globalCompositeOperation = 'source-in';
-  stampCtx.fillStyle = material === 'madera' ? '#2d1d0f' : '#1f130a';
-  stampCtx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-  stampCtx.globalCompositeOperation = 'source-over';
-
+  ctx.save();
   ctx.globalCompositeOperation = 'multiply';
-  ctx.globalAlpha = material === 'madera' ? 0.72 : 0.76;
-  ctx.drawImage(stampCanvas, 0, 0);
   ctx.globalAlpha = 1;
-
-  ctx.globalCompositeOperation = 'soft-light';
-  ctx.fillStyle = material === 'madera' ? 'rgba(255, 211, 160, 0.14)' : 'rgba(255, 220, 180, 0.12)';
-  ctx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-  ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(stampLayer, left, top);
+  ctx.restore();
 
   const blob = await toBlob(canvas, 'image/jpeg', 0.92);
   return new File([blob], `mockup_${material}.jpg`, { type: 'image/jpeg' });
