@@ -215,13 +215,20 @@ export default function MockupsPage() {
             details?: string;
             message?: string;
             hint?: string;
+            triedModels?: string[];
+            attemptsSummary?: Array<{ model: string; ok?: boolean; message?: string }>;
+            usedModel?: string;
           };
           if (!aiJson.optimizedDataUrl) {
+            const summary =
+              aiJson.attemptsSummary?.map((s) => `${s.model}: ${s.message || '—'}`).join(' · ') ||
+              '';
             const reason =
               aiJson?.hint ||
               aiJson?.message ||
               aiJson?.error ||
-              aiJson?.details?.slice(0, 160) ||
+              (typeof aiJson?.details === 'string' ? aiJson.details.slice(0, 220) : '') ||
+              summary.slice(0, 220) ||
               (!aiResponse.ok ? `Error IA (${aiResponse.status})` : 'Respuesta IA inválida');
             throw new Error(reason);
           }
