@@ -14,13 +14,25 @@ export type DireccionCatalogRow = {
   codigo_postal: string;
 };
 
-const provinceKey = (provincia: string) => canonicalizeProvince(provincia) || provincia.trim();
+/**
+ * Provincia canónica para agrupar en el catálogo: usa el texto, y si viene vacío
+ * infiere Buenos Aires por código postal tipo B1234 (muy común en domicilios de PBA).
+ */
+export function provinceKeyForCatalogRow(r: DireccionCatalogRow): string {
+  const fromField = canonicalizeProvince(r.provincia);
+  if (fromField) return fromField;
+  const trimmed = (r.provincia || '').trim();
+  if (trimmed) return trimmed;
+  const cp = (r.codigo_postal || '').replace(/\D/g, '');
+  if (/^B\d{4}$/i.test(cp)) return 'Buenos Aires';
+  return '';
+}
 
 /** Provincias canónicas (u originales si no matchean) presentes en el catálogo. */
 export function catalogProvinceOptions(rows: DireccionCatalogRow[]): string[] {
   const s = new Set<string>();
   for (const r of rows) {
-    const k = provinceKey(r.provincia);
+    const k = provinceKeyForCatalogRow(r);
     if (k) s.add(k);
   }
   return Array.from(s).sort((a, b) => a.localeCompare(b, 'es'));
@@ -44,7 +56,7 @@ export function catalogLocalityOptions(
   }
   const s = new Set<string>();
   for (const r of rows) {
-    if (provinceKey(r.provincia) !== p) continue;
+    if (provinceKeyForCatalogRow(r) !== p) continue;
     const loc = localityKey(r.localidad);
     if (loc) s.add(loc);
   }
@@ -62,7 +74,7 @@ export function catalogAddressOptions(
   const s = new Set<string>();
   if (p === 'Capital Federal') {
     for (const r of rows) {
-      if (provinceKey(r.provincia) !== 'Capital Federal') continue;
+      if (provinceKeyForCatalogRow(r) !== 'Capital Federal') continue;
       const dom = (r.domicilio || '').trim();
       if (dom) s.add(dom);
     }
@@ -70,7 +82,7 @@ export function catalogAddressOptions(
   }
   if (!locNorm) return [];
   for (const r of rows) {
-    if (provinceKey(r.provincia) !== p) continue;
+    if (provinceKeyForCatalogRow(r) !== p) continue;
     if (localityKey(r.localidad) !== locNorm) continue;
     const dom = (r.domicilio || '').trim();
     if (dom) s.add(dom);
@@ -90,7 +102,7 @@ export function findPostalCodeInCatalog(
   const dom = (domicilio || '').trim();
   if (!p || !dom) return null;
   for (const r of rows) {
-    if (provinceKey(r.provincia) !== p) continue;
+    if (provinceKeyForCatalogRow(r) !== p) continue;
     if ((r.domicilio || '').trim() !== dom) continue;
     if (p === 'Capital Federal') {
       return (r.codigo_postal || '').trim() || null;

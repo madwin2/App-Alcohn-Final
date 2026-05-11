@@ -101,6 +101,42 @@ export const canonicalizeProvince = (value: string): string => {
   for (const p of PROVINCES) {
     if (normalize(p) === normalized) return p;
   }
+  /** CABA con redacción rara (sin «DE» u orden distinto). */
+  if (
+    normalized.includes('CIUDAD AUTONOMA') &&
+    normalized.includes('BUENOS') &&
+    normalized.includes('AIRES')
+  ) {
+    return 'Capital Federal';
+  }
+  /**
+   * Texto libre muy habitual: «Buenos Aires, Argentina», «Buenos Aires Provincia», etc.
+   * Debe resolverse a provincia BA (no CABA) para catálogos y CSV.
+   */
+  if (normalized.startsWith('BUENOS AIRES')) {
+    if (normalized.includes('CIUDAD AUTONOMA')) return 'Capital Federal';
+    if (normalized.includes('CAPITAL FEDERAL') || normalized.includes('CAP FED')) return 'Capital Federal';
+    return 'Buenos Aires';
+  }
+  /** «Bs As», «Bs As La Matanza», etc. (no matchear prefijos tipo «BS ASUNCION»). */
+  if (
+    normalized === 'BS AS' ||
+    normalized.startsWith('BS AS ') ||
+    normalized === 'BSAS' ||
+    normalized.startsWith('BSAS ')
+  ) {
+    if (normalized.includes('CIUDAD AUTONOMA')) return 'Capital Federal';
+    return 'Buenos Aires';
+  }
+  /** «Merlo Buenos Aires», «La Plata Buenos Aires», etc. */
+  if (
+    (normalized.endsWith('BUENOS AIRES') || normalized.includes(' BUENOS AIRES')) &&
+    !normalized.includes('CIUDAD AUTONOMA') &&
+    !normalized.includes('CAPITAL FEDERAL') &&
+    !normalized.includes('CAP FED')
+  ) {
+    return 'Buenos Aires';
+  }
   return '';
 };
 
