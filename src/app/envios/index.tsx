@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +22,22 @@ import { Order, ShippingState } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
-import { canonicalizeProvince, normalizeLocality, normalizePhoneDigits, normalizePhoneDigitsForEnvios } from '@/lib/utils/shippingNormalization';
+import {
+  catalogAddressOptions,
+  catalogLocalityOptions,
+  catalogProvinceOptions,
+  findPostalCodeInCatalog,
+  mergeOption,
+  type DireccionCatalogRow,
+} from '@/lib/utils/enviosAddressCatalog';
+import {
+  canonicalizeProvince,
+  getCorreoCapitalFederalLocality,
+  normalizeLocality,
+  normalizeLocalityForCorreo,
+  normalizePhoneDigits,
+  normalizePhoneDigitsForEnvios,
+} from '@/lib/utils/shippingNormalization';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 const isEligibleForShipping = (order: Order): boolean => {
@@ -104,12 +119,15 @@ const mergeShippingData = (
   };
 };
 
-const normalizeShippingFormData = (data: ShippingFormData): ShippingFormData => ({
-  ...data,
-  province: canonicalizeProvince(data.province),
-  locality: normalizeLocality(data.locality),
-  phone: normalizePhoneDigitsForEnvios(data.phone),
-});
+const normalizeShippingFormData = (data: ShippingFormData): ShippingFormData => {
+  const canonicalProvince = canonicalizeProvince(data.province);
+  return {
+    ...data,
+    province: canonicalProvince || data.province.trim(),
+    locality: normalizeLocalityForCorreo(canonicalProvince, data.locality),
+    phone: normalizePhoneDigitsForEnvios(data.phone),
+  };
+};
 
 export default function EnviosPage() {
   const { orders, loading, error, updateOrder, fetchOrders } = useOrders();
@@ -128,6 +146,68 @@ export default function EnviosPage() {
   const [isPendientesExpanded, setIsPendientesExpanded] = useState(true);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [manualSucursalCode, setManualSucursalCode] = useState('');
+  const [addressCatalogRows, setAddressCatalogRows] = useState<DireccionCatalogRow[]>([]);
+  const [isLoadingAddressCatalog, setIsLoadingAddressCatalog] = useState(false);
+
+  useEffect(() => {
+    if (!selectedOrder) {
+      setAddressCatalogRows([]);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingAddressCatalog(true);
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('direcciones')
+          .select('provincia,localidad,domicilio,codigo_postal')
+          .or('activa.is.null,activa.eq.true');
+        if (cancelled) return;
+        if (error) {
+          console.error(error);
+          toast({
+            title: 'No se cargó el catálogo de direcciones',
+            description: 'Los desplegables pueden quedar incompletos. Reintentá abriendo el modal.',
+            variant: 'destructive',
+          });
+          setAddressCatalogRows([]);
+          return;
+        }
+        setAddressCatalogRows((data ?? []) as DireccionCatalogRow[]);
+      } finally {
+        if (!cancelled) setIsLoadingAddressCatalog(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedOrder]);
+
+  const provinceSelectOptions = useMemo(() => {
+    const base = catalogProvinceOptions(addressCatalogRows);
+    return mergeOption(base, shippingForm.province);
+  }, [addressCatalogRows, shippingForm.province]);
+
+  const localitySelectOptions = useMemo(() => {
+    const pCanon = canonicalizeProvince(shippingForm.province) || shippingForm.province.trim();
+    if (!pCanon) return mergeOption([], shippingForm.locality);
+    const base = catalogLocalityOptions(addressCatalogRows, pCanon);
+    return mergeOption(base, shippingForm.locality);
+  }, [addressCatalogRows, shippingForm.province, shippingForm.locality]);
+
+  const addressSelectOptions = useMemo(() => {
+    const pCanon = canonicalizeProvince(shippingForm.province) || shippingForm.province.trim();
+    if (!pCanon) return mergeOption([], shippingForm.address);
+    const loc =
+      pCanon === 'Capital Federal'
+        ? getCorreoCapitalFederalLocality()
+        : shippingForm.locality.trim();
+    const base = catalogAddressOptions(addressCatalogRows, pCanon, loc);
+    return mergeOption(base, shippingForm.address);
+  }, [addressCatalogRows, shippingForm.province, shippingForm.locality, shippingForm.address]);
+
+  /** Sin ninguna fila en `direcciones`, los desplegables no tienen opciones: se usan campos de texto libre. */
+  const hasAddressCatalog = addressCatalogRows.length > 0;
 
   const eligibleOrders = useMemo(() => {
     return orders.filter(isEligibleForShipping);
@@ -426,10 +506,11 @@ export default function EnviosPage() {
       if (existingAddressError) throw existingAddressError;
 
       const fullName = `${existingAddress?.nombre || order.customer.firstName || ''} ${existingAddress?.apellido || order.customer.lastName || ''}`.trim();
+      const canonProv = canonicalizeProvince(existingAddress?.provincia || '');
       setShippingForm({
         fullName,
-        province: canonicalizeProvince(existingAddress?.provincia || '') || (existingAddress?.provincia || ''),
-        locality: normalizeLocality(existingAddress?.localidad || ''),
+        province: canonProv || (existingAddress?.provincia || '').trim(),
+        locality: normalizeLocalityForCorreo(canonProv, existingAddress?.localidad || ''),
         address: existingAddress?.domicilio || '',
         postalCode: existingAddress?.codigo_postal || '',
         email: order.customer.email || '',
@@ -549,7 +630,8 @@ export default function EnviosPage() {
           activa: true,
           codigo_postal: normalizedForm.postalCode || '0000',
           provincia: canonicalProvince || 'SIN DEFINIR',
-          localidad: normalizeLocality(normalizedForm.locality) || 'SIN DEFINIR',
+          localidad:
+            normalizeLocalityForCorreo(canonicalProvince, normalizedForm.locality) || 'SIN DEFINIR',
           domicilio: normalizedForm.address || 'SIN DEFINIR',
           nombre: firstName,
           apellido: lastName,
@@ -1006,46 +1088,207 @@ export default function EnviosPage() {
                   onChange={(event) => setShippingForm((prev) => ({ ...prev, fullName: event.target.value }))}
                 />
               </div>
+              {isLoadingAddressCatalog ? (
+                <p className="text-xs text-muted-foreground">Cargando direcciones de referencia desde la base…</p>
+              ) : null}
+              {!isLoadingAddressCatalog && !hasAddressCatalog ? (
+                <p className="text-xs text-muted-foreground">
+                  No hay direcciones guardadas todavía: podés cargar provincia, localidad y domicilio a mano. Después
+                  de la primera carga, estos campos pasan a listas según lo que haya en la base.
+                </p>
+              ) : null}
               <div className="space-y-2">
                 <Label>Provincia</Label>
-                <Input
-                  value={shippingForm.province}
-                  onChange={(event) =>
-                    setShippingForm((prev) => ({
-                      ...prev,
-                      province: canonicalizeProvince(event.target.value) || event.target.value,
-                    }))
-                  }
-                />
+                {!hasAddressCatalog ? (
+                  <Input
+                    value={shippingForm.province}
+                    onChange={(event) =>
+                      setShippingForm((prev) => {
+                        const raw = event.target.value;
+                        const canon = canonicalizeProvince(raw);
+                        const provinceVal = canon || raw;
+                        const loc = normalizeLocalityForCorreo(canon, prev.locality);
+                        return { ...prev, province: provinceVal, locality: loc };
+                      })
+                    }
+                  />
+                ) : provinceSelectOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No se pudo armar la lista de provincias. Revisá la carga del catálogo o interpretá el texto del
+                    cliente.
+                  </p>
+                ) : (
+                  <Select
+                    value={shippingForm.province || undefined}
+                    onValueChange={(newProvince) => {
+                      setShippingForm((prev) => {
+                        const pCanon = canonicalizeProvince(newProvince) || newProvince.trim();
+                        const locMerged = mergeOption(
+                          catalogLocalityOptions(addressCatalogRows, pCanon),
+                          prev.locality,
+                        );
+                        const newLoc =
+                          pCanon === 'Capital Federal'
+                            ? getCorreoCapitalFederalLocality()
+                            : locMerged.includes(prev.locality)
+                              ? prev.locality
+                              : locMerged[0] ?? '';
+                        const locForAddr =
+                          pCanon === 'Capital Federal' ? getCorreoCapitalFederalLocality() : newLoc;
+                        const addrOpts = mergeOption(
+                          catalogAddressOptions(addressCatalogRows, pCanon, locForAddr),
+                          prev.address,
+                        );
+                        const newAddr = addrOpts.includes(prev.address) ? prev.address : addrOpts[0] ?? '';
+                        const cp = findPostalCodeInCatalog(
+                          addressCatalogRows,
+                          pCanon,
+                          locForAddr,
+                          newAddr,
+                        );
+                        return {
+                          ...prev,
+                          province: newProvince,
+                          locality: newLoc,
+                          address: newAddr,
+                          postalCode: cp ?? prev.postalCode,
+                        };
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Elegí provincia" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[min(60vh,320px)]">
+                      {provinceSelectOptions.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Localidad</Label>
-                <Input
-                  value={shippingForm.locality}
-                  onChange={(event) =>
-                    setShippingForm((prev) => ({
-                      ...prev,
-                      locality: normalizeLocality(event.target.value),
-                    }))
-                  }
-                />
+                {!hasAddressCatalog ? (
+                  <Input
+                    value={shippingForm.locality}
+                    onChange={(event) =>
+                      setShippingForm((prev) => ({
+                        ...prev,
+                        locality: normalizeLocality(event.target.value),
+                      }))
+                    }
+                  />
+                ) : localitySelectOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Elegí una provincia para ver localidades conocidas.</p>
+                ) : (
+                  <Select
+                    value={shippingForm.locality || undefined}
+                    onValueChange={(newLoc) => {
+                      setShippingForm((prev) => {
+                        const pCanon = canonicalizeProvince(prev.province) || prev.province.trim();
+                        const addrOpts = mergeOption(
+                          catalogAddressOptions(addressCatalogRows, pCanon, newLoc),
+                          prev.address,
+                        );
+                        const newAddr = addrOpts.includes(prev.address) ? prev.address : addrOpts[0] ?? '';
+                        const cp = findPostalCodeInCatalog(
+                          addressCatalogRows,
+                          pCanon,
+                          newLoc,
+                          newAddr,
+                        );
+                        return {
+                          ...prev,
+                          locality: newLoc,
+                          address: newAddr,
+                          postalCode: cp ?? prev.postalCode,
+                        };
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Elegí localidad" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[min(60vh,320px)]">
+                      {localitySelectOptions.map((loc) => (
+                        <SelectItem key={loc} value={loc}>
+                          {loc}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {(canonicalizeProvince(shippingForm.province) || shippingForm.province.trim()) ===
+                'Capital Federal' ? (
+                  <p className="text-xs text-muted-foreground">
+                    CABA / Capital Federal se guarda como provincia «Capital Federal» y localidad «Ciudad Autónoma de
+                    Buenos Aires», como en Correo Argentino.
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label>
                   {shippingTypeDraft === 'SUCURSAL' ? 'Dirección de la sucursal' : 'Domicilio (calle y número)'}
                 </Label>
-                <Input
-                  value={shippingForm.address}
-                  onChange={(event) => setShippingForm((prev) => ({ ...prev, address: event.target.value }))}
-                  placeholder={
-                    shippingTypeDraft === 'SUCURSAL'
-                      ? 'Calle y número de la oficina (ej. FRANCIA 1670), según el padrón de Correo'
-                      : 'Calle, número, piso…'
-                  }
-                />
+                {!hasAddressCatalog ? (
+                  <Input
+                    value={shippingForm.address}
+                    onChange={(event) => setShippingForm((prev) => ({ ...prev, address: event.target.value }))}
+                    placeholder={
+                      shippingTypeDraft === 'SUCURSAL'
+                        ? 'Calle y número de la oficina (ej. FRANCIA 1670), según el padrón de Correo'
+                        : 'Calle, número, piso…'
+                    }
+                  />
+                ) : addressSelectOptions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No hay calles guardadas para esta provincia y localidad. Elegí otra combinación o agregá la
+                    dirección guardando una vez con datos correctos.
+                  </p>
+                ) : (
+                  <Select
+                    value={shippingForm.address || undefined}
+                    onValueChange={(newAddr) => {
+                      setShippingForm((prev) => {
+                        const pCanon = canonicalizeProvince(prev.province) || prev.province.trim();
+                        const loc =
+                          pCanon === 'Capital Federal'
+                            ? getCorreoCapitalFederalLocality()
+                            : prev.locality.trim();
+                        const cp = findPostalCodeInCatalog(addressCatalogRows, pCanon, loc, newAddr);
+                        return {
+                          ...prev,
+                          address: newAddr,
+                          postalCode: cp ?? prev.postalCode,
+                        };
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          shippingTypeDraft === 'SUCURSAL'
+                            ? 'Elegí calle y número (padrón Correo)'
+                            : 'Elegí domicilio'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[min(60vh,360px)]">
+                      {addressSelectOptions.map((addr) => (
+                        <SelectItem key={addr} value={addr} className="whitespace-normal">
+                          {addr}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 {shippingTypeDraft === 'SUCURSAL' ? (
                   <p className="text-xs text-muted-foreground">
-                    Con sucursal usamos calle y número del padrón para asignar el código correcto; en una misma ciudad puede haber varias oficinas.
+                    Con sucursal usamos calle y número del padrón para asignar el código correcto; en una misma ciudad
+                    puede haber varias oficinas.
                   </p>
                 ) : null}
               </div>

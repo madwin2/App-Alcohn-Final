@@ -265,7 +265,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         ...initialData.order,
       },
       values: {
-        depositValue: 10000,
+        depositValue: 20000,
         ...initialData.values,
       },
       shipping: {
@@ -344,7 +344,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         },
         values: {
           totalValue: 0,
-          depositValue: 10000,
+          depositValue: 20000,
         },
         shipping: {
           carrier: undefined,
@@ -1127,7 +1127,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                     },
                     values: {
                       totalValue: 0,
-                      depositValue: 10000,
+                      depositValue: 20000,
                     },
                     shipping: {
                       carrier: undefined,

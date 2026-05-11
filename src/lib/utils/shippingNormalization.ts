@@ -123,3 +123,18 @@ export const stripLeading549FromDigits = (digits: string): string => {
 export const normalizePhoneDigitsForEnvios = (value: string): string =>
   stripLeading549FromDigits(normalizePhoneDigits(value));
 
+/** Localidad estándar MiCorreo / Correo Argentino cuando la provincia es Capital Federal (CABA). */
+export const getCorreoCapitalFederalLocality = (): string =>
+  normalizeLocality('Ciudad Autónoma de Buenos Aires');
+
+/**
+ * Alinea localidad con el criterio de Correo: en Capital Federal siempre
+ * "Ciudad Autónoma de Buenos Aires" (da igual si en BD o en el texto venía CABA, barrio, etc.).
+ */
+export const normalizeLocalityForCorreo = (canonicalProvince: string, locality: string): string => {
+  if (canonicalProvince === 'Capital Federal') {
+    return getCorreoCapitalFederalLocality();
+  }
+  return normalizeLocality(locality);
+};
+
