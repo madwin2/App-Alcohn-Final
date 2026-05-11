@@ -26,6 +26,7 @@ import {
   catalogAddressOptions,
   catalogLocalityOptions,
   catalogProvinceOptions,
+  correoSucursalToCatalogRow,
   findPostalCodeInCatalog,
   mergeOption,
   type DireccionCatalogRow,
@@ -160,29 +161,65 @@ export default function EnviosPage() {
       try {
         const pageSize = 1000;
         const accumulated: DireccionCatalogRow[] = [];
-        let offset = 0;
-        while (!cancelled) {
-          const { data, error } = await supabase
-            .from('direcciones')
-            .select('provincia,localidad,domicilio,codigo_postal')
-            .or('activa.is.null,activa.eq.true')
-            .order('id', { ascending: true })
-            .range(offset, offset + pageSize - 1);
-          if (cancelled) return;
-          if (error) {
-            console.error(error);
-            toast({
-              title: 'No se cargó el catálogo de direcciones',
-              description: 'Los desplegables pueden quedar incompletos. Reintentá abriendo el modal.',
-              variant: 'destructive',
-            });
-            setAddressCatalogRows([]);
-            return;
+
+        const pushPaged = async (
+          table: 'correo_sucursales' | 'direcciones',
+          mapRow: (row: Record<string, unknown>) => DireccionCatalogRow,
+        ): Promise<{ ok: boolean; errorMessage?: string }> => {
+          let offset = 0;
+          while (!cancelled) {
+            const q =
+              table === 'correo_sucursales'
+                ? supabase
+                    .from('correo_sucursales')
+                    .select('provincia,localidad,calle,numero')
+                    .or('activa.is.null,activa.eq.true')
+                    .order('id', { ascending: true })
+                    .range(offset, offset + pageSize - 1)
+                : supabase
+                    .from('direcciones')
+                    .select('provincia,localidad,domicilio,codigo_postal')
+                    .or('activa.is.null,activa.eq.true')
+                    .order('id', { ascending: true })
+                    .range(offset, offset + pageSize - 1);
+            const { data, error } = await q;
+            if (cancelled) return { ok: true };
+            if (error) {
+              console.error(`Catálogo envíos (${table}):`, error);
+              return { ok: false, errorMessage: error.message };
+            }
+            const chunk = data ?? [];
+            for (const row of chunk) {
+              accumulated.push(mapRow(row as Record<string, unknown>));
+            }
+            if (chunk.length < pageSize) break;
+            offset += pageSize;
           }
-          const chunk = (data ?? []) as DireccionCatalogRow[];
-          accumulated.push(...chunk);
-          if (chunk.length < pageSize) break;
-          offset += pageSize;
+          return { ok: true };
+        };
+
+        const padron = await pushPaged('correo_sucursales', (row) =>
+          correoSucursalToCatalogRow({
+            provincia: String(row.provincia ?? ''),
+            localidad: String(row.localidad ?? ''),
+            calle: String(row.calle ?? ''),
+            numero: row.numero != null ? String(row.numero) : null,
+          }),
+        );
+        const direcciones = await pushPaged('direcciones', (row) => ({
+          provincia: String(row.provincia ?? ''),
+          localidad: String(row.localidad ?? ''),
+          domicilio: String(row.domicilio ?? ''),
+          codigo_postal: String(row.codigo_postal ?? ''),
+        }));
+
+        if (!cancelled && (!padron.ok || !direcciones.ok)) {
+          toast({
+            title: 'Catálogo incompleto',
+            description:
+              'Revisá la tabla `correo_sucursales` (padrón MiCorreo) y permisos RLS. Los desplegables usan ese padrón más las direcciones guardadas.',
+            variant: 'destructive',
+          });
         }
         if (!cancelled) setAddressCatalogRows(accumulated);
       } finally {
@@ -217,7 +254,7 @@ export default function EnviosPage() {
     return mergeOption(base, shippingForm.address);
   }, [addressCatalogRows, shippingForm.province, shippingForm.locality, shippingForm.address]);
 
-  /** Sin ninguna fila en `direcciones`, los desplegables no tienen opciones: se usan campos de texto libre. */
+  /** Padrón `correo_sucursales` + `direcciones` guardadas. */
   const hasAddressCatalog = addressCatalogRows.length > 0;
 
   const eligibleOrders = useMemo(() => {
@@ -1100,12 +1137,14 @@ export default function EnviosPage() {
                 />
               </div>
               {isLoadingAddressCatalog ? (
-                <p className="text-xs text-muted-foreground">Cargando direcciones de referencia desde la base…</p>
+                <p className="text-xs text-muted-foreground">
+                  Cargando padrón Correo (`correo_sucursales`) y direcciones guardadas…
+                </p>
               ) : null}
               {!isLoadingAddressCatalog && !hasAddressCatalog ? (
                 <p className="text-xs text-muted-foreground">
-                  No hay direcciones guardadas todavía: podés cargar provincia, localidad y domicilio a mano. Después
-                  de la primera carga, estos campos pasan a listas según lo que haya en la base.
+                  No hay filas en `correo_sucursales` (importá el CSV MiCorreo en Supabase) ni direcciones guardadas:
+                  podés completar a mano. Cuando exista el padrón, provincia, localidad y calle salen del listado Correo.
                 </p>
               ) : null}
               <div className="space-y-2">

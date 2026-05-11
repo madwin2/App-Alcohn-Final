@@ -14,6 +14,27 @@ export type DireccionCatalogRow = {
   codigo_postal: string;
 };
 
+/** Fila mínima de `correo_sucursales` (padrón MiCorreo en Supabase). */
+export type CorreoSucursalPadronRow = {
+  provincia: string;
+  localidad: string;
+  calle: string;
+  numero: string | null;
+};
+
+/** Convierte una sucursal del padrón Correo al formato unificado del catálogo de envíos. */
+export function correoSucursalToCatalogRow(r: CorreoSucursalPadronRow): DireccionCatalogRow {
+  const calle = (r.calle || '').trim();
+  const numero = (r.numero || '').trim();
+  const domicilio = [calle, numero].filter(Boolean).join(' ').trim() || calle;
+  return {
+    provincia: (r.provincia || '').trim(),
+    localidad: (r.localidad || '').trim(),
+    domicilio,
+    codigo_postal: '',
+  };
+}
+
 /**
  * Provincia canónica para agrupar en el catálogo: usa el texto, y si viene vacío
  * infiere Buenos Aires por código postal tipo B1234 (muy común en domicilios de PBA).
