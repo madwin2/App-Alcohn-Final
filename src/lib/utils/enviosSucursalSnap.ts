@@ -43,7 +43,7 @@ export function snapFormToCorreoSucursalCatalog(
   const provinces = catalogProvinceOptions(rows);
   const fpCanon = canonicalizeProvince(form.province) || form.province.trim();
 
-  let bestProvince =
+  const bestProvince =
     provinces.find((p) => p === fpCanon) ||
     provinces.find((p) => canonicalizeProvince(p) === fpCanon) ||
     provinces.find((p) => norm(p) === norm(form.province)) ||
@@ -78,9 +78,10 @@ export function snapFormToCorreoSucursalCatalog(
     findPostalCodeInCatalog(rows, bestProvince, locForAddr, bestAddress) || form.postalCode;
 
   return {
-    province: bestProvince || form.province,
-    locality: bestLocality || form.locality,
-    address: bestAddress || form.address,
+    // Importante: en Sucursal no queremos inventar valores que no existan en el padrón.
+    province: bestProvince,
+    locality: bestLocality,
+    address: bestAddress,
     postalCode: cp,
   };
 }

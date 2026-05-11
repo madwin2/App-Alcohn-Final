@@ -184,7 +184,7 @@ export default function EnviosPage() {
         while (!cancelled) {
           const { data, error } = await supabase
             .from('correo_sucursales')
-            .select('provincia,localidad,calle,numero')
+            .select('codigo,provincia,localidad,calle,numero')
             .or('activa.is.null,activa.eq.true')
             .order('id', { ascending: true })
             .range(offset, offset + pageSize - 1);
@@ -198,6 +198,7 @@ export default function EnviosPage() {
           for (const row of chunk) {
             accumulated.push(
               correoSucursalToCatalogRow({
+                codigo: String((row as any).codigo ?? ''),
                 provincia: String(row.provincia ?? ''),
                 localidad: String(row.localidad ?? ''),
                 calle: String(row.calle ?? ''),
@@ -249,6 +250,34 @@ export default function EnviosPage() {
     const base = catalogAddressOptions(addressCatalogRows, pCanon, loc);
     return mergeOption(base, shippingForm.address);
   }, [addressCatalogRows, shippingForm.province, shippingForm.locality, shippingForm.address]);
+
+  const sucursalAddressOptionsWithCode = useMemo(() => {
+    const pCanon = canonicalizeProvince(shippingForm.province) || shippingForm.province.trim();
+    if (!pCanon) return [];
+    const loc =
+      pCanon === 'Capital Federal'
+        ? getCorreoCapitalFederalLocality()
+        : shippingForm.locality.trim();
+    if (!loc) return [];
+
+    const items = addressCatalogRows
+      .filter((r) => Boolean(r.codigo_sucursal))
+      .filter((r) => (canonicalizeProvince(r.provincia) || r.provincia.trim()) === pCanon)
+      .filter((r) => normalizeLocality(r.localidad) === normalizeLocality(loc))
+      .map((r) => {
+        const domicilio = (r.domicilio || '').trim();
+        const codigo = (r.codigo_sucursal || '').trim();
+        return {
+          domicilio,
+          codigo,
+          value: `${domicilio}||${codigo}`,
+        };
+      })
+      .filter((x) => x.domicilio && x.codigo);
+
+    items.sort((a, b) => a.domicilio.localeCompare(b.domicilio, 'es'));
+    return items;
+  }, [addressCatalogRows, shippingForm.province, shippingForm.locality]);
 
   /** Padrón MiCorreo (`correo_sucursales`) para modo Sucursal. */
   const hasAddressCatalog = addressCatalogRows.length > 0;
@@ -1379,22 +1408,34 @@ export default function EnviosPage() {
                     <Label>Dirección de la sucursal</Label>
                     <Select
                       disabled={isLoadingAddressCatalog || !hasAddressCatalog}
-                      value={shippingForm.address.trim() ? shippingForm.address : SELECT_EMPTY_VALUE}
+                      value={
+                        shippingForm.address.trim()
+                          ? manualSucursalCode.trim()
+                            ? `${shippingForm.address.trim()}||${manualSucursalCode.trim()}`
+                            : shippingForm.address.trim()
+                          : SELECT_EMPTY_VALUE
+                      }
                       onValueChange={(newAddr) => {
                         if (newAddr === SELECT_EMPTY_VALUE) {
+                          setManualSucursalCode('');
                           setShippingForm((prev) => ({ ...prev, address: '', postalCode: '' }));
                           return;
                         }
+                        const parts = newAddr.split('||');
+                        const domicilio = (parts[0] || '').trim();
+                        const codigo = (parts[1] || '').trim();
+                        if (codigo) setManualSucursalCode(codigo);
+
                         setShippingForm((prev) => {
                           const pCanon = canonicalizeProvince(prev.province) || prev.province.trim();
                           const loc =
                             pCanon === 'Capital Federal'
                               ? getCorreoCapitalFederalLocality()
                               : prev.locality.trim();
-                          const cp = findPostalCodeInCatalog(addressCatalogRows, pCanon, loc, newAddr);
+                          const cp = findPostalCodeInCatalog(addressCatalogRows, pCanon, loc, domicilio);
                           return {
                             ...prev,
-                            address: newAddr,
+                            address: domicilio,
                             postalCode: cp ?? prev.postalCode,
                           };
                         });
@@ -1405,11 +1446,17 @@ export default function EnviosPage() {
                       </SelectTrigger>
                       <SelectContent className="max-h-[min(60vh,360px)]">
                         <SelectItem value={SELECT_EMPTY_VALUE}>(vacío)</SelectItem>
-                        {addressSelectOptions.map((addr) => (
-                          <SelectItem key={addr} value={addr} className="whitespace-normal">
-                            {addr}
-                          </SelectItem>
-                        ))}
+                        {sucursalAddressOptionsWithCode.length > 0
+                          ? sucursalAddressOptionsWithCode.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value} className="whitespace-normal">
+                                {opt.domicilio}
+                              </SelectItem>
+                            ))
+                          : addressSelectOptions.map((addr) => (
+                              <SelectItem key={addr} value={addr} className="whitespace-normal">
+                                {addr}
+                              </SelectItem>
+                            ))}
                       </SelectContent>
                     </Select>
                   </div>

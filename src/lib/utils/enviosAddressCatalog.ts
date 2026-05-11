@@ -12,10 +12,13 @@ export type DireccionCatalogRow = {
   localidad: string;
   domicilio: string;
   codigo_postal: string;
+  /** Solo para filas provenientes de `correo_sucursales` (padrón MiCorreo). */
+  codigo_sucursal?: string;
 };
 
 /** Fila mínima de `correo_sucursales` (padrón MiCorreo en Supabase). */
 export type CorreoSucursalPadronRow = {
+  codigo: string;
   provincia: string;
   localidad: string;
   calle: string;
@@ -25,9 +28,12 @@ export type CorreoSucursalPadronRow = {
 /** Convierte una sucursal del padrón Correo al formato unificado del catálogo de envíos. */
 export function correoSucursalToCatalogRow(r: CorreoSucursalPadronRow): DireccionCatalogRow {
   const calle = (r.calle || '').trim();
-  const numero = (r.numero || '').trim();
+  const numeroRaw = (r.numero || '').trim();
+  // En el padrón MiCorreo a veces viene "0" como placeholder: tratamos como sin número.
+  const numero = numeroRaw === '0' ? '' : numeroRaw;
   const domicilio = [calle, numero].filter(Boolean).join(' ').trim() || calle;
   return {
+    codigo_sucursal: (r.codigo || '').trim() || undefined,
     provincia: (r.provincia || '').trim(),
     localidad: (r.localidad || '').trim(),
     domicilio,
