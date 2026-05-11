@@ -20,6 +20,40 @@ async function urlToDataUrl(url) {
   return `data:${contentType};base64,${buffer.toString('base64')}`;
 }
 
+async function callOpenAiEdit({ apiKey, model, inputBuffer, mime }) {
+  const form = new FormData();
+  form.append('model', model);
+  form.append(
+    'prompt',
+    [
+      'Convert this logo image into a production-ready stamp source while preserving the exact original design concept and proportions.',
+      'Do NOT alter, redraw, reinterpret, add, remove, or stylize any element.',
+      'Output only one centered logo with transparent or pure white background, monochrome single ink, black logo, high contrast, crisp edges.',
+      'No shadows, no gradients, no textures, no extra text, no decorations.',
+    ].join(' '),
+  );
+  form.append('size', '1024x1024');
+  form.append('image', new Blob([inputBuffer], { type: mime || 'image/png' }), 'logo.png');
+
+  const response = await fetch(OPENAI_IMAGE_API_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: form,
+  });
+
+  const raw = await response.text();
+  let json = null;
+  try {
+    json = raw ? JSON.parse(raw) : null;
+  } catch {
+    json = null;
+  }
+
+  return { ok: response.ok, status: response.status, raw, json };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -40,47 +74,44 @@ export default async function handler(req, res) {
 
   try {
     const inputBuffer = Buffer.from(parsed.base64, 'base64');
-    const form = new FormData();
-    form.append('model', process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1');
-    form.append(
-      'prompt',
-      [
-        'Convert this logo image into a production-ready stamp source while preserving the exact original design concept and proportions.',
-        'Do NOT alter, redraw, reinterpret, add, remove, or stylize any element.',
-        'Output only one centered logo with transparent or pure white background, monochrome single ink, black logo, high contrast, crisp edges.',
-        'No shadows, no gradients, no textures, no extra text, no decorations.',
-      ].join(' '),
-    );
-    form.append('size', '1024x1024');
-    form.append('quality', 'high');
-    form.append('image', new Blob([inputBuffer], { type: parsed.mime || 'image/png' }), 'logo.png');
-
-    const response = await fetch(OPENAI_IMAGE_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: form,
+    const primaryModel = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
+    const tried = [primaryModel];
+    let attempt = await callOpenAiEdit({
+      apiKey,
+      model: primaryModel,
+      inputBuffer,
+      mime: parsed.mime,
     });
 
-    if (!response.ok) {
-      const details = await response.text();
+    if (!attempt.ok && primaryModel !== 'gpt-image-1') {
+      tried.push('gpt-image-1');
+      attempt = await callOpenAiEdit({
+        apiKey,
+        model: 'gpt-image-1',
+        inputBuffer,
+        mime: parsed.mime,
+      });
+    }
+
+    if (!attempt.ok) {
       res.status(502).json({
         error: 'OpenAI image edit failed',
-        details,
+        details: attempt.raw,
         hint: 'Revisá OPENAI_API_KEY, OPENAI_IMAGE_MODEL y acceso al modelo en tu cuenta OpenAI.',
+        triedModels: tried,
       });
       return;
     }
 
-    const data = await response.json();
+    const data = attempt.json;
     const first = data?.data?.[0] ?? null;
     const b64 = first?.b64_json;
     const imageUrl = first?.url;
     if (!b64 && !imageUrl) {
       res.status(422).json({
         error: 'OpenAI response missing image output',
-        details: JSON.stringify(data).slice(0, 3000),
+        details: JSON.stringify(data ?? {}).slice(0, 3000),
+        triedModels: tried,
       });
       return;
     }
@@ -89,7 +120,8 @@ export default async function handler(req, res) {
 
     res.status(200).json({
       optimizedDataUrl,
-      source: 'openai',
+      source: tried.length > 1 ? `openai:${tried[tried.length - 1]}` : `openai:${tried[0]}`,
+      triedModels: tried,
     });
   } catch (error) {
     res.status(500).json({
