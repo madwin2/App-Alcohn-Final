@@ -258,48 +258,191 @@ export async function optimizeLogoForMockup(file: File, designName: string): Pro
 }
 
 /**
- * Réplica del pipeline Sharp del ejemplo: greyscale → linear(1.35, -b) → brillo por material.
- * Ver `generateWithSharp` en `mockupGenerator.ts`.
+ * Máscara de tinta 0–1: ignora blancos del logo (evita rectángulo gris al multiply)
+ * y combina oscuridad + alpha para sellos negros o transparentes.
  */
-function buildStampLayerCanvas(
-  logoImage: HTMLImageElement,
-  drawW: number,
-  drawH: number,
-  material: MockupMaterial,
-): HTMLCanvasElement {
-  const stamp = document.createElement('canvas');
-  stamp.width = drawW;
-  stamp.height = drawH;
-  const sctx = stamp.getContext('2d', { willReadFrequently: true });
-  if (!sctx) throw new Error('No se pudo crear capa sello');
-
+function extractInkMask(logoImage: HTMLImageElement, drawW: number, drawH: number): Float32Array {
+  const mask = new Float32Array(drawW * drawH);
+  const c = document.createElement('canvas');
+  c.width = drawW;
+  c.height = drawH;
+  const sctx = c.getContext('2d', { willReadFrequently: true });
+  if (!sctx) throw new Error('No se pudo crear máscara');
   sctx.imageSmoothingEnabled = true;
   sctx.imageSmoothingQuality = 'high';
-  sctx.clearRect(0, 0, drawW, drawH);
   sctx.drawImage(logoImage, 0, 0, drawW, drawH);
-
-  const linearB = material === 'madera' ? 50 : 40;
-  const brightnessMul = material === 'madera' ? 0.55 : 0.65;
-
-  const frame = sctx.getImageData(0, 0, drawW, drawH);
-  const px = frame.data;
-  for (let i = 0; i < px.length; i += 4) {
-    const a = px[i + 3];
-    if (a < 4) continue;
-
-    const r = px[i];
-    const g = px[i + 1];
-    const b = px[i + 2];
+  const d = sctx.getImageData(0, 0, drawW, drawH).data;
+  for (let i = 0, p = 0; i < d.length; i += 4, p += 1) {
+    const r = d[i];
+    const g = d[i + 1];
+    const b = d[i + 2];
+    const a = d[i + 3];
+    if (a < 8) {
+      mask[p] = 0;
+      continue;
+    }
     const L = 0.299 * r + 0.587 * g + 0.114 * b;
-    let v = L * 1.35 - linearB;
-    v *= brightnessMul;
-    v = clamp(v, 0, 255);
-    px[i] = v;
-    px[i + 1] = v;
-    px[i + 2] = v;
+    if (L >= 247) {
+      mask[p] = 0;
+      continue;
+    }
+    const dark = (255 - L) / 255;
+    let ink = dark * (a / 255);
+    ink = Math.pow(Math.min(1, ink * 1.12), 0.78);
+    mask[p] = ink;
   }
-  sctx.putImageData(frame, 0, 0);
-  return stamp;
+  return boxBlurMask2D(mask, drawW, drawH, 1);
+}
+
+/** Blur ligero para bordes de prensa más orgánicos. */
+function boxBlurMask2D(src: Float32Array, w: number, h: number, r: number): Float32Array {
+  if (r <= 0) return src;
+  const pass = (input: Float32Array): Float32Array => {
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let sum = 0;
+        let cnt = 0;
+        for (let dx = -r; dx <= r; dx++) {
+          const xx = clamp(x + dx, 0, w - 1);
+          sum += input[y * w + xx];
+          cnt += 1;
+        }
+        out[y * w + x] = sum / cnt;
+      }
+    }
+    return out;
+  };
+  let hPass = pass(src);
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      let cnt = 0;
+      for (let dy = -r; dy <= r; dy++) {
+        const yy = clamp(y + dy, 0, h - 1);
+        sum += hPass[yy * w + x];
+        cnt += 1;
+      }
+      out[y * w + x] = sum / cnt;
+    }
+  }
+  return out;
+}
+
+/** Fondo completo: cuero una capa; madera base + madera-quemada combinada (overlay + multiply + soft-light). */
+async function renderBackgroundCanvas(material: MockupMaterial): Promise<HTMLCanvasElement> {
+  const c = document.createElement('canvas');
+  c.width = OUTPUT_WIDTH;
+  c.height = OUTPUT_HEIGHT;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('No se pudo crear lienzo de fondo');
+
+  await drawTexture(ctx, material);
+
+  if (material === 'madera') {
+    try {
+      const burn = await loadImage(MADERA_BURN_OVERLAY);
+      const scale = Math.max(OUTPUT_WIDTH / burn.naturalWidth, OUTPUT_HEIGHT / burn.naturalHeight);
+      const bw = Math.round(burn.naturalWidth * scale);
+      const bh = Math.round(burn.naturalHeight * scale);
+      const bl = Math.round((OUTPUT_WIDTH - bw) / 2);
+      const bt = Math.round((OUTPUT_HEIGHT - bh) / 2);
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.globalAlpha = 0.48;
+      ctx.drawImage(burn, bl, bt, bw, bh);
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = 0.38;
+      ctx.drawImage(burn, bl, bt, bw, bh);
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'soft-light';
+      ctx.globalAlpha = 0.22;
+      ctx.drawImage(burn, bl, bt, bw, bh);
+      ctx.restore();
+    } catch {
+      /* sin segunda textura */
+    }
+  }
+
+  return c;
+}
+
+/**
+ * Marca a presión sobre la textura: no es un multiply global; oscurece según tinta
+ * y deja ver el grano (acople local) + relieve suave en bordes de la máscara.
+ */
+function applyPressedInkToBackground(
+  data: Uint8ClampedArray,
+  mask: Float32Array,
+  drawW: number,
+  drawH: number,
+  left: number,
+  top: number,
+  material: MockupMaterial,
+): void {
+  const W = OUTPUT_WIDTH;
+  const H = OUTPUT_HEIGHT;
+  const pad = 32;
+  const x0 = clamp(left - pad, 0, W - 1);
+  const x1 = clamp(left + drawW + pad, 0, W - 1);
+  const y0 = clamp(top - pad, 0, H - 1);
+  const y1 = clamp(top + drawH + pad, 0, H - 1);
+
+  const pressStrength = material === 'cuero' ? 0.62 : 0.52;
+  const grainCoupling = material === 'cuero' ? 0.2 : 0.14;
+  const edgeRim = material === 'cuero' ? 28 : 20;
+  const innerSink = material === 'cuero' ? -14 : -10;
+
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const mx = x - left;
+      const my = y - top;
+      if (mx < 0 || my < 0 || mx >= drawW || my >= drawH) continue;
+
+      const ink = mask[my * drawW + mx];
+      if (ink < 0.003) continue;
+
+      const idx = (y * W + x) * 4;
+      let r = data[idx];
+      let g = data[idx + 1];
+      let b = data[idx + 2];
+
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      const grain = lum / 255;
+
+      let press = 1 - pressStrength * ink;
+      r *= press;
+      g *= press;
+      b *= press;
+
+      const grainBoost = 1 + grainCoupling * ink * (grain - 0.5) * 2;
+      r *= grainBoost;
+      g *= grainBoost;
+      b *= grainBoost;
+
+      const edge = 4 * ink * (1 - ink);
+      const rim = edge * edgeRim;
+      r += rim;
+      g += rim;
+      b += rim;
+
+      const sink = ink * ink * innerSink;
+      r += sink;
+      g += sink;
+      b += sink;
+
+      data[idx] = clamp(r, 0, 255);
+      data[idx + 1] = clamp(g, 0, 255);
+      data[idx + 2] = clamp(b, 0, 255);
+    }
+  }
 }
 
 const paintProceduralTexture = (ctx: CanvasRenderingContext2D, material: MockupMaterial) => {
@@ -346,40 +489,13 @@ const drawTexture = async (ctx: CanvasRenderingContext2D, material: MockupMateri
   paintProceduralTexture(ctx, material);
 };
 
-/** Textura quemada encima de la madera base, como relieve (muy bajo). */
-async function drawMaderaBurnOverlay(ctx: CanvasRenderingContext2D) {
-  if (ctx.canvas.width !== OUTPUT_WIDTH || ctx.canvas.height !== OUTPUT_HEIGHT) return;
-  try {
-    const burn = await loadImage(MADERA_BURN_OVERLAY);
-    const scale = Math.max(OUTPUT_WIDTH / burn.naturalWidth, OUTPUT_HEIGHT / burn.naturalHeight);
-    const drawW = Math.round(burn.naturalWidth * scale);
-    const drawH = Math.round(burn.naturalHeight * scale);
-    const left = Math.round((OUTPUT_WIDTH - drawW) / 2);
-    const top = Math.round((OUTPUT_HEIGHT - drawH) / 2);
-    ctx.save();
-    ctx.globalAlpha = 0.22;
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.drawImage(burn, left, top, drawW, drawH);
-    ctx.restore();
-  } catch {
-    // sin overlay si no hay archivo
-  }
-}
-
 export async function generateMockup(optimizedLogo: File, material: MockupMaterial): Promise<File> {
   const logoSrc = await fileToDataUrl(optimizedLogo);
   const logoImage = await loadImage(logoSrc);
 
-  const canvas = document.createElement('canvas');
-  canvas.width = OUTPUT_WIDTH;
-  canvas.height = OUTPUT_HEIGHT;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('No se pudo generar mockup');
-
-  await drawTexture(ctx, material);
-  if (material === 'madera') {
-    await drawMaderaBurnOverlay(ctx);
-  }
+  const bgCanvas = await renderBackgroundCanvas(material);
+  const ctx = bgCanvas.getContext('2d');
+  if (!ctx) throw new Error('No se pudo leer fondo');
 
   const targetLogoW = Math.round(OUTPUT_WIDTH * LOGO_SCALE);
   const maxH = Math.round(OUTPUT_HEIGHT * LOGO_SCALE);
@@ -389,14 +505,11 @@ export async function generateMockup(optimizedLogo: File, material: MockupMateri
   const left = Math.round((OUTPUT_WIDTH - drawW) / 2);
   const top = Math.round((OUTPUT_HEIGHT - drawH) / 2);
 
-  const stampLayer = buildStampLayerCanvas(logoImage, drawW, drawH, material);
+  const mask = extractInkMask(logoImage, drawW, drawH);
+  const imageData = ctx.getImageData(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+  applyPressedInkToBackground(imageData.data, mask, drawW, drawH, left, top, material);
+  ctx.putImageData(imageData, 0, 0);
 
-  ctx.save();
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.globalAlpha = 1;
-  ctx.drawImage(stampLayer, left, top);
-  ctx.restore();
-
-  const blob = await toBlob(canvas, 'image/jpeg', 0.92);
+  const blob = await toBlob(bgCanvas, 'image/jpeg', 0.92);
   return new File([blob], `mockup_${material}.jpg`, { type: 'image/jpeg' });
 }
