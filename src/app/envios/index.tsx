@@ -158,22 +158,33 @@ export default function EnviosPage() {
     setIsLoadingAddressCatalog(true);
     void (async () => {
       try {
-        const { data, error } = await supabase
-          .from('direcciones')
-          .select('provincia,localidad,domicilio,codigo_postal')
-          .or('activa.is.null,activa.eq.true');
-        if (cancelled) return;
-        if (error) {
-          console.error(error);
-          toast({
-            title: 'No se cargó el catálogo de direcciones',
-            description: 'Los desplegables pueden quedar incompletos. Reintentá abriendo el modal.',
-            variant: 'destructive',
-          });
-          setAddressCatalogRows([]);
-          return;
+        const pageSize = 1000;
+        const accumulated: DireccionCatalogRow[] = [];
+        let offset = 0;
+        while (!cancelled) {
+          const { data, error } = await supabase
+            .from('direcciones')
+            .select('provincia,localidad,domicilio,codigo_postal')
+            .or('activa.is.null,activa.eq.true')
+            .order('id', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (cancelled) return;
+          if (error) {
+            console.error(error);
+            toast({
+              title: 'No se cargó el catálogo de direcciones',
+              description: 'Los desplegables pueden quedar incompletos. Reintentá abriendo el modal.',
+              variant: 'destructive',
+            });
+            setAddressCatalogRows([]);
+            return;
+          }
+          const chunk = (data ?? []) as DireccionCatalogRow[];
+          accumulated.push(...chunk);
+          if (chunk.length < pageSize) break;
+          offset += pageSize;
         }
-        setAddressCatalogRows((data ?? []) as DireccionCatalogRow[]);
+        if (!cancelled) setAddressCatalogRows(accumulated);
       } finally {
         if (!cancelled) setIsLoadingAddressCatalog(false);
       }
