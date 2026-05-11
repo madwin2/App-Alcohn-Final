@@ -37,6 +37,7 @@ import {
   mergeOption,
   type DireccionCatalogRow,
 } from '@/lib/utils/enviosAddressCatalog';
+import { snapFormToCorreoSucursalCatalog } from '@/lib/utils/enviosSucursalSnap';
 import {
   canonicalizeProvince,
   getCorreoCapitalFederalLocality,
@@ -178,62 +179,41 @@ export default function EnviosPage() {
         const pageSize = 1000;
         const accumulated: DireccionCatalogRow[] = [];
 
-        const pushPaged = async (
-          table: 'correo_sucursales' | 'direcciones',
-          mapRow: (row: Record<string, unknown>) => DireccionCatalogRow,
-        ): Promise<{ ok: boolean; errorMessage?: string }> => {
-          let offset = 0;
-          while (!cancelled) {
-            const q =
-              table === 'correo_sucursales'
-                ? supabase
-                    .from('correo_sucursales')
-                    .select('provincia,localidad,calle,numero')
-                    .or('activa.is.null,activa.eq.true')
-                    .order('id', { ascending: true })
-                    .range(offset, offset + pageSize - 1)
-                : supabase
-                    .from('direcciones')
-                    .select('provincia,localidad,domicilio,codigo_postal')
-                    .or('activa.is.null,activa.eq.true')
-                    .order('id', { ascending: true })
-                    .range(offset, offset + pageSize - 1);
-            const { data, error } = await q;
-            if (cancelled) return { ok: true };
-            if (error) {
-              console.error(`Catálogo envíos (${table}):`, error);
-              return { ok: false, errorMessage: error.message };
-            }
-            const chunk = data ?? [];
-            for (const row of chunk) {
-              accumulated.push(mapRow(row as Record<string, unknown>));
-            }
-            if (chunk.length < pageSize) break;
-            offset += pageSize;
+        let offset = 0;
+        let padronOk = true;
+        while (!cancelled) {
+          const { data, error } = await supabase
+            .from('correo_sucursales')
+            .select('provincia,localidad,calle,numero')
+            .or('activa.is.null,activa.eq.true')
+            .order('id', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (cancelled) break;
+          if (error) {
+            console.error('Catálogo sucursales (correo_sucursales):', error);
+            padronOk = false;
+            break;
           }
-          return { ok: true };
-        };
+          const chunk = data ?? [];
+          for (const row of chunk) {
+            accumulated.push(
+              correoSucursalToCatalogRow({
+                provincia: String(row.provincia ?? ''),
+                localidad: String(row.localidad ?? ''),
+                calle: String(row.calle ?? ''),
+                numero: row.numero != null ? String(row.numero) : null,
+              }),
+            );
+          }
+          if (chunk.length < pageSize) break;
+          offset += pageSize;
+        }
 
-        const padron = await pushPaged('correo_sucursales', (row) =>
-          correoSucursalToCatalogRow({
-            provincia: String(row.provincia ?? ''),
-            localidad: String(row.localidad ?? ''),
-            calle: String(row.calle ?? ''),
-            numero: row.numero != null ? String(row.numero) : null,
-          }),
-        );
-        const direcciones = await pushPaged('direcciones', (row) => ({
-          provincia: String(row.provincia ?? ''),
-          localidad: String(row.localidad ?? ''),
-          domicilio: String(row.domicilio ?? ''),
-          codigo_postal: String(row.codigo_postal ?? ''),
-        }));
-
-        if (!cancelled && (!padron.ok || !direcciones.ok)) {
+        if (!cancelled && !padronOk) {
           toast({
             title: 'Catálogo incompleto',
             description:
-              'Revisá la tabla `correo_sucursales` (padrón MiCorreo) y permisos RLS. Los desplegables usan ese padrón más las direcciones guardadas.',
+              'Revisá la tabla `correo_sucursales` (padrón MiCorreo) y permisos RLS. Los desplegables de sucursal usan solo esa tabla.',
             variant: 'destructive',
           });
         }
@@ -270,7 +250,7 @@ export default function EnviosPage() {
     return mergeOption(base, shippingForm.address);
   }, [addressCatalogRows, shippingForm.province, shippingForm.locality, shippingForm.address]);
 
-  /** Padrón `correo_sucursales` + `direcciones` guardadas. */
+  /** Padrón MiCorreo (`correo_sucursales`) para modo Sucursal. */
   const hasAddressCatalog = addressCatalogRows.length > 0;
 
   const eligibleOrders = useMemo(() => {
@@ -647,21 +627,33 @@ export default function EnviosPage() {
       };
 
       const normalized = normalizeShippingFormData(parsedData);
-      setShippingForm((prev) =>
-        shippingTypeDraft === 'SUCURSAL'
-          ? {
-              ...normalized,
-              province: prev.province,
-              locality: prev.locality,
-              address: prev.address,
-              postalCode: prev.postalCode,
-            }
-          : normalized,
-      );
+      if (shippingTypeDraft === 'SUCURSAL' && addressCatalogRows.length > 0) {
+        const snapped = snapFormToCorreoSucursalCatalog(
+          {
+            province: normalized.province,
+            locality: normalized.locality,
+            address: normalized.address,
+            postalCode: normalized.postalCode,
+          },
+          addressCatalogRows,
+        );
+        setShippingForm({
+          ...normalized,
+          province: snapped.province,
+          locality: snapped.locality,
+          address: snapped.address,
+          postalCode: snapped.postalCode,
+        });
+      } else {
+        setShippingForm(normalized);
+      }
       setShowParseConfirmation(false);
       toast({
         title: 'Parseo IA listo',
-        description: 'Se interpretó con IA. Revisá antes de confirmar.',
+        description:
+          shippingTypeDraft === 'SUCURSAL' && addressCatalogRows.length > 0
+            ? 'Se interpretó y se ajustó a las opciones del padrón Correo cuando hubo coincidencia.'
+            : 'Se interpretó con IA. Revisá antes de confirmar.',
       });
     } catch (error) {
       toast({
