@@ -10,6 +10,16 @@ function parseDataUrl(input) {
   };
 }
 
+async function urlToDataUrl(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`No se pudo descargar imagen optimizada desde URL (${response.status})`);
+  }
+  const contentType = response.headers.get('content-type') || 'image/png';
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return `data:${contentType};base64,${buffer.toString('base64')}`;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -42,7 +52,7 @@ export default async function handler(req, res) {
       ].join(' '),
     );
     form.append('size', '1024x1024');
-    form.append('response_format', 'b64_json');
+    form.append('quality', 'high');
     form.append('image', new Blob([inputBuffer], { type: parsed.mime || 'image/png' }), 'logo.png');
 
     const response = await fetch(OPENAI_IMAGE_API_URL, {
@@ -55,19 +65,30 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const details = await response.text();
-      res.status(502).json({ error: 'OpenAI image edit failed', details });
+      res.status(502).json({
+        error: 'OpenAI image edit failed',
+        details,
+        hint: 'Revisá OPENAI_API_KEY, OPENAI_IMAGE_MODEL y acceso al modelo en tu cuenta OpenAI.',
+      });
       return;
     }
 
     const data = await response.json();
-    const b64 = data?.data?.[0]?.b64_json;
-    if (!b64) {
-      res.status(422).json({ error: 'OpenAI response missing b64_json' });
+    const first = data?.data?.[0] ?? null;
+    const b64 = first?.b64_json;
+    const imageUrl = first?.url;
+    if (!b64 && !imageUrl) {
+      res.status(422).json({
+        error: 'OpenAI response missing image output',
+        details: JSON.stringify(data).slice(0, 3000),
+      });
       return;
     }
 
+    const optimizedDataUrl = b64 ? `data:image/png;base64,${b64}` : await urlToDataUrl(imageUrl);
+
     res.status(200).json({
-      optimizedDataUrl: `data:image/png;base64,${b64}`,
+      optimizedDataUrl,
       source: 'openai',
     });
   } catch (error) {

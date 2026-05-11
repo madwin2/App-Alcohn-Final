@@ -209,7 +209,24 @@ export default function MockupsPage() {
           });
 
           if (!aiResponse.ok) {
-            throw new Error('Optimizador IA no disponible');
+            let reason = 'Optimizador IA no disponible';
+            try {
+              const err = (await aiResponse.json()) as {
+                error?: string;
+                details?: string;
+                message?: string;
+                hint?: string;
+              };
+              reason =
+                err?.hint ||
+                err?.message ||
+                err?.error ||
+                err?.details?.slice(0, 160) ||
+                `Error IA (${aiResponse.status})`;
+            } catch {
+              reason = `Error IA (${aiResponse.status})`;
+            }
+            throw new Error(reason);
           }
 
           const aiJson = (await aiResponse.json()) as { optimizedDataUrl?: string };
