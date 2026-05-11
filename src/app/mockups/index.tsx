@@ -208,30 +208,22 @@ export default function MockupsPage() {
             body: JSON.stringify({ imageDataUrl: inputDataUrl }),
           });
 
-          if (!aiResponse.ok) {
-            let reason = 'Optimizador IA no disponible';
-            try {
-              const err = (await aiResponse.json()) as {
-                error?: string;
-                details?: string;
-                message?: string;
-                hint?: string;
-              };
-              reason =
-                err?.hint ||
-                err?.message ||
-                err?.error ||
-                err?.details?.slice(0, 160) ||
-                `Error IA (${aiResponse.status})`;
-            } catch {
-              reason = `Error IA (${aiResponse.status})`;
-            }
-            throw new Error(reason);
-          }
-
-          const aiJson = (await aiResponse.json()) as { optimizedDataUrl?: string };
+          const aiJson = (await aiResponse.json()) as {
+            ok?: boolean;
+            optimizedDataUrl?: string | null;
+            error?: string;
+            details?: string;
+            message?: string;
+            hint?: string;
+          };
           if (!aiJson.optimizedDataUrl) {
-            throw new Error('Respuesta IA inválida');
+            const reason =
+              aiJson?.hint ||
+              aiJson?.message ||
+              aiJson?.error ||
+              aiJson?.details?.slice(0, 160) ||
+              (!aiResponse.ok ? `Error IA (${aiResponse.status})` : 'Respuesta IA inválida');
+            throw new Error(reason);
           }
 
           optimizedFile = await dataUrlToFile(

@@ -111,11 +111,14 @@ export default async function handler(req, res) {
     }
 
     if (!attempt.ok) {
-      res.status(502).json({
+      res.status(200).json({
+        ok: false,
         error: 'OpenAI image edit failed',
         details: attempt.raw,
         hint: 'Revisá OPENAI_API_KEY, OPENAI_IMAGE_MODEL, timeout y acceso al modelo en tu cuenta OpenAI.',
         triedModels: tried,
+        optimizedDataUrl: null,
+        source: 'openai-failed',
       });
       return;
     }
@@ -125,10 +128,13 @@ export default async function handler(req, res) {
     const b64 = first?.b64_json;
     const imageUrl = first?.url;
     if (!b64 && !imageUrl) {
-      res.status(422).json({
+      res.status(200).json({
+        ok: false,
         error: 'OpenAI response missing image output',
         details: JSON.stringify(data ?? {}).slice(0, 3000),
         triedModels: tried,
+        optimizedDataUrl: null,
+        source: 'openai-invalid-output',
       });
       return;
     }
@@ -136,6 +142,7 @@ export default async function handler(req, res) {
     const optimizedDataUrl = b64 ? `data:image/png;base64,${b64}` : await urlToDataUrl(imageUrl);
 
     res.status(200).json({
+      ok: true,
       optimizedDataUrl,
       source: tried.length > 1 ? `openai:${tried[tried.length - 1]}` : `openai:${tried[0]}`,
       triedModels: tried,
