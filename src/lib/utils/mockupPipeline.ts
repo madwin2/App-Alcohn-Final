@@ -1,5 +1,28 @@
 export type MockupMaterial = 'cuero' | 'madera';
 
+/** Elección en UI: una textura o ambas. */
+export type MockupMaterialChoice = 'cuero' | 'madera' | 'ambos';
+
+export function resolveMockupMaterials(choice: MockupMaterialChoice): MockupMaterial[] {
+  if (choice === 'ambos') return ['cuero', 'madera'];
+  return [choice];
+}
+
+export function materialChoiceFromCheckboxes(useCuero: boolean, useMadera: boolean): MockupMaterialChoice {
+  if (useCuero && !useMadera) return 'cuero';
+  if (!useCuero && useMadera) return 'madera';
+  return 'ambos';
+}
+
+export function getMeasuresForMaterialChoice(
+  choice: MockupMaterialChoice,
+): Array<{ material: MockupMaterial; measures: MockupMeasure[] }> {
+  return resolveMockupMaterials(choice).map((material) => ({
+    material,
+    measures: getMockupMeasures(material),
+  }));
+}
+
 export interface LogoValidationResult {
   hasTransparentBackground: boolean;
   hasWhiteBackground: boolean;
