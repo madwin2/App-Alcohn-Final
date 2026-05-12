@@ -1,6 +1,9 @@
 import { Order, FabricationState, Filters, SortState } from '../types/index';
 import { parseOrderDateLocal } from './format';
 
+/** Mínimo de caracteres para buscar en toda la base (evita renderizar miles de filas sin criterio). */
+export const MIN_SEARCH_CHARS_FULL_DATABASE = 4;
+
 // Función para obtener contadores por estado de fabricación
 export const getFabricationCounts = (orders: Order[]) => {
   const counts: Record<FabricationState, number> = {
@@ -32,12 +35,14 @@ export const filterOrders = (
 ): Order[] => {
   let result = orders;
 
+  const normalizedSearch = searchQuery.toLowerCase().trim().replace(/\s+/g, ' ');
+  if (searchAcrossDatabase && normalizedSearch.length < MIN_SEARCH_CHARS_FULL_DATABASE) {
+    return [];
+  }
+
   // Aplicar búsqueda por texto
   if (searchQuery) {
-    const searchLower = searchQuery.toLowerCase().trim().replace(/\s+/g, ' ');
-    if (searchAcrossDatabase && searchLower.length < 4) {
-      return [];
-    }
+    const searchLower = normalizedSearch;
     result = result.filter(order =>
       `${order.customer.firstName} ${order.customer.lastName}`
         .toLowerCase()

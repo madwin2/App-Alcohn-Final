@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StateChips } from './StateChips';
 import { useOrdersStore } from '@/lib/state/orders.store';
-import { getFabricationCounts, filterOrders } from '@/lib/utils/orders.utils';
+import { getFabricationCounts, filterOrders, MIN_SEARCH_CHARS_FULL_DATABASE } from '@/lib/utils/orders.utils';
 import { FabricationState, Order } from '@/lib/types/index';
 
 interface OrdersHeaderProps {
@@ -58,7 +58,11 @@ export function OrdersHeader({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder={searchAcrossDatabase ? 'Buscar en toda la base (mín. 4 letras)...' : 'Buscar pedidos...'}
+              placeholder={
+                searchAcrossDatabase
+                  ? `Buscar en toda la base (mín. ${MIN_SEARCH_CHARS_FULL_DATABASE} letras)...`
+                  : 'Buscar pedidos...'
+              }
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 w-64"
@@ -146,9 +150,11 @@ export function OrdersHeader({
           </Button>
         </div>
       </div>
-      {searchAcrossDatabase && searchQuery.trim().length > 0 && searchQuery.trim().length < 4 ? (
+      {searchAcrossDatabase &&
+      searchQuery.toLowerCase().trim().replace(/\s+/g, ' ').length <
+        MIN_SEARCH_CHARS_FULL_DATABASE ? (
         <p className="text-xs text-muted-foreground">
-          Para buscar en toda la base, ingresá al menos 4 caracteres.
+          Para buscar en toda la base, ingresá al menos {MIN_SEARCH_CHARS_FULL_DATABASE} caracteres.
         </p>
       ) : null}
 
