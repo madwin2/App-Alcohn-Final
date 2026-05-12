@@ -1,7 +1,13 @@
 // Enums
 export type FabricationState = 'SIN_HACER' | 'HACIENDO' | 'VERIFICAR' | 'HECHO' | 'REHACER' | 'RETOCAR' | 'PROGRAMADO';
 export type SaleState = 'SEÑADO' | 'FOTO_ENVIADA' | 'TRANSFERIDO' | 'DEUDOR';
-export type ShippingState = 'SIN_ENVIO' | 'HACER_ETIQUETA' | 'ETIQUETA_LISTA' | 'DESPACHADO' | 'SEGUIMIENTO_ENVIADO';
+export type ShippingState =
+  | 'SIN_ENVIO'
+  | 'HACER_ETIQUETA'
+  | 'ERROR_ETIQUETA'
+  | 'ETIQUETA_LISTA'
+  | 'DESPACHADO'
+  | 'SEGUIMIENTO_ENVIADO';
 export type ShippingCarrier = 'ANDREANI' | 'CORREO_ARGENTINO' | 'VIA_CARGO' | 'OTRO';
 export type ShippingServiceDest = 'DOMICILIO' | 'SUCURSAL';
 export type ShippingOption = 
@@ -33,6 +39,7 @@ export type ProgressStep =
   | 'FOTO'
   | 'TRANSFERIDO'
   | 'HACER_ETIQUETA'
+  | 'ERROR_ETIQUETA'
   | 'ETIQUETA_LISTA'
   | 'DESPACHADO'
   | 'SEGUIMIENTO_ENVIADO';

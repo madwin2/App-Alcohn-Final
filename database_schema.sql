@@ -70,7 +70,7 @@ CREATE TABLE ordenes (
     seguimiento VARCHAR(100),
     estado_orden VARCHAR(30) CHECK (estado_orden IN ('Señado', 'Hecho', 'Foto', 'Transferido', 'Hacer Etiqueta', 'Etiqueta Lista', 'Despachado', 'Seguimiento Enviado')),
     fecha DATE DEFAULT CURRENT_DATE,
-    estado_envio VARCHAR(30) CHECK (estado_envio IN ('Sin envio', 'Hacer Etiqueta', 'Etiqueta Lista', 'Despachado', 'Seguimiento Enviado')),
+    estado_envio VARCHAR(30) CHECK (estado_envio IN ('Sin envio', 'Hacer Etiqueta', 'Etiqueta Lista', 'Error de Etiqueta', 'Despachado', 'Seguimiento Enviado')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

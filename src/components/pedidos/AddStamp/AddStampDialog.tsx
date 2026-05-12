@@ -32,7 +32,7 @@ const addStampSchema = z.object({
   depositValueItem: z.number().min(0, 'La seña debe ser mayor o igual a 0'),
   fabricationState: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR', 'PROGRAMADO']),
   saleState: z.enum(['SEÑADO', 'FOTO_ENVIADA', 'TRANSFERIDO', 'DEUDOR']),
-  shippingState: z.enum(['SIN_ENVIO', 'HACER_ETIQUETA', 'ETIQUETA_LISTA', 'DESPACHADO', 'SEGUIMIENTO_ENVIADO']),
+  shippingState: z.enum(['SIN_ENVIO', 'HACER_ETIQUETA', 'ERROR_ETIQUETA', 'ETIQUETA_LISTA', 'DESPACHADO', 'SEGUIMIENTO_ENVIADO']),
   isPriority: z.boolean(),
 }).superRefine((data, ctx) => {
   if (data.itemType === 'SELLO' && !data.designName?.trim()) {
@@ -88,6 +88,7 @@ const saleOptions = [
 const shippingOptions = [
   { value: 'SIN_ENVIO', label: 'Sin Envío' },
   { value: 'HACER_ETIQUETA', label: 'Hacer Etiqueta' },
+  { value: 'ERROR_ETIQUETA', label: 'Error de Etiqueta' },
   { value: 'ETIQUETA_LISTA', label: 'Etiqueta Lista' },
   { value: 'DESPACHADO', label: 'Despachado' },
   { value: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado' },

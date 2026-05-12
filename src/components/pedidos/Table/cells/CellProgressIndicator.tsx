@@ -1,14 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-
-export type ProgressStep = 
-  | 'HECHO'
-  | 'FOTO'
-  | 'TRANSFERIDO'
-  | 'HACER_ETIQUETA'
-  | 'ETIQUETA_LISTA'
-  | 'DESPACHADO'
-  | 'SEGUIMIENTO_ENVIADO';
+import type { ProgressStep } from '@/lib/types/index';
 
 export interface ProgressIndicatorProps {
   currentStep: ProgressStep;
@@ -21,6 +13,7 @@ const PROGRESS_STEPS: { key: ProgressStep; label: string; shortLabel: string; ab
   { key: 'FOTO', label: 'Foto', shortLabel: 'Foto', abbreviation: 'F' },
   { key: 'TRANSFERIDO', label: 'Transferido', shortLabel: 'Transferido', abbreviation: 'T' },
   { key: 'HACER_ETIQUETA', label: 'Hacer Etiqueta', shortLabel: 'Etiqueta', abbreviation: 'HE' },
+  { key: 'ERROR_ETIQUETA', label: 'Error de Etiqueta', shortLabel: 'Error', abbreviation: 'EE' },
   { key: 'ETIQUETA_LISTA', label: 'Etiqueta Lista', shortLabel: 'Lista', abbreviation: 'EL' },
   { key: 'DESPACHADO', label: 'Despachado', shortLabel: 'Despachado', abbreviation: 'D' },
   { key: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado', shortLabel: 'Enviado', abbreviation: 'SE' }

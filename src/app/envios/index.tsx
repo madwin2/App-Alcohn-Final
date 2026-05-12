@@ -110,6 +110,7 @@ const SELECT_EMPTY_VALUE = '__empty__';
 const shippingStateOptions: ShippingState[] = [
   'SIN_ENVIO',
   'HACER_ETIQUETA',
+  'ERROR_ETIQUETA',
   'ETIQUETA_LISTA',
   'DESPACHADO',
   'SEGUIMIENTO_ENVIADO',
@@ -287,12 +288,13 @@ export default function EnviosPage() {
     return orders.filter(isEligibleForShipping);
   }, [orders]);
 
-  /** Incluibles al CSV: ya tienen dirección en BD y aún no están en Etiqueta lista */
+  /** Incluibles al CSV: dirección lista; se omiten Etiqueta lista y Error de etiqueta (reintento manual). */
   const csvOrders = useMemo(() => {
-    return eligibleOrders.filter(
-      (order) =>
-        Boolean(order.direccionId) && order.items[0]?.shippingState !== 'ETIQUETA_LISTA',
-    );
+    return eligibleOrders.filter((order) => {
+      if (!order.direccionId) return false;
+      const st = order.items[0]?.shippingState;
+      return st !== 'ETIQUETA_LISTA' && st !== 'ERROR_ETIQUETA';
+    });
   }, [eligibleOrders]);
 
   const ordersConDatosEnvio = useMemo(
@@ -476,12 +478,12 @@ export default function EnviosPage() {
       const skippedIdSet = new Set(skipped.map((entry) => entry.orderId));
       const skippedOrders = csvOrders.filter((order) => skippedIdSet.has(order.id));
 
-      // Si una orden no pudo generar etiqueta, queda marcada para rehacerla.
+      // Órdenes que no generaron fila válida: quedan en Error de Etiqueta (rojo) y se excluyen del próximo CSV hasta corregir.
       for (const order of skippedOrders) {
         await updateOrder(order.id, {
           items: order.items.map((item) => ({
             id: item.id,
-            shippingState: 'HACER_ETIQUETA',
+            shippingState: 'ERROR_ETIQUETA',
           })) as any,
         });
       }
@@ -494,7 +496,7 @@ export default function EnviosPage() {
           : 'No hay filas exportables (revisar provincia, calle, sucursal o padrón CSV en el deploy).';
         toast({
           title: 'No se pudo generar el CSV',
-          description: `${primerMotivo}${skipped.length > 1 ? ` (+${skipped.length - 1} más en el listado de abajo)` : ''}`,
+          description: `${primerMotivo}${skipped.length > 1 ? ` (+${skipped.length - 1} más en el listado de abajo)` : ''} Las órdenes con fallo quedaron en Error de Etiqueta.`,
           variant: 'destructive',
         });
         return;
@@ -529,7 +531,7 @@ export default function EnviosPage() {
         title: 'CSV generado',
         description:
           skipped.length > 0
-            ? `Se exportaron ${exportedOrders.length} órdenes. ${skipped.length} quedaron afuera (ver detalle abajo).`
+            ? `Se exportaron ${exportedOrders.length} órdenes. ${skipped.length} con fallo quedaron en Error de Etiqueta (no se incluirán en el próximo CSV hasta que cambies el estado).`
             : `Se exportaron ${exportedOrders.length} órdenes y se marcaron como Etiqueta Lista.`,
       });
     } catch (generateError) {

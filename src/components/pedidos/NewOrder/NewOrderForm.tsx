@@ -37,7 +37,7 @@ const newOrderSchema = z.object({
   states: z.object({
     fabrication: z.enum(['SIN_HACER', 'HACIENDO', 'VERIFICAR', 'HECHO', 'REHACER', 'RETOCAR']),
     sale: z.enum(['SEÑADO', 'FOTO_ENVIADA', 'TRANSFERIDO', 'DEUDOR']),
-    shipping: z.enum(['SIN_ENVIO', 'HACER_ETIQUETA', 'ETIQUETA_LISTA', 'DESPACHADO', 'SEGUIMIENTO_ENVIADO']),
+    shipping: z.enum(['SIN_ENVIO', 'HACER_ETIQUETA', 'ERROR_ETIQUETA', 'ETIQUETA_LISTA', 'DESPACHADO', 'SEGUIMIENTO_ENVIADO']),
     isPriority: z.boolean(),
   }),
 });
@@ -100,6 +100,7 @@ const saleOptions = [
 const shippingOptions = [
   { value: 'SIN_ENVIO', label: 'Sin Envío' },
   { value: 'HACER_ETIQUETA', label: 'Hacer Etiqueta' },
+  { value: 'ERROR_ETIQUETA', label: 'Error de Etiqueta' },
   { value: 'ETIQUETA_LISTA', label: 'Etiqueta Lista' },
   { value: 'DESPACHADO', label: 'Despachado' },
   { value: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado' },

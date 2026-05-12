@@ -158,6 +158,7 @@ const saleOptions = [
 const shippingOptions = [
   { value: 'SIN_ENVIO', label: 'Sin Envío' },
   { value: 'HACER_ETIQUETA', label: 'Hacer Etiqueta' },
+  { value: 'ERROR_ETIQUETA', label: 'Error de Etiqueta' },
   { value: 'ETIQUETA_LISTA', label: 'Etiqueta Lista' },
   { value: 'DESPACHADO', label: 'Despachado' },
   { value: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado' },

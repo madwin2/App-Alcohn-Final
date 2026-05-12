@@ -52,7 +52,14 @@ export interface Database {
           seguimiento: string | null;
           estado_orden: 'Señado' | 'Hecho' | 'Foto' | 'Transferido' | 'Hacer Etiqueta' | 'Etiqueta Lista' | 'Despachado' | 'Seguimiento Enviado' | null;
           fecha: string | null;
-          estado_envio: 'Sin envio' | 'Hacer Etiqueta' | 'Etiqueta Lista' | 'Despachado' | 'Seguimiento Enviado' | null;
+          estado_envio:
+            | 'Sin envio'
+            | 'Hacer Etiqueta'
+            | 'Etiqueta Lista'
+            | 'Error de Etiqueta'
+            | 'Despachado'
+            | 'Seguimiento Enviado'
+            | null;
           taken_by: string | null;
           created_at: string | null;
           updated_at: string | null;

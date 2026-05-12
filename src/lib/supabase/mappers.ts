@@ -59,6 +59,7 @@ const mapShippingState = (estado: string | null): ShippingState => {
   const mapping: Record<string, ShippingState> = {
     'Sin envio': 'SIN_ENVIO',
     'Hacer Etiqueta': 'HACER_ETIQUETA',
+    'Error de Etiqueta': 'ERROR_ETIQUETA',
     'Etiqueta Lista': 'ETIQUETA_LISTA',
     'Despachado': 'DESPACHADO',
     'Seguimiento Enviado': 'SEGUIMIENTO_ENVIADO',
@@ -70,6 +71,7 @@ export const mapShippingStateToDB = (estado: ShippingState): string => {
   const mapping: Record<ShippingState, string> = {
     'SIN_ENVIO': 'Sin envio',
     'HACER_ETIQUETA': 'Hacer Etiqueta',
+    'ERROR_ETIQUETA': 'Error de Etiqueta',
     'ETIQUETA_LISTA': 'Etiqueta Lista',
     'DESPACHADO': 'Despachado',
     'SEGUIMIENTO_ENVIADO': 'Seguimiento Enviado',
@@ -177,6 +179,7 @@ const mapProgressStep = (estadoOrden: string | null, estadoEnvio: string | null)
   if (estadoEnvio === 'Seguimiento Enviado') return 'SEGUIMIENTO_ENVIADO';
   if (estadoEnvio === 'Despachado') return 'DESPACHADO';
   if (estadoEnvio === 'Etiqueta Lista') return 'ETIQUETA_LISTA';
+  if (estadoEnvio === 'Error de Etiqueta') return 'ERROR_ETIQUETA';
   if (estadoEnvio === 'Hacer Etiqueta') return 'HACER_ETIQUETA';
   if (estadoOrden === 'Transferido') return 'TRANSFERIDO';
   if (estadoOrden === 'Foto') return 'FOTO';
@@ -365,7 +368,15 @@ export const mapOrderToOrden = (
   tipo_envio: order.shipping?.service ? mapShippingServiceToDB(order.shipping.service) as 'Domicilio' | 'Sucursal' | 'Retiro' : null,
   seguimiento: order.shipping?.trackingNumber || null,
   estado_orden: order.saleStateOrder ? mapSaleStateToDB(order.saleStateOrder) as 'Señado' | 'Hecho' | 'Foto' | 'Transferido' | 'Hacer Etiqueta' | 'Etiqueta Lista' | 'Despachado' | 'Seguimiento Enviado' : null,
-  estado_envio: order.items?.[0]?.shippingState ? mapShippingStateToDB(order.items[0].shippingState) as 'Sin envio' | 'Hacer Etiqueta' | 'Etiqueta Lista' | 'Despachado' | 'Seguimiento Enviado' : null,
+  estado_envio: order.items?.[0]?.shippingState
+    ? (mapShippingStateToDB(order.items[0].shippingState) as
+        | 'Sin envio'
+        | 'Hacer Etiqueta'
+        | 'Etiqueta Lista'
+        | 'Error de Etiqueta'
+        | 'Despachado'
+        | 'Seguimiento Enviado')
+    : null,
   fecha: order.orderDate ? order.orderDate.split('T')[0] : new Date().toISOString().split('T')[0],
 });
 

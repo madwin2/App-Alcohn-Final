@@ -11,6 +11,7 @@ interface CellEnvioEstadoProps {
 const shippingLabels: Record<ShippingState, string> = {
   'SIN_ENVIO': 'Sin Envío',
   'HACER_ETIQUETA': 'Hacer Etiqueta',
+  'ERROR_ETIQUETA': 'Error de Etiqueta',
   'ETIQUETA_LISTA': 'Etiqueta Lista',
   'DESPACHADO': 'D',
   'SEGUIMIENTO_ENVIADO': 'Seguimiento Enviado'

@@ -189,6 +189,8 @@ export const getShippingStateColor = (state: string): string => {
       return 'bg-muted/30 text-muted-foreground border-border/40'; // Estilo oscuro como "Sin Hacer"
     case 'HACER_ETIQUETA':
       return 'bg-muted/30 text-muted-foreground border-border/40';
+    case 'ERROR_ETIQUETA':
+      return 'bg-red-600/15 text-red-700 border-red-500/50';
     case 'ETIQUETA_LISTA':
       return 'bg-muted/30 text-muted-foreground border-border/40';
     case 'DESPACHADO':
@@ -265,6 +267,7 @@ export const getShippingLabel = (state: string): string => {
   const labels: Record<string, string> = {
     'SIN_ENVIO': 'Sin Envío',
     'HACER_ETIQUETA': 'Hacer Et.',
+    'ERROR_ETIQUETA': 'Error Etq.',
     'ETIQUETA_LISTA': 'Et. Lista',
     'DESPACHADO': 'Desp.',
     'SEGUIMIENTO_ENVIADO': 'Seg. Env.'
@@ -329,6 +332,8 @@ export const getShippingChipVisual = (state: string): ChipVisual => {
       return buildVisual('55,65,81', '17,24,39', '107,114,128', true); // Oscuro
     case 'HACER_ETIQUETA':
       return buildVisual('249,115,22', '245,158,11', '249,115,22'); // Naranja
+    case 'ERROR_ETIQUETA':
+      return buildVisual('239,68,68', '220,38,38', '239,68,68'); // Rojo (fallo CSV / datos Correo)
     case 'ETIQUETA_LISTA':
       return buildVisual('234,179,8', '202,138,4', '234,179,8'); // Amarillo
     case 'DESPACHADO':
