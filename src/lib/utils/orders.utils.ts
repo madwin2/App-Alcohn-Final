@@ -36,9 +36,8 @@ export const filterOrders = (
   let result = orders;
 
   const normalizedSearch = searchQuery.toLowerCase().trim().replace(/\s+/g, ' ');
-  if (searchAcrossDatabase && normalizedSearch.length < MIN_SEARCH_CHARS_FULL_DATABASE) {
-    return [];
-  }
+  const fullDbSearchActive =
+    searchAcrossDatabase && normalizedSearch.length >= MIN_SEARCH_CHARS_FULL_DATABASE;
 
   // Aplicar búsqueda por texto
   if (searchQuery) {
@@ -55,8 +54,8 @@ export const filterOrders = (
     );
   }
 
-  // Aplicar filtros del store
-  if (!searchAcrossDatabase && (filters.dateRange?.from || filters.dateRange?.to)) {
+  // Aplicar filtros del store (se ignoran solo cuando la búsqueda en toda la base ya está activa)
+  if (!fullDbSearchActive && (filters.dateRange?.from || filters.dateRange?.to)) {
     const fromStr = filters.dateRange?.from;
     const toStr = filters.dateRange?.to;
     const fromDate = fromStr ? new Date(fromStr + 'T00:00:00') : null;
@@ -74,32 +73,32 @@ export const filterOrders = (
     }
   }
 
-  if (!searchAcrossDatabase && filters.fabrication && filters.fabrication.length > 0) {
+  if (!fullDbSearchActive && filters.fabrication && filters.fabrication.length > 0) {
     result = result.filter(order =>
       order.items.some(item => filters.fabrication!.includes(item.fabricationState))
     );
   }
 
-  if (!searchAcrossDatabase && filters.sale && filters.sale.length > 0) {
+  if (!fullDbSearchActive && filters.sale && filters.sale.length > 0) {
     result = result.filter(order =>
       order.items.some(item => filters.sale!.includes(item.saleState)) ||
       (order.saleStateOrder && filters.sale!.includes(order.saleStateOrder))
     );
   }
 
-  if (!searchAcrossDatabase && filters.shipping && filters.shipping.length > 0) {
+  if (!fullDbSearchActive && filters.shipping && filters.shipping.length > 0) {
     result = result.filter(order =>
       order.items.some(item => filters.shipping!.includes(item.shippingState))
     );
   }
 
-  if (!searchAcrossDatabase && filters.types && filters.types.length > 0) {
+  if (!fullDbSearchActive && filters.types && filters.types.length > 0) {
     result = result.filter(order =>
       order.items.some(item => filters.types!.includes(item.stampType))
     );
   }
 
-  if (!searchAcrossDatabase && filters.channels && filters.channels.length > 0) {
+  if (!fullDbSearchActive && filters.channels && filters.channels.length > 0) {
     result = result.filter(order =>
       order.items.some(item => {
         const channel = item.contact.channel;
@@ -108,7 +107,7 @@ export const filterOrders = (
     );
   }
 
-  if (!searchAcrossDatabase && filters.uploaders && filters.uploaders.length > 0) {
+  if (!fullDbSearchActive && filters.uploaders && filters.uploaders.length > 0) {
     result = result.filter(order => {
       const uploaderName = order.takenBy?.name;
       return uploaderName && filters.uploaders!.includes(uploaderName);

@@ -36,7 +36,9 @@ export function OrdersHeader({
   const filteredOrders = useMemo(() => {
     return filterOrders(orders, searchQuery, filters, sort, searchAcrossDatabase);
   }, [orders, searchQuery, filters, sort, searchAcrossDatabase]);
-  
+
+  const normalizedSearchKey = searchQuery.toLowerCase().trim().replace(/\s+/g, ' ');
+
   const activeOrdersCount = filteredOrders.length;
   const counts = getFabricationCounts(filteredOrders);
 
@@ -74,7 +76,7 @@ export function OrdersHeader({
             size="sm"
             onClick={() => setSearchAcrossDatabase(!searchAcrossDatabase)}
             className="gap-2"
-            title="Buscar en toda la base ignorando filtros"
+            title="Con 4+ caracteres en el buscador: búsqueda en toda la base sin filtros. Con menos: misma vista que con filtros."
           >
             <Database className="h-4 w-4" />
             Toda la base
@@ -151,10 +153,11 @@ export function OrdersHeader({
         </div>
       </div>
       {searchAcrossDatabase &&
-      searchQuery.toLowerCase().trim().replace(/\s+/g, ' ').length <
-        MIN_SEARCH_CHARS_FULL_DATABASE ? (
+      normalizedSearchKey.length > 0 &&
+      normalizedSearchKey.length < MIN_SEARCH_CHARS_FULL_DATABASE ? (
         <p className="text-xs text-muted-foreground">
-          Para buscar en toda la base, ingresá al menos {MIN_SEARCH_CHARS_FULL_DATABASE} caracteres.
+          Con menos de {MIN_SEARCH_CHARS_FULL_DATABASE} caracteres seguís viendo la vista con filtros;
+          escribí al menos {MIN_SEARCH_CHARS_FULL_DATABASE} para buscar en toda la base (sin filtros).
         </p>
       ) : null}
 
