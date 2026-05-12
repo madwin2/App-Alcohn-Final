@@ -6,7 +6,8 @@
 
 const OUTPUT_WIDTH = 1400;
 const OUTPUT_HEIGHT = 1000;
-const LOGO_SCALE = 0.55;
+/** Baseline 0.55 + 15%: el sello ocupa más superficie en madera y cuero. */
+const LOGO_SCALE = 0.55 * 1.15;
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -397,17 +398,16 @@ function applyColorGrade(data: Uint8ClampedArray, warmth: number): void {
 }
 
 /**
- * Nitidez suave (unsharp) solo para mockup en cuero: compensa el suavizado del emboss y el DOF global
- * sin generar halos fuertes.
+ * Unsharp final (cuero y madera): compensa emboss/DOF y el JPEG sin halos duros.
  */
-export function applyCueroMockupSharpening(
+export function applyMockupFinalSharpening(
   data: Uint8ClampedArray,
   width: number,
   height: number,
   opts?: { amount?: number; blurSigma?: number },
 ): void {
-  const amount = opts?.amount ?? 0.24;
-  const blurSigma = opts?.blurSigma ?? 0.9;
+  const amount = opts?.amount ?? 0.36;
+  const blurSigma = opts?.blurSigma ?? 0.72;
   const blur = gaussianBlurRgb(data, width, height, blurSigma);
   for (let i = 0; i < data.length; i += 4) {
     data[i] = clamp(data[i] + amount * (data[i] - blur[i]), 0, 255);
@@ -426,7 +426,7 @@ export function applyGlobalPostEffectsLikePython(
   const strength = opts?.perspectiveStrength ?? 0.035;
   const warped = applyPerspectiveToImageData(d, w, h, strength);
   imageData.data.set(warped);
-  applyDepthOfField(imageData.data, w, h, opts?.dofBlur ?? 1.8);
+  applyDepthOfField(imageData.data, w, h, opts?.dofBlur ?? 1.22);
   applyVignette(imageData.data, w, h, opts?.vignetteStrength ?? 0.25);
   applyColorGrade(imageData.data, opts?.warmth ?? 1.06);
 }

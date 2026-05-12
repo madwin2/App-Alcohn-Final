@@ -53,7 +53,8 @@ TEXTURES_DIRS = [d for d in (_LOCAL_TEXTURES, _REPO_TEXTURES) if os.path.isdir(d
 OUTPUT_WIDTH = 1400
 OUTPUT_HEIGHT = 1000
 
-LOGO_SCALE = 0.55
+# Baseline 0.55 + 15% (más superficie del sello en el mockup)
+LOGO_SCALE = 0.55 * 1.15
 
 # Materiales que usan efecto quemado
 BURN_MATERIALS = ('madera', 'carton')
@@ -643,7 +644,7 @@ def generate_mockup(
 
     # 6. DOF suave
     if dof:
-        result = apply_depth_of_field(result, blur_strength=1.8)
+        result = apply_depth_of_field(result, blur_strength=1.22)
         print("[mockup] DOF aplicado")
 
     # 7. Viñeta

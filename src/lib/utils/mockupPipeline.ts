@@ -1,6 +1,6 @@
 import {
   applyCueroEmbossPythonLike,
-  applyCueroMockupSharpening,
+  applyMockupFinalSharpening,
   applyGlobalPostEffectsLikePython,
   applyMaderaBurnFallbackTint,
   applyMaderaBurnPythonLike,
@@ -593,11 +593,9 @@ export async function generateMockup(optimizedLogo: File, material: MockupMateri
   }
 
   applyGlobalPostEffectsLikePython(imageData);
-  if (material === 'cuero') {
-    applyCueroMockupSharpening(imageData.data, imageData.width, imageData.height);
-  }
+  applyMockupFinalSharpening(imageData.data, imageData.width, imageData.height);
   ctx.putImageData(imageData, 0, 0);
 
-  const blob = await toBlob(bgCanvas, 'image/jpeg', 0.92);
+  const blob = await toBlob(bgCanvas, 'image/jpeg', 0.94);
   return new File([blob], `mockup_${material}.jpg`, { type: 'image/jpeg' });
 }
