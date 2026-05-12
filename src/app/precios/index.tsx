@@ -16,6 +16,7 @@ import {
   persistPreciosFormState,
   type PreciosFormState,
 } from '@/lib/supabase/services/preciosPro.service';
+import { formatSupabaseError } from '@/lib/supabase/formatSupabaseError';
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
 
@@ -65,7 +66,7 @@ export default function PreciosPage() {
         }
       } catch (e: unknown) {
         if (cancelled) return;
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = formatSupabaseError(e);
         toast({
           title: 'No se pudieron cargar los precios',
           description: msg,
@@ -89,7 +90,7 @@ export default function PreciosPage() {
       setDirty(false);
       setLastSavedAt(new Date().toISOString());
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = formatSupabaseError(e);
       toast({
         title: 'Error al guardar',
         description: msg,
