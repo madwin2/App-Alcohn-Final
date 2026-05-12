@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase/client';
 import { uploadFile } from '@/lib/supabase/services/storage.service';
 import {
   insertMockupSolicitud,
+  notifyMockupsReadyWhatsApp,
   updateMockupSolicitud,
   type MockupSolicitudRow,
 } from '@/lib/supabase/services/mockupSolicitudes.service';
@@ -658,7 +659,25 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setActiveRow(updated);
       setUiStep(3);
       void onHistoryRefresh();
-      toast({ title: 'Mockup listo', description: 'Archivos guardados en la base y en Storage.' });
+
+      let desc = 'Archivos guardados en la base y en Storage.';
+      const wa = (updated.whatsapp ?? '').trim();
+      if (wa) {
+        const notify = await notifyMockupsReadyWhatsApp({
+          whatsapp: wa,
+          nombre: updated.nombre_muestra?.trim() || updated.nombre_slug || 'Cliente',
+          solicitudId: updated.id,
+          mockupCueroUrl: updated.mockup_cuero_url ?? null,
+          mockupMaderaUrl: updated.mockup_madera_url ?? null,
+        });
+        if (notify.ok) {
+          desc += ' Te avisamos al cliente por WhatsApp con las imágenes.';
+        } else if (notify.error) {
+          desc += ` No se pudo notificar por WhatsApp: ${notify.error}`;
+        }
+      }
+
+      toast({ title: 'Mockup listo', description: desc });
     } catch (error) {
       await updateMockupSolicitud(activeRow.id, {
         estado: 'error',
