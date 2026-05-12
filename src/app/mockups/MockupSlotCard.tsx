@@ -729,12 +729,12 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
   return (
     <Card
-      className={`flex h-full min-h-[420px] flex-col overflow-hidden border-border/80 shadow-sm transition-shadow ${
+      className={`flex h-full min-h-[420px] w-full min-w-0 flex-col overflow-hidden border-border/80 shadow-sm transition-shadow ${
         isPasteTarget ? 'ring-2 ring-primary/35 ring-offset-2 ring-offset-background' : ''
       }`}
       data-mockup-slot={slotIndex}
     >
-      <CardHeader className="space-y-2 border-b bg-muted/30 pb-3 pt-4">
+      <CardHeader className="min-w-0 space-y-2 border-b bg-muted/30 pb-3 pt-4">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-base font-semibold leading-tight">{title}</CardTitle>
           {activeRow?.estado ? (
@@ -745,7 +745,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
         </div>
         {stepper}
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+      <CardContent className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-3 overflow-y-auto p-4 [scrollbar-gutter:stable]">
         {uiStep === 1 && (
           <>
             <div className="space-y-2">

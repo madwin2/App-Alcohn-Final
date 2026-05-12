@@ -75,13 +75,13 @@ export default function MockupsPage() {
         </div>
 
         <div
-          className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 auto-rows-fr"
+          className="grid w-full auto-rows-fr gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
           onMouseLeave={() => setHoveredSlot(null)}
         >
           {SLOT_TITLES.map((title, i) => (
             <div
               key={title}
-              className="min-h-0 flex"
+              className="flex min-h-0 min-w-0 w-full"
               onMouseEnter={() => setHoveredSlot(i)}
             >
               <MockupSlotCard
