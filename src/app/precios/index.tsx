@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -13,6 +12,7 @@ import { etiquetaMedidaFila } from '@/lib/precios/preciosDims';
 import type { SelloGrupoCodigo } from '@/lib/precios/resolverPrecioSello';
 import {
   fetchPreciosFormState,
+  fetchPreciosFormStateReadOnly,
   persistPreciosFormState,
   type PreciosFormState,
 } from '@/lib/supabase/services/preciosPro.service';
@@ -41,18 +41,28 @@ export default function PreciosPage() {
   const stateRef = useRef<PreciosFormState | null>(null);
   stateRef.current = state;
 
-  const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
+  const canEdit = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
   useEffect(() => {
-    if (authLoading || !isAllowed || !user?.id) return;
+    if (authLoading || !user?.id) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const data = await fetchPreciosFormState(user.id);
+        const data = canEdit ? await fetchPreciosFormState(user.id) : await fetchPreciosFormStateReadOnly();
         if (cancelled) return;
-        setState(data);
-        setDirty(false);
+        if (!data) {
+          toast({
+            title: 'No hay catálogo de precios',
+            description:
+              'No se encontraron datos o no tenés permiso de lectura. Verificá la migración de lectura del equipo en Supabase.',
+            variant: 'destructive',
+          });
+          setState(null);
+        } else {
+          setState(data);
+          setDirty(false);
+        }
       } catch (e: unknown) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
@@ -69,10 +79,10 @@ export default function PreciosPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, isAllowed, user?.id, toast]);
+  }, [authLoading, user?.id, canEdit, toast]);
 
   const persist = useCallback(async () => {
-    if (!isAllowed || !user?.id || !stateRef.current) return;
+    if (!canEdit || !user?.id || !stateRef.current) return;
     setSaving(true);
     try {
       await persistPreciosFormState(user.id, stateRef.current);
@@ -88,18 +98,18 @@ export default function PreciosPage() {
     } finally {
       setSaving(false);
     }
-  }, [isAllowed, user?.id, toast]);
+  }, [canEdit, user?.id, toast]);
 
   useEffect(() => {
-    if (!dirty || !isAllowed || !user?.id || loading || !state) return;
+    if (!dirty || !canEdit || !user?.id || loading || !state) return;
     const t = window.setTimeout(() => {
       void persist();
     }, 1200);
     return () => window.clearTimeout(t);
-  }, [state, dirty, isAllowed, user?.id, loading, persist]);
+  }, [state, dirty, canEdit, user?.id, loading, persist]);
 
   useEffect(() => {
-    if (!dirty || !isAllowed || !user?.id) return;
+    if (!dirty || !canEdit || !user?.id) return;
     const flush = () => {
       void persist();
     };
@@ -112,9 +122,10 @@ export default function PreciosPage() {
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('pagehide', flush);
     };
-  }, [dirty, isAllowed, user?.id, persist]);
+  }, [dirty, canEdit, user?.id, persist]);
 
   const patchGrupo = (codigo: SelloGrupoCodigo, precioTransferencia: number) => {
+    if (!canEdit) return;
     setState((s) => {
       if (!s) return s;
       return {
@@ -128,6 +139,7 @@ export default function PreciosPage() {
   };
 
   const patchAccesorio = (key: keyof PreciosFormState['accesorios'], value: number) => {
+    if (!canEdit) return;
     setState((s) => {
       if (!s) return s;
       return {
@@ -139,6 +151,7 @@ export default function PreciosPage() {
   };
 
   const patchAbc = (index: number, precioTransferencia: number) => {
+    if (!canEdit) return;
     setState((s) => {
       if (!s) return s;
       return {
@@ -156,6 +169,7 @@ export default function PreciosPage() {
     field: 'simple' | 'intermedio' | 'complejo',
     value: number,
   ) => {
+    if (!canEdit) return;
     setState((s) => {
       if (!s) return s;
       return {
@@ -169,6 +183,7 @@ export default function PreciosPage() {
   };
 
   const patchOtra = (index: number, precioTransferencia: number) => {
+    if (!canEdit) return;
     setState((s) => {
       if (!s) return s;
       return {
@@ -197,10 +212,6 @@ export default function PreciosPage() {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   }
 
-  if (!isAllowed) {
-    return <Navigate to="/pedidos" replace />;
-  }
-
   if (loading || !state) {
     return (
       <div className="min-h-screen bg-background">
@@ -220,6 +231,11 @@ export default function PreciosPage() {
           <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-3xl font-semibold tracking-tight">Precios</h1>
+              {!canEdit && (
+                <p className="text-sm text-amber-600 dark:text-amber-500/90 mt-2 max-w-2xl">
+                  Solo lectura: podés ver el catálogo; solo la cuenta administradora puede editar y guardar.
+                </p>
+              )}
               <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
                 Tablas en Supabase: grupos con precio, mapa medida→grupo, medidas con precio fijo, accesorios,
                 abecedarios y redondos. Transferencia editable; link = +15 % redondeado. Para calcular precio por
@@ -232,10 +248,12 @@ export default function PreciosPage() {
               )}
             </div>
             <div className="flex flex-col items-stretch gap-2 sm:items-end">
-              <Button type="button" variant="secondary" disabled={saving} onClick={() => void persist()}>
-                {saving ? 'Guardando…' : 'Guardar ahora'}
-              </Button>
-              {savedLabel && (
+              {canEdit && (
+                <Button type="button" variant="secondary" disabled={saving} onClick={() => void persist()}>
+                  {saving ? 'Guardando…' : 'Guardar ahora'}
+                </Button>
+              )}
+              {canEdit && savedLabel && (
                 <span className="text-xs text-muted-foreground">Último guardado: {savedLabel}</span>
               )}
             </div>
@@ -267,6 +285,8 @@ export default function PreciosPage() {
                         <Input
                           id={`grupo-${g.codigo}-transf`}
                           inputMode="numeric"
+                          readOnly={!canEdit}
+                          className={!canEdit ? 'bg-muted/50 cursor-default' : undefined}
                           value={String(g.precioTransferencia)}
                           onChange={(e) => patchGrupo(g.codigo, parseMoneyInput(e.target.value))}
                         />
@@ -304,6 +324,8 @@ export default function PreciosPage() {
                       <Input
                         id={`acc-${key}`}
                         inputMode="numeric"
+                        readOnly={!canEdit}
+                        className={!canEdit ? 'bg-muted/50 cursor-default' : undefined}
                         value={String(v)}
                         onChange={(e) => patchAccesorio(key, parseMoneyInput(e.target.value))}
                       />
@@ -338,8 +360,9 @@ export default function PreciosPage() {
                           <td className="py-2 pr-3 align-middle text-muted-foreground">{row.detalle}</td>
                           <td className="py-2 pr-3 align-middle">
                             <Input
-                              className="h-9"
+                              className={`h-9${!canEdit ? ' bg-muted/50 cursor-default' : ''}`}
                               inputMode="numeric"
+                              readOnly={!canEdit}
                               value={String(row.precioTransferencia)}
                               onChange={(e) => patchAbc(i, parseMoneyInput(e.target.value))}
                             />
@@ -378,8 +401,9 @@ export default function PreciosPage() {
                           <td key={field} className="py-2 pr-2">
                             <div className="flex flex-col gap-1">
                               <Input
-                                className="h-9 w-32"
+                                className={`h-9 w-32${!canEdit ? ' bg-muted/50 cursor-default' : ''}`}
                                 inputMode="numeric"
+                                readOnly={!canEdit}
                                 value={String(row[field])}
                                 onChange={(e) => patchRedondo(ri, field, parseMoneyInput(e.target.value))}
                               />
@@ -422,8 +446,9 @@ export default function PreciosPage() {
                           <td className="py-2 pr-3 font-mono">{label}</td>
                           <td className="py-2 pr-3">
                             <Input
-                              className="h-9"
+                              className={`h-9${!canEdit ? ' bg-muted/50 cursor-default' : ''}`}
                               inputMode="numeric"
+                              readOnly={!canEdit}
                               value={String(row.precioTransferencia)}
                               onChange={(e) => patchOtra(i, parseMoneyInput(e.target.value))}
                             />

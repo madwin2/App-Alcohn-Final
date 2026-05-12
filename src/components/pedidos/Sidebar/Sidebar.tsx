@@ -149,18 +149,18 @@ export function Sidebar() {
                 onClick={() => navigate('/gastos')}
               />
             </div>
-            <div className="flex justify-start">
-              <SidebarItem
-                icon={Tag}
-                label="Precios"
-                isActive={location.pathname === '/precios'}
-                isExpanded={isExpanded}
-                disabled={false}
-                onClick={() => navigate('/precios')}
-              />
-            </div>
           </>
         )}
+        <div className="flex justify-start">
+          <SidebarItem
+            icon={Tag}
+            label="Precios"
+            isActive={location.pathname === '/precios'}
+            isExpanded={isExpanded}
+            disabled={false}
+            onClick={() => navigate('/precios')}
+          />
+        </div>
       </nav>
 
       {/* User Profile */}

@@ -181,31 +181,30 @@ export async function ensurePreciosSeed(userId: string): Promise<void> {
   }
 }
 
-export async function fetchPreciosFormState(userId: string): Promise<PreciosFormState> {
-  await ensurePreciosSeed(userId);
-
+/** Solo SELECT (RLS de lectura equipo). Sin seed: no intenta inserts como otro usuario. */
+async function buildPreciosFormStateFromRows(catalogUserId: string): Promise<PreciosFormState> {
   const [cfg, grupos, accs, abc, rd, mf] = await Promise.all([
-    supabase.from('precios_config').select('nota_presupuesto').eq('user_id', userId).maybeSingle(),
+    supabase.from('precios_config').select('nota_presupuesto').eq('user_id', catalogUserId).maybeSingle(),
     supabase
       .from('precios_sello_grupo')
       .select('codigo, titulo, medidas_resumen, precio_transferencia, orden')
-      .eq('user_id', userId)
+      .eq('user_id', catalogUserId)
       .order('orden', { ascending: true }),
-    supabase.from('precios_accesorio').select('codigo, precio_transferencia').eq('user_id', userId),
+    supabase.from('precios_accesorio').select('codigo, precio_transferencia').eq('user_id', catalogUserId),
     supabase
       .from('precios_abecedario')
       .select('id, categoria, detalle, precio_transferencia, orden')
-      .eq('user_id', userId)
+      .eq('user_id', catalogUserId)
       .order('orden', { ascending: true }),
     supabase
       .from('precios_sello_redondo')
       .select('id, rango, precio_simple, precio_intermedio, precio_complejo, orden')
-      .eq('user_id', userId)
+      .eq('user_id', catalogUserId)
       .order('orden', { ascending: true }),
     supabase
       .from('precios_sello_medida_fija')
       .select('ancho, largo, etiqueta, precio_transferencia')
-      .eq('user_id', userId)
+      .eq('user_id', catalogUserId)
       .order('ancho', { ascending: true })
       .order('largo', { ascending: true }),
   ]);
@@ -266,6 +265,18 @@ export async function fetchPreciosFormState(userId: string): Promise<PreciosForm
       };
     }),
   };
+}
+
+export async function fetchPreciosFormState(userId: string): Promise<PreciosFormState> {
+  await ensurePreciosSeed(userId);
+  return buildPreciosFormStateFromRows(userId);
+}
+
+/** Vista del catálogo compartido (misma fuente que cotización). Sin permisos de escritura. */
+export async function fetchPreciosFormStateReadOnly(): Promise<PreciosFormState | null> {
+  const uid = await resolvePreciosCatalogUserId();
+  if (!uid) return null;
+  return buildPreciosFormStateFromRows(uid);
 }
 
 export async function persistPreciosFormState(userId: string, state: PreciosFormState): Promise<void> {
