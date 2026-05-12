@@ -322,20 +322,150 @@ export interface Database {
           updated_at: string;
         }>;
       };
-      precios_lista: {
+      precios_config: {
         Row: {
           user_id: string;
-          data: Record<string, unknown>;
+          nota_presupuesto: string | null;
           updated_at: string;
         };
         Insert: {
           user_id: string;
-          data?: Record<string, unknown>;
+          nota_presupuesto?: string | null;
           updated_at?: string;
         };
         Update: Partial<{
-          data: Record<string, unknown>;
+          nota_presupuesto: string | null;
           updated_at: string;
+        }>;
+      };
+      precios_sello_grupo: {
+        Row: {
+          user_id: string;
+          codigo: string;
+          titulo: string;
+          medidas_resumen: string | null;
+          precio_transferencia: number;
+          orden: number;
+        };
+        Insert: {
+          user_id: string;
+          codigo: string;
+          titulo: string;
+          medidas_resumen?: string | null;
+          precio_transferencia?: number;
+          orden?: number;
+        };
+        Update: Partial<{
+          titulo: string;
+          medidas_resumen: string | null;
+          precio_transferencia: number;
+          orden: number;
+        }>;
+      };
+      precios_sello_medida_grupo: {
+        Row: {
+          user_id: string;
+          ancho: number;
+          largo: number;
+          grupo_codigo: string;
+        };
+        Insert: {
+          user_id: string;
+          ancho: number;
+          largo: number;
+          grupo_codigo: string;
+        };
+        Update: Partial<{
+          grupo_codigo: string;
+        }>;
+      };
+      precios_sello_medida_fija: {
+        Row: {
+          user_id: string;
+          ancho: number;
+          largo: number;
+          etiqueta: string | null;
+          precio_transferencia: number;
+        };
+        Insert: {
+          user_id: string;
+          ancho: number;
+          largo: number;
+          etiqueta?: string | null;
+          precio_transferencia: number;
+        };
+        Update: Partial<{
+          etiqueta: string | null;
+          precio_transferencia: number;
+        }>;
+      };
+      precios_accesorio: {
+        Row: {
+          user_id: string;
+          codigo: string;
+          etiqueta: string;
+          precio_transferencia: number;
+        };
+        Insert: {
+          user_id: string;
+          codigo: string;
+          etiqueta: string;
+          precio_transferencia?: number;
+        };
+        Update: Partial<{
+          etiqueta: string;
+          precio_transferencia: number;
+        }>;
+      };
+      precios_abecedario: {
+        Row: {
+          id: string;
+          user_id: string;
+          categoria: string;
+          detalle: string;
+          precio_transferencia: number;
+          orden: number;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          categoria: string;
+          detalle: string;
+          precio_transferencia?: number;
+          orden?: number;
+        };
+        Update: Partial<{
+          categoria: string;
+          detalle: string;
+          precio_transferencia: number;
+          orden: number;
+        }>;
+      };
+      precios_sello_redondo: {
+        Row: {
+          id: string;
+          user_id: string;
+          rango: string;
+          precio_simple: number;
+          precio_intermedio: number;
+          precio_complejo: number;
+          orden: number;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          rango: string;
+          precio_simple?: number;
+          precio_intermedio?: number;
+          precio_complejo?: number;
+          orden?: number;
+        };
+        Update: Partial<{
+          rango: string;
+          precio_simple: number;
+          precio_intermedio: number;
+          precio_complejo: number;
+          orden: number;
         }>;
       };
     };

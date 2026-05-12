@@ -8,13 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
+import { precioLinkDesdeTransferencia } from '@/lib/precios/precioLink';
+import { etiquetaMedidaFila } from '@/lib/precios/preciosDims';
+import type { SelloGrupoCodigo } from '@/lib/precios/resolverPrecioSello';
 import {
-  DEFAULT_PRECIOS_PAYLOAD,
-  mergePreciosPayload,
-  precioLinkDesdeTransferencia,
-  type PreciosPayload,
-} from '@/lib/precios/preciosPayload';
-import { fetchPreciosLista, upsertPreciosLista } from '@/lib/supabase/services/preciosLista.service';
+  fetchPreciosFormState,
+  persistPreciosFormState,
+  type PreciosFormState,
+} from '@/lib/supabase/services/preciosPro.service';
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
 
@@ -32,13 +33,13 @@ function parseMoneyInput(raw: string): number {
 export default function PreciosPage() {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const [payload, setPayload] = useState<PreciosPayload>(() => structuredClone(DEFAULT_PRECIOS_PAYLOAD));
+  const [state, setState] = useState<PreciosFormState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const payloadRef = useRef(payload);
-  payloadRef.current = payload;
+  const stateRef = useRef<PreciosFormState | null>(null);
+  stateRef.current = state;
 
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
@@ -48,9 +49,9 @@ export default function PreciosPage() {
     (async () => {
       setLoading(true);
       try {
-        const fromDb = await fetchPreciosLista(user.id);
+        const data = await fetchPreciosFormState(user.id);
         if (cancelled) return;
-        setPayload(fromDb ?? structuredClone(DEFAULT_PRECIOS_PAYLOAD));
+        setState(data);
         setDirty(false);
       } catch (e: unknown) {
         if (cancelled) return;
@@ -60,7 +61,7 @@ export default function PreciosPage() {
           description: msg,
           variant: 'destructive',
         });
-        setPayload(structuredClone(DEFAULT_PRECIOS_PAYLOAD));
+        setState(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -71,10 +72,10 @@ export default function PreciosPage() {
   }, [authLoading, isAllowed, user?.id, toast]);
 
   const persist = useCallback(async () => {
-    if (!isAllowed || !user?.id) return;
+    if (!isAllowed || !user?.id || !stateRef.current) return;
     setSaving(true);
     try {
-      await upsertPreciosLista(user.id, payloadRef.current);
+      await persistPreciosFormState(user.id, stateRef.current);
       setDirty(false);
       setLastSavedAt(new Date().toISOString());
     } catch (e: unknown) {
@@ -90,12 +91,12 @@ export default function PreciosPage() {
   }, [isAllowed, user?.id, toast]);
 
   useEffect(() => {
-    if (!dirty || !isAllowed || !user?.id || loading) return;
+    if (!dirty || !isAllowed || !user?.id || loading || !state) return;
     const t = window.setTimeout(() => {
       void persist();
     }, 1200);
     return () => window.clearTimeout(t);
-  }, [payload, dirty, isAllowed, user?.id, loading, persist]);
+  }, [state, dirty, isAllowed, user?.id, loading, persist]);
 
   useEffect(() => {
     if (!dirty || !isAllowed || !user?.id) return;
@@ -113,31 +114,40 @@ export default function PreciosPage() {
     };
   }, [dirty, isAllowed, user?.id, persist]);
 
-  const patchGrupo = (id: string, precioTransferencia: number) => {
-    setPayload((p) => ({
-      ...p,
-      sellosGrupos: p.sellosGrupos.map((g) =>
-        g.id === id ? { ...g, precioTransferencia: Math.max(0, Math.round(precioTransferencia)) } : g,
-      ),
-    }));
+  const patchGrupo = (codigo: SelloGrupoCodigo, precioTransferencia: number) => {
+    setState((s) => {
+      if (!s) return s;
+      return {
+        ...s,
+        sellosGrupos: s.sellosGrupos.map((g) =>
+          g.codigo === codigo ? { ...g, precioTransferencia: Math.max(0, Math.round(precioTransferencia)) } : g,
+        ),
+      };
+    });
     setDirty(true);
   };
 
-  const patchAccesorio = (key: keyof PreciosPayload['accesorios'], value: number) => {
-    setPayload((p) => ({
-      ...p,
-      accesorios: { ...p.accesorios, [key]: Math.max(0, Math.round(value)) },
-    }));
+  const patchAccesorio = (key: keyof PreciosFormState['accesorios'], value: number) => {
+    setState((s) => {
+      if (!s) return s;
+      return {
+        ...s,
+        accesorios: { ...s.accesorios, [key]: Math.max(0, Math.round(value)) },
+      };
+    });
     setDirty(true);
   };
 
   const patchAbc = (index: number, precioTransferencia: number) => {
-    setPayload((p) => ({
-      ...p,
-      abecedarios: p.abecedarios.map((row, i) =>
-        i === index ? { ...row, precioTransferencia: Math.max(0, Math.round(precioTransferencia)) } : row,
-      ),
-    }));
+    setState((s) => {
+      if (!s) return s;
+      return {
+        ...s,
+        abecedarios: s.abecedarios.map((row, i) =>
+          i === index ? { ...row, precioTransferencia: Math.max(0, Math.round(precioTransferencia)) } : row,
+        ),
+      };
+    });
     setDirty(true);
   };
 
@@ -146,22 +156,28 @@ export default function PreciosPage() {
     field: 'simple' | 'intermedio' | 'complejo',
     value: number,
   ) => {
-    setPayload((p) => ({
-      ...p,
-      sellosRedondos: p.sellosRedondos.map((row, i) =>
-        i === index ? { ...row, [field]: Math.max(0, Math.round(value)) } : row,
-      ),
-    }));
+    setState((s) => {
+      if (!s) return s;
+      return {
+        ...s,
+        sellosRedondos: s.sellosRedondos.map((row, i) =>
+          i === index ? { ...row, [field]: Math.max(0, Math.round(value)) } : row,
+        ),
+      };
+    });
     setDirty(true);
   };
 
   const patchOtra = (index: number, precioTransferencia: number) => {
-    setPayload((p) => ({
-      ...p,
-      otrasMedidas: p.otrasMedidas.map((row, i) =>
-        i === index ? { ...row, precioTransferencia: Math.max(0, Math.round(precioTransferencia)) } : row,
-      ),
-    }));
+    setState((s) => {
+      if (!s) return s;
+      return {
+        ...s,
+        otrasMedidas: s.otrasMedidas.map((row, i) =>
+          i === index ? { ...row, precioTransferencia: Math.max(0, Math.round(precioTransferencia)) } : row,
+        ),
+      };
+    });
     setDirty(true);
   };
 
@@ -185,6 +201,17 @@ export default function PreciosPage() {
     return <Navigate to="/pedidos" replace />;
   }
 
+  if (loading || !state) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Sidebar />
+        <div className="ml-20 flex min-h-screen flex-1 flex-col p-8">
+          <p className="text-muted-foreground">Cargando datos…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
@@ -194,15 +221,18 @@ export default function PreciosPage() {
             <div>
               <h1 className="text-3xl font-semibold tracking-tight">Precios</h1>
               <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-                Valores por transferencia. El costo por link de pago se calcula como transferencia + 15 % (redondeado
-                a pesos enteros). Los cambios se guardan en Supabase automáticamente.
+                Tablas en Supabase: grupos con precio, mapa medida→grupo, medidas con precio fijo, accesorios,
+                abecedarios y redondos. Transferencia editable; link = +15 % redondeado. Para calcular precio por
+                ancho/largo en pedidos o mockups usá en código{' '}
+                <code className="text-xs">fetchPreciosResolverInput</code> y{' '}
+                <code className="text-xs">resolverPrecioSelloRectangular</code>.
               </p>
-              {payload.notaRespetoPresupuesto && (
-                <p className="text-xs text-muted-foreground mt-2 italic max-w-2xl">{payload.notaRespetoPresupuesto}</p>
+              {state.notaPresupuesto && (
+                <p className="text-xs text-muted-foreground mt-2 italic max-w-2xl">{state.notaPresupuesto}</p>
               )}
             </div>
             <div className="flex flex-col items-stretch gap-2 sm:items-end">
-              <Button type="button" variant="secondary" disabled={saving || loading} onClick={() => void persist()}>
+              <Button type="button" variant="secondary" disabled={saving} onClick={() => void persist()}>
                 {saving ? 'Guardando…' : 'Guardar ahora'}
               </Button>
               {savedLabel && (
@@ -211,201 +241,202 @@ export default function PreciosPage() {
             </div>
           </header>
 
-          {loading ? (
-            <p className="text-muted-foreground">Cargando datos…</p>
-          ) : (
-            <div className="space-y-8 pb-16">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sellos por medida — 4 grupos</CardTitle>
-                  <CardDescription>
-                    Una fila por grupo. Editá solo transferencia; el link se muestra al costado.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {payload.sellosGrupos.map((g) => {
-                    const link = precioLinkDesdeTransferencia(g.precioTransferencia);
-                    return (
-                      <div
-                        key={g.id}
-                        className="grid gap-4 rounded-lg border bg-muted/15 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end"
-                      >
-                        <div className="space-y-1 min-w-0">
-                          <p className="font-medium">{g.titulo}</p>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{g.medidas}</p>
-                        </div>
-                        <div className="space-y-1 w-full sm:w-40">
-                          <Label htmlFor={`grupo-${g.id}-transf`}>Transferencia</Label>
-                          <Input
-                            id={`grupo-${g.id}-transf`}
-                            inputMode="numeric"
-                            value={String(g.precioTransferencia)}
-                            onChange={(e) => patchGrupo(g.id, parseMoneyInput(e.target.value))}
-                          />
-                        </div>
-                        <div className="space-y-1 w-full sm:w-40">
-                          <Label>Link (+15 %)</Label>
-                          <div className="h-10 flex items-center rounded-md border bg-background px-3 text-sm font-mono tabular-nums">
-                            {formatArs(link)}
-                          </div>
-                        </div>
+          <div className="space-y-8 pb-16">
+            <Card>
+              <CardHeader>
+                <CardTitle>Sellos por medida — 4 grupos</CardTitle>
+                <CardDescription>
+                  Precio por transferencia por grupo. Las medidas de cada grupo viven en la tabla{' '}
+                  <code className="text-xs">precios_sello_medida_grupo</code> para lookup automático.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {state.sellosGrupos.map((g) => {
+                  const link = precioLinkDesdeTransferencia(g.precioTransferencia);
+                  return (
+                    <div
+                      key={g.codigo}
+                      className="grid gap-4 rounded-lg border bg-muted/15 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end"
+                    >
+                      <div className="space-y-1 min-w-0">
+                        <p className="font-medium">{g.titulo}</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{g.medidas}</p>
                       </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Accesorios</CardTitle>
-                  <CardDescription>Soldador, base remachadora y mango de golpe (transferencia).</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 sm:grid-cols-3">
-                  {(
-                    [
-                      ['soldador', 'Soldador'],
-                      ['baseRemachadora', 'Base remachadora'],
-                      ['mangoGolpe', 'Mango de golpe'],
-                    ] as const
-                  ).map(([key, label]) => {
-                    const v = payload.accesorios[key];
-                    const link = precioLinkDesdeTransferencia(v);
-                    return (
-                      <div key={key} className="space-y-2 rounded-lg border p-3">
-                        <Label htmlFor={`acc-${key}`}>{label}</Label>
+                      <div className="space-y-1 w-full sm:w-40">
+                        <Label htmlFor={`grupo-${g.codigo}-transf`}>Transferencia</Label>
                         <Input
-                          id={`acc-${key}`}
+                          id={`grupo-${g.codigo}-transf`}
                           inputMode="numeric"
-                          value={String(v)}
-                          onChange={(e) => patchAccesorio(key, parseMoneyInput(e.target.value))}
+                          value={String(g.precioTransferencia)}
+                          onChange={(e) => patchGrupo(g.codigo, parseMoneyInput(e.target.value))}
                         />
-                        <p className="text-xs text-muted-foreground">Link: {formatArs(link)}</p>
                       </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
+                      <div className="space-y-1 w-full sm:w-40">
+                        <Label>Link (+15 %)</Label>
+                        <div className="h-10 flex items-center rounded-md border bg-background px-3 text-sm font-mono tabular-nums">
+                          {formatArs(link)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Abecedarios</CardTitle>
-                  <CardDescription>Listado fijo según tabla interna; editable por transferencia.</CardDescription>
-                </CardHeader>
-                <CardContent className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Categoría</th>
-                        <th className="py-2 pr-3 font-medium">Detalle</th>
-                        <th className="py-2 pr-3 font-medium w-36">Transferencia</th>
-                        <th className="py-2 font-medium w-36">Link (+15 %)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {payload.abecedarios.map((row, i) => {
-                        const link = precioLinkDesdeTransferencia(row.precioTransferencia);
-                        return (
-                          <tr key={`${row.categoria}-${row.detalle}`} className="border-b border-border/60">
-                            <td className="py-2 pr-3 align-middle">{row.categoria}</td>
-                            <td className="py-2 pr-3 align-middle text-muted-foreground">{row.detalle}</td>
-                            <td className="py-2 pr-3 align-middle">
-                              <Input
-                                className="h-9"
-                                inputMode="numeric"
-                                value={String(row.precioTransferencia)}
-                                onChange={(e) => patchAbc(i, parseMoneyInput(e.target.value))}
-                              />
-                            </td>
-                            <td className="py-2 align-middle font-mono tabular-nums text-muted-foreground">
-                              {formatArs(link)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Accesorios</CardTitle>
+                <CardDescription>Soldador, base remachadora y mango de golpe (transferencia).</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-3">
+                {(
+                  [
+                    ['soldador', 'Soldador'],
+                    ['baseRemachadora', 'Base remachadora'],
+                    ['mangoGolpe', 'Mango de golpe'],
+                  ] as const
+                ).map(([key, label]) => {
+                  const v = state.accesorios[key];
+                  const link = precioLinkDesdeTransferencia(v);
+                  return (
+                    <div key={key} className="space-y-2 rounded-lg border p-3">
+                      <Label htmlFor={`acc-${key}`}>{label}</Label>
+                      <Input
+                        id={`acc-${key}`}
+                        inputMode="numeric"
+                        value={String(v)}
+                        onChange={(e) => patchAccesorio(key, parseMoneyInput(e.target.value))}
+                      />
+                      <p className="text-xs text-muted-foreground">Link: {formatArs(link)}</p>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sellos redondos</CardTitle>
-                  <CardDescription>Precios por transferencia según tamaño y complejidad del diseño.</CardDescription>
-                </CardHeader>
-                <CardContent className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Tamaño</th>
-                        <th className="py-2 pr-2 font-medium">Simple</th>
-                        <th className="py-2 pr-2 font-medium">Intermedio</th>
-                        <th className="py-2 pr-2 font-medium">Complejo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {payload.sellosRedondos.map((row, ri) => (
-                        <tr key={row.rango} className="border-b border-border/60 align-middle">
-                          <td className="py-2 pr-3 font-medium">{row.rango}</td>
-                          {(['simple', 'intermedio', 'complejo'] as const).map((field) => (
-                            <td key={field} className="py-2 pr-2">
-                              <div className="flex flex-col gap-1">
-                                <Input
-                                  className="h-9 w-32"
-                                  inputMode="numeric"
-                                  value={String(row[field])}
-                                  onChange={(e) => patchRedondo(ri, field, parseMoneyInput(e.target.value))}
-                                />
-                                <span className="text-[10px] text-muted-foreground font-mono">
-                                  Link {formatArs(precioLinkDesdeTransferencia(row[field]))}
-                                </span>
-                              </div>
-                            </td>
-                          ))}
+            <Card>
+              <CardHeader>
+                <CardTitle>Abecedarios</CardTitle>
+                <CardDescription>Tabla <code className="text-xs">precios_abecedario</code>.</CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Categoría</th>
+                      <th className="py-2 pr-3 font-medium">Detalle</th>
+                      <th className="py-2 pr-3 font-medium w-36">Transferencia</th>
+                      <th className="py-2 font-medium w-36">Link (+15 %)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.abecedarios.map((row, i) => {
+                      const link = precioLinkDesdeTransferencia(row.precioTransferencia);
+                      return (
+                        <tr key={row.id} className="border-b border-border/60">
+                          <td className="py-2 pr-3 align-middle">{row.categoria}</td>
+                          <td className="py-2 pr-3 align-middle text-muted-foreground">{row.detalle}</td>
+                          <td className="py-2 pr-3 align-middle">
+                            <Input
+                              className="h-9"
+                              inputMode="numeric"
+                              value={String(row.precioTransferencia)}
+                              onChange={(e) => patchAbc(i, parseMoneyInput(e.target.value))}
+                            />
+                          </td>
+                          <td className="py-2 align-middle font-mono tabular-nums text-muted-foreground">
+                            {formatArs(link)}
+                          </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Otras medidas de sellos</CardTitle>
-                  <CardDescription>Medidas que no entran en los cuatro grupos anteriores.</CardDescription>
-                </CardHeader>
-                <CardContent className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="py-2 pr-3 font-medium">Medida</th>
-                        <th className="py-2 pr-3 font-medium w-36">Transferencia</th>
-                        <th className="py-2 font-medium w-36">Link (+15 %)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {payload.otrasMedidas.map((row, i) => {
-                        const link = precioLinkDesdeTransferencia(row.precioTransferencia);
-                        return (
-                          <tr key={row.medida} className="border-b border-border/60">
-                            <td className="py-2 pr-3 font-mono">{row.medida}</td>
-                            <td className="py-2 pr-3">
+            <Card>
+              <CardHeader>
+                <CardTitle>Sellos redondos</CardTitle>
+                <CardDescription>Tabla <code className="text-xs">precios_sello_redondo</code>.</CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Tamaño</th>
+                      <th className="py-2 pr-2 font-medium">Simple</th>
+                      <th className="py-2 pr-2 font-medium">Intermedio</th>
+                      <th className="py-2 pr-2 font-medium">Complejo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.sellosRedondos.map((row, ri) => (
+                      <tr key={row.id} className="border-b border-border/60 align-middle">
+                        <td className="py-2 pr-3 font-medium">{row.rango}</td>
+                        {(['simple', 'intermedio', 'complejo'] as const).map((field) => (
+                          <td key={field} className="py-2 pr-2">
+                            <div className="flex flex-col gap-1">
                               <Input
-                                className="h-9"
+                                className="h-9 w-32"
                                 inputMode="numeric"
-                                value={String(row.precioTransferencia)}
-                                onChange={(e) => patchOtra(i, parseMoneyInput(e.target.value))}
+                                value={String(row[field])}
+                                onChange={(e) => patchRedondo(ri, field, parseMoneyInput(e.target.value))}
                               />
-                            </td>
-                            <td className="py-2 font-mono tabular-nums text-muted-foreground">{formatArs(link)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                Link {formatArs(precioLinkDesdeTransferencia(row[field]))}
+                              </span>
+                            </div>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Otras medidas de sellos</CardTitle>
+                <CardDescription>
+                  Tabla <code className="text-xs">precios_sello_medida_fija</code> (precio propio; pisa el precio por
+                  grupo).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-3 font-medium">Medida</th>
+                      <th className="py-2 pr-3 font-medium w-36">Transferencia</th>
+                      <th className="py-2 font-medium w-36">Link (+15 %)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.otrasMedidas.map((row, i) => {
+                      const link = precioLinkDesdeTransferencia(row.precioTransferencia);
+                      const label = etiquetaMedidaFila(row.ancho, row.largo, row.etiqueta);
+                      return (
+                        <tr key={`${row.ancho}-${row.largo}-${row.etiqueta ?? ''}`} className="border-b border-border/60">
+                          <td className="py-2 pr-3 font-mono">{label}</td>
+                          <td className="py-2 pr-3">
+                            <Input
+                              className="h-9"
+                              inputMode="numeric"
+                              value={String(row.precioTransferencia)}
+                              onChange={(e) => patchOtra(i, parseMoneyInput(e.target.value))}
+                            />
+                          </td>
+                          <td className="py-2 font-mono tabular-nums text-muted-foreground">{formatArs(link)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
       <Toaster />

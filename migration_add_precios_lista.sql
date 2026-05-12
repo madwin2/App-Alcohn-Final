@@ -1,5 +1,7 @@
--- Lista de precios interna (JSON) por usuario, solo accesible para julian.475@hotmail.com
--- Ejecutar en Supabase SQL Editor (una vez)
+-- Lista de precios interna (JSON) por usuario — LEGACY
+-- Reemplazado por migration_precios_normalizado.sql (tablas relacionales).
+-- Si ya corriste este archivo, ejecutá después migration_precios_normalizado.sql
+-- (borra precios_lista y crea el esquema pro).
 
 create table if not exists public.precios_lista (
   user_id uuid primary key references auth.users (id) on delete cascade,
