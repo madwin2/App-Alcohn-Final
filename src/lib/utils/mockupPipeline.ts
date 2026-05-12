@@ -593,7 +593,12 @@ export async function generateMockup(optimizedLogo: File, material: MockupMateri
   }
 
   applyGlobalPostEffectsLikePython(imageData);
-  applyMockupFinalSharpening(imageData.data, imageData.width, imageData.height);
+  applyMockupFinalSharpening(
+    imageData.data,
+    imageData.width,
+    imageData.height,
+    material === 'cuero' ? { amount: 0.17, blurSigma: 0.95 } : undefined,
+  );
   ctx.putImageData(imageData, 0, 0);
 
   const blob = await toBlob(bgCanvas, 'image/jpeg', 0.94);

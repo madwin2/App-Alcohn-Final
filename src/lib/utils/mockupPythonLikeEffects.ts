@@ -406,8 +406,8 @@ export function applyMockupFinalSharpening(
   height: number,
   opts?: { amount?: number; blurSigma?: number },
 ): void {
-  const amount = opts?.amount ?? 0.36;
-  const blurSigma = opts?.blurSigma ?? 0.72;
+  const amount = opts?.amount ?? 0.3;
+  const blurSigma = opts?.blurSigma ?? 0.78;
   const blur = gaussianBlurRgb(data, width, height, blurSigma);
   for (let i = 0; i < data.length; i += 4) {
     data[i] = clamp(data[i] + amount * (data[i] - blur[i]), 0, 255);
@@ -668,7 +668,7 @@ export function applyMaderaBurnFallbackTint(
   }
 }
 
-/** `apply_emboss_effect` del script Python, retocado para deboss más nítido y labio exterior creíble. */
+/** Deboss de cuero: relieve legible sin filo digital; borde ligeramente redondeado como prensa real. */
 export function applyCueroEmbossPythonLike(
   baseData: Uint8ClampedArray,
   maskRaw: Float32Array,
@@ -680,23 +680,23 @@ export function applyCueroEmbossPythonLike(
   const W = OUTPUT_WIDTH;
   const H = OUTPUT_HEIGHT;
 
-  let maskNp = gaussianLikeBlurFloat(float32OwnCopy(maskRaw), drawW, drawH, 0.32);
+  let maskNp = gaussianLikeBlurFloat(float32OwnCopy(maskRaw), drawW, drawH, 0.44);
 
-  let heightNp = gaussianLikeBlurFloat(float32OwnCopy(maskNp), drawW, drawH, 2);
+  let heightNp = gaussianLikeBlurFloat(float32OwnCopy(maskNp), drawW, drawH, 2.65);
   for (let p = 0; p < heightNp.length; p++) {
     const t = heightNp[p];
     heightNp[p] = t * t * (3 - 2 * t);
   }
 
-  let rimNp = maxFilterFloat(maskRaw, drawW, drawH, 6);
-  rimNp = gaussianLikeBlurFloat(rimNp, drawW, drawH, 2.8);
+  let rimNp = maxFilterFloat(maskRaw, drawW, drawH, 7);
+  rimNp = gaussianLikeBlurFloat(rimNp, drawW, drawH, 3.4);
   let rimBump: Float32AB = new Float32Array(new ArrayBuffer(drawW * drawH * 4)) as Float32AB;
   for (let p = 0; p < rimBump.length; p++) {
     rimBump[p] = clamp(rimNp[p] - maskNp[p] * 0.85, 0, 1);
   }
-  rimBump = gaussianLikeBlurFloat(rimBump, drawW, drawH, 1.1);
+  rimBump = gaussianLikeBlurFloat(rimBump, drawW, drawH, 1.65);
   for (let p = 0; p < heightNp.length; p++) {
-    heightNp[p] -= rimBump[p] * 0.18;
+    heightNp[p] -= rimBump[p] * 0.145;
   }
 
   const gradX = new Float32Array(drawW * drawH);
@@ -720,30 +720,30 @@ export function applyCueroEmbossPythonLike(
   let highlightMap: Float32AB = new Float32Array(new ArrayBuffer(drawW * drawH * 4)) as Float32AB;
   for (let p = 0; p < shadowMap.length; p++) {
     const dot = gradX[p] * lightX + gradY[p] * lightY;
-    shadowMap[p] = clamp(-dot * 17.5, 0, 1);
-    highlightMap[p] = clamp(dot * 8.5, 0, 1);
+    shadowMap[p] = clamp(-dot * 15, 0, 1);
+    highlightMap[p] = clamp(dot * 7.2, 0, 1);
   }
-  shadowMap = gaussianLikeBlurFloat(shadowMap, drawW, drawH, 0.55);
-  highlightMap = gaussianLikeBlurFloat(highlightMap, drawW, drawH, 0.42);
+  shadowMap = gaussianLikeBlurFloat(shadowMap, drawW, drawH, 0.88);
+  highlightMap = gaussianLikeBlurFloat(highlightMap, drawW, drawH, 0.72);
 
-  let dropNp = gaussianLikeBlurFloat(float32OwnCopy(maskRaw), drawW, drawH, 4);
+  let dropNp = gaussianLikeBlurFloat(float32OwnCopy(maskRaw), drawW, drawH, 4.8);
   const dropOnly = new Float32Array(drawW * drawH);
   for (let p = 0; p < dropOnly.length; p++) {
     dropOnly[p] = clamp(dropNp[p] - maskNp[p] * 0.8, 0, 1);
   }
 
-  /** Arista del grabado (gradiente de la máscara): surco más duro + labio exterior. */
+  /** Refuerzo suave en el borde del hueco (menos “vector” que antes). */
   const cavityEdge = new Float32Array(drawW * drawH);
   for (let y = 1; y < drawH - 1; y++) {
     for (let x = 1; x < drawW - 1; x++) {
       const p = y * drawW + x;
       const gx = maskNp[p + 1] - maskNp[p - 1];
       const gy = maskNp[p + drawW] - maskNp[p - drawW];
-      cavityEdge[p] = clamp(Math.hypot(gx, gy) * 4.2, 0, 1);
+      cavityEdge[p] = clamp(Math.hypot(gx, gy) * 2.85, 0, 1);
     }
   }
 
-  const shadowTint = [58, 32, 14];
+  const shadowTint = [62, 36, 16];
 
   for (let my = 0; my < drawH; my++) {
     for (let mx = 0; mx < drawW; mx++) {
@@ -761,42 +761,42 @@ export function applyCueroEmbossPythonLike(
       let b = baseData[idx + 2];
 
       const lum = (r + g + b) / 3;
-      const soften = 0.14 * m;
+      const soften = 0.2 * m;
       r = r * (1 - soften) + lum * soften;
       g = g * (1 - soften) + lum * soften;
       b = b * (1 - soften) + lum * soften;
 
-      r *= 1 - m * 0.38;
-      g *= 1 - m * 0.38;
-      b *= 1 - m * 0.38;
+      r *= 1 - m * 0.34;
+      g *= 1 - m * 0.34;
+      b *= 1 - m * 0.34;
 
       const sh = shadowMap[p];
       for (let c = 0; c < 3; c++) {
         const ch = c === 0 ? r : c === 1 ? g : b;
         const st = shadowTint[c];
-        const darkened = ch * (1 - sh * 0.72);
-        const tinted = ch * (1 - sh * 0.55) + st * (sh * 0.55);
-        const mixed = darkened * 0.45 + tinted * 0.55;
+        const darkened = ch * (1 - sh * 0.65);
+        const tinted = ch * (1 - sh * 0.5) + st * (sh * 0.5);
+        const mixed = darkened * 0.5 + tinted * 0.5;
         if (c === 0) r = mixed;
         else if (c === 1) g = mixed;
         else b = mixed;
       }
 
       const hi = highlightMap[p];
-      r += (255 - r) * hi * 0.28;
-      g += (255 - g) * hi * 0.28;
-      b += (255 - b) * hi * 0.28;
+      r += (255 - r) * hi * 0.22;
+      g += (255 - g) * hi * 0.22;
+      b += (255 - b) * hi * 0.22;
 
       const ce = cavityEdge[p];
       const wall = ce * clamp(4 * m * (1 - m), 0, 1);
-      r -= wall * 38;
-      g -= wall * 34;
-      b -= wall * 30;
+      r -= wall * 22;
+      g -= wall * 20;
+      b -= wall * 18;
 
-      const lip = ce * (1 - m) * 0.9;
-      r += (255 - r) * lip * 0.16;
-      g += (255 - g) * lip * 0.14;
-      b += (255 - b) * lip * 0.12;
+      const lip = ce * (1 - m) * 0.72;
+      r += (255 - r) * lip * 0.1;
+      g += (255 - g) * lip * 0.09;
+      b += (255 - b) * lip * 0.08;
 
       const dr = dropOnly[p];
       r *= 1 - dr * 0.11;
