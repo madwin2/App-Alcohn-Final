@@ -127,7 +127,6 @@ export default function MockupsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState<'idle' | 'generar' | 'simplificar'>('idle');
   const [logoMetrics, setLogoMetrics] = useState<LogoInkMeasurements | null>(null);
-  const [viaSimplificarIa, setViaSimplificarIa] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isRedoing, setIsRedoing] = useState(false);
 
@@ -186,7 +185,6 @@ export default function MockupsPage() {
       setPhase('ingreso');
       setActiveRow(null);
       setLogoMetrics(null);
-      setViaSimplificarIa(false);
 
       setSourceFile(file);
       setSourcePreview(URL.createObjectURL(file));
@@ -413,6 +411,7 @@ export default function MockupsPage() {
         imagen_optimizada_path: optimizedPath,
         estado: 'pendiente_aprobacion',
         intentos_optimizacion: 1,
+        preparado_con_simplificar_ia: false,
         mensaje_error: null,
       });
       if (upErr || !updated) throw upErr || new Error('No se pudo guardar la optimización');
@@ -421,7 +420,6 @@ export default function MockupsPage() {
       setOptimizedPreview(URL.createObjectURL(optimizedFile));
       setMockupCueroPreview(null);
       setMockupMaderaPreview(null);
-      setViaSimplificarIa(false);
       await aplicarMedicionTrazo(optimizedFile, id);
       setActiveRow(updated);
       setPhase('revision');
@@ -539,6 +537,7 @@ export default function MockupsPage() {
         imagen_optimizada_path: optimizedPath,
         estado: 'pendiente_aprobacion',
         intentos_optimizacion: 1,
+        preparado_con_simplificar_ia: true,
         mensaje_error: null,
       });
       if (upErr || !updated) throw upErr || new Error('No se pudo guardar');
@@ -547,7 +546,6 @@ export default function MockupsPage() {
       setOptimizedPreview(URL.createObjectURL(simplifiedFile));
       setMockupCueroPreview(null);
       setMockupMaderaPreview(null);
-      setViaSimplificarIa(true);
       await aplicarMedicionTrazo(simplifiedFile, id);
       setActiveRow(updated);
       setPhase('revision');
@@ -591,17 +589,20 @@ export default function MockupsPage() {
         `original_${activeRow.nombre_slug}.${getFileExtension(activeRow.archivo_base_path || '', 'png')}`,
       );
       const slug = activeRow.nombre_slug;
+      const rehacerSimplificar = Boolean(activeRow.preparado_con_simplificar_ia);
       let optimizedFile: File;
       try {
-        optimizedFile = await runAiOptimize(baseFile, slug);
+        optimizedFile = rehacerSimplificar
+          ? await runAiSimplify(baseFile, slug)
+          : await runAiOptimize(baseFile, slug);
       } catch (aiErr) {
         optimizedFile = await optimizeLogoForMockup(baseFile, slug);
         toast({
-          title: 'Optimización local',
+          title: rehacerSimplificar ? 'Simplificación local' : 'Optimización local',
           description:
             aiErr instanceof Error
-              ? `IA: ${aiErr.message.slice(0, 100)}… — se usó optimización local.`
-              : 'Se usó optimización local.',
+              ? `IA: ${aiErr.message.slice(0, 100)}… — se usó procesamiento local.`
+              : 'Se usó procesamiento local.',
         });
       }
 
@@ -622,7 +623,10 @@ export default function MockupsPage() {
       setOptimizedPreview(URL.createObjectURL(optimizedFile));
       setActiveRow(updated);
       await aplicarMedicionTrazo(optimizedFile, activeRow.id);
-      toast({ title: 'Optimización rehecha', description: `Intento ${nextIntentos}.` });
+      toast({
+        title: rehacerSimplificar ? 'Simplificación rehecha' : 'Optimización rehecha',
+        description: `Intento ${nextIntentos}.`,
+      });
     } catch (error) {
       toast({
         title: 'Error al rehacer',
@@ -632,7 +636,7 @@ export default function MockupsPage() {
     } finally {
       setIsRedoing(false);
     }
-  }, [activeRow, aplicarMedicionTrazo, optimizedPreview, runAiOptimize, toast]);
+  }, [activeRow, aplicarMedicionTrazo, optimizedPreview, runAiOptimize, runAiSimplify, toast]);
 
   const handleAprobado = useCallback(async () => {
     if (!activeRow?.id || !activeRow.imagen_optimizada_url) return;
@@ -720,7 +724,6 @@ export default function MockupsPage() {
     setUseCuero(false);
     setUseMadera(false);
     setLogoMetrics(null);
-    setViaSimplificarIa(false);
     setProcessing('idle');
   }, [mockupCueroPreview, mockupMaderaPreview, optimizedPreview, sourcePreview]);
 
@@ -898,7 +901,13 @@ export default function MockupsPage() {
                     onClick={() => void handleRehacerOptimizacion()}
                     disabled={isRedoing || isApproving || isBusy}
                   >
-                    {isRedoing ? 'Reoptimizando…' : 'Rehacer optimización'}
+                    {isRedoing
+                      ? activeRow?.preparado_con_simplificar_ia
+                        ? 'Simplificando…'
+                        : 'Reoptimizando…'
+                      : activeRow?.preparado_con_simplificar_ia
+                        ? 'Rehacer simplificación'
+                        : 'Rehacer optimización'}
                   </Button>
                 </div>
               )}
@@ -917,7 +926,7 @@ export default function MockupsPage() {
                     <Badge variant={validationFromRow.approved ? 'default' : 'secondary'}>
                       {validationFromRow.approved ? 'Validación OK' : 'Observaciones'}
                     </Badge>
-                    {viaSimplificarIa ? (
+                    {activeRow?.preparado_con_simplificar_ia ? (
                       <Badge variant="outline">Preparado vía simplificar IA</Badge>
                     ) : null}
                     {activeRow?.omitir_analisis ? <Badge variant="outline">Análisis omitido</Badge> : null}

@@ -8,6 +8,7 @@ create table if not exists public.mockup_solicitudes (
   whatsapp text,
   material text not null check (material in ('cuero', 'madera', 'ambos')),
   omitir_analisis boolean not null default false,
+  preparado_con_simplificar_ia boolean not null default false,
   estado text not null default 'procesando'
     check (estado in ('procesando', 'pendiente_aprobacion', 'completado', 'error')),
   archivo_base_url text,

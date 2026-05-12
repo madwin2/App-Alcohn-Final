@@ -243,6 +243,7 @@ export interface Database {
           whatsapp: string | null;
           material: 'cuero' | 'madera' | 'ambos';
           omitir_analisis: boolean;
+          preparado_con_simplificar_ia: boolean;
           estado: 'procesando' | 'pendiente_aprobacion' | 'completado' | 'error';
           archivo_base_url: string | null;
           archivo_base_path: string | null;
@@ -266,6 +267,7 @@ export interface Database {
           whatsapp?: string | null;
           material: 'cuero' | 'madera' | 'ambos';
           omitir_analisis?: boolean;
+          preparado_con_simplificar_ia?: boolean;
           estado?: 'procesando' | 'pendiente_aprobacion' | 'completado' | 'error';
           archivo_base_url?: string | null;
           archivo_base_path?: string | null;
@@ -288,6 +290,7 @@ export interface Database {
           whatsapp: string | null;
           material: 'cuero' | 'madera' | 'ambos';
           omitir_analisis: boolean;
+          preparado_con_simplificar_ia: boolean;
           estado: 'procesando' | 'pendiente_aprobacion' | 'completado' | 'error';
           archivo_base_url: string | null;
           archivo_base_path: string | null;
