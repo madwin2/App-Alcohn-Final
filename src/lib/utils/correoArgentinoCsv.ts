@@ -81,6 +81,8 @@ export type CorreoAddressInput = {
   tipoEnvio: 'Domicilio' | 'Sucursal';
   /** Si falla `buscarSucursalSmart`, el código de la oficina según MiCorreo (padrón o planilla). */
   codigoSucursalManual?: string;
+  /** Largo, ancho, altura (cm) y peso (kg) para la plantilla; si no se envía, se usan `DEFAULT_VALUES`. */
+  paquete?: { largo: string; ancho: string; altura: string; peso: string };
 };
 
 /**
@@ -192,12 +194,17 @@ export const createCorreoCsvRow = async (
     return { ok: false, reason: 'Sucursal sin código en padrón.' };
   }
 
+  const largo = input.paquete?.largo ?? DEFAULT_VALUES.largo;
+  const ancho = input.paquete?.ancho ?? DEFAULT_VALUES.ancho;
+  const altura = input.paquete?.altura ?? DEFAULT_VALUES.altura;
+  const peso = input.paquete?.peso ?? DEFAULT_VALUES.peso;
+
   const row = [
     DEFAULT_VALUES.tipo_producto,
-    DEFAULT_VALUES.largo,
-    DEFAULT_VALUES.ancho,
-    DEFAULT_VALUES.altura,
-    DEFAULT_VALUES.peso,
+    largo,
+    ancho,
+    altura,
+    peso,
     DEFAULT_VALUES.valor_del_contenido,
     letraProvincia,
     isSucursal ? sucursalCode : '',

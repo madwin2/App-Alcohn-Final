@@ -27,6 +27,7 @@ import { formatDate, getShippingChipVisual, getShippingLabel } from '@/lib/utils
 import { Order, ShippingState } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
+import { resolveCorreoCsvPaqueteFromOrderItems } from '@/lib/utils/correoCsvPackageFromOrder';
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
 import {
   catalogAddressOptions,
@@ -450,6 +451,7 @@ export default function EnviosPage() {
         }
 
         const isSucursal = (order.shipping.service === 'SUCURSAL') || dbOrder.tipo_envio === 'Sucursal';
+        const paquete = resolveCorreoCsvPaqueteFromOrderItems(order.items);
         const csvRow = await createCorreoCsvRow({
           provincia: address.provincia || '',
           localidad: address.localidad || '',
@@ -459,6 +461,7 @@ export default function EnviosPage() {
           email: customerById.get(order.customer.id)?.mail || order.customer.email || '',
           telefono: address.telefono || order.customer.phoneE164 || '',
           tipoEnvio: isSucursal ? 'Sucursal' : 'Domicilio',
+          paquete,
         });
 
         if (!csvRow.ok) {
@@ -831,6 +834,7 @@ export default function EnviosPage() {
           }
         }
       }
+      const paquete = resolveCorreoCsvPaqueteFromOrderItems(selectedOrder.items);
       const csvRow = await createCorreoCsvRow({
         provincia: normalizedForm.province || '',
         localidad: normalizedForm.locality || '',
@@ -842,6 +846,7 @@ export default function EnviosPage() {
         tipoEnvio: shippingTypeDraft === 'SUCURSAL' ? 'Sucursal' : 'Domicilio',
         codigoSucursalManual:
           shippingTypeDraft === 'SUCURSAL' ? manualSucursalCode.trim() || undefined : undefined,
+        paquete,
       });
 
       if (!csvRow.ok) {
