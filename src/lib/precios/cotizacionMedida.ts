@@ -39,26 +39,39 @@ export function normalizarMedidaPlanchuelaCm(anchoCm: number, largoCm: number): 
   return normalizarMedidaMm(a, l);
 }
 
-const L_LINE_TOL = 0.18;
-
-function seedsMismaLineaLargo(lObjetivo: number): typeof SEED_MEDIDAS_GRUPO {
-  const largosUniq = [...new Set(SEED_MEDIDAS_GRUPO.map((s) => s.largo))].sort((x, y) => x - y);
-  let bestL = largosUniq[0]!;
-  let bestD = Infinity;
-  for (const L of largosUniq) {
-    const d = Math.abs(L - lObjetivo);
-    if (d < bestD) {
-      bestD = d;
-      bestL = L;
-    }
+/**
+ * Catálogo / semillas: **lado largo × lado corto** (cm), p. ej. 8×1,4 → ancho 8 largo 1,4.
+ * Si el usuario cargó ancho×alto al revés, lo alineamos antes de cotizar.
+ */
+export function orientacionTablaCm(anchoCm: number, largoCm: number): { ancho: number; largo: number } {
+  if (!Number.isFinite(anchoCm) || !Number.isFinite(largoCm) || anchoCm <= 0 || largoCm <= 0) {
+    return { ancho: anchoCm, largo: largoCm };
   }
-  if (bestD > L_LINE_TOL) return [];
-  return SEED_MEDIDAS_GRUPO.filter((s) => Math.abs(s.largo - bestL) < 1e-3);
+  return normalizarMedidaMm(Math.max(anchoCm, largoCm), Math.min(anchoCm, largoCm));
+}
+
+/**
+ * Mapea el **lado corto** (cm) a la “línea” de la tabla de semillas (1, 2, 2,5, …).
+ * - Hasta 1,35 cm: línea 1 (4×1, 8×1 chicos; incluye sellos finos tipo 4×0,2).
+ * - De 1,35 a 2,25 cm: línea 2 (p. ej. 8×1,4 → misma banda que 8×2 medianos).
+ */
+export function largoLineaInferenciaCm(ladoCortoCm: number): number | null {
+  if (!Number.isFinite(ladoCortoCm) || ladoCortoCm <= 0) return null;
+  if (ladoCortoCm < 1.35) return 1;
+  if (ladoCortoCm < 2.25) return 2;
+  if (ladoCortoCm < 2.75) return 2.5;
+  if (ladoCortoCm < 3.5) return 3;
+  if (ladoCortoCm < 4.5) return 4;
+  if (ladoCortoCm < 5.5) return 5;
+  if (ladoCortoCm <= 6.5) return 6;
+  return null;
 }
 
 /** Si no hay clave exacta en BD: misma “línea” de largo que la tabla y ancho máximo semilla ≤ medida. */
 export function inferirGrupoPorSemillas(anchoCm: number, largoCm: number): SelloGrupoCodigo | null {
-  const col = seedsMismaLineaLargo(largoCm);
+  const Lref = largoLineaInferenciaCm(largoCm);
+  if (Lref === null) return null;
+  const col = SEED_MEDIDAS_GRUPO.filter((s) => Math.abs(s.largo - Lref) < 1e-3);
   if (col.length === 0) return null;
   const candidates = col.filter((s) => s.ancho <= anchoCm + 1e-3);
   if (candidates.length) {
@@ -73,6 +86,9 @@ export function inferirGrupoPorSemillas(anchoCm: number, largoCm: number): Sello
   return null;
 }
 
+/**
+ * Último recurso: semilla 2D más cercana solo si distancia Manhattan ≤ umbral (evita falsos medianos/grandes).
+ */
 function grupoPorSemillaMasCercana2D(anchoCm: number, largoCm: number): SelloGrupoCodigo | null {
   let best: SelloGrupoCodigo | null = null;
   let bestD = Infinity;
@@ -83,7 +99,7 @@ function grupoPorSemillaMasCercana2D(anchoCm: number, largoCm: number): SelloGru
       best = s.grupo_codigo as SelloGrupoCodigo;
     }
   }
-  return bestD <= 0.55 ? best : null;
+  return bestD <= 0.4 ? best : null;
 }
 
 export type CotizacionSelloRectangular = {
@@ -102,7 +118,8 @@ export function cotizarSelloRectangularCm(
 ): CotizacionSelloRectangular | null {
   if (!Number.isFinite(anchoCm) || !Number.isFinite(largoCm) || anchoCm <= 0 || largoCm <= 0) return null;
 
-  const { ancho: as, largo: ls } = normalizarMedidaPlanchuelaCm(anchoCm, largoCm);
+  const oriented = orientacionTablaCm(anchoCm, largoCm);
+  const { ancho: as, largo: ls } = normalizarMedidaPlanchuelaCm(oriented.ancho, oriented.largo);
 
   const exact = resolverPrecioSelloRectangular(as, ls, input);
   if (exact) {
