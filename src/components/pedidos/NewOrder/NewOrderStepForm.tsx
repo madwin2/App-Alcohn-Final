@@ -173,8 +173,8 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   const phoneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoFilledRef = useRef(false);
   const [measureInput, setMeasureInput] = useState<string>('');
-  const [measureTick, setMeasureTick] = useState(0);
   const [preciosCotizacion, setPreciosCotizacion] = useState<PreciosResolverInput | null>(null);
+  const [preciosFetchHecho, setPreciosFetchHecho] = useState(false);
 
   // Formulario para el paso 1 (Cliente)
   const customerForm = useForm<CustomerFormData>({
@@ -272,6 +272,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         ...initialData.order,
       },
       values: {
+        totalValue: 0,
         depositValue: 20000,
         ...initialData.values,
       },
@@ -296,22 +297,29 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   const restante = Math.max(0, totalValue - depositValue);
 
   useEffect(() => {
+    if (currentStep !== 2 && currentStep !== 3) return;
+    setPreciosFetchHecho(false);
     void fetchPreciosResolverInputForCotizacion()
-      .then(setPreciosCotizacion)
-      .catch(() => setPreciosCotizacion(null));
-  }, []);
+      .then((p) => {
+        setPreciosCotizacion(p);
+        setPreciosFetchHecho(true);
+      })
+      .catch(() => {
+        setPreciosCotizacion(null);
+        setPreciosFetchHecho(true);
+      });
+  }, [currentStep]);
 
   const aplicarMedidaDesdeTexto = useCallback(
     (value: string) => {
       setMeasureInput(value);
       const parsed = parseMedidaMmAString(value);
       if (parsed) {
-        orderForm.setValue('order.requestedWidthMm', parsed.anchoMm);
-        orderForm.setValue('order.requestedHeightMm', parsed.altoMm);
-        setMeasureTick((t) => t + 1);
+        orderForm.setValue('order.requestedWidthMm', parsed.anchoMm, { shouldDirty: true, shouldValidate: true });
+        orderForm.setValue('order.requestedHeightMm', parsed.altoMm, { shouldDirty: true, shouldValidate: true });
       } else if (value.trim() === '') {
-        orderForm.setValue('order.requestedWidthMm', 1);
-        orderForm.setValue('order.requestedHeightMm', 1);
+        orderForm.setValue('order.requestedWidthMm', 1, { shouldDirty: true });
+        orderForm.setValue('order.requestedHeightMm', 1, { shouldDirty: true });
       }
     },
     [orderForm],
@@ -323,15 +331,17 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   useEffect(() => {
     if (selectedItemType !== 'SELLO') return;
     if (currentStep !== 2 && currentStep !== 3) return;
-    if (!preciosCotizacion || measureTick === 0) return;
+    if (!preciosCotizacion) return;
     const w = Number(wMm) || 0;
     const h = Number(hMm) || 0;
     if (w < 1 || h < 1) return;
+    /** 1×1 mm = placeholder hasta que cargue medida (evita cotizar antes de escribir). */
+    if (w === 1 && h === 1) return;
     const { anchoCm, altoCm } = mmPedidoAcm(w, h);
     const c = cotizarSelloRectangularCm(anchoCm, altoCm, preciosCotizacion);
     if (!c) return;
-    orderForm.setValue('values.totalValue', c.precioTransferencia);
-  }, [measureTick, preciosCotizacion, selectedItemType, currentStep, wMm, hMm, orderForm]);
+    orderForm.setValue('values.totalValue', c.precioTransferencia, { shouldDirty: true, shouldValidate: true });
+  }, [preciosCotizacion, selectedItemType, currentStep, wMm, hMm, orderForm]);
 
   useEffect(() => {
     if (selectedItemType === 'SOLDADOR') {
@@ -386,6 +396,8 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
         order: {
           itemType: 'SELLO',
           stampType: 'CLASICO',
+          requestedWidthMm: 1,
+          requestedHeightMm: 1,
         },
         values: {
           totalValue: 0,
@@ -579,11 +591,20 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             {measureInput && !parseMedidaMmAString(measureInput) && (
               <p className="text-xs text-yellow-500 mt-1">Formato: 40×40 o 35 (milímetros)</p>
             )}
-            {preciosCotizacion && selectedItemType === 'SELLO' && measureTick > 0 && Number(wMm) >= 1 && Number(hMm) >= 1 ? (
+            {preciosCotizacion &&
+            selectedItemType === 'SELLO' &&
+            Number(wMm) >= 1 &&
+            Number(hMm) >= 1 &&
+            !(Number(wMm) === 1 && Number(hMm) === 1) ? (
               <p className="text-[11px] text-muted-foreground">
                 Valor sugerido por lista de precios (transferencia); podés editarlo si aplica descuento.
               </p>
             ) : null}
+            {selectedItemType === 'SELLO' && preciosFetchHecho && !preciosCotizacion && (
+              <p className="text-[11px] text-amber-500/90 mt-1">
+                No se pudo cargar el catálogo de precios (Supabase / permisos). El total no se autocompleta; revisá la migración de lectura del equipo.
+              </p>
+            )}
           </div>
           <div className="col-span-2">
             {selectedItemType === 'SELLO' && (

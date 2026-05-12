@@ -138,7 +138,7 @@ export function cotizarSelloRectangularCm(
 
 /** Parse "40×40", "35,5×25" o "40" (cuadrado) en **milímetros** → `requestedWidthMm` / `requestedHeightMm`. */
 export function parseMedidaMmAString(raw: string): { anchoMm: number; altoMm: number } | null {
-  const t = raw.trim().replace(/,/g, '.');
+  const t = raw.trim().replace(/,/g, '.').replace(/\s/g, '');
   const m = t.match(/^(\d+(?:\.\d+)?)(?:[xX×](\d+(?:\.\d+)?))?$/);
   if (!m) return null;
   const wMm = parseFloat(m[1]);

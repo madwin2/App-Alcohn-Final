@@ -114,18 +114,27 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
       isPriority: false,
       itemValue: 0,
       depositValueItem: 0,
+      requestedWidthMm: 1,
       requestedHeightMm: 1,
     },
   });
 
-  const [measureTick, setMeasureTick] = useState(0);
   const [preciosCotizacion, setPreciosCotizacion] = useState<PreciosResolverInput | null>(null);
+  const [preciosFetchHecho, setPreciosFetchHecho] = useState(false);
 
   useEffect(() => {
+    if (!open) return;
+    setPreciosFetchHecho(false);
     void fetchPreciosResolverInputForCotizacion()
-      .then(setPreciosCotizacion)
-      .catch(() => setPreciosCotizacion(null));
-  }, []);
+      .then((p) => {
+        setPreciosCotizacion(p);
+        setPreciosFetchHecho(true);
+      })
+      .catch(() => {
+        setPreciosCotizacion(null);
+        setPreciosFetchHecho(true);
+      });
+  }, [open]);
 
   const watchedValues = watch(['itemValue', 'depositValueItem']);
   const selectedItemType = watch('itemType');
@@ -138,23 +147,23 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
 
   useEffect(() => {
     if (selectedItemType !== 'SELLO') return;
-    if (!preciosCotizacion || measureTick === 0) return;
+    if (!preciosCotizacion) return;
     const w = Number(wMmWatch) || 0;
     const h = Number(hMmWatch) || 0;
     if (w < 1 || h < 1) return;
+    if (w === 1 && h === 1) return;
     const { anchoCm, altoCm } = mmPedidoAcm(w, h);
     const c = cotizarSelloRectangularCm(anchoCm, altoCm, preciosCotizacion);
-    if (c) setValue('itemValue', c.precioTransferencia);
-  }, [measureTick, preciosCotizacion, selectedItemType, wMmWatch, hMmWatch, setValue]);
+    if (c) setValue('itemValue', c.precioTransferencia, { shouldDirty: true, shouldValidate: true });
+  }, [preciosCotizacion, selectedItemType, wMmWatch, hMmWatch, setValue]);
 
   const aplicarMedidaDesdeTexto = useCallback(
     (value: string) => {
       setMeasureInput(value);
       const parsed = parseMedidaMmAString(value);
       if (parsed) {
-        setValue('requestedWidthMm', parsed.anchoMm);
-        setValue('requestedHeightMm', parsed.altoMm);
-        setMeasureTick((t) => t + 1);
+        setValue('requestedWidthMm', parsed.anchoMm, { shouldDirty: true, shouldValidate: true });
+        setValue('requestedHeightMm', parsed.altoMm, { shouldDirty: true, shouldValidate: true });
       } else if (value.trim() === '') {
         setValue('requestedWidthMm', 1);
         setValue('requestedHeightMm', 1);
@@ -337,11 +346,19 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                   {measureInput && !parseMedidaMmAString(measureInput) && (
                     <p className="text-xs text-yellow-500 mt-1">Formato: 40×40 o 35 (milímetros)</p>
                   )}
-                  {preciosCotizacion && measureTick > 0 && Number(wMmWatch) >= 1 && Number(hMmWatch) >= 1 ? (
+                  {preciosCotizacion &&
+                    Number(wMmWatch) >= 1 &&
+                    Number(hMmWatch) >= 1 &&
+                    !(Number(wMmWatch) === 1 && Number(hMmWatch) === 1) ? (
                     <p className="text-[11px] text-muted-foreground">
                       Valor sugerido por lista (transferencia); editable.
                     </p>
                   ) : null}
+                  {selectedItemType === 'SELLO' && preciosFetchHecho && !preciosCotizacion && (
+                    <p className="text-[11px] text-amber-500/90 mt-1">
+                      No se pudo cargar el catálogo de precios; el valor no se autocompleta.
+                    </p>
+                  )}
                 </div>
               )}
               <div>
