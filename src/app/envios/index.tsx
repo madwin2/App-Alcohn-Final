@@ -422,7 +422,9 @@ export default function EnviosPage() {
 
       const addressIds = (dbOrders ?? []).map((row) => row.direccion_id).filter(Boolean) as string[];
       const { data: addresses, error: addressesError } = addressIds.length
-        ? await supabase.from('direcciones').select('id,provincia,localidad,domicilio,codigo_postal,nombre,apellido,telefono')
+        ? await supabase
+            .from('direcciones')
+            .select('id,provincia,localidad,domicilio,codigo_postal,nombre,apellido,telefono,codigo_sucursal_micorreo')
             .in('id', addressIds)
         : { data: [], error: null };
 
@@ -453,6 +455,8 @@ export default function EnviosPage() {
         }
 
         const isSucursal = (order.shipping.service === 'SUCURSAL') || dbOrder.tipo_envio === 'Sucursal';
+        const codigoGuardado = ((address as { codigo_sucursal_micorreo?: string | null }).codigo_sucursal_micorreo || '')
+          .trim();
         const paquete = resolveCorreoCsvPaqueteFromOrderItems(order.items);
         const csvRow = await createCorreoCsvRow({
           provincia: address.provincia || '',
@@ -463,6 +467,7 @@ export default function EnviosPage() {
           email: customerById.get(order.customer.id)?.mail || order.customer.email || '',
           telefono: address.telefono || order.customer.phoneE164 || '',
           tipoEnvio: isSucursal ? 'Sucursal' : 'Domicilio',
+          codigoSucursalManual: isSucursal && codigoGuardado ? codigoGuardado : undefined,
           paquete,
         });
 
@@ -578,7 +583,7 @@ export default function EnviosPage() {
     try {
       const { data: existingAddress, error: existingAddressError } = await supabase
         .from('direcciones')
-        .select('provincia,localidad,domicilio,codigo_postal,nombre,apellido,telefono')
+        .select('provincia,localidad,domicilio,codigo_postal,nombre,apellido,telefono,codigo_sucursal_micorreo')
         .eq('id', order.direccionId)
         .single();
       if (existingAddressError) throw existingAddressError;
@@ -594,6 +599,9 @@ export default function EnviosPage() {
         email: order.customer.email || '',
         phone: normalizePhoneDigitsForEnvios(existingAddress?.telefono || order.customer.phoneE164 || ''),
       });
+      setManualSucursalCode(
+        ((existingAddress as { codigo_sucursal_micorreo?: string | null })?.codigo_sucursal_micorreo || '').trim(),
+      );
     } catch (existingAddressLoadError) {
       toast({
         title: 'No se pudieron cargar los datos actuales',
@@ -724,6 +732,11 @@ export default function EnviosPage() {
       const firstName = nameParts[0] ?? selectedOrder.customer.firstName;
       const lastName = nameParts.slice(1).join(' ') || selectedOrder.customer.lastName || '-';
 
+      const codigoSucursalDb =
+        shippingTypeDraft === 'SUCURSAL' && manualSucursalCode.trim()
+          ? manualSucursalCode.trim()
+          : null;
+
       const { data: addressRow, error: addressError } = await supabase
         .from('direcciones')
         .insert({
@@ -734,6 +747,7 @@ export default function EnviosPage() {
           localidad:
             normalizeLocalityForCorreo(canonicalProvince, normalizedForm.locality) || 'SIN DEFINIR',
           domicilio: normalizedForm.address || 'SIN DEFINIR',
+          codigo_sucursal_micorreo: codigoSucursalDb,
           nombre: firstName,
           apellido: lastName,
           telefono: normalizePhoneDigitsForEnvios(normalizedForm.phone) || null,

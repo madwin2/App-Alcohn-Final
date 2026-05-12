@@ -32,6 +32,7 @@ CREATE TABLE direcciones (
     provincia VARCHAR(100) NOT NULL,
     localidad VARCHAR(100) NOT NULL,
     domicilio VARCHAR(255) NOT NULL,
+    codigo_sucursal_micorreo VARCHAR(20),
     nombre VARCHAR(100) NOT NULL,
     apellido VARCHAR(100) NOT NULL,
     telefono VARCHAR(20),

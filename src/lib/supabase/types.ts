@@ -26,6 +26,7 @@ export interface Database {
           provincia: string;
           localidad: string;
           domicilio: string;
+          codigo_sucursal_micorreo: string | null;
           nombre: string;
           apellido: string;
           telefono: string | null;
@@ -267,6 +268,7 @@ export interface Database {
           logo_trazo_ratio_w_h: number | null;
           logo_trazo_ratio_label: string | null;
           logo_trazo_bbox_fallback: boolean | null;
+          medidas_cotizacion_json: Record<string, unknown>[] | null;
           mensaje_error: string | null;
           creado_por: string | null;
           created_at: string;
@@ -296,6 +298,7 @@ export interface Database {
           logo_trazo_ratio_w_h?: number | null;
           logo_trazo_ratio_label?: string | null;
           logo_trazo_bbox_fallback?: boolean | null;
+          medidas_cotizacion_json?: Record<string, unknown>[] | null;
           mensaje_error?: string | null;
           creado_por?: string | null;
           created_at?: string;
@@ -324,6 +327,7 @@ export interface Database {
           logo_trazo_ratio_w_h: number | null;
           logo_trazo_ratio_label: string | null;
           logo_trazo_bbox_fallback: boolean | null;
+          medidas_cotizacion_json: Record<string, unknown>[] | null;
           mensaje_error: string | null;
           creado_por: string | null;
           updated_at: string;
