@@ -14,15 +14,6 @@ export function materialChoiceFromCheckboxes(useCuero: boolean, useMadera: boole
   return 'ambos';
 }
 
-export function getMeasuresForMaterialChoice(
-  choice: MockupMaterialChoice,
-): Array<{ material: MockupMaterial; measures: MockupMeasure[] }> {
-  return resolveMockupMaterials(choice).map((material) => ({
-    material,
-    measures: getMockupMeasures(material),
-  }));
-}
-
 export interface LogoValidationResult {
   hasTransparentBackground: boolean;
   hasWhiteBackground: boolean;
@@ -31,28 +22,10 @@ export interface LogoValidationResult {
   details: string;
 }
 
-export interface MockupMeasure {
-  label: string;
-  price: number;
-}
-
 const OUTPUT_WIDTH = 1400;
 const OUTPUT_HEIGHT = 1000;
 const MAX_ANALYSIS_PIXELS = 220_000;
 const MAX_PROCESSING_SIZE = 1800;
-
-const PRICE_TABLE: Record<MockupMaterial, MockupMeasure[]> = {
-  cuero: [
-    { label: '4 x 4 cm', price: 13500 },
-    { label: '6 x 6 cm', price: 18900 },
-    { label: '8 x 8 cm', price: 24600 },
-  ],
-  madera: [
-    { label: '4 x 4 cm', price: 11800 },
-    { label: '6 x 6 cm', price: 16500 },
-    { label: '8 x 8 cm', price: 21900 },
-  ],
-};
 
 /** Mismas rutas base que el ejemplo Sharp (`mockupGenerator.ts`). */
 const textureCandidates: Record<MockupMaterial, string[]> = {
@@ -124,10 +97,6 @@ const rgbToHue = (r: number, g: number, b: number): number => {
 };
 
 const isNearWhite = (r: number, g: number, b: number) => r >= 245 && g >= 245 && b >= 245;
-
-export function getMockupMeasures(material: MockupMaterial): MockupMeasure[] {
-  return PRICE_TABLE[material];
-}
 
 export function sanitizeDesignName(input: string): string {
   return input
@@ -407,6 +376,83 @@ function boxBlurMask2D(src: Float32Array, w: number, h: number, r: number): Floa
     }
   }
   return out;
+}
+
+export interface LogoInkMeasurements {
+  /** Ancho del trazo (px, espacio de la imagen original). */
+  widthPx: number;
+  heightPx: number;
+  /** ancho / alto */
+  ratioWOverH: number;
+  /** Proporción reducida del rectángulo del trazo, p. ej. `3 : 2 (ancho : alto)`. */
+  ratioLabel: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  /** Si no hubo tinta detectada, se usa el lienzo completo. */
+  usedFallbackFullImage: boolean;
+}
+
+function gcdInt(a: number, b: number): number {
+  let x = Math.max(1, Math.round(Math.abs(a)));
+  let y = Math.max(1, Math.round(Math.abs(b)));
+  while (y) {
+    const t = y;
+    y = x % y;
+    x = t;
+  }
+  return x;
+}
+
+/** Bounding box del trazo de tinta (no del archivo completo), en píxeles nativos. */
+export async function measureLogoInkBoundsFromFile(file: File): Promise<LogoInkMeasurements> {
+  const src = await fileToDataUrl(file);
+  const image = await loadImage(src);
+  const nw = image.naturalWidth;
+  const nh = image.naturalHeight;
+  const scaled = scaleForLimit(nw, nh, MAX_ANALYSIS_PIXELS);
+  const mask = extractInkMask(image, scaled.width, scaled.height, 0);
+  const TH = 0.085;
+  let minX = scaled.width;
+  let minY = scaled.height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < scaled.height; y++) {
+    const row = y * scaled.width;
+    for (let x = 0; x < scaled.width; x++) {
+      if (mask[row + x] >= TH) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  let widthPx = nw;
+  let heightPx = nh;
+  let usedFallbackFullImage = true;
+  if (maxX >= minX && maxY >= minY) {
+    usedFallbackFullImage = false;
+    const bw = maxX - minX + 1;
+    const bh = maxY - minY + 1;
+    const sx = nw / scaled.width;
+    const sy = nh / scaled.height;
+    widthPx = Math.max(1, Math.round(bw * sx));
+    heightPx = Math.max(1, Math.round(bh * sy));
+  }
+  const ratioWOverH = widthPx / Math.max(1, heightPx);
+  const g = gcdInt(widthPx, heightPx);
+  const rw = Math.round(widthPx / g);
+  const rh = Math.round(heightPx / g);
+  const ratioLabel = `${rw} : ${rh} (ancho : alto)`;
+  return {
+    widthPx,
+    heightPx,
+    ratioWOverH,
+    ratioLabel,
+    naturalWidth: nw,
+    naturalHeight: nh,
+    usedFallbackFullImage,
+  };
 }
 
 /** Solo textura base (madera quemada se aplica después con máscara del logo). */

@@ -18,11 +18,12 @@ import {
 } from '@/lib/supabase/services/mockupSolicitudes.service';
 import {
   generateMockup,
-  getMeasuresForMaterialChoice,
   materialChoiceFromCheckboxes,
+  measureLogoInkBoundsFromFile,
   optimizeLogoForMockup,
   resolveMockupMaterials,
   sanitizeDesignName,
+  type LogoInkMeasurements,
   type LogoValidationResult,
   type MockupMaterialChoice,
   validateLogoForMockup,
@@ -72,15 +73,39 @@ function validationToRecord(v: LogoValidationResult): Record<string, unknown> {
   };
 }
 
-function recordToValidation(r: Record<string, unknown> | null): LogoValidationResult | null {
-  if (!r || typeof r !== 'object') return null;
-  return {
-    hasTransparentBackground: Boolean(r.hasTransparentBackground),
-    hasWhiteBackground: Boolean(r.hasWhiteBackground),
-    isMonochrome: Boolean(r.isMonochrome),
-    approved: Boolean(r.approved),
-    details: typeof r.details === 'string' ? r.details : '',
-  };
+const LS_PROPORCIONES = 'mockup_logo_proporciones_v1';
+
+function persistProporcionNavegador(solicitudId: string, m: LogoInkMeasurements) {
+  try {
+    const raw = localStorage.getItem(LS_PROPORCIONES);
+    const prev = (() => {
+      try {
+        const p = JSON.parse(raw || '[]');
+        return Array.isArray(p) ? p : [];
+      } catch {
+        return [];
+      }
+    })() as Array<{
+      solicitudId: string;
+      widthPx: number;
+      heightPx: number;
+      ratioWOverH: number;
+      ratioLabel: string;
+      at: string;
+    }>;
+    const entry = {
+      solicitudId,
+      widthPx: m.widthPx,
+      heightPx: m.heightPx,
+      ratioWOverH: m.ratioWOverH,
+      ratioLabel: m.ratioLabel,
+      at: new Date().toISOString(),
+    };
+    const next = [entry, ...prev.filter((x) => x.solicitudId !== solicitudId)].slice(0, 300);
+    localStorage.setItem(LS_PROPORCIONES, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
 }
 
 export default function MockupsPage() {
@@ -100,7 +125,9 @@ export default function MockupsPage() {
   const [mockupMaderaPreview, setMockupMaderaPreview] = useState<string | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
-  const [isRunningAnalysis, setIsRunningAnalysis] = useState(false);
+  const [processing, setProcessing] = useState<'idle' | 'generar' | 'simplificar'>('idle');
+  const [logoMetrics, setLogoMetrics] = useState<LogoInkMeasurements | null>(null);
+  const [viaSimplificarIa, setViaSimplificarIa] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isRedoing, setIsRedoing] = useState(false);
 
@@ -114,14 +141,6 @@ export default function MockupsPage() {
     () => materialChoiceFromCheckboxes(useCuero, useMadera),
     [useCuero, useMadera],
   );
-
-  const measuresBlocks = useMemo(() => {
-    const choice =
-      phase === 'ingreso' || !activeRow
-        ? materialChoiceFromCheckboxes(useCuero, useMadera)
-        : (activeRow.material as MockupMaterialChoice);
-    return getMeasuresForMaterialChoice(choice);
-  }, [phase, useCuero, useMadera, activeRow]);
 
   const refreshHistory = useCallback(async () => {
     const { data, error } = await listMockupSolicitudes(50);
@@ -166,6 +185,8 @@ export default function MockupsPage() {
       setValidation(null);
       setPhase('ingreso');
       setActiveRow(null);
+      setLogoMetrics(null);
+      setViaSimplificarIa(false);
 
       setSourceFile(file);
       setSourcePreview(URL.createObjectURL(file));
@@ -241,6 +262,45 @@ export default function MockupsPage() {
     [],
   );
 
+  const runAiSimplify = useCallback(
+    async (file: File, slug: string): Promise<File> => {
+      const inputDataUrl = await fileToDataUrl(file);
+      const aiResponse = await fetch('/api/simplify-logo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageDataUrl: inputDataUrl }),
+      });
+      const aiJson = (await aiResponse.json()) as {
+        ok?: boolean;
+        optimizedDataUrl?: string | null;
+        error?: string;
+        details?: string;
+        message?: string;
+        triedModels?: string[];
+        attemptsSummary?: Array<{ model: string; ok?: boolean; message?: string }>;
+      };
+      if (!aiJson.optimizedDataUrl) {
+        const summary =
+          aiJson.attemptsSummary?.map((s) => `${s.model}: ${s.message || '—'}`).join(' · ') || '';
+        const reason =
+          aiJson?.message ||
+          aiJson?.error ||
+          (typeof aiJson?.details === 'string' ? aiJson.details.slice(0, 220) : '') ||
+          summary.slice(0, 220) ||
+          (!aiResponse.ok ? `Error IA (${aiResponse.status})` : 'Respuesta IA inválida');
+        throw new Error(reason);
+      }
+      return dataUrlToFile(aiJson.optimizedDataUrl, `${slug}_simplificado.png`);
+    },
+    [],
+  );
+
+  const aplicarMedicionTrazo = useCallback(async (file: File, solicitudId: string) => {
+    const m = await measureLogoInkBoundsFromFile(file);
+    setLogoMetrics(m);
+    persistProporcionNavegador(solicitudId, m);
+  }, []);
+
   const suggestNameFromAi = useCallback(async (fileName: string, details: string): Promise<string | null> => {
     const res = await fetch('/api/suggest-mockup-name', {
       method: 'POST',
@@ -269,7 +329,7 @@ export default function MockupsPage() {
     const id = crypto.randomUUID();
     const provisionalSlug = sanitizeDesignName(sampleName.trim() || `muestra-${id.slice(0, 8)}`);
 
-    setIsRunningAnalysis(true);
+    setProcessing('generar');
     try {
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData.user?.id ?? null;
@@ -361,12 +421,14 @@ export default function MockupsPage() {
       setOptimizedPreview(URL.createObjectURL(optimizedFile));
       setMockupCueroPreview(null);
       setMockupMaderaPreview(null);
+      setViaSimplificarIa(false);
+      await aplicarMedicionTrazo(optimizedFile, id);
       setActiveRow(updated);
       setPhase('revision');
 
       toast({
         title: 'Listo para revisar',
-        description: 'Revisá la imagen óptima y las medidas. Aprobá o pedí rehacer la optimización.',
+        description: 'Revisá el trazo óptimo y la medición. Aprobá o pedí rehacer la optimización.',
       });
     } catch (error) {
       await updateMockupSolicitud(id, {
@@ -379,13 +441,139 @@ export default function MockupsPage() {
         variant: 'destructive',
       });
     } finally {
-      setIsRunningAnalysis(false);
+      setProcessing('idle');
     }
   }, [
+    aplicarMedicionTrazo,
     materialChoice,
-    mockupMaderaPreview,
     optimizedPreview,
     runAiOptimize,
+    sampleName,
+    skipAnalysis,
+    sourceFile,
+    suggestNameFromAi,
+    toast,
+    whatsapp,
+  ]);
+
+  const handleSimplificarYPreparar = useCallback(async () => {
+    if (!sourceFile) {
+      toast({
+        title: 'Falta imagen',
+        description: 'Subí el archivo base antes de simplificar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const waTrim = whatsapp.trim();
+    const wa = waTrim.length > 0 ? waTrim.slice(0, 40) : null;
+    const choice = materialChoice;
+    const id = crypto.randomUUID();
+    const provisionalSlug = sanitizeDesignName(sampleName.trim() || `muestra-${id.slice(0, 8)}`);
+
+    setProcessing('simplificar');
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData.user?.id ?? null;
+
+      const { data: inserted, error: insErr } = await insertMockupSolicitud({
+        id,
+        nombre_muestra: sampleName.trim() || null,
+        nombre_slug: provisionalSlug,
+        whatsapp: wa,
+        material: choice,
+        omitir_analisis: skipAnalysis,
+        estado: 'procesando',
+        creado_por: userId,
+      });
+      if (insErr || !inserted) {
+        throw new Error(
+          insErr?.message ||
+            'No se pudo crear la solicitud. ¿Ejecutaste la migración SQL `migration_mockup_solicitudes.sql` en Supabase?',
+        );
+      }
+
+      const originalExt = getFileExtension(sourceFile.name, 'png');
+      const basePath = `mockups/solicitudes/${id}/original.${originalExt}`;
+      const baseUrl = await uploadFile('foto', sourceFile, basePath);
+
+      await updateMockupSolicitud(id, {
+        archivo_base_url: baseUrl,
+        archivo_base_path: basePath,
+      });
+
+      const simplifiedFile = await runAiSimplify(sourceFile, provisionalSlug);
+
+      const validationResult: LogoValidationResult = skipAnalysis
+        ? {
+            approved: true,
+            details: 'Análisis omitido tras simplificación IA.',
+            hasTransparentBackground: false,
+            hasWhiteBackground: false,
+            isMonochrome: true,
+          }
+        : await validateLogoForMockup(simplifiedFile);
+
+      setValidation(validationResult);
+
+      let finalSlug = provisionalSlug;
+      if (!sampleName.trim()) {
+        const suggested = await suggestNameFromAi(sourceFile.name, validationResult.details);
+        if (suggested) {
+          finalSlug = sanitizeDesignName(suggested);
+          await updateMockupSolicitud(id, {
+            nombre_muestra: suggested,
+            nombre_slug: finalSlug,
+          });
+          setSampleName(suggested);
+        }
+      }
+
+      const optimizedPath = `mockups/solicitudes/${id}/optimizado.png`;
+      const optimizedUrl = await uploadFile('foto', simplifiedFile, optimizedPath);
+
+      const { data: updated, error: upErr } = await updateMockupSolicitud(id, {
+        validacion: validationToRecord(validationResult),
+        imagen_optimizada_url: optimizedUrl,
+        imagen_optimizada_path: optimizedPath,
+        estado: 'pendiente_aprobacion',
+        intentos_optimizacion: 1,
+        mensaje_error: null,
+      });
+      if (upErr || !updated) throw upErr || new Error('No se pudo guardar');
+
+      revokeBlobUrl(optimizedPreview);
+      setOptimizedPreview(URL.createObjectURL(simplifiedFile));
+      setMockupCueroPreview(null);
+      setMockupMaderaPreview(null);
+      setViaSimplificarIa(true);
+      await aplicarMedicionTrazo(simplifiedFile, id);
+      setActiveRow(updated);
+      setPhase('revision');
+
+      toast({
+        title: 'Versión simplificada lista',
+        description: 'Revisá el trazo, la medición del logo y aprobá o pedí rehacer.',
+      });
+    } catch (error) {
+      await updateMockupSolicitud(id, {
+        estado: 'error',
+        mensaje_error: error instanceof Error ? error.message : 'Error desconocido',
+      }).catch(() => {});
+      toast({
+        title: 'Error al simplificar',
+        description: error instanceof Error ? error.message : 'No se pudo completar.',
+        variant: 'destructive',
+      });
+    } finally {
+      setProcessing('idle');
+    }
+  }, [
+    aplicarMedicionTrazo,
+    materialChoice,
+    optimizedPreview,
+    runAiSimplify,
     sampleName,
     skipAnalysis,
     sourceFile,
@@ -433,6 +621,7 @@ export default function MockupsPage() {
       revokeBlobUrl(optimizedPreview);
       setOptimizedPreview(URL.createObjectURL(optimizedFile));
       setActiveRow(updated);
+      await aplicarMedicionTrazo(optimizedFile, activeRow.id);
       toast({ title: 'Optimización rehecha', description: `Intento ${nextIntentos}.` });
     } catch (error) {
       toast({
@@ -443,7 +632,7 @@ export default function MockupsPage() {
     } finally {
       setIsRedoing(false);
     }
-  }, [activeRow, optimizedPreview, runAiOptimize, toast]);
+  }, [activeRow, aplicarMedicionTrazo, optimizedPreview, runAiOptimize, toast]);
 
   const handleAprobado = useCallback(async () => {
     if (!activeRow?.id || !activeRow.imagen_optimizada_url) return;
@@ -530,11 +719,16 @@ export default function MockupsPage() {
     setSkipAnalysis(false);
     setUseCuero(false);
     setUseMadera(false);
+    setLogoMetrics(null);
+    setViaSimplificarIa(false);
+    setProcessing('idle');
   }, [mockupCueroPreview, mockupMaderaPreview, optimizedPreview, sourcePreview]);
 
   const validationFromRow = activeRow?.validacion
     ? recordToValidation(activeRow.validacion as Record<string, unknown>)
     : validation;
+
+  const isBusy = processing !== 'idle';
 
   return (
     <div className="min-h-screen bg-background">
@@ -543,7 +737,8 @@ export default function MockupsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Generador de Mockups</h1>
           <p className="text-sm text-muted-foreground">
-            Análisis y optimización primero; después aprobás o pedís rehacer. Todo queda guardado en Supabase.
+            Podés optimizar el archivo, o pedir una versión simplificada por IA; después medimos el trazo del logo y
+            aprobás. Los datos de Supabase; la proporción del trazo queda en el navegador.
           </p>
         </div>
 
@@ -658,19 +853,42 @@ export default function MockupsPage() {
               </div>
 
               {phase === 'ingreso' && (
-                <Button
-                  type="button"
-                  className="w-full"
-                  onClick={() => void handleGenerarMockup()}
-                  disabled={isRunningAnalysis}
-                >
-                  {isRunningAnalysis ? 'Analizando y optimizando…' : 'Generar mockup'}
-                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    type="button"
+                    className="flex-1"
+                    onClick={() => void handleGenerarMockup()}
+                    disabled={isBusy}
+                  >
+                    {processing === 'generar' ? 'Analizando y optimizando…' : 'Generar mockup'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="flex-1"
+                    onClick={() => void handleSimplificarYPreparar()}
+                    disabled={isBusy}
+                  >
+                    {processing === 'simplificar' ? 'Simplificando…' : 'Simplificar'}
+                  </Button>
+                </div>
               )}
+              {phase === 'ingreso' ? (
+                <p className="text-xs text-muted-foreground">
+                  <strong>Generar mockup</strong> aplica el análisis y la optimización habituales.{' '}
+                  <strong>Simplificar</strong> pide a la IA una versión más limpia del mismo logo (sin pasar antes por
+                  ese análisis); después medimos el trazo y podés aprobar o rehacer.
+                </p>
+              ) : null}
 
               {phase === 'revision' && (
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" className="flex-1" onClick={() => void handleAprobado()} disabled={isApproving}>
+                  <Button
+                    type="button"
+                    className="flex-1"
+                    onClick={() => void handleAprobado()}
+                    disabled={isApproving || isBusy}
+                  >
                     {isApproving ? 'Generando mockup…' : 'Aprobado — generar mockup'}
                   </Button>
                   <Button
@@ -678,7 +896,7 @@ export default function MockupsPage() {
                     variant="secondary"
                     className="flex-1"
                     onClick={() => void handleRehacerOptimizacion()}
-                    disabled={isRedoing || isApproving}
+                    disabled={isRedoing || isApproving || isBusy}
                   >
                     {isRedoing ? 'Reoptimizando…' : 'Rehacer optimización'}
                   </Button>
@@ -699,6 +917,9 @@ export default function MockupsPage() {
                     <Badge variant={validationFromRow.approved ? 'default' : 'secondary'}>
                       {validationFromRow.approved ? 'Validación OK' : 'Observaciones'}
                     </Badge>
+                    {viaSimplificarIa ? (
+                      <Badge variant="outline">Preparado vía simplificar IA</Badge>
+                    ) : null}
                     {activeRow?.omitir_analisis ? <Badge variant="outline">Análisis omitido</Badge> : null}
                   </div>
                   <p className="text-muted-foreground">{validationFromRow.details}</p>
@@ -713,7 +934,7 @@ export default function MockupsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Vista previa y medidas</CardTitle>
+              <CardTitle>Vista previa y medición del trazo</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -756,21 +977,35 @@ export default function MockupsPage() {
                 </div>
               ) : null}
 
-              <div className="rounded-md border p-3 space-y-3">
-                <p className="text-sm font-medium">Medidas y precios (según material elegido)</p>
-                {measuresBlocks.map(({ material, measures }) => (
-                  <div key={material}>
-                    <p className="text-xs font-medium capitalize mb-2">{material}</p>
-                    <div className="grid gap-2">
-                      {measures.map((item) => (
-                        <div key={`${material}-${item.label}`} className="flex items-center justify-between text-sm">
-                          <span>{item.label}</span>
-                          <span className="font-medium">${item.price.toLocaleString('es-AR')}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+              <div className="rounded-md border p-3 space-y-2">
+                <p className="text-sm font-medium">Tamaño del logo (trazo, no el lienzo del archivo)</p>
+                {logoMetrics ? (
+                  <>
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">Ancho × alto del trazo:</span>{' '}
+                      <span className="font-medium tabular-nums">
+                        {logoMetrics.widthPx} × {logoMetrics.heightPx} px
+                      </span>
+                    </p>
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">Proporción (ancho : alto):</span>{' '}
+                      <span className="font-medium">{logoMetrics.ratioLabel}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Ancho / alto = {logoMetrics.ratioWOverH.toFixed(4)}. La proporción queda guardada en el
+                      navegador (localStorage, clave {LS_PROPORCIONES}).
+                    </p>
+                    {logoMetrics.usedFallbackFullImage ? (
+                      <p className="text-xs text-amber-600">
+                        No se detectó un trazo claro; se usó el tamaño del lienzo completo como referencia.
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    La medición aparece cuando terminás de preparar la muestra (generar o simplificar).
+                  </p>
+                )}
               </div>
 
               {activeRow?.id ? (
