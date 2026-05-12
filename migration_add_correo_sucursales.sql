@@ -9,6 +9,7 @@
 --
 -- Actualizar desde un Excel MiCorreo más nuevo (mismas columnas típicas: CÓDIGO, CALLE, …):
 --    python scripts/import_correo_sucursales_xlsx.py "ruta/archivo.xlsx" -o correo_sucursales_nuevo.csv
+--    (o .csv) — omite filas con código #N/A u otros errores de Excel antes de importar.
 --    Luego TRUNCATE + import del CSV, o bien --upsert con SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY (ver docstring del script).
 
 create table if not exists public.correo_sucursales (
