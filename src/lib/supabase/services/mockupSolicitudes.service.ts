@@ -46,6 +46,27 @@ export async function listMockupSolicitudes(limit = 60): Promise<{
   return { data: (data ?? []) as MockupSolicitudRow[], error: null };
 }
 
+export type MedidaCotizacionWebhookItem = {
+  label: string;
+  ancho_cm: number;
+  alto_cm: number;
+  precio_transferencia_ars: number | null;
+  /** Listo para pegar en WhatsApp (ej. "$ 12.345"). */
+  precio_transferencia_texto: string | null;
+};
+
+async function fetchMedidasCotizacionFromDb(solicitudId: string): Promise<MedidaCotizacionWebhookItem[]> {
+  const { data, error } = await supabase
+    .from('mockup_solicitudes')
+    .select('medidas_cotizacion_json')
+    .eq('id', solicitudId)
+    .maybeSingle();
+  if (error || !data) return [];
+  const raw = data.medidas_cotizacion_json;
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  return raw as MedidaCotizacionWebhookItem[];
+}
+
 export type NotifyMockupsWhatsAppInput = {
   whatsapp: string;
   /** `nombre` del contrato webhook (ej. nombre de muestra o slug). */
@@ -53,6 +74,11 @@ export type NotifyMockupsWhatsAppInput = {
   solicitudId: string;
   mockupCueroUrl: string | null;
   mockupMaderaUrl: string | null;
+  /**
+   * Solo si la fila aún no tiene `medidas_cotizacion_json` (p. ej. migración pendiente).
+   * Lo normal: se lee desde la DB tras el update de completado.
+   */
+  medidasCotizacion?: MedidaCotizacionWebhookItem[];
 };
 
 /**
@@ -74,6 +100,10 @@ export async function notifyMockupsReadyWhatsApp(
   const nombre = input.nombre.trim() || 'Cliente';
 
   try {
+    const fromDb = await fetchMedidasCotizacionFromDb(input.solicitudId);
+    const medidasCotizacion =
+      fromDb.length > 0 ? fromDb : (input.medidasCotizacion ?? []);
+
     const { data, error } = await supabase.functions.invoke(MOCKUP_WEBHOOK_FN, {
       body: {
         numero_telefono: tel,
@@ -84,6 +114,7 @@ export async function notifyMockupsReadyWhatsApp(
           mockup_cuero_url: cuero,
           mockup_madera_url: madera,
           nombre_muestra: nombre,
+          medidas_cotizacion: medidasCotizacion,
         },
       },
     });

@@ -100,13 +100,16 @@ Deno.serve(async (req: Request) => {
     console.log("incoming body", body);
 
     /** Mockups generados en la app: el bot debe enviar imágenes a `numero_telefono` (WhatsApp).
-     * datos: { solicitud_mockup_id, mockup_cuero_url?, mockup_madera_url?, nombre_muestra? } */
+     * datos: { solicitud_mockup_id, mockup_cuero_url?, mockup_madera_url?, nombre_muestra?, medidas_cotizacion? } */
     const tipoAct = String(body.tipo_actualizacion || "");
     if (tipoAct === "mockups_listos") {
+      const med = body?.datos?.medidas_cotizacion;
+      const nMed = Array.isArray(med) ? med.length : 0;
       console.log("mockups_listos → reenvío al bot (mockups al cliente)", {
         solicitud_mockup_id: body?.datos?.solicitud_mockup_id,
         mockup_cuero_url: Boolean(body?.datos?.mockup_cuero_url),
         mockup_madera_url: Boolean(body?.datos?.mockup_madera_url),
+        medidas_cotizacion: nMed,
       });
     }
 

@@ -396,6 +396,8 @@ export async function fetchPreciosResolverInput(userId: string): Promise<Precios
 
 let cotizacionCache: { input: PreciosResolverInput; at: number } | null = null;
 const COTIZ_CACHE_MS = 5 * 60 * 1000;
+/** Una sola red aunque varios componentes monten a la vez. */
+let cotizacionInFlight: Promise<PreciosResolverInput | null> | null = null;
 
 /** UUID del usuario dueño del catálogo (primera fila legible con políticas de equipo). */
 export async function resolvePreciosCatalogUserId(): Promise<string | null> {
@@ -409,13 +411,21 @@ export async function fetchPreciosResolverInputForCotizacion(): Promise<PreciosR
   if (cotizacionCache && Date.now() - cotizacionCache.at < COTIZ_CACHE_MS) {
     return cotizacionCache.input;
   }
-  const uid = await resolvePreciosCatalogUserId();
-  if (!uid) {
-    cotizacionCache = null;
-    return null;
+  if (cotizacionInFlight) {
+    return cotizacionInFlight;
   }
-  const input = await fetchPreciosResolverInput(uid);
-  if (input) cotizacionCache = { input, at: Date.now() };
-  else cotizacionCache = null;
-  return input;
+  cotizacionInFlight = (async () => {
+    const uid = await resolvePreciosCatalogUserId();
+    if (!uid) {
+      cotizacionCache = null;
+      return null;
+    }
+    const input = await fetchPreciosResolverInput(uid);
+    if (input) cotizacionCache = { input, at: Date.now() };
+    else cotizacionCache = null;
+    return input;
+  })().finally(() => {
+    cotizacionInFlight = null;
+  });
+  return cotizacionInFlight;
 }

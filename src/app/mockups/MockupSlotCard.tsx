@@ -24,6 +24,7 @@ import {
   insertMockupSolicitud,
   notifyMockupsReadyWhatsApp,
   updateMockupSolicitud,
+  type MedidaCotizacionWebhookItem,
   type MockupSolicitudRow,
 } from '@/lib/supabase/services/mockupSolicitudes.service';
 import {
@@ -56,6 +57,33 @@ import { cotizarSelloRectangularCm } from '@/lib/precios/cotizacionMedida';
 
 const formatArsCorto = (value: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
+
+/** Medidas + precios transferencia; persiste en DB al aprobar optimizado y al completar mockups. */
+async function buildMedidasCotizacionSnapshot(
+  solicitudId: string,
+  ratioWOverH: number,
+  preciosHint: PreciosResolverInput | null,
+): Promise<MedidaCotizacionWebhookItem[]> {
+  const fromLs = leerAlternativasMedidasLocal(solicitudId);
+  const medidasBase =
+    fromLs && fromLs.length > 0 ? fromLs : medidasAlternativasCmDesdeRatio(Number(ratioWOverH));
+  const preciosResolved = preciosHint ?? (await fetchPreciosResolverInputForCotizacion());
+  return (
+    medidasBase?.map((alt) => {
+      const c = preciosResolved
+        ? cotizarSelloRectangularCm(alt.anchoCm, alt.altoCm, preciosResolved)
+        : null;
+      const precio = c?.precioTransferencia ?? null;
+      return {
+        label: alt.label,
+        ancho_cm: alt.anchoCm,
+        alto_cm: alt.altoCm,
+        precio_transferencia_ars: precio,
+        precio_transferencia_texto: precio != null ? formatArsCorto(precio) : null,
+      };
+    }) ?? []
+  );
+}
 
 export type MockupSlotHandle = {
   acceptFile: (file: File) => void;
@@ -360,6 +388,8 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setLogoMetrics(m);
       persistAlternativasMedidasLocal(id, medidasAlternativasCmDesdeRatio(m.ratioWOverH));
 
+      const medidasCotizacionJson = await buildMedidasCotizacionSnapshot(id, m.ratioWOverH, preciosCotizacion);
+
       const { data: updated, error: upErr } = await updateMockupSolicitud(id, {
         validacion: validationToRecord(validationResult),
         imagen_optimizada_url: optimizedUrl,
@@ -372,6 +402,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
         logo_trazo_ratio_w_h: m.ratioWOverH,
         logo_trazo_ratio_label: m.ratioLabel,
         logo_trazo_bbox_fallback: m.usedFallbackFullImage,
+        medidas_cotizacion_json: medidasCotizacionJson,
         mensaje_error: null,
       });
       if (upErr || !updated) throw upErr || new Error('No se pudo guardar la optimización');
@@ -403,6 +434,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   }, [
     materialChoice,
     optimizedPreview,
+    preciosCotizacion,
     runAiOptimize,
     sampleName,
     skipAnalysis,
@@ -489,6 +521,8 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setLogoMetrics(m);
       persistAlternativasMedidasLocal(id, medidasAlternativasCmDesdeRatio(m.ratioWOverH));
 
+      const medidasCotizacionJson = await buildMedidasCotizacionSnapshot(id, m.ratioWOverH, preciosCotizacion);
+
       const { data: updated, error: upErr } = await updateMockupSolicitud(id, {
         validacion: validationToRecord(validationResult),
         imagen_optimizada_url: optimizedUrl,
@@ -501,6 +535,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
         logo_trazo_ratio_w_h: m.ratioWOverH,
         logo_trazo_ratio_label: m.ratioLabel,
         logo_trazo_bbox_fallback: m.usedFallbackFullImage,
+        medidas_cotizacion_json: medidasCotizacionJson,
         mensaje_error: null,
       });
       if (upErr || !updated) throw upErr || new Error('No se pudo guardar');
@@ -532,6 +567,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   }, [
     materialChoice,
     optimizedPreview,
+    preciosCotizacion,
     runAiSimplify,
     sampleName,
     skipAnalysis,
@@ -576,6 +612,12 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setLogoMetrics(m);
       persistAlternativasMedidasLocal(activeRow.id, medidasAlternativasCmDesdeRatio(m.ratioWOverH));
 
+      const medidasCotizacionJson = await buildMedidasCotizacionSnapshot(
+        activeRow.id,
+        m.ratioWOverH,
+        preciosCotizacion,
+      );
+
       const { data: updated, error } = await updateMockupSolicitud(activeRow.id, {
         imagen_optimizada_url: optimizedUrl,
         imagen_optimizada_path: optimizedPath,
@@ -586,6 +628,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
         logo_trazo_ratio_w_h: m.ratioWOverH,
         logo_trazo_ratio_label: m.ratioLabel,
         logo_trazo_bbox_fallback: m.usedFallbackFullImage,
+        medidas_cotizacion_json: medidasCotizacionJson,
         mensaje_error: null,
       });
       if (error || !updated) throw error || new Error('No se pudo guardar');
@@ -606,7 +649,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     } finally {
       setIsRedoing(false);
     }
-  }, [activeRow, optimizedPreview, runAiOptimize, runAiSimplify, toast]);
+  }, [activeRow, optimizedPreview, preciosCotizacion, runAiOptimize, runAiSimplify, toast]);
 
   const handleAprobado = useCallback(async () => {
     if (!activeRow?.id || !activeRow.imagen_optimizada_url) return;
@@ -652,6 +695,17 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
         }
       }
 
+      const rh =
+        activeRow.logo_trazo_ratio_w_h != null && Number(activeRow.logo_trazo_ratio_w_h) > 0
+          ? Number(activeRow.logo_trazo_ratio_w_h)
+          : logoMetrics && logoMetrics.ratioWOverH > 0
+            ? logoMetrics.ratioWOverH
+            : null;
+      const medidasCotizacionJson = rh
+        ? await buildMedidasCotizacionSnapshot(activeRow.id, rh, preciosCotizacion)
+        : [];
+      patch.medidas_cotizacion_json = medidasCotizacionJson;
+
       patch.estado = 'completado';
       const { data: updated, error } = await updateMockupSolicitud(activeRow.id, patch);
       if (error || !updated) throw error || new Error('No se pudo guardar el mockup');
@@ -669,9 +723,10 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
           solicitudId: updated.id,
           mockupCueroUrl: updated.mockup_cuero_url ?? null,
           mockupMaderaUrl: updated.mockup_madera_url ?? null,
+          medidasCotizacion: medidasCotizacionJson,
         });
         if (notify.ok) {
-          desc += ' Te avisamos al cliente por WhatsApp con las imágenes.';
+          desc += ' Te avisamos al cliente por WhatsApp con las imágenes y las opciones de medida/precio.';
         } else if (notify.error) {
           desc += ` No se pudo notificar por WhatsApp: ${notify.error}`;
         }
@@ -691,7 +746,15 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     } finally {
       setIsApproving(false);
     }
-  }, [activeRow, mockupCueroPreview, mockupMaderaPreview, onHistoryRefresh, toast]);
+  }, [
+    activeRow,
+    logoMetrics,
+    mockupCueroPreview,
+    mockupMaderaPreview,
+    onHistoryRefresh,
+    preciosCotizacion,
+    toast,
+  ]);
 
   const resetNuevaMuestra = useCallback(() => {
     revokeBlobUrl(sourcePreview);
