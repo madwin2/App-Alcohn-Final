@@ -10,6 +10,7 @@ import {
   useState,
   type DragEvent,
 } from 'react';
+import { X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,7 +45,6 @@ import {
   getFileExtension,
   leerAlternativasMedidasLocal,
   persistAlternativasMedidasLocal,
-  recordToValidation,
   revokeBlobUrl,
   validationToRecord,
   type UiStep,
@@ -56,9 +56,8 @@ export type MockupSlotHandle = {
 
 const STEP_META: { step: UiStep; label: string; short: string }[] = [
   { step: 1, label: 'Datos e imagen', short: '1' },
-  { step: 2, label: 'Preparar', short: '2' },
-  { step: 3, label: 'Revisar', short: '3' },
-  { step: 4, label: 'Listo', short: '4' },
+  { step: 2, label: 'Revisar', short: '2' },
+  { step: 3, label: 'Listo', short: '3' },
 ];
 
 type Props = {
@@ -96,7 +95,6 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   const [isRedoing, setIsRedoing] = useState(false);
 
   const [activeRow, setActiveRow] = useState<MockupSolicitudRow | null>(null);
-  const [validation, setValidation] = useState<LogoValidationResult | null>(null);
 
   const materialChoice: MockupMaterialChoice = useMemo(
     () => materialChoiceFromCheckboxes(useCuero, useMadera),
@@ -106,11 +104,23 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   useEffect(() => {
     return () => {
       revokeBlobUrl(sourcePreview);
+    };
+  }, [sourcePreview]);
+  useEffect(() => {
+    return () => {
       revokeBlobUrl(optimizedPreview);
+    };
+  }, [optimizedPreview]);
+  useEffect(() => {
+    return () => {
       revokeBlobUrl(mockupCueroPreview);
+    };
+  }, [mockupCueroPreview]);
+  useEffect(() => {
+    return () => {
       revokeBlobUrl(mockupMaderaPreview);
     };
-  }, [sourcePreview, optimizedPreview, mockupCueroPreview, mockupMaderaPreview]);
+  }, [mockupMaderaPreview]);
 
   const setSelectedFile = useCallback(
     (file: File) => {
@@ -130,7 +140,6 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setOptimizedPreview(null);
       setMockupCueroPreview(null);
       setMockupMaderaPreview(null);
-      setValidation(null);
       setActiveRow(null);
       setLogoMetrics(null);
       setUiStep(1);
@@ -161,6 +170,12 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     },
     [setSelectedFile],
   );
+
+  const clearSourceImage = useCallback(() => {
+    revokeBlobUrl(sourcePreview);
+    setSourcePreview(null);
+    setSourceFile(null);
+  }, [sourcePreview]);
 
   const runAiOptimize = useCallback(async (file: File, slug: string): Promise<File> => {
     const inputDataUrl = await fileToDataUrl(file);
@@ -293,8 +308,6 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
           }
         : await validateLogoForMockup(sourceFile);
 
-      setValidation(validationResult);
-
       const needsOptimization = !skipAnalysis && !validationResult.approved;
       let optimizedFile = sourceFile;
       if (needsOptimization) {
@@ -354,7 +367,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setMockupCueroPreview(null);
       setMockupMaderaPreview(null);
       setActiveRow(updated);
-      setUiStep(3);
+      setUiStep(2);
 
       toast({
         title: 'Listo para revisar',
@@ -444,8 +457,6 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
           }
         : await validateLogoForMockup(simplifiedFile);
 
-      setValidation(validationResult);
-
       if (!sampleName.trim()) {
         const suggested = await suggestNameFromAi(sourceFile.name, validationResult.details);
         if (suggested) {
@@ -485,7 +496,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setMockupCueroPreview(null);
       setMockupMaderaPreview(null);
       setActiveRow(updated);
-      setUiStep(3);
+      setUiStep(2);
 
       toast({
         title: 'Versión simplificada lista',
@@ -632,7 +643,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       if (error || !updated) throw error || new Error('No se pudo guardar el mockup');
 
       setActiveRow(updated);
-      setUiStep(4);
+      setUiStep(3);
       void onHistoryRefresh();
       toast({ title: 'Mockup listo', description: 'Archivos guardados en la base y en Storage.' });
     } catch (error) {
@@ -660,7 +671,6 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     setMockupCueroPreview(null);
     setMockupMaderaPreview(null);
     setSourceFile(null);
-    setValidation(null);
     setActiveRow(null);
     setUiStep(1);
     setSampleName('');
@@ -672,28 +682,10 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     setProcessing('idle');
   }, [mockupCueroPreview, mockupMaderaPreview, optimizedPreview, sourcePreview]);
 
-  const validationFromRow = activeRow?.validacion
-    ? recordToValidation(activeRow.validacion as Record<string, unknown>)
-    : validation;
-
-  const medicionVista = useMemo((): LogoInkMeasurements | null => {
-    if (
-      activeRow?.logo_trazo_ancho_px != null &&
-      activeRow.logo_trazo_alto_px != null &&
-      activeRow.logo_trazo_ratio_w_h != null
-    ) {
-      return {
-        widthPx: activeRow.logo_trazo_ancho_px,
-        heightPx: activeRow.logo_trazo_alto_px,
-        ratioWOverH: activeRow.logo_trazo_ratio_w_h,
-        ratioLabel: activeRow.logo_trazo_ratio_label ?? '',
-        naturalWidth: activeRow.logo_trazo_ancho_px,
-        naturalHeight: activeRow.logo_trazo_alto_px,
-        usedFallbackFullImage: Boolean(activeRow.logo_trazo_bbox_fallback),
-      };
-    }
-    return logoMetrics;
-  }, [activeRow, logoMetrics]);
+  const originalDisplaySrc = useMemo(
+    () => activeRow?.archivo_base_url || sourcePreview || '',
+    [activeRow?.archivo_base_url, sourcePreview],
+  );
 
   const alternativasMedidas = useMemo(() => {
     const id = activeRow?.id;
@@ -734,10 +726,6 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       })}
     </div>
   );
-
-  const dropZoneClass = `rounded-lg border border-dashed p-4 text-center transition-colors ${
-    isDragging ? 'border-primary bg-primary/10' : 'border-border'
-  } ${uiStep !== 1 ? 'opacity-60 pointer-events-none' : ''}`;
 
   return (
     <Card
@@ -812,72 +800,83 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
                 </p>
               </div>
             </div>
-            <div
-              className={dropZoneClass}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={onDrop}
-            >
-              <p className="text-xs font-medium">Imagen base del logo</p>
-              <p className="text-[11px] text-muted-foreground">Arrastrá, pegá (Ctrl+V) o elegí archivo</p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                onClick={() => inputRef.current?.click()}
-              >
-                Seleccionar
-              </Button>
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) setSelectedFile(file);
-                  e.currentTarget.value = '';
-                }}
-              />
-            </div>
-            {sourcePreview ? (
-              <div className="aspect-[4/3] max-h-36 overflow-hidden rounded-md border bg-muted/20">
-                <img src={sourcePreview} alt="" className="h-full w-full object-contain" />
-              </div>
-            ) : null}
-            <Button type="button" className="mt-auto w-full" disabled={!sourceFile} onClick={() => setUiStep(2)}>
-              Siguiente: preparar con IA
-            </Button>
-          </>
-        )}
 
-        {uiStep === 2 && (
-          <>
-            <div className="rounded-md border bg-muted/20 p-3 text-xs space-y-1">
-              <p>
-                <span className="text-muted-foreground">Muestra:</span>{' '}
-                <span className="font-medium">{sampleName.trim() || '(sin nombre)'}</span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Materiales:</span>{' '}
-                <span className="font-medium">{materialChoice === 'ambos' ? 'ambos' : materialChoice}</span>
-              </p>
-              {whatsapp.trim() ? (
-                <p>
-                  <span className="text-muted-foreground">WA:</span> {whatsapp.trim()}
+            {!sourcePreview ? (
+              <div
+                className={`rounded-lg border border-dashed p-4 text-center transition-colors ${
+                  isDragging ? 'border-primary bg-primary/10' : 'border-border'
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={onDrop}
+              >
+                <p className="text-xs font-medium">Imagen base del logo</p>
+                <p className="text-[11px] text-muted-foreground">Arrastrá, pegá (Ctrl+V) o elegí archivo</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => inputRef.current?.click()}
+                >
+                  Seleccionar
+                </Button>
+              </div>
+            ) : (
+              <div
+                className={`group relative max-h-40 overflow-hidden rounded-md border bg-white ${
+                  isDragging ? 'ring-2 ring-primary' : ''
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={onDrop}
+              >
+                <div className="flex aspect-[4/3] max-h-40 items-center justify-center bg-white">
+                  <img
+                    src={sourcePreview}
+                    alt="Vista previa del logo"
+                    className="max-h-full max-w-full object-contain"
+                    decoding="async"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => clearSourceImage()}
+                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground opacity-100 shadow-md ring-1 ring-border transition-opacity hover:bg-destructive hover:text-destructive-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                  aria-label="Quitar imagen"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <p className="border-t bg-muted/40 px-2 py-1 text-center text-[10px] text-muted-foreground">
+                  Pasá el mouse por la imagen y tocá ✕ para cargar otra
                 </p>
-              ) : null}
-            </div>
+              </div>
+            )}
+
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setSelectedFile(file);
+                e.currentTarget.value = '';
+              }}
+            />
+
             <p className="text-[11px] text-muted-foreground leading-snug">
               <strong>Generar mockup</strong>: análisis y optimización habituales. <strong>Simplificar</strong>: la IA
-              limpia el trazo primero; luego medimos y aprobás.
+              limpia el trazo primero; después revisás y aprobás.
             </p>
-            <div className="flex flex-col gap-2">
-              <Button type="button" className="w-full" onClick={() => void handleGenerarMockup()} disabled={isBusy}>
+            <div className="mt-auto flex flex-col gap-2">
+              <Button type="button" className="w-full" onClick={() => void handleGenerarMockup()} disabled={!sourceFile || isBusy}>
                 {processing === 'generar' ? 'Analizando…' : 'Generar mockup'}
               </Button>
               <Button
@@ -885,33 +884,41 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
                 variant="secondary"
                 className="w-full"
                 onClick={() => void handleSimplificarYPreparar()}
-                disabled={isBusy}
+                disabled={!sourceFile || isBusy}
               >
                 {processing === 'simplificar' ? 'Simplificando…' : 'Simplificar con IA'}
               </Button>
             </div>
-            <Button type="button" variant="ghost" size="sm" className="mt-auto" disabled={isBusy} onClick={() => setUiStep(1)}>
-              ← Volver al paso 1
-            </Button>
           </>
         )}
 
-        {uiStep === 3 && (
+        {uiStep === 2 && (
           <>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Original</p>
-                <div className="aspect-square rounded-md border bg-muted/20 overflow-hidden">
-                  {sourcePreview ? (
-                    <img src={sourcePreview} alt="" className="h-full w-full object-contain" />
+                <div className="aspect-square overflow-hidden rounded-md border border-border bg-white">
+                  {originalDisplaySrc ? (
+                    <img
+                      src={originalDisplaySrc}
+                      alt=""
+                      className="h-full w-full object-contain"
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                    />
                   ) : null}
                 </div>
               </div>
               <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Óptimo</p>
-                <div className="aspect-square rounded-md border bg-muted/20 overflow-hidden">
+                <div className="aspect-square overflow-hidden rounded-md border border-border bg-white">
                   {optimizedPreview ? (
-                    <img src={optimizedPreview} alt="" className="h-full w-full object-contain" />
+                    <img
+                      src={optimizedPreview}
+                      alt=""
+                      className="h-full w-full object-contain"
+                      decoding="async"
+                    />
                   ) : null}
                 </div>
               </div>
@@ -938,44 +945,6 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
               </Button>
             </div>
 
-            {validationFromRow && (
-              <div className="rounded-md border p-2.5 text-xs space-y-1.5">
-                <div className="flex flex-wrap gap-1.5">
-                  <Badge variant={validationFromRow.approved ? 'default' : 'secondary'} className="text-[10px]">
-                    {validationFromRow.approved ? 'Validación OK' : 'Observaciones'}
-                  </Badge>
-                  {activeRow?.preparado_con_simplificar_ia ? (
-                    <Badge variant="outline" className="text-[10px]">
-                      Simplificar IA
-                    </Badge>
-                  ) : null}
-                  {activeRow?.omitir_analisis ? (
-                    <Badge variant="outline" className="text-[10px]">
-                      Sin análisis
-                    </Badge>
-                  ) : null}
-                </div>
-                <p className="text-muted-foreground leading-snug">{validationFromRow.details}</p>
-              </div>
-            )}
-
-            <div className="rounded-md border p-2.5 space-y-1">
-              <p className="text-xs font-medium">Trazo (Supabase)</p>
-              {medicionVista ? (
-                <>
-                  <p className="text-xs tabular-nums">
-                    {medicionVista.widthPx} × {medicionVista.heightPx} px ·{' '}
-                    <span className="font-medium">{medicionVista.ratioLabel}</span>
-                  </p>
-                  {medicionVista.usedFallbackFullImage ? (
-                    <p className="text-[10px] text-amber-600">Referencia: lienzo completo.</p>
-                  ) : null}
-                </>
-              ) : (
-                <p className="text-[11px] text-muted-foreground">Medición al preparar.</p>
-              )}
-            </div>
-
             {alternativasMedidas && alternativasMedidas.length > 0 ? (
               <div className="rounded-md border p-2.5 space-y-1">
                 <p className="text-xs font-medium">Tres tamaños (navegador)</p>
@@ -995,15 +964,15 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
           </>
         )}
 
-        {uiStep === 4 && (
+        {uiStep === 3 && (
           <>
             <p className="text-sm text-muted-foreground">Mockups generados y guardados.</p>
             <div className="grid grid-cols-1 gap-2">
               {mockupCueroPreview ? (
                 <div className="space-y-1">
                   <p className="text-[10px] text-muted-foreground">Cuero</p>
-                  <div className="aspect-[4/3] max-h-40 overflow-hidden rounded-md border">
-                    <img src={mockupCueroPreview} alt="" className="h-full w-full object-cover" />
+                  <div className="aspect-[4/3] max-h-40 overflow-hidden rounded-md border bg-muted/20">
+                    <img src={mockupCueroPreview} alt="" className="h-full w-full object-cover" decoding="async" />
                   </div>
                   {activeRow?.mockup_cuero_url ? (
                     <a className="text-xs underline" href={activeRow.mockup_cuero_url} target="_blank" rel="noreferrer">
@@ -1015,8 +984,8 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
               {mockupMaderaPreview ? (
                 <div className="space-y-1">
                   <p className="text-[10px] text-muted-foreground">Madera</p>
-                  <div className="aspect-[4/3] max-h-40 overflow-hidden rounded-md border">
-                    <img src={mockupMaderaPreview} alt="" className="h-full w-full object-cover" />
+                  <div className="aspect-[4/3] max-h-40 overflow-hidden rounded-md border bg-muted/20">
+                    <img src={mockupMaderaPreview} alt="" className="h-full w-full object-cover" decoding="async" />
                   </div>
                   {activeRow?.mockup_madera_url ? (
                     <a className="text-xs underline" href={activeRow.mockup_madera_url} target="_blank" rel="noreferrer">

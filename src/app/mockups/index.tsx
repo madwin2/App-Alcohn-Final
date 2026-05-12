@@ -68,8 +68,8 @@ export default function MockupsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Generador de Mockups</h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-            Hasta cuatro flujos en paralelo. Cada tarjeta avanza por pasos: datos e imagen → preparar con IA → revisar
-            y aprobar → mockup listo. Pasá el mouse sobre una tarjeta y pegá (Ctrl+V) para cargar la imagen ahí. La
+            Hasta cuatro flujos en paralelo. Cada tarjeta tiene tres pasos: datos e imagen (con Generar o Simplificar) →
+            revisar y aprobar → mockup listo. Pasá el mouse sobre una tarjeta y pegá (Ctrl+V) para cargar la imagen ahí. La
             proporción del trazo se guarda en Supabase; tres tamaños en cm quedan en el navegador ({LS_ALT_MEDIDAS}).
           </p>
         </div>

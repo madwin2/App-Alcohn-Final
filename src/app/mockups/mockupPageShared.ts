@@ -1,6 +1,6 @@
 import type { LogoValidationResult, MedidaAlternativaCm } from '@/lib/utils/mockupPipeline';
 
-export type UiStep = 1 | 2 | 3 | 4;
+export type UiStep = 1 | 2 | 3;
 
 export const getFileExtension = (fileName: string, fallback: string) => {
   const parts = fileName.split('.');
