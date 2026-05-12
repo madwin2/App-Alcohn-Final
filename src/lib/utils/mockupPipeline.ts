@@ -1,3 +1,13 @@
+import {
+  applyCueroEmbossPythonLike,
+  applyGlobalPostEffectsLikePython,
+  applyMaderaBurnFallbackTint,
+  applyMaderaBurnPythonLike,
+  computeLogoDrawDimensionsPython,
+  createMaskPythonStyle,
+} from './mockupPythonLikeEffects';
+import { MOCKUP_TEXTURE_FILES, mockupTextureUrl } from './mockupTextureUrls';
+
 export type MockupMaterial = 'cuero' | 'madera';
 
 /** Elección en UI: una textura o ambas. */
@@ -27,17 +37,11 @@ const OUTPUT_HEIGHT = 1000;
 const MAX_ANALYSIS_PIXELS = 220_000;
 const MAX_PROCESSING_SIZE = 1800;
 
-/** Mismas rutas base que el ejemplo Sharp (`mockupGenerator.ts`). */
-const textureCandidates: Record<MockupMaterial, string[]> = {
-  cuero: ['/mockup-textures/cuero.jpg.jpeg', '/mockup-textures/cuero.jpg', '/mockup-textures/cuero.jpeg'],
-  madera: ['/mockup-textures/madera.jpg.jpeg', '/mockup-textures/madera.jpg', '/mockup-textures/madera.jpeg'],
+/** Rutas resueltas con `base` de Vite; coinciden con `public/mockup-textures/`. */
+const textureCandidates: Record<MockupMaterial, readonly string[]> = {
+  cuero: MOCKUP_TEXTURE_FILES.cuero,
+  madera: MOCKUP_TEXTURE_FILES.madera,
 };
-
-/** Opcional: refuerzo de vetas (solo madera), muy suave encima de la base. */
-const MADERA_BURN_OVERLAY = '/mockup-textures/madera-quemada.png';
-
-/** Igual que `LOGO_SCALE` en `generador mockup ejemplo/mockupGenerator.ts`. */
-const LOGO_SCALE = 0.55;
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
@@ -52,7 +56,9 @@ const fileToDataUrl = (file: File): Promise<string> =>
 const loadImage = (src: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    if (!src.startsWith('data:') && !src.startsWith('blob:')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`No se pudo cargar imagen: ${src}`));
     img.src = src;
@@ -320,9 +326,6 @@ function extractInkMask(
   sctx.drawImage(logoImage, 0, 0, drawW, drawH);
   const d = sctx.getImageData(0, 0, drawW, drawH).data;
   for (let i = 0, p = 0; i < d.length; i += 4, p += 1) {
-    const r = d[i];
-    const g = d[i + 1];
-    const b = d[i + 2];
     const a = d[i + 3];
     if (a < 8) {
       mask[p] = 0;
@@ -517,192 +520,6 @@ function getCoverImageData(img: HTMLImageElement, outW: number, outH: number): I
   return ctx.getImageData(0, 0, outW, outH);
 }
 
-/**
- * Madera quemada solo en el trazo del logo (máscara real, sin placa).
- * Aureola: blur sobre máscara con padding para que el halo salga fuera del bbox del PNG.
- */
-function applyMaderaQuemadaConMascara(
-  baseData: Uint8ClampedArray,
-  burnData: Uint8ClampedArray,
-  mask: Float32Array,
-  drawW: number,
-  drawH: number,
-  left: number,
-  top: number,
-): void {
-  const W = OUTPUT_WIDTH;
-  const H = OUTPUT_HEIGHT;
-  const PAD = 80;
-  const pw = drawW + 2 * PAD;
-  const ph = drawH + 2 * PAD;
-  const big = new Float32Array(pw * ph);
-  for (let my = 0; my < drawH; my++) {
-    for (let mx = 0; mx < drawW; mx++) {
-      big[(PAD + my) * pw + PAD + mx] = mask[my * drawW + mx];
-    }
-  }
-  const blurBig = boxBlurMask2D(big, pw, ph, 12);
-
-  for (let y = top - PAD; y <= top + drawH + PAD; y++) {
-    if (y < 0 || y >= H) continue;
-    for (let x = left - PAD; x <= left + drawW + PAD; x++) {
-      if (x < 0 || x >= W) continue;
-
-      const bx = x - left + PAD;
-      const by = y - top + PAD;
-      if (bx < 0 || by < 0 || bx >= pw || by >= ph) continue;
-
-      const spread = blurBig[by * pw + bx];
-      const ink =
-        bx >= PAD && bx < PAD + drawW && by >= PAD && by < PAD + drawH
-          ? mask[(by - PAD) * drawW + (bx - PAD)]
-          : 0;
-
-      let halo = spread - ink * 0.96;
-      halo = clamp(halo * 2.8, 0, 1) * (1 - ink * 0.85);
-
-      if (ink < 0.004 && halo < 0.028) continue;
-
-      const idx = (y * W + x) * 4;
-      const br = baseData[idx];
-      const bg = baseData[idx + 1];
-      const bb = baseData[idx + 2];
-
-      const ur = burnData[idx];
-      const ug = burnData[idx + 1];
-      const ub = burnData[idx + 2];
-
-      const core = Math.pow(Math.max(ink, 0), 0.45);
-      let r = br * (1 - core) + ur * core;
-      let g = bg * (1 - core) + ug * core;
-      let b = bb * (1 - core) + ub * core;
-
-      const hg = halo * 0.42;
-      r = r * (1 - hg) + (r * 0.35 + ur * 0.45 + 255 * 0.2) * hg;
-      g = g * (1 - hg) + (g * 0.35 + ug * 0.35 + 110 * 0.3) * hg;
-      b = b * (1 - hg) + (b * 0.3 + ub * 0.35 + 35 * 0.35) * hg;
-
-      baseData[idx] = clamp(r, 0, 255);
-      baseData[idx + 1] = clamp(g, 0, 255);
-      baseData[idx + 2] = clamp(b, 0, 255);
-    }
-  }
-}
-
-function sampleMask(mask: Float32Array, drawW: number, drawH: number, mx: number, my: number): number {
-  if (mx < 0 || my < 0 || mx >= drawW || my >= drawH) return 0;
-  return mask[my * drawW + mx];
-}
-
-/** Cuero: hundido fuerte con Sobel 3×3, sombra proyectada y bisel de luz. */
-function applyCueroBiselHundido(
-  data: Uint8ClampedArray,
-  mask: Float32Array,
-  drawW: number,
-  drawH: number,
-  left: number,
-  top: number,
-): void {
-  const W = OUTPUT_WIDTH;
-  const H = OUTPUT_HEIGHT;
-  const gxArr = new Float32Array(drawW * drawH);
-  const gyArr = new Float32Array(drawW * drawH);
-
-  for (let my = 1; my < drawH - 1; my++) {
-    for (let mx = 1; mx < drawW - 1; mx++) {
-      const p = my * drawW + mx;
-      const m00 = mask[p - drawW - 1];
-      const m01 = mask[p - drawW];
-      const m02 = mask[p - drawW + 1];
-      const m10 = mask[p - 1];
-      const m12 = mask[p + 1];
-      const m20 = mask[p + drawW - 1];
-      const m21 = mask[p + drawW];
-      const m22 = mask[p + drawW + 1];
-      gxArr[p] = -m00 + m02 - 2 * m10 + 2 * m12 - m20 + m22;
-      gyArr[p] = m00 + 2 * m01 + m02 - m20 - 2 * m21 - m22;
-    }
-  }
-
-  const Lx = -0.65;
-  const Ly = -0.65;
-  const lLen = Math.hypot(Lx, Ly) || 1;
-  const nlx = Lx / lLen;
-  const nly = Ly / lLen;
-
-  const pad = 48;
-  const x0 = clamp(left - pad, 0, W - 1);
-  const x1 = clamp(left + drawW + pad, 0, W - 1);
-  const y0 = clamp(top - pad, 0, H - 1);
-  const y1 = clamp(top + drawH + pad, 0, H - 1);
-
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const mx = x - left;
-      const my = y - top;
-      if (mx < 0 || my < 0 || mx >= drawW || my >= drawH) continue;
-
-      const p = my * drawW + mx;
-      const ink = mask[p];
-      if (ink < 0.004) continue;
-
-      const gxm = gxArr[p];
-      const gym = gyArr[p];
-      const gLen = Math.hypot(gxm, gym) + 1e-5;
-      const nx = -gxm / gLen;
-      const ny = -gym / gLen;
-      const edge = Math.min(1, gLen * 0.22);
-      const ndotl = nx * nlx + ny * nly;
-
-      const idx = (y * W + x) * 4;
-      let r = data[idx];
-      let g = data[idx + 1];
-      let b = data[idx + 2];
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      const grain = lum / 255;
-
-      const cavity = ink * ink;
-      let press = 1 - 0.74 * cavity;
-      r *= press;
-      g *= press;
-      b *= press;
-
-      const grainBoost = 1 + 0.28 * ink * (grain - 0.5) * 2;
-      r *= grainBoost;
-      g *= grainBoost;
-      b *= grainBoost;
-
-      const rim = edge * (1 - ink * 0.55);
-      const highlight = rim * Math.max(0, ndotl) * 88;
-      r += highlight;
-      g += highlight;
-      b += highlight;
-
-      const shadow = rim * Math.max(0, -ndotl) * 72;
-      r -= shadow;
-      g -= shadow;
-      b -= shadow;
-
-      const shelf = cavity * (1 - edge * 0.35) * -28;
-      r += shelf;
-      g += shelf;
-      b += shelf;
-
-      const shCast =
-        ink *
-        sampleMask(mask, drawW, drawH, mx + 4, my + 5) *
-        36;
-      r -= shCast;
-      g -= shCast;
-      b -= shCast;
-
-      data[idx] = clamp(r, 0, 255);
-      data[idx + 1] = clamp(g, 0, 255);
-      data[idx + 2] = clamp(b, 0, 255);
-    }
-  }
-}
-
 const paintProceduralTexture = (ctx: CanvasRenderingContext2D, material: MockupMaterial) => {
   const gradient = ctx.createLinearGradient(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
   if (material === 'madera') {
@@ -730,9 +547,9 @@ const paintProceduralTexture = (ctx: CanvasRenderingContext2D, material: MockupM
 };
 
 const drawTexture = async (ctx: CanvasRenderingContext2D, material: MockupMaterial) => {
-  for (const candidate of textureCandidates[material]) {
+  for (const file of textureCandidates[material]) {
     try {
-      const texture = await loadImage(candidate);
+      const texture = await loadImage(mockupTextureUrl(file));
       const scale = Math.max(OUTPUT_WIDTH / texture.naturalWidth, OUTPUT_HEIGHT / texture.naturalHeight);
       const drawW = Math.round(texture.naturalWidth * scale);
       const drawH = Math.round(texture.naturalHeight * scale);
@@ -755,36 +572,26 @@ export async function generateMockup(optimizedLogo: File, material: MockupMateri
   const ctx = bgCanvas.getContext('2d');
   if (!ctx) throw new Error('No se pudo leer fondo');
 
-  const targetLogoW = Math.round(OUTPUT_WIDTH * LOGO_SCALE);
-  const maxH = Math.round(OUTPUT_HEIGHT * LOGO_SCALE);
-  const fitScale = Math.min(targetLogoW / logoImage.naturalWidth, maxH / logoImage.naturalHeight);
-  const drawW = Math.max(1, Math.round(logoImage.naturalWidth * fitScale));
-  const drawH = Math.max(1, Math.round(logoImage.naturalHeight * fitScale));
+  const { drawW, drawH } = computeLogoDrawDimensionsPython(logoImage.naturalWidth, logoImage.naturalHeight);
   const left = Math.round((OUTPUT_WIDTH - drawW) / 2);
   const top = Math.round((OUTPUT_HEIGHT - drawH) / 2);
 
-  const mask = extractInkMask(logoImage, drawW, drawH, material === 'madera' ? 0 : 1);
+  const mask = createMaskPythonStyle(logoImage, drawW, drawH);
   const imageData = ctx.getImageData(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
 
   if (material === 'madera') {
     try {
-      const burnImg = await loadImage(MADERA_BURN_OVERLAY);
+      const burnImg = await loadImage(mockupTextureUrl(MOCKUP_TEXTURE_FILES.maderaBurnOverlay));
       const burnData = getCoverImageData(burnImg, OUTPUT_WIDTH, OUTPUT_HEIGHT).data;
-      applyMaderaQuemadaConMascara(imageData.data, burnData, mask, drawW, drawH, left, top);
+      applyMaderaBurnPythonLike(imageData.data, burnData, mask, drawW, drawH, left, top, 'madera');
     } catch {
-      const sin = new Uint8ClampedArray(imageData.data.length);
-      for (let i = 0; i < sin.length; i += 4) {
-        sin[i] = clamp(imageData.data[i] * 0.42, 0, 255);
-        sin[i + 1] = clamp(imageData.data[i + 1] * 0.35, 0, 255);
-        sin[i + 2] = clamp(imageData.data[i + 2] * 0.28, 0, 255);
-        sin[i + 3] = 255;
-      }
-      applyMaderaQuemadaConMascara(imageData.data, sin, mask, drawW, drawH, left, top);
+      applyMaderaBurnFallbackTint(imageData.data, mask, drawW, drawH, left, top, 'madera');
     }
   } else {
-    applyCueroBiselHundido(imageData.data, mask, drawW, drawH, left, top);
+    applyCueroEmbossPythonLike(imageData.data, mask, drawW, drawH, left, top);
   }
 
+  applyGlobalPostEffectsLikePython(imageData);
   ctx.putImageData(imageData, 0, 0);
 
   const blob = await toBlob(bgCanvas, 'image/jpeg', 0.92);
