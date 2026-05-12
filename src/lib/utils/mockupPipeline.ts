@@ -261,7 +261,12 @@ export async function optimizeLogoForMockup(file: File, designName: string): Pro
  * Máscara de tinta 0–1: ignora blancos del logo (evita rectángulo gris al multiply)
  * y combina oscuridad + alpha para sellos negros o transparentes.
  */
-function extractInkMask(logoImage: HTMLImageElement, drawW: number, drawH: number): Float32Array {
+function extractInkMask(
+  logoImage: HTMLImageElement,
+  drawW: number,
+  drawH: number,
+  postBlurRadius = 1,
+): Float32Array {
   const mask = new Float32Array(drawW * drawH);
   const c = document.createElement('canvas');
   c.width = drawW;
@@ -282,7 +287,7 @@ function extractInkMask(logoImage: HTMLImageElement, drawW: number, drawH: numbe
       continue;
     }
     const L = 0.299 * r + 0.587 * g + 0.114 * b;
-    if (L >= 247) {
+    if (L >= 245) {
       mask[p] = 0;
       continue;
     }
@@ -291,7 +296,7 @@ function extractInkMask(logoImage: HTMLImageElement, drawW: number, drawH: numbe
     ink = Math.pow(Math.min(1, ink * 1.12), 0.78);
     mask[p] = ink;
   }
-  return boxBlurMask2D(mask, drawW, drawH, 1);
+  return postBlurRadius > 0 ? boxBlurMask2D(mask, drawW, drawH, postBlurRadius) : mask;
 }
 
 /** Blur ligero para bordes de prensa más orgánicos. */
@@ -330,75 +335,54 @@ function boxBlurMask2D(src: Float32Array, w: number, h: number, r: number): Floa
   return out;
 }
 
-/** Fondo completo: cuero una capa; madera base + madera-quemada combinada (overlay + multiply + soft-light). */
+/** Solo textura base (madera quemada se aplica después con máscara del logo). */
 async function renderBackgroundCanvas(material: MockupMaterial): Promise<HTMLCanvasElement> {
   const c = document.createElement('canvas');
   c.width = OUTPUT_WIDTH;
   c.height = OUTPUT_HEIGHT;
   const ctx = c.getContext('2d');
   if (!ctx) throw new Error('No se pudo crear lienzo de fondo');
-
   await drawTexture(ctx, material);
-
-  if (material === 'madera') {
-    try {
-      const burn = await loadImage(MADERA_BURN_OVERLAY);
-      const scale = Math.max(OUTPUT_WIDTH / burn.naturalWidth, OUTPUT_HEIGHT / burn.naturalHeight);
-      const bw = Math.round(burn.naturalWidth * scale);
-      const bh = Math.round(burn.naturalHeight * scale);
-      const bl = Math.round((OUTPUT_WIDTH - bw) / 2);
-      const bt = Math.round((OUTPUT_HEIGHT - bh) / 2);
-
-      ctx.save();
-      ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = 0.48;
-      ctx.drawImage(burn, bl, bt, bw, bh);
-      ctx.restore();
-
-      ctx.save();
-      ctx.globalCompositeOperation = 'multiply';
-      ctx.globalAlpha = 0.38;
-      ctx.drawImage(burn, bl, bt, bw, bh);
-      ctx.restore();
-
-      ctx.save();
-      ctx.globalCompositeOperation = 'soft-light';
-      ctx.globalAlpha = 0.22;
-      ctx.drawImage(burn, bl, bt, bw, bh);
-      ctx.restore();
-    } catch {
-      /* sin segunda textura */
-    }
-  }
-
   return c;
 }
 
+/** Dibuja imagen cover y devuelve RGBA alineado al lienzo de salida. */
+function getCoverImageData(img: HTMLImageElement, outW: number, outH: number): ImageData {
+  const c = document.createElement('canvas');
+  c.width = outW;
+  c.height = outH;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('No se pudo rasterizar textura');
+  const scale = Math.max(outW / img.naturalWidth, outH / img.naturalHeight);
+  const bw = Math.round(img.naturalWidth * scale);
+  const bh = Math.round(img.naturalHeight * scale);
+  const bl = Math.round((outW - bw) / 2);
+  const bt = Math.round((outH - bh) / 2);
+  ctx.drawImage(img, bl, bt, bw, bh);
+  return ctx.getImageData(0, 0, outW, outH);
+}
+
 /**
- * Marca a presión sobre la textura: no es un multiply global; oscurece según tinta
- * y deja ver el grano (acople local) + relieve suave en bordes de la máscara.
+ * Madera quemada solo donde el logo: mezcla base ↔ textura quemada según máscara.
+ * Aureola: blur(máscara) − máscara → leve glow cálido alrededor.
  */
-function applyPressedInkToBackground(
-  data: Uint8ClampedArray,
+function applyMaderaQuemadaConMascara(
+  baseData: Uint8ClampedArray,
+  burnData: Uint8ClampedArray,
   mask: Float32Array,
   drawW: number,
   drawH: number,
   left: number,
   top: number,
-  material: MockupMaterial,
 ): void {
   const W = OUTPUT_WIDTH;
   const H = OUTPUT_HEIGHT;
-  const pad = 32;
+  const blurM = boxBlurMask2D(mask, drawW, drawH, 9);
+  const pad = 48;
   const x0 = clamp(left - pad, 0, W - 1);
   const x1 = clamp(left + drawW + pad, 0, W - 1);
   const y0 = clamp(top - pad, 0, H - 1);
   const y1 = clamp(top + drawH + pad, 0, H - 1);
-
-  const pressStrength = material === 'cuero' ? 0.62 : 0.52;
-  const grainCoupling = material === 'cuero' ? 0.2 : 0.14;
-  const edgeRim = material === 'cuero' ? 28 : 20;
-  const innerSink = material === 'cuero' ? -14 : -10;
 
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
@@ -406,37 +390,128 @@ function applyPressedInkToBackground(
       const my = y - top;
       if (mx < 0 || my < 0 || mx >= drawW || my >= drawH) continue;
 
-      const ink = mask[my * drawW + mx];
+      const p = my * drawW + mx;
+      const ink = mask[p];
+      const spread = blurM[p];
+      let halo = (spread - ink * 0.92) * 2.4;
+      halo = clamp(halo, 0, 1);
+
+      if (ink < 0.002 && halo < 0.02) continue;
+
+      const idx = (y * W + x) * 4;
+      const br = baseData[idx];
+      const bg = baseData[idx + 1];
+      const bb = baseData[idx + 2];
+
+      const ur = burnData[idx];
+      const ug = burnData[idx + 1];
+      const ub = burnData[idx + 2];
+
+      const t = Math.pow(ink, 0.52);
+      let r = br * (1 - t) + ur * t;
+      let g = bg * (1 - t) + ug * t;
+      let b = bb * (1 - t) + ub * t;
+
+      const emberR = 255;
+      const emberG = 120;
+      const emberB = 40;
+      const glow = halo * 0.38;
+      r = r * (1 - glow) + (r * 0.55 + emberR * 0.45) * glow;
+      g = g * (1 - glow) + (g * 0.45 + emberG * 0.55) * glow;
+      b = b * (1 - glow) + (b * 0.35 + emberB * 0.65) * glow;
+
+      baseData[idx] = clamp(r, 0, 255);
+      baseData[idx + 1] = clamp(g, 0, 255);
+      baseData[idx + 2] = clamp(b, 0, 255);
+    }
+  }
+}
+
+/** Cuero: hundido con bisel (luz arriba-izquierda, sombra abajo-derecha) + grano. */
+function applyCueroBiselHundido(
+  data: Uint8ClampedArray,
+  mask: Float32Array,
+  drawW: number,
+  drawH: number,
+  left: number,
+  top: number,
+): void {
+  const W = OUTPUT_WIDTH;
+  const H = OUTPUT_HEIGHT;
+  const gxArr = new Float32Array(drawW * drawH);
+  const gyArr = new Float32Array(drawW * drawH);
+
+  for (let my = 1; my < drawH - 1; my++) {
+    for (let mx = 1; mx < drawW - 1; mx++) {
+      const p = my * drawW + mx;
+      gxArr[p] = (mask[p + 1] - mask[p - 1]) * 0.5;
+      gyArr[p] = (mask[p + drawW] - mask[p - drawW]) * 0.5;
+    }
+  }
+
+  const lx = -0.7;
+  const ly = -0.7;
+  const lLen = Math.hypot(lx, ly) || 1;
+  const Lx = lx / lLen;
+  const Ly = ly / lLen;
+
+  const pad = 40;
+  const x0 = clamp(left - pad, 0, W - 1);
+  const x1 = clamp(left + drawW + pad, 0, W - 1);
+  const y0 = clamp(top - pad, 0, H - 1);
+  const y1 = clamp(top + drawH + pad, 0, H - 1);
+
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const mx = x - left;
+      const my = y - top;
+      if (mx < 0 || my < 0 || mx >= drawW || my >= drawH) continue;
+
+      const p = my * drawW + mx;
+      const ink = mask[p];
       if (ink < 0.003) continue;
+
+      const gxm = gxArr[p];
+      const gym = gyArr[p];
+      const gLen = Math.hypot(gxm, gym) + 1e-5;
+      const nx = -gxm / gLen;
+      const ny = -gym / gLen;
+      const edge = Math.min(1, gLen * 5.5);
+      const ndotl = nx * Lx + ny * Ly;
 
       const idx = (y * W + x) * 4;
       let r = data[idx];
       let g = data[idx + 1];
       let b = data[idx + 2];
-
       const lum = 0.299 * r + 0.587 * g + 0.114 * b;
       const grain = lum / 255;
 
-      let press = 1 - pressStrength * ink;
+      const cavity = ink * ink;
+      let press = 1 - 0.6 * cavity;
       r *= press;
       g *= press;
       b *= press;
 
-      const grainBoost = 1 + grainCoupling * ink * (grain - 0.5) * 2;
+      const grainBoost = 1 + 0.24 * ink * (grain - 0.5) * 2;
       r *= grainBoost;
       g *= grainBoost;
       b *= grainBoost;
 
-      const edge = 4 * ink * (1 - ink);
-      const rim = edge * edgeRim;
-      r += rim;
-      g += rim;
-      b += rim;
+      const rim = edge * (1 - ink * 0.75);
+      const highlight = rim * Math.max(0, ndotl) * 52;
+      r += highlight;
+      g += highlight;
+      b += highlight;
 
-      const sink = ink * ink * innerSink;
-      r += sink;
-      g += sink;
-      b += sink;
+      const shadow = rim * ink * Math.max(0, -ndotl) * 44;
+      r -= shadow;
+      g -= shadow;
+      b -= shadow;
+
+      const shelf = cavity * (1 - edge * 0.4) * -16;
+      r += shelf;
+      g += shelf;
+      b += shelf;
 
       data[idx] = clamp(r, 0, 255);
       data[idx + 1] = clamp(g, 0, 255);
@@ -505,9 +580,28 @@ export async function generateMockup(optimizedLogo: File, material: MockupMateri
   const left = Math.round((OUTPUT_WIDTH - drawW) / 2);
   const top = Math.round((OUTPUT_HEIGHT - drawH) / 2);
 
-  const mask = extractInkMask(logoImage, drawW, drawH);
+  const mask = extractInkMask(logoImage, drawW, drawH, material === 'madera' ? 0 : 1);
   const imageData = ctx.getImageData(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-  applyPressedInkToBackground(imageData.data, mask, drawW, drawH, left, top, material);
+
+  if (material === 'madera') {
+    try {
+      const burnImg = await loadImage(MADERA_BURN_OVERLAY);
+      const burnData = getCoverImageData(burnImg, OUTPUT_WIDTH, OUTPUT_HEIGHT).data;
+      applyMaderaQuemadaConMascara(imageData.data, burnData, mask, drawW, drawH, left, top);
+    } catch {
+      const sin = new Uint8ClampedArray(imageData.data.length);
+      for (let i = 0; i < sin.length; i += 4) {
+        sin[i] = clamp(imageData.data[i] * 0.42, 0, 255);
+        sin[i + 1] = clamp(imageData.data[i + 1] * 0.35, 0, 255);
+        sin[i + 2] = clamp(imageData.data[i + 2] * 0.28, 0, 255);
+        sin[i + 3] = 255;
+      }
+      applyMaderaQuemadaConMascara(imageData.data, sin, mask, drawW, drawH, left, top);
+    }
+  } else {
+    applyCueroBiselHundido(imageData.data, mask, drawW, drawH, left, top);
+  }
+
   ctx.putImageData(imageData, 0, 0);
 
   const blob = await toBlob(bgCanvas, 'image/jpeg', 0.92);
