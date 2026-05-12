@@ -73,6 +73,17 @@ function validationToRecord(v: LogoValidationResult): Record<string, unknown> {
   };
 }
 
+function recordToValidation(r: Record<string, unknown> | null): LogoValidationResult | null {
+  if (!r || typeof r !== 'object') return null;
+  return {
+    hasTransparentBackground: Boolean(r.hasTransparentBackground),
+    hasWhiteBackground: Boolean(r.hasWhiteBackground),
+    isMonochrome: Boolean(r.isMonochrome),
+    approved: Boolean(r.approved),
+    details: typeof r.details === 'string' ? r.details : '',
+  };
+}
+
 const LS_PROPORCIONES = 'mockup_logo_proporciones_v1';
 
 function persistProporcionNavegador(solicitudId: string, m: LogoInkMeasurements) {
