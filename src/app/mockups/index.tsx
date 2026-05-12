@@ -20,11 +20,13 @@ import {
   generateMockup,
   materialChoiceFromCheckboxes,
   measureLogoInkBoundsFromFile,
+  medidasAlternativasCmDesdeRatio,
   optimizeLogoForMockup,
   resolveMockupMaterials,
   sanitizeDesignName,
   type LogoInkMeasurements,
   type LogoValidationResult,
+  type MedidaAlternativaCm,
   type MockupMaterialChoice,
   validateLogoForMockup,
 } from '@/lib/utils/mockupPipeline';
@@ -84,11 +86,11 @@ function recordToValidation(r: Record<string, unknown> | null): LogoValidationRe
   };
 }
 
-const LS_PROPORCIONES = 'mockup_logo_proporciones_v1';
+const LS_ALT_MEDIDAS = 'mockup_medidas_alternativas_v1';
 
-function persistProporcionNavegador(solicitudId: string, m: LogoInkMeasurements) {
+function persistAlternativasMedidasLocal(solicitudId: string, alternativas: MedidaAlternativaCm[]) {
   try {
-    const raw = localStorage.getItem(LS_PROPORCIONES);
+    const raw = localStorage.getItem(LS_ALT_MEDIDAS);
     const prev = (() => {
       try {
         const p = JSON.parse(raw || '[]');
@@ -96,26 +98,29 @@ function persistProporcionNavegador(solicitudId: string, m: LogoInkMeasurements)
       } catch {
         return [];
       }
-    })() as Array<{
-      solicitudId: string;
-      widthPx: number;
-      heightPx: number;
-      ratioWOverH: number;
-      ratioLabel: string;
-      at: string;
-    }>;
+    })() as Array<{ solicitudId: string; alternativas: MedidaAlternativaCm[]; at: string }>;
     const entry = {
       solicitudId,
-      widthPx: m.widthPx,
-      heightPx: m.heightPx,
-      ratioWOverH: m.ratioWOverH,
-      ratioLabel: m.ratioLabel,
+      alternativas,
       at: new Date().toISOString(),
     };
     const next = [entry, ...prev.filter((x) => x.solicitudId !== solicitudId)].slice(0, 300);
-    localStorage.setItem(LS_PROPORCIONES, JSON.stringify(next));
+    localStorage.setItem(LS_ALT_MEDIDAS, JSON.stringify(next));
   } catch {
     // ignore
+  }
+}
+
+function leerAlternativasMedidasLocal(solicitudId: string): MedidaAlternativaCm[] | null {
+  try {
+    const raw = localStorage.getItem(LS_ALT_MEDIDAS);
+    const p = JSON.parse(raw || '[]');
+    if (!Array.isArray(p)) return null;
+    const hit = p.find((x: { solicitudId?: string }) => x?.solicitudId === solicitudId);
+    if (!hit?.alternativas || !Array.isArray(hit.alternativas)) return null;
+    return hit.alternativas as MedidaAlternativaCm[];
+  } catch {
+    return null;
   }
 }
 
@@ -304,12 +309,6 @@ export default function MockupsPage() {
     [],
   );
 
-  const aplicarMedicionTrazo = useCallback(async (file: File, solicitudId: string) => {
-    const m = await measureLogoInkBoundsFromFile(file);
-    setLogoMetrics(m);
-    persistProporcionNavegador(solicitudId, m);
-  }, []);
-
   const suggestNameFromAi = useCallback(async (fileName: string, details: string): Promise<string | null> => {
     const res = await fetch('/api/suggest-mockup-name', {
       method: 'POST',
@@ -416,6 +415,10 @@ export default function MockupsPage() {
       const optimizedPath = `mockups/solicitudes/${id}/optimizado.png`;
       const optimizedUrl = await uploadFile('foto', optimizedFile, optimizedPath);
 
+      const m = await measureLogoInkBoundsFromFile(optimizedFile);
+      setLogoMetrics(m);
+      persistAlternativasMedidasLocal(id, medidasAlternativasCmDesdeRatio(m.ratioWOverH));
+
       const { data: updated, error: upErr } = await updateMockupSolicitud(id, {
         validacion: validationToRecord(validationResult),
         imagen_optimizada_url: optimizedUrl,
@@ -423,6 +426,11 @@ export default function MockupsPage() {
         estado: 'pendiente_aprobacion',
         intentos_optimizacion: 1,
         preparado_con_simplificar_ia: false,
+        logo_trazo_ancho_px: m.widthPx,
+        logo_trazo_alto_px: m.heightPx,
+        logo_trazo_ratio_w_h: m.ratioWOverH,
+        logo_trazo_ratio_label: m.ratioLabel,
+        logo_trazo_bbox_fallback: m.usedFallbackFullImage,
         mensaje_error: null,
       });
       if (upErr || !updated) throw upErr || new Error('No se pudo guardar la optimización');
@@ -431,7 +439,6 @@ export default function MockupsPage() {
       setOptimizedPreview(URL.createObjectURL(optimizedFile));
       setMockupCueroPreview(null);
       setMockupMaderaPreview(null);
-      await aplicarMedicionTrazo(optimizedFile, id);
       setActiveRow(updated);
       setPhase('revision');
 
@@ -453,7 +460,6 @@ export default function MockupsPage() {
       setProcessing('idle');
     }
   }, [
-    aplicarMedicionTrazo,
     materialChoice,
     optimizedPreview,
     runAiOptimize,
@@ -542,6 +548,10 @@ export default function MockupsPage() {
       const optimizedPath = `mockups/solicitudes/${id}/optimizado.png`;
       const optimizedUrl = await uploadFile('foto', simplifiedFile, optimizedPath);
 
+      const m = await measureLogoInkBoundsFromFile(simplifiedFile);
+      setLogoMetrics(m);
+      persistAlternativasMedidasLocal(id, medidasAlternativasCmDesdeRatio(m.ratioWOverH));
+
       const { data: updated, error: upErr } = await updateMockupSolicitud(id, {
         validacion: validationToRecord(validationResult),
         imagen_optimizada_url: optimizedUrl,
@@ -549,6 +559,11 @@ export default function MockupsPage() {
         estado: 'pendiente_aprobacion',
         intentos_optimizacion: 1,
         preparado_con_simplificar_ia: true,
+        logo_trazo_ancho_px: m.widthPx,
+        logo_trazo_alto_px: m.heightPx,
+        logo_trazo_ratio_w_h: m.ratioWOverH,
+        logo_trazo_ratio_label: m.ratioLabel,
+        logo_trazo_bbox_fallback: m.usedFallbackFullImage,
         mensaje_error: null,
       });
       if (upErr || !updated) throw upErr || new Error('No se pudo guardar');
@@ -557,7 +572,6 @@ export default function MockupsPage() {
       setOptimizedPreview(URL.createObjectURL(simplifiedFile));
       setMockupCueroPreview(null);
       setMockupMaderaPreview(null);
-      await aplicarMedicionTrazo(simplifiedFile, id);
       setActiveRow(updated);
       setPhase('revision');
 
@@ -579,7 +593,6 @@ export default function MockupsPage() {
       setProcessing('idle');
     }
   }, [
-    aplicarMedicionTrazo,
     materialChoice,
     optimizedPreview,
     runAiSimplify,
@@ -621,11 +634,21 @@ export default function MockupsPage() {
       const optimizedUrl = await uploadFile('foto', optimizedFile, optimizedPath);
 
       const nextIntentos = (activeRow.intentos_optimizacion ?? 0) + 1;
+
+      const m = await measureLogoInkBoundsFromFile(optimizedFile);
+      setLogoMetrics(m);
+      persistAlternativasMedidasLocal(activeRow.id, medidasAlternativasCmDesdeRatio(m.ratioWOverH));
+
       const { data: updated, error } = await updateMockupSolicitud(activeRow.id, {
         imagen_optimizada_url: optimizedUrl,
         imagen_optimizada_path: optimizedPath,
         intentos_optimizacion: nextIntentos,
         estado: 'pendiente_aprobacion',
+        logo_trazo_ancho_px: m.widthPx,
+        logo_trazo_alto_px: m.heightPx,
+        logo_trazo_ratio_w_h: m.ratioWOverH,
+        logo_trazo_ratio_label: m.ratioLabel,
+        logo_trazo_bbox_fallback: m.usedFallbackFullImage,
         mensaje_error: null,
       });
       if (error || !updated) throw error || new Error('No se pudo guardar');
@@ -633,7 +656,6 @@ export default function MockupsPage() {
       revokeBlobUrl(optimizedPreview);
       setOptimizedPreview(URL.createObjectURL(optimizedFile));
       setActiveRow(updated);
-      await aplicarMedicionTrazo(optimizedFile, activeRow.id);
       toast({
         title: rehacerSimplificar ? 'Simplificación rehecha' : 'Optimización rehecha',
         description: `Intento ${nextIntentos}.`,
@@ -647,7 +669,7 @@ export default function MockupsPage() {
     } finally {
       setIsRedoing(false);
     }
-  }, [activeRow, aplicarMedicionTrazo, optimizedPreview, runAiOptimize, runAiSimplify, toast]);
+  }, [activeRow, optimizedPreview, runAiOptimize, runAiSimplify, toast]);
 
   const handleAprobado = useCallback(async () => {
     if (!activeRow?.id || !activeRow.imagen_optimizada_url) return;
@@ -742,6 +764,36 @@ export default function MockupsPage() {
     ? recordToValidation(activeRow.validacion as Record<string, unknown>)
     : validation;
 
+  const medicionVista = useMemo((): LogoInkMeasurements | null => {
+    if (
+      activeRow?.logo_trazo_ancho_px != null &&
+      activeRow.logo_trazo_alto_px != null &&
+      activeRow.logo_trazo_ratio_w_h != null
+    ) {
+      return {
+        widthPx: activeRow.logo_trazo_ancho_px,
+        heightPx: activeRow.logo_trazo_alto_px,
+        ratioWOverH: activeRow.logo_trazo_ratio_w_h,
+        ratioLabel: activeRow.logo_trazo_ratio_label ?? '',
+        naturalWidth: activeRow.logo_trazo_ancho_px,
+        naturalHeight: activeRow.logo_trazo_alto_px,
+        usedFallbackFullImage: Boolean(activeRow.logo_trazo_bbox_fallback),
+      };
+    }
+    return logoMetrics;
+  }, [activeRow, logoMetrics]);
+
+  const alternativasMedidas = useMemo(() => {
+    const id = activeRow?.id;
+    if (!id) return null;
+    const fromLs = leerAlternativasMedidasLocal(id);
+    if (fromLs && fromLs.length > 0) return fromLs;
+    const rh = activeRow?.logo_trazo_ratio_w_h;
+    if (rh != null && rh > 0) return medidasAlternativasCmDesdeRatio(rh);
+    if (logoMetrics) return medidasAlternativasCmDesdeRatio(logoMetrics.ratioWOverH);
+    return null;
+  }, [activeRow?.id, activeRow?.logo_trazo_ratio_w_h, logoMetrics]);
+
   const isBusy = processing !== 'idle';
 
   return (
@@ -752,7 +804,8 @@ export default function MockupsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Generador de Mockups</h1>
           <p className="text-sm text-muted-foreground">
             Podés optimizar el archivo, o pedir una versión simplificada por IA; después medimos el trazo del logo y
-            aprobás. Los datos de Supabase; la proporción del trazo queda en el navegador.
+            aprobás. La proporción del trazo queda en Supabase; tres alternativas de tamaño en cm (según esa proporción)
+            en el navegador (localStorage).
           </p>
         </div>
 
@@ -999,23 +1052,23 @@ export default function MockupsPage() {
 
               <div className="rounded-md border p-3 space-y-2">
                 <p className="text-sm font-medium">Tamaño del logo (trazo, no el lienzo del archivo)</p>
-                {logoMetrics ? (
+                {medicionVista ? (
                   <>
                     <p className="text-sm">
                       <span className="text-muted-foreground">Ancho × alto del trazo:</span>{' '}
                       <span className="font-medium tabular-nums">
-                        {logoMetrics.widthPx} × {logoMetrics.heightPx} px
+                        {medicionVista.widthPx} × {medicionVista.heightPx} px
                       </span>
                     </p>
                     <p className="text-sm">
                       <span className="text-muted-foreground">Proporción (ancho : alto):</span>{' '}
-                      <span className="font-medium">{logoMetrics.ratioLabel}</span>
+                      <span className="font-medium">{medicionVista.ratioLabel}</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Ancho / alto = {logoMetrics.ratioWOverH.toFixed(4)}. La proporción queda guardada en el
-                      navegador (localStorage, clave {LS_PROPORCIONES}).
+                      Ancho / alto = {medicionVista.ratioWOverH.toFixed(4)}. Esto queda guardado en la solicitud
+                      (Supabase).
                     </p>
-                    {logoMetrics.usedFallbackFullImage ? (
+                    {medicionVista.usedFallbackFullImage ? (
                       <p className="text-xs text-amber-600">
                         No se detectó un trazo claro; se usó el tamaño del lienzo completo como referencia.
                       </p>
@@ -1027,6 +1080,21 @@ export default function MockupsPage() {
                   </p>
                 )}
               </div>
+
+              {alternativasMedidas && alternativasMedidas.length > 0 ? (
+                <div className="rounded-md border p-3 space-y-2">
+                  <p className="text-sm font-medium">Tres tamaños posibles (misma proporción)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Lado largo 4, 6 u 8 cm; el otro lado se calcula para mantener el ratio del trazo. Solo en este
+                    navegador (clave {LS_ALT_MEDIDAS}).
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1 text-sm">
+                    {alternativasMedidas.map((alt) => (
+                      <li key={alt.label}>{alt.label}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               {activeRow?.id ? (
                 <p className="text-xs text-muted-foreground">ID solicitud: {activeRow.id}</p>
@@ -1059,6 +1127,9 @@ export default function MockupsPage() {
                       <p className="text-xs text-muted-foreground">
                         {new Date(item.created_at).toLocaleString('es-AR')} · {item.estado}
                       </p>
+                      {item.logo_trazo_ratio_label ? (
+                        <p className="text-xs text-muted-foreground">Proporción trazo: {item.logo_trazo_ratio_label}</p>
+                      ) : null}
                       {thumb ? (
                         <div className="aspect-[4/3] rounded border overflow-hidden bg-muted/30">
                           <img src={thumb} alt="" className="h-full w-full object-cover" />

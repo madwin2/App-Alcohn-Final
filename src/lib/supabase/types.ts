@@ -255,6 +255,11 @@ export interface Database {
           mockup_madera_url: string | null;
           mockup_madera_path: string | null;
           intentos_optimizacion: number;
+          logo_trazo_ancho_px: number | null;
+          logo_trazo_alto_px: number | null;
+          logo_trazo_ratio_w_h: number | null;
+          logo_trazo_ratio_label: string | null;
+          logo_trazo_bbox_fallback: boolean | null;
           mensaje_error: string | null;
           creado_por: string | null;
           created_at: string;
@@ -279,6 +284,11 @@ export interface Database {
           mockup_madera_url?: string | null;
           mockup_madera_path?: string | null;
           intentos_optimizacion?: number;
+          logo_trazo_ancho_px?: number | null;
+          logo_trazo_alto_px?: number | null;
+          logo_trazo_ratio_w_h?: number | null;
+          logo_trazo_ratio_label?: string | null;
+          logo_trazo_bbox_fallback?: boolean | null;
           mensaje_error?: string | null;
           creado_por?: string | null;
           created_at?: string;
@@ -302,6 +312,11 @@ export interface Database {
           mockup_madera_url: string | null;
           mockup_madera_path: string | null;
           intentos_optimizacion: number;
+          logo_trazo_ancho_px: number | null;
+          logo_trazo_alto_px: number | null;
+          logo_trazo_ratio_w_h: number | null;
+          logo_trazo_ratio_label: string | null;
+          logo_trazo_bbox_fallback: boolean | null;
           mensaje_error: string | null;
           creado_por: string | null;
           updated_at: string;

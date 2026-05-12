@@ -455,6 +455,39 @@ export async function measureLogoInkBoundsFromFile(file: File): Promise<LogoInkM
   };
 }
 
+export interface MedidaAlternativaCm {
+  label: string;
+  anchoCm: number;
+  altoCm: number;
+}
+
+function fmtCmCorto(n: number): string {
+  const t = n.toFixed(1);
+  return t.endsWith('.0') ? t.slice(0, -2) : t;
+}
+
+/** Tres tamaños manteniendo la proporción; el lado largo mide 4, 6 y 8 cm. */
+export function medidasAlternativasCmDesdeRatio(ratioWOverH: number): MedidaAlternativaCm[] {
+  const largosCm = [4, 6, 8];
+  const r = ratioWOverH > 0 && Number.isFinite(ratioWOverH) ? ratioWOverH : 1;
+  return largosCm.map((L) => {
+    let anchoCm: number;
+    let altoCm: number;
+    if (r >= 1) {
+      anchoCm = L;
+      altoCm = L / r;
+    } else {
+      altoCm = L;
+      anchoCm = L * r;
+    }
+    return {
+      label: `${fmtCmCorto(anchoCm)} × ${fmtCmCorto(altoCm)} cm`,
+      anchoCm,
+      altoCm,
+    };
+  });
+}
+
 /** Solo textura base (madera quemada se aplica después con máscara del logo). */
 async function renderBackgroundCanvas(material: MockupMaterial): Promise<HTMLCanvasElement> {
   const c = document.createElement('canvas');
