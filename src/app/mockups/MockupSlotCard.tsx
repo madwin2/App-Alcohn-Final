@@ -49,6 +49,12 @@ import {
   validationToRecord,
   type UiStep,
 } from './mockupPageShared';
+import { fetchPreciosResolverInputForCotizacion } from '@/lib/supabase/services/preciosPro.service';
+import type { PreciosResolverInput } from '@/lib/precios/resolverPrecioSello';
+import { cotizarSelloRectangularCm } from '@/lib/precios/cotizacionMedida';
+
+const formatArsCorto = (value: number) =>
+  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
 
 export type MockupSlotHandle = {
   acceptFile: (file: File) => void;
@@ -95,6 +101,13 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   const [isRedoing, setIsRedoing] = useState(false);
 
   const [activeRow, setActiveRow] = useState<MockupSolicitudRow | null>(null);
+  const [preciosCotizacion, setPreciosCotizacion] = useState<PreciosResolverInput | null>(null);
+
+  useEffect(() => {
+    void fetchPreciosResolverInputForCotizacion()
+      .then(setPreciosCotizacion)
+      .catch(() => setPreciosCotizacion(null));
+  }, []);
 
   const materialChoice: MockupMaterialChoice = useMemo(
     () => materialChoiceFromCheckboxes(useCuero, useMadera),
@@ -698,6 +711,14 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     return null;
   }, [activeRow?.id, activeRow?.logo_trazo_ratio_w_h, logoMetrics]);
 
+  const alternativasConPrecio = useMemo(() => {
+    if (!alternativasMedidas || !preciosCotizacion) return alternativasMedidas;
+    return alternativasMedidas.map((alt) => {
+      const c = cotizarSelloRectangularCm(alt.anchoCm, alt.altoCm, preciosCotizacion);
+      return { ...alt, precioTransferencia: c?.precioTransferencia ?? null };
+    });
+  }, [alternativasMedidas, preciosCotizacion]);
+
   const isBusy = processing !== 'idle';
 
   const stepper = (
@@ -945,12 +966,19 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
               </Button>
             </div>
 
-            {alternativasMedidas && alternativasMedidas.length > 0 ? (
+            {alternativasConPrecio && alternativasConPrecio.length > 0 ? (
               <div className="rounded-md border p-2.5 space-y-1">
-                <p className="text-xs font-medium">Tres tamaños (navegador)</p>
+                <p className="text-xs font-medium">Tres tamaños (navegador) y precio transferencia</p>
                 <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
-                  {alternativasMedidas.map((alt) => (
-                    <li key={alt.label}>{alt.label}</li>
+                  {alternativasConPrecio.map((alt) => (
+                    <li key={alt.label}>
+                      {alt.label}
+                      {alt.precioTransferencia != null ? (
+                        <span className="text-muted-foreground"> — {formatArsCorto(alt.precioTransferencia)}</span>
+                      ) : (
+                        <span className="text-muted-foreground"> — (sin cotización)</span>
+                      )}
+                    </li>
                   ))}
                 </ul>
               </div>

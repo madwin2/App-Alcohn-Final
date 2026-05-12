@@ -382,3 +382,29 @@ export async function fetchPreciosResolverInput(userId: string): Promise<Precios
 
   return { precioTransferenciaPorGrupo, medidaAGrupo, precioTransferenciaPorMedidaFija };
 }
+
+let cotizacionCache: { input: PreciosResolverInput; at: number } | null = null;
+const COTIZ_CACHE_MS = 5 * 60 * 1000;
+
+/** UUID del usuario dueño del catálogo (primera fila legible con políticas de equipo). */
+export async function resolvePreciosCatalogUserId(): Promise<string | null> {
+  const { data, error } = await supabase.from('precios_sello_grupo').select('user_id').limit(1);
+  if (error || !data?.length) return null;
+  return data[0].user_id as string;
+}
+
+/** Catálogo para cotizar en la app (cualquier usuario autenticado con política de lectura equipo). */
+export async function fetchPreciosResolverInputForCotizacion(): Promise<PreciosResolverInput | null> {
+  if (cotizacionCache && Date.now() - cotizacionCache.at < COTIZ_CACHE_MS) {
+    return cotizacionCache.input;
+  }
+  const uid = await resolvePreciosCatalogUserId();
+  if (!uid) {
+    cotizacionCache = null;
+    return null;
+  }
+  const input = await fetchPreciosResolverInput(uid);
+  if (input) cotizacionCache = { input, at: Date.now() };
+  else cotizacionCache = null;
+  return input;
+}

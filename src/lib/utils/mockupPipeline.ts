@@ -459,6 +459,8 @@ export interface MedidaAlternativaCm {
   label: string;
   anchoCm: number;
   altoCm: number;
+  /** Cotización transferencia (opcional, rellena la UI). */
+  precioTransferencia?: number | null;
 }
 
 function fmtCmCorto(n: number): string {

@@ -1,5 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -9,14 +9,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Order, StampType, FabricationState, SaleState, ShippingState, ItemType, SoldadorPower, AbecedarioCase } from '@/lib/types/index';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Upload, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { fetchPreciosResolverInputForCotizacion } from '@/lib/supabase/services/preciosPro.service';
+import type { PreciosResolverInput } from '@/lib/precios/resolverPrecioSello';
+import { cotizarSelloRectangularCm, mmPedidoAcm, parseMedidaMmAString } from '@/lib/precios/cotizacionMedida';
 
 const addStampSchema = z.object({
   itemType: z.enum(['SELLO', 'ABECEDARIO', 'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA']),
   designName: z.string().optional(),
   requestedWidthMm: z.number().min(1, 'La medida debe ser mayor a 0'),
+  requestedHeightMm: z.number().min(1, 'La medida debe ser mayor a 0'),
   stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
   soldadorPower: z.enum(['100W', '200W']).optional(),
   abecedarioTipografia: z.string().optional(),
@@ -99,7 +103,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [measureInput, setMeasureInput] = useState('');
 
-  const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm<AddStampFormData>({
+  const { register, handleSubmit, formState: { errors }, setValue, watch, reset, control } = useForm<AddStampFormData>({
     resolver: zodResolver(addStampSchema),
     defaultValues: {
       itemType: 'SELLO',
@@ -110,14 +114,54 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
       isPriority: false,
       itemValue: 0,
       depositValueItem: 0,
+      requestedHeightMm: 1,
     },
   });
+
+  const [measureTick, setMeasureTick] = useState(0);
+  const [preciosCotizacion, setPreciosCotizacion] = useState<PreciosResolverInput | null>(null);
+
+  useEffect(() => {
+    void fetchPreciosResolverInputForCotizacion()
+      .then(setPreciosCotizacion)
+      .catch(() => setPreciosCotizacion(null));
+  }, []);
 
   const watchedValues = watch(['itemValue', 'depositValueItem']);
   const selectedItemType = watch('itemType');
   const itemValue = watchedValues[0] || 0;
   const depositValue = watchedValues[1] || 0;
   const restante = Math.max(0, itemValue - depositValue);
+
+  const wMmWatch = useWatch({ control, name: 'requestedWidthMm' });
+  const hMmWatch = useWatch({ control, name: 'requestedHeightMm' });
+
+  useEffect(() => {
+    if (selectedItemType !== 'SELLO') return;
+    if (!preciosCotizacion || measureTick === 0) return;
+    const w = Number(wMmWatch) || 0;
+    const h = Number(hMmWatch) || 0;
+    if (w < 1 || h < 1) return;
+    const { anchoCm, altoCm } = mmPedidoAcm(w, h);
+    const c = cotizarSelloRectangularCm(anchoCm, altoCm, preciosCotizacion);
+    if (c) setValue('itemValue', c.precioTransferencia);
+  }, [measureTick, preciosCotizacion, selectedItemType, wMmWatch, hMmWatch, setValue]);
+
+  const aplicarMedidaDesdeTexto = useCallback(
+    (value: string) => {
+      setMeasureInput(value);
+      const parsed = parseMedidaMmAString(value);
+      if (parsed) {
+        setValue('requestedWidthMm', parsed.anchoMm);
+        setValue('requestedHeightMm', parsed.altoMm);
+        setMeasureTick((t) => t + 1);
+      } else if (value.trim() === '') {
+        setValue('requestedWidthMm', 1);
+        setValue('requestedHeightMm', 1);
+      }
+    },
+    [setValue],
+  );
 
   useEffect(() => {
     if (selectedItemType === 'SOLDADOR') {
@@ -129,6 +173,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
     }
     if (selectedItemType !== 'SELLO') {
       setValue('requestedWidthMm', 1);
+      setValue('requestedHeightMm', 1);
       setValue('stampType', 'CLASICO');
     }
   }, [selectedItemType, setValue]);
@@ -137,7 +182,9 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
   useEffect(() => {
     if (open) {
       setMeasureInput('');
-      setValue('requestedWidthMm', 0);
+      setMeasureTick(0);
+      setValue('requestedWidthMm', 1);
+      setValue('requestedHeightMm', 1);
     }
   }, [open, setValue]);
 
@@ -152,18 +199,18 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
       let width = 1;
       let height = 1;
       if (data.itemType === 'SELLO') {
-        const match = measureInput.match(/^(\d+)(?:[xX×](\d+))?$/);
-        if (!match) {
+        const parsed = parseMedidaMmAString(measureInput);
+        if (!parsed) {
           toast({
             title: "Error",
-            description: "Formato de medida inválido. Use el formato: 20x20 o 20",
+            description: "Formato de medida inválido. Usá milímetros, ej: 40×40 o 35",
             variant: "destructive",
           });
           setIsSubmitting(false);
           return;
         }
-        width = parseInt(match[1]);
-        height = match[2] ? parseInt(match[2]) : width;
+        width = parsed.anchoMm;
+        height = parsed.altoMm;
       }
       
       await onAddStamp(order.id, {
@@ -214,6 +261,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
       reset();
       setFiles({});
       setMeasureInput('');
+      setMeasureTick(0);
       onOpenChange(false);
     } catch (error) {
       console.error('Error adding stamp:', error);
@@ -278,27 +326,22 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                   <Input
                     id="requestedWidthMm"
                     type="text"
-                    placeholder="Ej: 20x20 o 20"
+                    placeholder="Ej: 40×40 o 35"
                     value={measureInput}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setMeasureInput(value);
-                      const match = value.match(/^(\d+)(?:[xX×](\d+))?$/);
-                      if (match) {
-                        const width = parseInt(match[1]);
-                        setValue('requestedWidthMm', width);
-                      } else if (value === '') {
-                        setValue('requestedWidthMm', 0);
-                      }
-                    }}
+                    onChange={(e) => aplicarMedidaDesdeTexto(e.target.value)}
                     className={errors.requestedWidthMm ? 'border-red-500' : ''}
                   />
                   {errors.requestedWidthMm && (
                     <p className="text-xs text-red-500 mt-1">{errors.requestedWidthMm.message}</p>
                   )}
-                  {measureInput && !measureInput.match(/^\d+([xX×]\d+)?$/) && (
-                    <p className="text-xs text-yellow-500 mt-1">Formato: 20x20 o 20</p>
+                  {measureInput && !parseMedidaMmAString(measureInput) && (
+                    <p className="text-xs text-yellow-500 mt-1">Formato: 40×40 o 35 (milímetros)</p>
                   )}
+                  {preciosCotizacion && measureTick > 0 && Number(wMmWatch) >= 1 && Number(hMmWatch) >= 1 ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Valor sugerido por lista (transferencia); editable.
+                    </p>
+                  ) : null}
                 </div>
               )}
               <div>

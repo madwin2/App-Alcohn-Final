@@ -1,4 +1,4 @@
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -9,9 +9,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
 import { NewOrderFormData, FabricationState, ShippingCarrier, ShippingServiceDest, ShippingOption, StampType, ItemType, SoldadorPower, AbecedarioCase } from '@/lib/types/index';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, X } from 'lucide-react';
 import { findCustomerByPhone } from '@/lib/supabase/services/orders.service';
+import { fetchPreciosResolverInputForCotizacion } from '@/lib/supabase/services/preciosPro.service';
+import type { PreciosResolverInput } from '@/lib/precios/resolverPrecioSello';
+import { cotizarSelloRectangularCm, mmPedidoAcm, parseMedidaMmAString } from '@/lib/precios/cotizacionMedida';
 
 // Schema para el paso 1 (Información del cliente)
 const customerSchema = z.object({
@@ -32,7 +35,7 @@ const orderSchema = z.object({
     itemType: z.enum(['SELLO', 'ABECEDARIO', 'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA']),
     designName: z.string().optional(),
     requestedWidthMm: z.number().min(1, 'La medida debe ser mayor a 0'),
-    requestedHeightMm: z.number().min(1, 'La medida debe ser mayor a 0').optional(),
+    requestedHeightMm: z.number().min(1, 'La medida debe ser mayor a 0'),
     stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
     soldadorPower: z.enum(['100W', '200W']).optional(),
     abecedarioTipografia: z.string().optional(),
@@ -170,6 +173,8 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   const phoneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoFilledRef = useRef(false);
   const [measureInput, setMeasureInput] = useState<string>('');
+  const [measureTick, setMeasureTick] = useState(0);
+  const [preciosCotizacion, setPreciosCotizacion] = useState<PreciosResolverInput | null>(null);
 
   // Formulario para el paso 1 (Cliente)
   const customerForm = useForm<CustomerFormData>({
@@ -262,6 +267,8 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
       order: {
         itemType: 'SELLO',
         stampType: 'CLASICO',
+        requestedWidthMm: 1,
+        requestedHeightMm: 1,
         ...initialData.order,
       },
       values: {
@@ -287,6 +294,44 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
   const totalValue = watchedValues[0] || 0;
   const depositValue = watchedValues[1] || 0;
   const restante = Math.max(0, totalValue - depositValue);
+
+  useEffect(() => {
+    void fetchPreciosResolverInputForCotizacion()
+      .then(setPreciosCotizacion)
+      .catch(() => setPreciosCotizacion(null));
+  }, []);
+
+  const aplicarMedidaDesdeTexto = useCallback(
+    (value: string) => {
+      setMeasureInput(value);
+      const parsed = parseMedidaMmAString(value);
+      if (parsed) {
+        orderForm.setValue('order.requestedWidthMm', parsed.anchoMm);
+        orderForm.setValue('order.requestedHeightMm', parsed.altoMm);
+        setMeasureTick((t) => t + 1);
+      } else if (value.trim() === '') {
+        orderForm.setValue('order.requestedWidthMm', 1);
+        orderForm.setValue('order.requestedHeightMm', 1);
+      }
+    },
+    [orderForm],
+  );
+
+  const wMm = useWatch({ control: orderForm.control, name: 'order.requestedWidthMm' });
+  const hMm = useWatch({ control: orderForm.control, name: 'order.requestedHeightMm' });
+
+  useEffect(() => {
+    if (selectedItemType !== 'SELLO') return;
+    if (currentStep !== 2 && currentStep !== 3) return;
+    if (!preciosCotizacion || measureTick === 0) return;
+    const w = Number(wMm) || 0;
+    const h = Number(hMm) || 0;
+    if (w < 1 || h < 1) return;
+    const { anchoCm, altoCm } = mmPedidoAcm(w, h);
+    const c = cotizarSelloRectangularCm(anchoCm, altoCm, preciosCotizacion);
+    if (!c) return;
+    orderForm.setValue('values.totalValue', c.precioTransferencia);
+  }, [measureTick, preciosCotizacion, selectedItemType, currentStep, wMm, hMm, orderForm]);
 
   useEffect(() => {
     if (selectedItemType === 'SOLDADOR') {
@@ -522,35 +567,23 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
             <Input
               id="measureInput"
               type="text"
-              placeholder="Medida * (Ej: 20x20 o 20)"
+              placeholder="Medida * en mm (ej: 40×40 o 35)"
               value={measureInput}
-              onChange={(e) => {
-                const value = e.target.value;
-                setMeasureInput(value);
-                
-                // Parsear el valor: puede ser "20x20" o solo "20"
-                const match = value.match(/^(\d+)(?:[xX×](\d+))?$/);
-                if (match) {
-                  const width = parseInt(match[1]);
-                  const height = match[2] ? parseInt(match[2]) : width; // Si no hay altura, usar el mismo valor
-                  
-                  orderForm.setValue('order.requestedWidthMm', width);
-                  orderForm.setValue('order.requestedHeightMm', height);
-                } else if (value === '') {
-                  // Si está vacío, limpiar los valores
-                  orderForm.setValue('order.requestedWidthMm', 0);
-                  orderForm.setValue('order.requestedHeightMm', 0);
-                }
-              }}
+              onChange={(e) => aplicarMedidaDesdeTexto(e.target.value)}
               className={`${selectedItemType !== 'SELLO' ? 'opacity-60' : ''} ${orderForm.formState.errors.order?.requestedWidthMm ? 'border-red-500' : ''}`}
               disabled={selectedItemType !== 'SELLO'}
             />
             {orderForm.formState.errors.order?.requestedWidthMm && (
               <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.order.requestedWidthMm.message}</p>
             )}
-            {measureInput && !measureInput.match(/^\d+([xX×]\d+)?$/) && (
-              <p className="text-xs text-yellow-500 mt-1">Formato: 20x20 o 20</p>
+            {measureInput && !parseMedidaMmAString(measureInput) && (
+              <p className="text-xs text-yellow-500 mt-1">Formato: 40×40 o 35 (milímetros)</p>
             )}
+            {preciosCotizacion && selectedItemType === 'SELLO' && measureTick > 0 && Number(wMm) >= 1 && Number(hMm) >= 1 ? (
+              <p className="text-[11px] text-muted-foreground">
+                Valor sugerido por lista de precios (transferencia); podés editarlo si aplica descuento.
+              </p>
+            ) : null}
           </div>
           <div className="col-span-2">
             {selectedItemType === 'SELLO' && (
@@ -875,33 +908,16 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
                 <Input
                   id="measureInput-step3"
                   type="text"
-                  placeholder="Medida * (Ej: 20x20 o 20)"
+                  placeholder="Medida * en mm (ej: 40×40 o 35)"
                   value={measureInput}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setMeasureInput(value);
-                    
-                    // Parsear el valor: puede ser "20x20" o solo "20"
-                    const match = value.match(/^(\d+)(?:[xX×](\d+))?$/);
-                    if (match) {
-                      const width = parseInt(match[1]);
-                      const height = match[2] ? parseInt(match[2]) : width; // Si no hay altura, usar el mismo valor
-                      
-                      orderForm.setValue('order.requestedWidthMm', width);
-                      orderForm.setValue('order.requestedHeightMm', height);
-                    } else if (value === '') {
-                      // Si está vacío, limpiar los valores
-                      orderForm.setValue('order.requestedWidthMm', 0);
-                      orderForm.setValue('order.requestedHeightMm', 0);
-                    }
-                  }}
+                  onChange={(e) => aplicarMedidaDesdeTexto(e.target.value)}
                   className={orderForm.formState.errors.order?.requestedWidthMm ? 'border-red-500' : ''}
                 />
                 {orderForm.formState.errors.order?.requestedWidthMm && (
                   <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.order?.requestedWidthMm?.message}</p>
                 )}
-                {measureInput && !measureInput.match(/^\d+([xX×]\d+)?$/) && (
-                  <p className="text-xs text-yellow-500 mt-1">Formato: 20x20 o 20</p>
+                {measureInput && !parseMedidaMmAString(measureInput) && (
+                  <p className="text-xs text-yellow-500 mt-1">Formato: 40×40 o 35 (milímetros)</p>
                 )}
               </div>
               <div className="col-span-2">
