@@ -240,7 +240,7 @@ export interface Database {
           id: string;
           nombre_muestra: string | null;
           nombre_slug: string;
-          whatsapp: string;
+          whatsapp: string | null;
           material: 'cuero' | 'madera' | 'ambos';
           omitir_analisis: boolean;
           estado: 'procesando' | 'pendiente_aprobacion' | 'completado' | 'error';
@@ -263,7 +263,7 @@ export interface Database {
           id?: string;
           nombre_muestra?: string | null;
           nombre_slug: string;
-          whatsapp: string;
+          whatsapp?: string | null;
           material: 'cuero' | 'madera' | 'ambos';
           omitir_analisis?: boolean;
           estado?: 'procesando' | 'pendiente_aprobacion' | 'completado' | 'error';
@@ -285,7 +285,7 @@ export interface Database {
         Update: Partial<{
           nombre_muestra: string | null;
           nombre_slug: string;
-          whatsapp: string;
+          whatsapp: string | null;
           material: 'cuero' | 'madera' | 'ambos';
           omitir_analisis: boolean;
           estado: 'procesando' | 'pendiente_aprobacion' | 'completado' | 'error';

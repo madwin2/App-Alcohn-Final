@@ -5,7 +5,7 @@ create table if not exists public.mockup_solicitudes (
   id uuid primary key default gen_random_uuid(),
   nombre_muestra text,
   nombre_slug text not null,
-  whatsapp text not null,
+  whatsapp text,
   material text not null check (material in ('cuero', 'madera', 'ambos')),
   omitir_analisis boolean not null default false,
   estado text not null default 'procesando'

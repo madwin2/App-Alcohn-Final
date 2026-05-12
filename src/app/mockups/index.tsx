@@ -62,15 +62,6 @@ async function fetchUrlAsFile(url: string, fileName: string): Promise<File> {
   return new File([blob], fileName, { type: blob.type || 'image/png' });
 }
 
-function assertWhatsapp(raw: string): string {
-  const t = raw.trim();
-  const digits = t.replace(/\D/g, '');
-  if (digits.length < 8) {
-    throw new Error('Ingresá un WhatsApp válido (al menos 8 dígitos).');
-  }
-  return t.slice(0, 40);
-}
-
 function validationToRecord(v: LogoValidationResult): Record<string, unknown> {
   return {
     hasTransparentBackground: v.hasTransparentBackground,
@@ -270,19 +261,11 @@ export default function MockupsPage() {
       });
       return;
     }
-    try {
-      assertWhatsapp(whatsapp);
-    } catch (e) {
-      toast({
-        title: 'WhatsApp',
-        description: e instanceof Error ? e.message : 'Dato inválido',
-        variant: 'destructive',
-      });
-      return;
-    }
 
-    const wa = whatsapp.trim();
+    const waTrim = whatsapp.trim();
+    const wa = waTrim.length > 0 ? waTrim.slice(0, 40) : null;
     const choice = materialChoice;
+
     const id = crypto.randomUUID();
     const provisionalSlug = sanitizeDesignName(sampleName.trim() || `muestra-${id.slice(0, 8)}`);
 
@@ -582,12 +565,12 @@ export default function MockupsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="wa">WhatsApp del cliente</Label>
+                <Label htmlFor="wa">WhatsApp del cliente (opcional)</Label>
                 <Input
                   id="wa"
                   value={whatsapp}
                   onChange={(e) => setWhatsapp(e.target.value)}
-                  placeholder="Ej: +54 9 11 1234-5678"
+                  placeholder="Ej: +54 9 11 1234-5678 — podés dejarlo vacío"
                   disabled={phase !== 'ingreso'}
                 />
               </div>
@@ -815,7 +798,9 @@ export default function MockupsPage() {
                         <p className="text-sm font-medium truncate">{item.nombre_muestra || item.nombre_slug}</p>
                         <Badge variant="outline">{item.material}</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">WA: {item.whatsapp}</p>
+                      {item.whatsapp ? (
+                        <p className="text-xs text-muted-foreground">WA: {item.whatsapp}</p>
+                      ) : null}
                       <p className="text-xs text-muted-foreground">
                         {new Date(item.created_at).toLocaleString('es-AR')} · {item.estado}
                       </p>
