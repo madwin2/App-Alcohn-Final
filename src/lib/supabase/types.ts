@@ -322,6 +322,22 @@ export interface Database {
           updated_at: string;
         }>;
       };
+      precios_lista: {
+        Row: {
+          user_id: string;
+          data: Record<string, unknown>;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          data?: Record<string, unknown>;
+          updated_at?: string;
+        };
+        Update: Partial<{
+          data: Record<string, unknown>;
+          updated_at: string;
+        }>;
+      };
     };
   };
 }

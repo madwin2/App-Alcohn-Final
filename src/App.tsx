@@ -8,6 +8,7 @@ import StockPage from './app/stock/index'
 import EconomiaPage from './app/economia/index'
 import GastosPage from './app/gastos/index'
 import MockupsPage from './app/mockups/index'
+import PreciosPage from './app/precios/index'
 import LoginPage from './app/login/index'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -92,6 +93,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <MockupsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/precios"
+            element={
+              <ProtectedRoute>
+                <PreciosPage />
               </ProtectedRoute>
             }
           />

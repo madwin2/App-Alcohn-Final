@@ -14,6 +14,7 @@ import {
   Wallet,
   Package,
   Image,
+  Tag,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SidebarItem } from './SidebarItem';
@@ -146,6 +147,16 @@ export function Sidebar() {
                 isExpanded={isExpanded}
                 disabled={false}
                 onClick={() => navigate('/gastos')}
+              />
+            </div>
+            <div className="flex justify-start">
+              <SidebarItem
+                icon={Tag}
+                label="Precios"
+                isActive={location.pathname === '/precios'}
+                isExpanded={isExpanded}
+                disabled={false}
+                onClick={() => navigate('/precios')}
               />
             </div>
           </>
