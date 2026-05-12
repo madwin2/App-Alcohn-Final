@@ -396,6 +396,26 @@ function applyColorGrade(data: Uint8ClampedArray, warmth: number): void {
   }
 }
 
+/**
+ * Nitidez suave (unsharp) solo para mockup en cuero: compensa el suavizado del emboss y el DOF global
+ * sin generar halos fuertes.
+ */
+export function applyCueroMockupSharpening(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  opts?: { amount?: number; blurSigma?: number },
+): void {
+  const amount = opts?.amount ?? 0.24;
+  const blurSigma = opts?.blurSigma ?? 0.9;
+  const blur = gaussianBlurRgb(data, width, height, blurSigma);
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = clamp(data[i] + amount * (data[i] - blur[i]), 0, 255);
+    data[i + 1] = clamp(data[i + 1] + amount * (data[i + 1] - blur[i + 1]), 0, 255);
+    data[i + 2] = clamp(data[i + 2] + amount * (data[i + 2] - blur[i + 2]), 0, 255);
+  }
+}
+
 export function applyGlobalPostEffectsLikePython(
   imageData: ImageData,
   opts?: { perspectiveStrength?: number; dofBlur?: number; vignetteStrength?: number; warmth?: number },
