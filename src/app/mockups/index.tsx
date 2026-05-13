@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import {
   stripFadeKindForPage,
 } from './StripCardAtmosphere';
 import { LS_ALT_MEDIDAS } from './mockupPageShared';
-import { MOCKUP_PAGE_SLOT_COUNT_KEY } from './mockupSlotDraft';
+import { compactMockupSlotStorageAfterClose, MOCKUP_PAGE_SLOT_COUNT_KEY } from './mockupSlotDraft';
 
 const SLOT_TITLES = ['Creación 1', 'Creación 2', 'Creación 3', 'Creación 4'] as const;
 const MAX_MOCKUP_SLOTS = 4;
@@ -151,6 +151,16 @@ export default function MockupsPage() {
       /* ignore */
     }
   }, [slotCount]);
+
+  const closeCreationSlot = useCallback(
+    (index: number) => {
+      if (slotCount <= 1) return;
+      compactMockupSlotStorageAfterClose(index, slotCount);
+      setSlotCount((c) => c - 1);
+      setHoveredSlot(null);
+    },
+    [slotCount],
+  );
 
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
@@ -450,7 +460,7 @@ export default function MockupsPage() {
                       return (
                         <div
                           key={i}
-                          className="flex min-h-0 min-w-0 w-full max-w-full rounded-2xl xl:h-full"
+                          className="group/mockup-slot relative flex min-h-0 min-w-0 w-full max-w-full rounded-2xl xl:h-full"
                           onMouseEnter={() => {
                             if (isCard) setHoveredSlot(i);
                             else setHoveredSlot(null);
@@ -463,6 +473,7 @@ export default function MockupsPage() {
                           >
                             {isCard ? (
                               <MockupSlotCard
+                                key={`mockup-slot-${i}-${slotCount}`}
                                 ref={slotRefCallbacks[i]}
                                 slotIndex={i}
                                 title={title}
@@ -488,6 +499,28 @@ export default function MockupsPage() {
                               <div className="hidden h-full min-h-0 w-full max-w-full xl:block" aria-hidden />
                             )}
                           </StripCardAtmosphere>
+                          {isCard && slotCount > 1 ? (
+                            <button
+                              type="button"
+                              className={cn(
+                                'absolute right-2 top-2 z-[35] flex h-8 w-8 items-center justify-center rounded-full',
+                                'border border-border/55 bg-background/92 text-foreground shadow-md backdrop-blur-sm',
+                                'pointer-events-none opacity-0 transition-opacity duration-200 ease-out',
+                                'hover:bg-muted/95 active:scale-95',
+                                'group-hover/mockup-slot:pointer-events-auto group-hover/mockup-slot:opacity-100',
+                                'focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                              )}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                closeCreationSlot(i);
+                              }}
+                              title="Cerrar tarjeta"
+                              aria-label={`Cerrar ${title}`}
+                            >
+                              <X className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                            </button>
+                          ) : null}
                         </div>
                       );
                     })}

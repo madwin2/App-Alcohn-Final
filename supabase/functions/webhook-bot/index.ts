@@ -6,6 +6,10 @@ const BOT_WEBHOOK_URL =
 const WEBHOOK_TOKEN = (Deno.env.get("WEBHOOK_TOKEN") ?? "").trim();
 const BOT_WEBHOOK_TIMEOUT = 10000; // 10 segundos
 
+/** Defaults alineados con `messages.json` del bot (Correo Argentino). */
+const DEFAULT_COSTO_ENVIO_SUCURSAL = 6000;
+const DEFAULT_COSTO_ENVIO_DOMICILIO = 9000;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -58,11 +62,59 @@ const resolveItemDisplayName = (diseno: unknown, itemType: unknown): string => {
   return getItemTypeLabel(itemType);
 };
 
+/** Valor de `ordenes.tipo_envio` + etiqueta para mensajes (pedido_enviado, etc.). */
+const buildTipoEnvioCampos = (tipoEnvioRaw: unknown) => {
+  const tipo =
+    tipoEnvioRaw === null || tipoEnvioRaw === undefined
+      ? null
+      : String(tipoEnvioRaw).trim() || null;
+
+  const tl = tipo ? tipo.toLowerCase() : "";
+
+  let tipo_envio_etiqueta = "Tipo de envío no indicado";
+  let es_envio_domicilio = false;
+  let es_envio_sucursal = false;
+  let es_retiro_taller = false;
+
+  if (tl === "domicilio") {
+    tipo_envio_etiqueta = "Envío a domicilio";
+    es_envio_domicilio = true;
+  } else if (tl === "sucursal") {
+    tipo_envio_etiqueta = "Envío a sucursal del correo";
+    es_envio_sucursal = true;
+  } else if (tl === "retiro") {
+    tipo_envio_etiqueta = "Retiro en el taller";
+    es_retiro_taller = true;
+  } else if (tipo) {
+    tipo_envio_etiqueta = `Envío: ${tipo}`;
+  }
+
+  return {
+    tipo_envio: tipo,
+    tipo_envio_etiqueta,
+    es_envio_domicilio,
+    es_envio_sucursal,
+    es_retiro_taller,
+  };
+};
+
 /** Foto presente (misma lógica que el trigger en SQL: NOT NULL y != ''). */
 const tieneFotoSello = (row: { foto_sello?: unknown }): boolean => {
   const f = row?.foto_sello;
   if (f === null || f === undefined) return false;
   return String(f).trim() !== "";
+};
+
+const countSellosTipoSello = (
+  rows: Array<{ item_type?: unknown }>,
+): number => {
+  return rows.filter((s) => {
+    const raw = s?.item_type;
+    const t = raw === null || raw === undefined || raw === ""
+      ? "SELLO"
+      : String(raw).toUpperCase();
+    return t === "SELLO";
+  }).length;
 };
 
 Deno.serve(async (req: Request) => {
@@ -146,7 +198,7 @@ Deno.serve(async (req: Request) => {
     if (supabase && numeroPedido) {
       console.log("Enriqueciendo payload para numero_pedido", numeroPedido);
 
-      // Traer orden + cliente (incluye teléfono)
+      // Traer orden + cliente (incluye teléfono, tipo de envío)
       const { data: orden, error: ordenError } = await supabase
         .from("ordenes")
         .select(`
@@ -155,6 +207,8 @@ Deno.serve(async (req: Request) => {
           senia_total,
           restante,
           cliente_id,
+          tipo_envio,
+          empresa_envio,
           clientes (
             nombre,
             apellido,
@@ -187,6 +241,10 @@ Deno.serve(async (req: Request) => {
           rawSellos.length > 0 && rawSellos.every((s: { foto_sello?: unknown }) =>
             tieneFotoSello(s),
           );
+
+        const itemsSinFoto = rawSellos.filter((s: { foto_sello?: unknown }) =>
+          !tieneFotoSello(s),
+        ).length;
 
         const clienteNombreSolo =
           (orden as any)?.clientes?.nombre ||
@@ -232,6 +290,16 @@ Deno.serve(async (req: Request) => {
         const seniaTotalOrden = toNumber((orden as any).senia_total);
         const saldoSoloProductos = Math.max(0, valorTotalOrden - seniaTotalOrden);
 
+        const saldoPorItems = rawSellos.reduce(
+          (acc: number, s: { valor?: unknown; senia?: unknown }) =>
+            acc + Math.max(0, toNumber(s.valor) - toNumber(s.senia)),
+          0,
+        );
+
+        let saldoProductosParaEnvio = saldoPorItems > 0
+          ? saldoPorItems
+          : saldoSoloProductos;
+
         // `ordenes.restante` ya incluye envío (ver triggers update_orden_totals)
         const restanteOrdenRaw = (orden as any).restante;
         const saldoTotalOrdenPreferido =
@@ -253,6 +321,10 @@ Deno.serve(async (req: Request) => {
           ? items.find((it: any) => String(it.item_id) === String(currentItemId)) || null
           : null;
 
+        const tipoEnvioOrden = (orden as any)?.tipo_envio;
+        const empresaEnvioOrden = (orden as any)?.empresa_envio;
+        const camposTipoEnvio = buildTipoEnvioCampos(tipoEnvioOrden);
+
         body.datos = {
           ...(body.datos || {}),
           numero_pedido: numeroPedido,
@@ -263,6 +335,13 @@ Deno.serve(async (req: Request) => {
           senia_total: seniaTotalOrden,
           saldo_total: saldoSoloProductos,
           item_actual: itemActual, // útil para plantillas del bot
+          sellos_sin_foto_restantes: itemsSinFoto,
+          ...camposTipoEnvio,
+          ...(empresaEnvioOrden !== null &&
+              empresaEnvioOrden !== undefined &&
+              String(empresaEnvioOrden).trim() !== ""
+            ? { empresa_envio: String(empresaEnvioOrden).trim() }
+            : {}),
         };
 
         const tipoActualizacion = String(body.tipo_actualizacion || "").toLowerCase();
@@ -285,8 +364,47 @@ Deno.serve(async (req: Request) => {
           });
         }
 
+        const sellosParaReglaEnvio = countSellosTipoSello(rawSellos);
+        const envioGratisPorCantidad = sellosParaReglaEnvio >= 3;
+
+        const costoEnvioSucursal = envioGratisPorCantidad
+          ? 0
+          : toNumber(Deno.env.get("COSTO_ENVIO_SUCURSAL")) || DEFAULT_COSTO_ENVIO_SUCURSAL;
+        const costoEnvioDomicilio = envioGratisPorCantidad
+          ? 0
+          : toNumber(Deno.env.get("COSTO_ENVIO_DOMICILIO")) ||
+            DEFAULT_COSTO_ENVIO_DOMICILIO;
+
+        const restanteOpcionSucursal = Math.max(
+          0,
+          saldoProductosParaEnvio + costoEnvioSucursal,
+        );
+        const restanteOpcionDomicilio = Math.max(
+          0,
+          saldoProductosParaEnvio + costoEnvioDomicilio,
+        );
+
+        // --- Mensajes según si quedan sellos sin foto (solo webhook pedido_listo) ---
+        if (esPedidoListo) {
+          delete body.datos.texto_sellos_pendientes;
+          delete body.datos.restante_opcion_sucursal;
+          delete body.datos.restante_opcion_domicilio;
+          delete body.datos.envio_gratis;
+          delete body.datos.costo_envio_sucursal;
+          delete body.datos.costo_envio_domicilio;
+
+          if (!esUltimoSello && rawSellos.length > 0) {
+            const otros = itemsSinFoto;
+            body.datos.texto_sellos_pendientes =
+              otros > 0
+                ? "Estamos terminando el resto del pedido. Te avisamos cuando tengamos lista la próxima pieza."
+                : "Estamos terminando el resto del pedido.";
+          }
+        }
+
         // Reglas de cobro:
         // - Si es último item (o pedido completado/finalizado): enviar RESTANTE GLOBAL
+        //   y opciones de total con envío a sucursal / domicilio.
         // - Si no: NO forzar cobro global
         if (esUltimoSello || esPedidoCompletado) {
           body.datos.es_ultimo_sello = true;
@@ -298,12 +416,28 @@ Deno.serve(async (req: Request) => {
           body.datos.valor_item = valorTotalOrden;
           body.datos.senia_item = seniaTotalOrden;
           body.datos.saldo_item = saldoTotalOrdenPreferido;
+
+          if (esPedidoListo || esPedidoCompletado) {
+            body.datos.restante_opcion_sucursal = restanteOpcionSucursal;
+            body.datos.restante_opcion_domicilio = restanteOpcionDomicilio;
+            body.datos.envio_gratis = envioGratisPorCantidad;
+            body.datos.costo_envio_sucursal = costoEnvioSucursal;
+            body.datos.costo_envio_domicilio = costoEnvioDomicilio;
+          }
         } else {
+          body.datos.es_ultimo_sello = false;
+          delete body.datos.tipo_mensaje_restante;
           // Evitar arrastre accidental de valores globales de una ejecución previa
           delete body.datos.restante_a_pagar;
           delete body.datos.valor_item;
           delete body.datos.senia_item;
           delete body.datos.saldo_item;
+          delete body.datos.restante_sello;
+          delete body.datos.restante_opcion_sucursal;
+          delete body.datos.restante_opcion_domicilio;
+          delete body.datos.envio_gratis;
+          delete body.datos.costo_envio_sucursal;
+          delete body.datos.costo_envio_domicilio;
         }
       }
     } else if (!numeroPedido) {

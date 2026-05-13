@@ -63,3 +63,16 @@ export function clearMockupSlotDraft(slotIndex: number): void {
     // ignore
   }
 }
+
+/** Elimina el slot `closedIndex` y desplaza los borradores siguientes hacia índices menores. */
+export function compactMockupSlotStorageAfterClose(closedIndex: number, previousSlotCount: number): void {
+  if (previousSlotCount <= 1) return;
+  if (closedIndex < 0 || closedIndex >= previousSlotCount) return;
+  const newCount = previousSlotCount - 1;
+  for (let k = closedIndex; k < newCount; k++) {
+    const moved = readMockupSlotDraft(k + 1);
+    if (moved) writeMockupSlotDraft(k, moved);
+    else clearMockupSlotDraft(k);
+  }
+  clearMockupSlotDraft(previousSlotCount - 1);
+}
