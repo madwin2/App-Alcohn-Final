@@ -46,6 +46,14 @@ export async function listMockupSolicitudes(limit = 60): Promise<{
   return { data: (data ?? []) as MockupSolicitudRow[], error: null };
 }
 
+export async function fetchMockupSolicitudById(
+  id: string,
+): Promise<{ data: MockupSolicitudRow | null; error: Error | null }> {
+  const { data, error } = await supabase.from('mockup_solicitudes').select('*').eq('id', id).maybeSingle();
+  if (error) return { data: null, error: new Error(error.message) };
+  return { data: (data as MockupSolicitudRow) ?? null, error: null };
+}
+
 export type MedidaCotizacionWebhookItem = {
   label: string;
   ancho_cm: number;

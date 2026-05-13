@@ -494,6 +494,49 @@ export function medidasAlternativasCmDesdeRatio(ratioWOverH: number): MedidaAlte
   });
 }
 
+const MIN_ANCHO_CM = 0.5;
+
+/**
+ * Tres variantes por ancho nominal: el ancho elegido, +1 cm y −1 cm (mín. 0,5 cm),
+ * con alto proporcional (ratio = ancho/alto del trazo).
+ */
+export function medidasAlternativasDesdeAnchoCm(
+  anchoBaseCm: number,
+  ratioWOverH: number,
+): MedidaAlternativaCm[] {
+  const r = ratioWOverH > 0 && Number.isFinite(ratioWOverH) ? ratioWOverH : 1;
+  const w0 = Math.max(MIN_ANCHO_CM, Number(anchoBaseCm));
+  const mk = (anchoCm: number): MedidaAlternativaCm => {
+    const altoCm = anchoCm / r;
+    return {
+      label: `${fmtCmCorto(anchoCm)} × ${fmtCmCorto(altoCm)} cm`,
+      anchoCm,
+      altoCm,
+    };
+  };
+  const candidates = [w0, w0 + 1, Math.max(MIN_ANCHO_CM, w0 - 1)];
+  const seen = new Set<string>();
+  const widths: number[] = [];
+  for (const x of candidates) {
+    const key = x.toFixed(4);
+    if (!seen.has(key)) {
+      seen.add(key);
+      widths.push(x);
+    }
+  }
+  let pad = 2;
+  while (widths.length < 3) {
+    const x = w0 + pad;
+    pad += 1;
+    const key = x.toFixed(4);
+    if (!seen.has(key)) {
+      seen.add(key);
+      widths.push(x);
+    }
+  }
+  return widths.slice(0, 3).map(mk);
+}
+
 /** Solo textura base (madera quemada se aplica después con máscara del logo). */
 async function renderBackgroundCanvas(material: MockupMaterial): Promise<HTMLCanvasElement> {
   const c = document.createElement('canvas');

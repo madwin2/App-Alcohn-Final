@@ -10,7 +10,7 @@ import {
   useState,
   type DragEvent,
 } from 'react';
-import { X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,7 @@ import {
   insertMockupSolicitud,
   notifyMockupsReadyWhatsApp,
   updateMockupSolicitud,
+  fetchMockupSolicitudById,
   type MedidaCotizacionWebhookItem,
   type MockupSolicitudRow,
 } from '@/lib/supabase/services/mockupSolicitudes.service';
@@ -32,6 +33,7 @@ import {
   materialChoiceFromCheckboxes,
   measureLogoInkBoundsFromFile,
   medidasAlternativasCmDesdeRatio,
+  medidasAlternativasDesdeAnchoCm,
   optimizeLogoForMockup,
   resolveMockupMaterials,
   sanitizeDesignName,
@@ -46,11 +48,19 @@ import {
   fileToDataUrl,
   getFileExtension,
   leerAlternativasMedidasLocal,
+  leerSeleccionMedidasEnvioLocal,
   persistAlternativasMedidasLocal,
+  persistSeleccionMedidasEnvioLocal,
   revokeBlobUrl,
   validationToRecord,
   type UiStep,
 } from './mockupPageShared';
+import {
+  clearMockupSlotDraft,
+  readMockupSlotDraft,
+  writeMockupSlotDraft,
+  type MockupSlotDraftV1,
+} from './mockupSlotDraft';
 import { fetchPreciosResolverInputForCotizacion } from '@/lib/supabase/services/preciosPro.service';
 import type { PreciosResolverInput } from '@/lib/precios/resolverPrecioSello';
 import { cotizarSelloRectangularCm } from '@/lib/precios/cotizacionMedida';
@@ -58,15 +68,49 @@ import { cotizarSelloRectangularCm } from '@/lib/precios/cotizacionMedida';
 const formatArsCorto = (value: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
 
-/** Medidas + precios transferencia; persiste en DB al aprobar optimizado y al completar mockups. */
+function parseAnchoDisenoCm(raw: string): number | null {
+  const s = raw.trim().replace(',', '.');
+  if (!s) return null;
+  const n = Number(s);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+function mapEstadoToUiStep(row: MockupSolicitudRow): UiStep {
+  if (row.estado === 'completado') return 3;
+  if (row.estado === 'pendiente_aprobacion' || row.estado === 'error') return 2;
+  if (row.estado === 'procesando') return row.imagen_optimizada_url ? 2 : 1;
+  return 1;
+}
+
+function logoMetricsStubFromRow(row: MockupSolicitudRow): LogoInkMeasurements | null {
+  const rh = row.logo_trazo_ratio_w_h;
+  if (rh == null || !Number.isFinite(Number(rh)) || Number(rh) <= 0) return null;
+  const r = Number(rh);
+  const w = row.logo_trazo_ancho_px ?? 100;
+  const h = row.logo_trazo_alto_px ?? Math.max(1, Math.round(w / r));
+  return {
+    widthPx: w,
+    heightPx: h,
+    ratioWOverH: r,
+    ratioLabel: row.logo_trazo_ratio_label ?? '',
+    naturalWidth: w,
+    naturalHeight: h,
+    usedFallbackFullImage: Boolean(row.logo_trazo_bbox_fallback),
+  };
+}
+
+/** Medidas + precios; solo filas marcadas para envío al cliente. */
 async function buildMedidasCotizacionSnapshot(
   solicitudId: string,
   ratioWOverH: number,
   preciosHint: PreciosResolverInput | null,
 ): Promise<MedidaCotizacionWebhookItem[]> {
   const fromLs = leerAlternativasMedidasLocal(solicitudId);
-  const medidasBase =
+  let medidasBase =
     fromLs && fromLs.length > 0 ? fromLs : medidasAlternativasCmDesdeRatio(Number(ratioWOverH));
+  const sel = leerSeleccionMedidasEnvioLocal(solicitudId, medidasBase.length);
+  medidasBase = medidasBase.filter((_, i) => sel[i]);
   const preciosResolved = preciosHint ?? (await fetchPreciosResolverInputForCotizacion());
   return (
     medidasBase?.map((alt) => {
@@ -125,18 +169,183 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState<'idle' | 'generar' | 'simplificar'>('idle');
+  /** Progreso visual 0–100 mientras `processing === 'generar'` (sin API de progreso real). */
+  const [generarProgress, setGenerarProgress] = useState(0);
   const [logoMetrics, setLogoMetrics] = useState<LogoInkMeasurements | null>(null);
   const [isApproving, setIsApproving] = useState(false);
   const [isRedoing, setIsRedoing] = useState(false);
 
   const [activeRow, setActiveRow] = useState<MockupSolicitudRow | null>(null);
   const [preciosCotizacion, setPreciosCotizacion] = useState<PreciosResolverInput | null>(null);
+  /** Ancho nominal en cm (paso 1); vacío = tres tamaños estándar por ratio. */
+  const [anchoDisenoCm, setAnchoDisenoCm] = useState('');
+  /** Qué filas de medidas incluir en WhatsApp/DB; se sincroniza con localStorage por solicitud. */
+  const [medidasEnviarSeleccion, setMedidasEnviarSeleccion] = useState<boolean[] | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   useEffect(() => {
     void fetchPreciosResolverInputForCotizacion()
       .then(setPreciosCotizacion)
       .catch(() => setPreciosCotizacion(null));
   }, []);
+
+  useEffect(() => {
+    if (processing !== 'generar') {
+      setGenerarProgress(0);
+      return;
+    }
+    const started = Date.now();
+    const tick = () => {
+      const t = (Date.now() - started) / 1000;
+      const p = Math.min(94, 92 * (1 - Math.exp(-t / 3.2)));
+      setGenerarProgress(p);
+    };
+    tick();
+    const id = window.setInterval(tick, 100);
+    return () => window.clearInterval(id);
+  }, [processing]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDraftHydrated(false);
+    (async () => {
+      const d = readMockupSlotDraft(slotIndex);
+      if (!d) {
+        if (!cancelled) setDraftHydrated(true);
+        return;
+      }
+
+      setSampleName(d.sampleName);
+      setWhatsapp(d.whatsapp);
+      setSkipAnalysis(d.skipAnalysis);
+      setUseCuero(d.useCuero);
+      setUseMadera(d.useMadera);
+      setAnchoDisenoCm(d.anchoDisenoCm);
+
+      if (d.activeRowId) {
+        const { data: row, error } = await fetchMockupSolicitudById(d.activeRowId);
+        if (cancelled) return;
+        if (!row || error) {
+          clearMockupSlotDraft(slotIndex);
+          if (!cancelled) setDraftHydrated(true);
+          return;
+        }
+        setActiveRow(row);
+        setSampleName(row.nombre_muestra?.trim() || d.sampleName || '');
+        setWhatsapp((row.whatsapp ?? d.whatsapp ?? '').trim().slice(0, 40));
+        setSkipAnalysis(Boolean(row.omitir_analisis));
+        if (row.material === 'cuero') {
+          setUseCuero(true);
+          setUseMadera(false);
+        } else if (row.material === 'madera') {
+          setUseCuero(false);
+          setUseMadera(true);
+        } else {
+          setUseCuero(true);
+          setUseMadera(true);
+        }
+        const step = mapEstadoToUiStep(row);
+        setUiStep(step);
+        if (row.archivo_base_url) setSourcePreview(row.archivo_base_url);
+        if (row.imagen_optimizada_url) setOptimizedPreview(row.imagen_optimizada_url);
+        if (step === 3) {
+          if (row.mockup_cuero_url) setMockupCueroPreview(row.mockup_cuero_url);
+          if (row.mockup_madera_url) setMockupMaderaPreview(row.mockup_madera_url);
+        } else {
+          setMockupCueroPreview(null);
+          setMockupMaderaPreview(null);
+        }
+        const lm = logoMetricsStubFromRow(row);
+        setLogoMetrics(lm ?? d.logoMetrics ?? null);
+      } else if (d.sourceDataUrl) {
+        try {
+          const file = await dataUrlToFile(d.sourceDataUrl, 'restaurado.png');
+          if (cancelled) return;
+          setSourceFile(file);
+          setSourcePreview(d.sourceDataUrl);
+        } catch {
+          if (!cancelled) setSourcePreview(null);
+        }
+        setUiStep(d.uiStep === 2 || d.uiStep === 3 ? 1 : d.uiStep);
+        if (d.logoMetrics) setLogoMetrics(d.logoMetrics);
+      } else {
+        setUiStep(d.uiStep);
+        if (d.logoMetrics) setLogoMetrics(d.logoMetrics);
+      }
+
+      if (!cancelled) setDraftHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slotIndex]);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        let sourceDataUrl: string | null = null;
+        if (!activeRow?.id && sourceFile && uiStep === 1) {
+          try {
+            const u = await fileToDataUrl(sourceFile);
+            if (u.length <= 2_800_000) sourceDataUrl = u;
+          } catch {
+            /* ignore */
+          }
+        }
+        const draft: MockupSlotDraftV1 = {
+          v: 1,
+          savedAt: new Date().toISOString(),
+          uiStep,
+          sampleName,
+          whatsapp,
+          skipAnalysis,
+          useCuero,
+          useMadera,
+          anchoDisenoCm,
+          activeRowId: activeRow?.id ?? null,
+          sourceDataUrl,
+          logoMetrics,
+        };
+        writeMockupSlotDraft(slotIndex, draft);
+      })();
+    }, 750);
+    return () => window.clearTimeout(t);
+  }, [
+    activeRow?.id,
+    anchoDisenoCm,
+    draftHydrated,
+    logoMetrics,
+    sampleName,
+    skipAnalysis,
+    slotIndex,
+    sourceFile,
+    uiStep,
+    useCuero,
+    useMadera,
+    whatsapp,
+  ]);
+
+  const alternativasMedidas = useMemo(() => {
+    const id = activeRow?.id;
+    if (!id) return null;
+    const fromLs = leerAlternativasMedidasLocal(id);
+    if (fromLs && fromLs.length > 0) return fromLs;
+    const rh = activeRow?.logo_trazo_ratio_w_h;
+    if (rh != null && rh > 0) return medidasAlternativasCmDesdeRatio(rh);
+    if (logoMetrics) return medidasAlternativasCmDesdeRatio(logoMetrics.ratioWOverH);
+    return null;
+  }, [activeRow?.id, activeRow?.logo_trazo_ratio_w_h, logoMetrics]);
+
+  useEffect(() => {
+    const id = activeRow?.id;
+    const n = alternativasMedidas?.length ?? 0;
+    if (!id || !n) {
+      setMedidasEnviarSeleccion(null);
+      return;
+    }
+    setMedidasEnviarSeleccion(leerSeleccionMedidasEnvioLocal(id, n));
+  }, [activeRow?.id, alternativasMedidas]);
 
   const materialChoice: MockupMaterialChoice = useMemo(
     () => materialChoiceFromCheckboxes(useCuero, useMadera),
@@ -185,6 +394,8 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setActiveRow(null);
       setLogoMetrics(null);
       setUiStep(1);
+      setAnchoDisenoCm('');
+      setMedidasEnviarSeleccion(null);
 
       setSourceFile(file);
       setSourcePreview(URL.createObjectURL(file));
@@ -311,6 +522,17 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
     setProcessing('generar');
     try {
+      const anchoTrim = anchoDisenoCm.trim();
+      if (anchoTrim && parseAnchoDisenoCm(anchoTrim) == null) {
+        toast({
+          title: 'Ancho inválido',
+          description: 'Ingresá un número en centímetros o dejá el campo vacío para tamaños estándar.',
+          variant: 'destructive',
+        });
+        setProcessing('idle');
+        return;
+      }
+
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData.user?.id ?? null;
 
@@ -386,7 +608,12 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const m = await measureLogoInkBoundsFromFile(optimizedFile);
       setLogoMetrics(m);
-      persistAlternativasMedidasLocal(id, medidasAlternativasCmDesdeRatio(m.ratioWOverH));
+      const parsedAncho = parseAnchoDisenoCm(anchoDisenoCm.trim());
+      const medidasAlts =
+        parsedAncho != null
+          ? medidasAlternativasDesdeAnchoCm(parsedAncho, m.ratioWOverH)
+          : medidasAlternativasCmDesdeRatio(m.ratioWOverH);
+      persistAlternativasMedidasLocal(id, medidasAlts);
 
       const medidasCotizacionJson = await buildMedidasCotizacionSnapshot(id, m.ratioWOverH, preciosCotizacion);
 
@@ -432,6 +659,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setProcessing('idle');
     }
   }, [
+    anchoDisenoCm,
     materialChoice,
     optimizedPreview,
     preciosCotizacion,
@@ -462,6 +690,17 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
     setProcessing('simplificar');
     try {
+      const anchoTrim = anchoDisenoCm.trim();
+      if (anchoTrim && parseAnchoDisenoCm(anchoTrim) == null) {
+        toast({
+          title: 'Ancho inválido',
+          description: 'Ingresá un número en centímetros o dejá el campo vacío para tamaños estándar.',
+          variant: 'destructive',
+        });
+        setProcessing('idle');
+        return;
+      }
+
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData.user?.id ?? null;
 
@@ -519,7 +758,12 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const m = await measureLogoInkBoundsFromFile(simplifiedFile);
       setLogoMetrics(m);
-      persistAlternativasMedidasLocal(id, medidasAlternativasCmDesdeRatio(m.ratioWOverH));
+      const parsedAncho = parseAnchoDisenoCm(anchoDisenoCm.trim());
+      const medidasAlts =
+        parsedAncho != null
+          ? medidasAlternativasDesdeAnchoCm(parsedAncho, m.ratioWOverH)
+          : medidasAlternativasCmDesdeRatio(m.ratioWOverH);
+      persistAlternativasMedidasLocal(id, medidasAlts);
 
       const medidasCotizacionJson = await buildMedidasCotizacionSnapshot(id, m.ratioWOverH, preciosCotizacion);
 
@@ -565,6 +809,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       setProcessing('idle');
     }
   }, [
+    anchoDisenoCm,
     materialChoice,
     optimizedPreview,
     preciosCotizacion,
@@ -610,7 +855,12 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const m = await measureLogoInkBoundsFromFile(optimizedFile);
       setLogoMetrics(m);
-      persistAlternativasMedidasLocal(activeRow.id, medidasAlternativasCmDesdeRatio(m.ratioWOverH));
+      const parsedAncho = parseAnchoDisenoCm(anchoDisenoCm.trim());
+      const medidasAlts =
+        parsedAncho != null
+          ? medidasAlternativasDesdeAnchoCm(parsedAncho, m.ratioWOverH)
+          : medidasAlternativasCmDesdeRatio(m.ratioWOverH);
+      persistAlternativasMedidasLocal(activeRow.id, medidasAlts);
 
       const medidasCotizacionJson = await buildMedidasCotizacionSnapshot(
         activeRow.id,
@@ -649,10 +899,32 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     } finally {
       setIsRedoing(false);
     }
-  }, [activeRow, optimizedPreview, preciosCotizacion, runAiOptimize, runAiSimplify, toast]);
+  }, [activeRow, anchoDisenoCm, optimizedPreview, preciosCotizacion, runAiOptimize, runAiSimplify, toast]);
 
   const handleAprobado = useCallback(async () => {
     if (!activeRow?.id || !activeRow.imagen_optimizada_url) return;
+
+    const waPlan = (activeRow.whatsapp ?? '').trim();
+    const rhPlan =
+      activeRow.logo_trazo_ratio_w_h != null && Number(activeRow.logo_trazo_ratio_w_h) > 0
+        ? Number(activeRow.logo_trazo_ratio_w_h)
+        : logoMetrics && logoMetrics.ratioWOverH > 0
+          ? logoMetrics.ratioWOverH
+          : null;
+    if (waPlan && rhPlan) {
+      const fromLs = leerAlternativasMedidasLocal(activeRow.id);
+      const base = fromLs?.length ? fromLs : medidasAlternativasCmDesdeRatio(rhPlan);
+      const sel = leerSeleccionMedidasEnvioLocal(activeRow.id, base.length);
+      if (!base.some((_, i) => sel[i])) {
+        toast({
+          title: 'Medidas para WhatsApp',
+          description: 'Seleccioná al menos una opción de medida para enviar al cliente.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     setIsApproving(true);
     try {
       await updateMockupSolicitud(activeRow.id, { estado: 'procesando', mensaje_error: null });
@@ -757,6 +1029,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   ]);
 
   const resetNuevaMuestra = useCallback(() => {
+    clearMockupSlotDraft(slotIndex);
     revokeBlobUrl(sourcePreview);
     revokeBlobUrl(optimizedPreview);
     revokeBlobUrl(mockupCueroPreview);
@@ -775,23 +1048,14 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     setUseMadera(false);
     setLogoMetrics(null);
     setProcessing('idle');
-  }, [mockupCueroPreview, mockupMaderaPreview, optimizedPreview, sourcePreview]);
+    setAnchoDisenoCm('');
+    setMedidasEnviarSeleccion(null);
+  }, [mockupCueroPreview, mockupMaderaPreview, optimizedPreview, slotIndex, sourcePreview]);
 
   const originalDisplaySrc = useMemo(
     () => activeRow?.archivo_base_url || sourcePreview || '',
     [activeRow?.archivo_base_url, sourcePreview],
   );
-
-  const alternativasMedidas = useMemo(() => {
-    const id = activeRow?.id;
-    if (!id) return null;
-    const fromLs = leerAlternativasMedidasLocal(id);
-    if (fromLs && fromLs.length > 0) return fromLs;
-    const rh = activeRow?.logo_trazo_ratio_w_h;
-    if (rh != null && rh > 0) return medidasAlternativasCmDesdeRatio(rh);
-    if (logoMetrics) return medidasAlternativasCmDesdeRatio(logoMetrics.ratioWOverH);
-    return null;
-  }, [activeRow?.id, activeRow?.logo_trazo_ratio_w_h, logoMetrics]);
 
   const alternativasConPrecio = useMemo(() => {
     if (!alternativasMedidas || !preciosCotizacion) return alternativasMedidas;
@@ -804,25 +1068,25 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   const isBusy = processing !== 'idle';
 
   const stepper = (
-    <div className="flex flex-wrap items-center gap-1.5" aria-label="Pasos del mockup">
+    <div className="flex flex-wrap items-center gap-2" aria-label="Pasos del mockup">
       {STEP_META.map(({ step, label, short }, idx) => {
         const active = uiStep === step;
         const done = uiStep > step;
         return (
-          <div key={step} className="flex items-center gap-1.5">
-            {idx > 0 ? <span className="text-muted-foreground/60 text-xs">›</span> : null}
+          <div key={step} className="flex items-center gap-2">
+            {idx > 0 ? <span className="text-muted-foreground/40 text-[10px]">·</span> : null}
             <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+              className={`inline-flex min-h-[1.75rem] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
                 active
-                  ? 'border-primary bg-primary/10 text-primary'
+                  ? 'bg-foreground text-background shadow-sm'
                   : done
-                    ? 'border-muted-foreground/30 bg-muted/40 text-muted-foreground'
-                    : 'border-border bg-background text-muted-foreground'
+                    ? 'bg-white/[0.08] text-foreground/75 ring-1 ring-white/10'
+                    : 'bg-white/[0.04] text-muted-foreground ring-1 ring-white/[0.06]'
               }`}
               title={label}
             >
-              <span className="tabular-nums">{short}</span>
-              <span className="hidden min-[340px]:inline max-w-[72px] truncate sm:max-w-none">{label}</span>
+              <span className="tabular-nums opacity-80">{short}</span>
+              <span className="hidden max-w-[5.5rem] truncate min-[360px]:inline sm:max-w-none">{label}</span>
             </span>
           </div>
         );
@@ -832,135 +1096,157 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
   return (
     <Card
-      className={`flex h-full min-h-[420px] w-full min-w-0 flex-col overflow-hidden border-border/80 shadow-sm transition-shadow ${
-        isPasteTarget ? 'ring-2 ring-primary/35 ring-offset-2 ring-offset-background' : ''
+      className={`flex h-full min-h-0 w-full min-w-0 max-w-full shrink-0 flex-col overflow-hidden border border-white/10 bg-white/[0.07] shadow-[0_8px_32px_-12px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-[box-shadow,ring] supports-[backdrop-filter]:bg-white/[0.06] ${
+        isPasteTarget ? 'ring-2 ring-primary/35 ring-offset-2 ring-offset-transparent' : ''
       }`}
       data-mockup-slot={slotIndex}
     >
-      <CardHeader className="min-w-0 space-y-2 border-b bg-muted/30 pb-3 pt-4">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base font-semibold leading-tight">{title}</CardTitle>
+      <CardHeader className="shrink-0 min-w-0 space-y-2 border-b border-white/[0.08] bg-white/[0.03] px-4 pb-2.5 pt-3 backdrop-blur-sm sm:px-5">
+        <div className="flex items-start justify-between gap-3">
+          <CardTitle className="text-base font-semibold tracking-tight text-foreground sm:text-[1.05rem]">{title}</CardTitle>
           {activeRow?.estado ? (
-            <Badge variant="outline" className="shrink-0 text-[10px] uppercase tracking-wide">
+            <Badge variant="outline" className="shrink-0 border-white/15 bg-white/[0.06] text-[10px] uppercase tracking-wide text-muted-foreground">
               {activeRow.estado.replace(/_/g, ' ')}
             </Badge>
           ) : null}
         </div>
         {stepper}
       </CardHeader>
-      <CardContent className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-3 overflow-y-auto p-4 [scrollbar-gutter:stable]">
+      <CardContent className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-2 overflow-hidden bg-transparent p-3 sm:p-4">
         {uiStep === 1 && (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor={`sample-name-${slotIndex}`}>Nombre de la muestra</Label>
-              <Input
-                id={`sample-name-${slotIndex}`}
-                value={sampleName}
-                onChange={(e) => setSampleName(e.target.value)}
-                placeholder="Opcional: la IA puede sugerir un nombre"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`wa-${slotIndex}`}>WhatsApp (opcional)</Label>
-              <Input
-                id={`wa-${slotIndex}`}
-                value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
-                placeholder="+54 9 …"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Materiales</Label>
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                Sin selección o ambos marcados → se generan <strong>ambos</strong> mockups al aprobar.
-              </p>
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+            <section className="shrink-0 space-y-2 rounded-xl border border-white/[0.07] bg-white/[0.04] p-2.5 sm:p-3">
+              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/90">Datos</p>
+              <div className="flex flex-col gap-2">
+                <div className="w-fit max-w-full space-y-1">
+                  <Label htmlFor={`sample-name-${slotIndex}`} className="text-[11px] font-medium text-foreground/85">
+                    Nombre
+                  </Label>
+                  <Input
+                    id={`sample-name-${slotIndex}`}
+                    className="h-8 w-[min(100%,14rem)] rounded-md border-white/10 bg-black/25 text-sm placeholder:text-muted-foreground/60"
+                    value={sampleName}
+                    onChange={(e) => setSampleName(e.target.value)}
+                    placeholder="Opcional"
+                  />
+                </div>
+                <div className="w-fit max-w-full space-y-1">
+                  <Label htmlFor={`wa-${slotIndex}`} className="text-[11px] font-medium text-foreground/85">
+                    WhatsApp
+                  </Label>
+                  <Input
+                    id={`wa-${slotIndex}`}
+                    className="h-8 w-[min(100%,11rem)] rounded-md border-white/10 bg-black/25 text-sm placeholder:text-muted-foreground/60"
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value)}
+                    placeholder="+54 9 …"
+                  />
+                </div>
+                <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
+                  <div className="space-y-1">
+                    <Label htmlFor={`ancho-diseno-${slotIndex}`} className="text-[11px] font-medium text-foreground/85">
+                      Ancho (cm)
+                    </Label>
+                    <Input
+                      id={`ancho-diseno-${slotIndex}`}
+                      className="h-8 w-[4.5rem] rounded-md border-white/10 bg-black/25 text-center text-sm tabular-nums placeholder:text-muted-foreground/60"
+                      inputMode="decimal"
+                      value={anchoDisenoCm}
+                      onChange={(e) => setAnchoDisenoCm(e.target.value)}
+                      placeholder="—"
+                      title="Vacío: 4 / 6 / 8 cm. Con número: ese ancho."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/[0.06] pt-2">
+                <span className="text-[11px] font-medium text-foreground/85">Materiales</span>
+                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/90">
                   <Checkbox checked={useCuero} onCheckedChange={(v) => setUseCuero(v === true)} />
                   Cuero
                 </label>
-                <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/90">
                   <Checkbox checked={useMadera} onCheckedChange={(v) => setUseMadera(v === true)} />
                   Madera
                 </label>
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="border-white/12 bg-black/20 text-[10px] font-normal text-muted-foreground">
                   {materialChoice === 'ambos' ? 'Ambos' : `Solo ${materialChoice}`}
                 </Badge>
               </div>
-            </div>
-            <div className="flex items-start gap-2 rounded-md border p-2.5">
-              <Checkbox
-                id={`skip-${slotIndex}`}
-                checked={skipAnalysis}
-                onCheckedChange={(v) => setSkipAnalysis(v === true)}
-              />
-              <div className="grid gap-0.5 leading-tight">
-                <label htmlFor={`skip-${slotIndex}`} className="text-xs font-medium cursor-pointer">
+
+              <div
+                className="flex items-center gap-2 rounded-lg bg-black/20 px-2 py-1.5 ring-1 ring-white/[0.06]"
+                title="Usa el archivo sin validar ni optimizar con IA."
+              >
+                <Checkbox
+                  id={`skip-${slotIndex}`}
+                  checked={skipAnalysis}
+                  onCheckedChange={(v) => setSkipAnalysis(v === true)}
+                />
+                <label htmlFor={`skip-${slotIndex}`} className="cursor-pointer text-xs font-medium text-foreground/90">
                   Omitir análisis
                 </label>
-                <p className="text-[11px] text-muted-foreground">
-                  El archivo base se usa tal cual, sin validación ni optimización IA.
-                </p>
               </div>
-            </div>
+            </section>
 
-            {!sourcePreview ? (
-              <div
-                className={`rounded-lg border border-dashed p-4 text-center transition-colors ${
-                  isDragging ? 'border-primary bg-primary/10' : 'border-border'
-                }`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={onDrop}
-              >
-                <p className="text-xs font-medium">Imagen base del logo</p>
-                <p className="text-[11px] text-muted-foreground">Arrastrá, pegá (Ctrl+V) o elegí archivo</p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => inputRef.current?.click()}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {!sourcePreview ? (
+                <div
+                  className={`flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-white/15 bg-black/15 px-3 py-4 text-center transition-colors ${
+                    isDragging ? 'border-primary/60 bg-primary/10' : ''
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={onDrop}
                 >
-                  Seleccionar
-                </Button>
-              </div>
-            ) : (
-              <div
-                className={`group relative max-h-40 overflow-hidden rounded-md border bg-white ${
-                  isDragging ? 'ring-2 ring-primary' : ''
-                }`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={onDrop}
-              >
-                <div className="flex aspect-[4/3] max-h-40 items-center justify-center bg-white">
-                  <img
-                    src={sourcePreview}
-                    alt="Vista previa del logo"
-                    className="max-h-full max-w-full object-contain"
-                    decoding="async"
-                  />
+                  <p className="text-sm font-medium text-foreground/90">Vista del logo</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground/90">Arrastrá · Ctrl+V · archivo</p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2 h-8 rounded-md px-4 text-xs"
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    Seleccionar
+                  </Button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => clearSourceImage()}
-                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground opacity-100 shadow-md ring-1 ring-border transition-opacity hover:bg-destructive hover:text-destructive-foreground sm:opacity-0 sm:group-hover:opacity-100"
-                  aria-label="Quitar imagen"
+              ) : (
+                <div
+                  className={`group relative min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-white ${
+                    isDragging ? 'ring-2 ring-primary/50' : ''
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={onDrop}
                 >
-                  <X className="h-4 w-4" />
-                </button>
-                <p className="border-t bg-muted/40 px-2 py-1 text-center text-[10px] text-muted-foreground">
-                  Pasá el mouse por la imagen y tocá ✕ para cargar otra
-                </p>
-              </div>
-            )}
+                  <div className="relative h-full min-h-[8rem] w-full overflow-hidden bg-white">
+                    <img
+                      src={sourcePreview}
+                      alt="Vista previa del logo"
+                      className="h-full w-full object-contain"
+                      decoding="async"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => clearSourceImage()}
+                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground shadow-md ring-1 ring-border transition-opacity hover:bg-destructive hover:text-destructive-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                      aria-label="Quitar imagen"
+                      title="Quitar imagen"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <input
               ref={inputRef}
@@ -974,33 +1260,57 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
               }}
             />
 
-            <p className="text-[11px] text-muted-foreground leading-snug">
-              <strong>Generar mockup</strong>: análisis y optimización habituales. <strong>Simplificar</strong>: la IA
-              limpia el trazo primero; después revisás y aprobás.
-            </p>
-            <div className="mt-auto flex flex-col gap-2">
-              <Button type="button" className="w-full" onClick={() => void handleGenerarMockup()} disabled={!sourceFile || isBusy}>
-                {processing === 'generar' ? 'Analizando…' : 'Generar mockup'}
-              </Button>
+            <div className="flex shrink-0 flex-col gap-2 border-t border-white/[0.06] pt-2">
+              {processing === 'generar' ? (
+                <div
+                  className="w-full overflow-hidden rounded-xl border border-primary/30 bg-black/25 px-3 py-3 shadow-inner transition-all duration-300 ease-out"
+                  role="progressbar"
+                  aria-valuenow={Math.round(generarProgress)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Generando mockup"
+                >
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden />
+                    <span>Generando mockup…</span>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-background/80">
+                    <div
+                      className="h-full rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary)/0.35)] transition-[width] duration-150 ease-out"
+                      style={{ width: `${generarProgress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  className="h-10 w-full rounded-lg text-sm font-medium transition-opacity duration-200"
+                  onClick={() => void handleGenerarMockup()}
+                  disabled={!sourceFile || isBusy}
+                >
+                  Generar mockup
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="secondary"
-                className="w-full"
+                className="h-10 w-full rounded-lg text-sm"
                 onClick={() => void handleSimplificarYPreparar()}
                 disabled={!sourceFile || isBusy}
+                title="Limpia el trazo con IA; después revisás en el paso 2."
               >
                 {processing === 'simplificar' ? 'Simplificando…' : 'Simplificar con IA'}
               </Button>
             </div>
-          </>
+          </div>
         )}
 
         {uiStep === 2 && (
-          <>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Original</p>
-                <div className="aspect-square overflow-hidden rounded-md border border-border bg-white">
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
+            <div className="grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-3 [grid-template-rows:minmax(0,1fr)]">
+              <div className="flex min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden">
+                <p className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/90">Original</p>
+                <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-white">
                   {originalDisplaySrc ? (
                     <img
                       src={originalDisplaySrc}
@@ -1012,9 +1322,9 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
                   ) : null}
                 </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Óptimo</p>
-                <div className="aspect-square overflow-hidden rounded-md border border-border bg-white">
+              <div className="flex min-h-0 min-w-0 flex-col gap-1.5 overflow-hidden">
+                <p className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/90">Óptimo</p>
+                <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-white">
                   {optimizedPreview ? (
                     <img
                       src={optimizedPreview}
@@ -1027,14 +1337,19 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
               </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Button type="button" className="w-full" onClick={() => void handleAprobado()} disabled={isApproving || isBusy}>
+            <div className="flex shrink-0 flex-col gap-2.5">
+              <Button
+                type="button"
+                className="h-10 w-full rounded-lg text-sm font-medium"
+                onClick={() => void handleAprobado()}
+                disabled={isApproving || isBusy}
+              >
                 {isApproving ? 'Generando mockup…' : 'Aprobado — generar mockup'}
               </Button>
               <Button
                 type="button"
                 variant="secondary"
-                className="w-full"
+                className="h-10 w-full rounded-lg text-sm"
                 onClick={() => void handleRehacerOptimizacion()}
                 disabled={isRedoing || isApproving || isBusy}
               >
@@ -1049,17 +1364,36 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
             </div>
 
             {alternativasConPrecio && alternativasConPrecio.length > 0 ? (
-              <div className="rounded-md border p-2.5 space-y-1">
-                <p className="text-xs font-medium">Tres tamaños (navegador) y precio transferencia</p>
-                <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
-                  {alternativasConPrecio.map((alt) => (
-                    <li key={alt.label}>
-                      {alt.label}
-                      {alt.precioTransferencia != null ? (
-                        <span className="text-muted-foreground"> — {formatArsCorto(alt.precioTransferencia)}</span>
-                      ) : (
-                        <span className="text-muted-foreground"> — (sin cotización)</span>
-                      )}
+              <div
+                className="shrink-0 space-y-2.5 rounded-xl border border-white/[0.08] bg-white/[0.04] p-3"
+                title="Elegí qué medidas van en el mensaje de WhatsApp. Por defecto las tres."
+              >
+                <p className="text-xs font-medium text-foreground/90">Medidas y precios</p>
+                <ul className="space-y-2">
+                  {alternativasConPrecio.map((alt, i) => (
+                    <li key={`${alt.label}-${i}`} className="flex items-start gap-2 text-xs leading-snug">
+                      <Checkbox
+                        id={`med-env-${slotIndex}-${i}`}
+                        checked={medidasEnviarSeleccion?.[i] ?? true}
+                        onCheckedChange={(v) => {
+                          const n = alternativasConPrecio.length;
+                          const base =
+                            medidasEnviarSeleccion?.length === n
+                              ? [...medidasEnviarSeleccion]
+                              : Array.from({ length: n }, () => true);
+                          base[i] = v === true;
+                          if (activeRow?.id) persistSeleccionMedidasEnvioLocal(activeRow.id, base);
+                          setMedidasEnviarSeleccion(base);
+                        }}
+                      />
+                      <label htmlFor={`med-env-${slotIndex}-${i}`} className="cursor-pointer leading-snug">
+                        {alt.label}
+                        {alt.precioTransferencia != null ? (
+                          <span className="text-muted-foreground"> — {formatArsCorto(alt.precioTransferencia)}</span>
+                        ) : (
+                          <span className="text-muted-foreground"> — (sin cotización)</span>
+                        )}
+                      </label>
                     </li>
                   ))}
                 </ul>
@@ -1067,48 +1401,62 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
             ) : null}
 
             {activeRow?.estado === 'error' && activeRow.mensaje_error ? (
-              <p className="text-xs text-destructive">{activeRow.mensaje_error}</p>
+              <p className="shrink-0 truncate text-[10px] text-destructive" title={activeRow.mensaje_error}>
+                {activeRow.mensaje_error}
+              </p>
             ) : null}
 
-            {activeRow?.id ? <p className="text-[10px] text-muted-foreground">ID: {activeRow.id.slice(0, 8)}…</p> : null}
-          </>
+            {activeRow?.id ? (
+              <p className="shrink-0 text-[9px] text-muted-foreground">ID: {activeRow.id.slice(0, 8)}…</p>
+            ) : null}
+          </div>
         )}
 
         {uiStep === 3 && (
-          <>
-            <p className="text-sm text-muted-foreground">Mockups generados y guardados.</p>
-            <div className="grid grid-cols-1 gap-2">
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
+            <p className="shrink-0 text-sm font-medium text-foreground/90">Listo</p>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 sm:flex-row">
               {mockupCueroPreview ? (
-                <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground">Cuero</p>
-                  <div className="aspect-[4/3] max-h-40 overflow-hidden rounded-md border bg-muted/20">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden">
+                  <p className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/90">Cuero</p>
+                  <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-muted/20">
                     <img src={mockupCueroPreview} alt="" className="h-full w-full object-cover" decoding="async" />
                   </div>
                   {activeRow?.mockup_cuero_url ? (
-                    <a className="text-xs underline" href={activeRow.mockup_cuero_url} target="_blank" rel="noreferrer">
+                    <a
+                      className="shrink-0 text-xs text-primary underline-offset-2 hover:underline"
+                      href={activeRow.mockup_cuero_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       Abrir archivo
                     </a>
                   ) : null}
                 </div>
               ) : null}
               {mockupMaderaPreview ? (
-                <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground">Madera</p>
-                  <div className="aspect-[4/3] max-h-40 overflow-hidden rounded-md border bg-muted/20">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden">
+                  <p className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/90">Madera</p>
+                  <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-muted/20">
                     <img src={mockupMaderaPreview} alt="" className="h-full w-full object-cover" decoding="async" />
                   </div>
                   {activeRow?.mockup_madera_url ? (
-                    <a className="text-xs underline" href={activeRow.mockup_madera_url} target="_blank" rel="noreferrer">
+                    <a
+                      className="shrink-0 text-xs text-primary underline-offset-2 hover:underline"
+                      href={activeRow.mockup_madera_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       Abrir archivo
                     </a>
                   ) : null}
                 </div>
               ) : null}
             </div>
-            <Button type="button" variant="outline" className="mt-auto w-full" onClick={resetNuevaMuestra}>
+            <Button type="button" variant="outline" className="mt-auto h-10 w-full shrink-0 rounded-lg text-sm" onClick={resetNuevaMuestra}>
               Nueva creación en esta tarjeta
             </Button>
-          </>
+          </div>
         )}
       </CardContent>
     </Card>

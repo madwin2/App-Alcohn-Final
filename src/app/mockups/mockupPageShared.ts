@@ -57,7 +57,19 @@ export function recordToValidation(r: Record<string, unknown> | null): LogoValid
 
 export const LS_ALT_MEDIDAS = 'mockup_medidas_alternativas_v1';
 
-export function persistAlternativasMedidasLocal(solicitudId: string, alternativas: MedidaAlternativaCm[]) {
+type MedidasLsEntry = {
+  solicitudId: string;
+  alternativas: MedidaAlternativaCm[];
+  /** Si falta o no coincide la longitud, se asume todo true (compatibilidad). */
+  enviar?: boolean[];
+  at: string;
+};
+
+export function persistAlternativasMedidasLocal(
+  solicitudId: string,
+  alternativas: MedidaAlternativaCm[],
+  enviar?: boolean[],
+) {
   try {
     const raw = localStorage.getItem(LS_ALT_MEDIDAS);
     const prev = (() => {
@@ -67,16 +79,60 @@ export function persistAlternativasMedidasLocal(solicitudId: string, alternativa
       } catch {
         return [];
       }
-    })() as Array<{ solicitudId: string; alternativas: MedidaAlternativaCm[]; at: string }>;
-    const entry = {
+    })() as MedidasLsEntry[];
+    const flags =
+      enviar && enviar.length === alternativas.length
+        ? enviar.map(Boolean)
+        : alternativas.map(() => true);
+    const entry: MedidasLsEntry = {
       solicitudId,
       alternativas,
+      enviar: flags,
       at: new Date().toISOString(),
     };
     const next = [entry, ...prev.filter((x) => x.solicitudId !== solicitudId)].slice(0, 300);
     localStorage.setItem(LS_ALT_MEDIDAS, JSON.stringify(next));
   } catch {
     // ignore
+  }
+}
+
+export function persistSeleccionMedidasEnvioLocal(solicitudId: string, enviar: boolean[]) {
+  try {
+    const raw = localStorage.getItem(LS_ALT_MEDIDAS);
+    const prev = (() => {
+      try {
+        const p = JSON.parse(raw || '[]');
+        return Array.isArray(p) ? p : [];
+      } catch {
+        return [];
+      }
+    })() as MedidasLsEntry[];
+    const hit = prev.find((x) => x.solicitudId === solicitudId);
+    if (!hit?.alternativas || hit.alternativas.length !== enviar.length) return;
+    const entry: MedidasLsEntry = {
+      ...hit,
+      enviar: enviar.map(Boolean),
+      at: new Date().toISOString(),
+    };
+    const next = [entry, ...prev.filter((x) => x.solicitudId !== solicitudId)].slice(0, 300);
+    localStorage.setItem(LS_ALT_MEDIDAS, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
+export function leerSeleccionMedidasEnvioLocal(solicitudId: string, len: number): boolean[] {
+  try {
+    const raw = localStorage.getItem(LS_ALT_MEDIDAS);
+    const p = JSON.parse(raw || '[]');
+    if (!Array.isArray(p)) return Array(len).fill(true);
+    const hit = p.find((x: { solicitudId?: string }) => x?.solicitudId === solicitudId) as MedidasLsEntry | undefined;
+    const e = hit?.enviar;
+    if (!Array.isArray(e) || e.length !== len) return Array(len).fill(true);
+    return e.map((x) => x === true);
+  } catch {
+    return Array(len).fill(true);
   }
 }
 

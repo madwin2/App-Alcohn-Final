@@ -4,10 +4,7 @@ Convierte el Excel MiCorreo (códigos sucursales + provincias) al formato de `pu
 
 Uso típico (genera CSV para importar en Supabase):
   pip install pandas openpyxl
-  python scripts/import_correo_sucursales_xlsx.py "archivo.xlsx" -o correo_sucursales_nuevo.csv
-  python scripts/import_correo_sucursales_xlsx.py "archivo.csv" -o correo_sucursales_limpio.csv   # mismo saneamiento
-
-  Filas con código #N/A, #REF!, vacío, etc. (errores de Excel) se omiten — no son sucursales válidas.
+  python scripts/import_correo_sucursales_xlsx.py "codigos_sucursales_y_provincias_MiCorreo (3).xlsx" -o correo_sucursales_nuevo.csv
 
 Luego en Supabase (reemplazo completo del padrón, lo más simple):
   1) SQL Editor → ejecutar:  TRUNCATE public.correo_sucursales RESTART IDENTITY;
@@ -18,7 +15,6 @@ Luego en Supabase (reemplazo completo del padrón, lo más simple):
 Upsert directo (actualiza por código, inserta nuevas; requiere service role):
   set SUPABASE_URL=...  set SUPABASE_SERVICE_ROLE_KEY=...
   python scripts/import_correo_sucursales_xlsx.py archivo.xlsx --upsert
-  python scripts/import_correo_sucursales_xlsx.py archivo.csv --upsert
 """
 
 from __future__ import annotations
@@ -70,27 +66,11 @@ def map_columns(df_columns: list[str]) -> dict[str, str]:
     return out
 
 
-def is_valid_codigo(raw: str) -> bool:
-    """Excluye errores típicos de Excel y códigos vacíos."""
-    c = (raw or "").strip()
-    if not c:
-        return False
-    u = c.upper()
-    if u.startswith("#") or u in {"#N/A", "#REF!", "#VALUE!", "#NULL!", "#NUM!", "#NAME?"}:
-        return False
-    if u in {"N/A", "NA", "NAN", "NONE", "<NA>"}:
-        return False
-    # Códigos MiCorreo: letras/números, sin espacios (evita pegar texto suelto)
-    if " " in c or "\t" in c:
-        return False
-    return bool(re.match(r"^[A-Za-z0-9\-]{2,15}$", c))
-
-
 def main() -> int:
-    p = argparse.ArgumentParser(description="Excel/CSV MiCorreo → CSV limpio para correo_sucursales (Supabase)")
-    p.add_argument("source", type=Path, help="Ruta al .xlsx o .csv (columnas codigo,calle,… o CÓDIGO,CALLE,…)")
+    p = argparse.ArgumentParser(description="Excel MiCorreo → CSV correo_sucursales (Supabase)")
+    p.add_argument("xlsx", type=Path, help="Ruta al .xlsx")
     p.add_argument("-o", "--out-csv", type=Path, help="Salida CSV (UTF-8). Si omitís --upsert, conviene pasar -o.")
-    p.add_argument("--sheet", type=int, default=0, help="Índice de hoja (0 = primera); solo .xlsx")
+    p.add_argument("--sheet", type=int, default=0, help="Índice de hoja (0 = primera)")
     p.add_argument(
         "--upsert",
         action="store_true",
@@ -98,8 +78,8 @@ def main() -> int:
     )
     args = p.parse_args()
 
-    if not args.source.is_file():
-        print(f"No existe el archivo: {args.source}", file=sys.stderr)
+    if not args.xlsx.is_file():
+        print(f"No existe el archivo: {args.xlsx}", file=sys.stderr)
         return 1
 
     try:
@@ -108,15 +88,7 @@ def main() -> int:
         print("Instalá dependencias: pip install pandas openpyxl", file=sys.stderr)
         return 1
 
-    suf = args.source.suffix.lower()
-    if suf == ".csv":
-        df = pd.read_csv(args.source, encoding="utf-8-sig", dtype=str, keep_default_na=False)
-        df.columns = [str(c).strip() for c in df.columns]
-    elif suf in (".xlsx", ".xls"):
-        df = pd.read_excel(args.source, sheet_name=args.sheet, engine="openpyxl")
-    else:
-        print("Formato no soportado: usá .csv, .xlsx o .xls", file=sys.stderr)
-        return 1
+    df = pd.read_excel(args.xlsx, sheet_name=args.sheet, engine="openpyxl")
     mapping = map_columns(list(df.columns))
     required = {"codigo", "calle", "localidad", "provincia"}
     mapped_targets = set(mapping.values())
@@ -147,16 +119,8 @@ def main() -> int:
     )
     for col in out_df.columns:
         out_df[col] = out_df[col].replace({"nan": "", "None": "", "<NA>": ""}, regex=False)
-
-    before = len(out_df)
-    out_df = out_df[out_df["codigo"].apply(is_valid_codigo)]
-    dropped_invalid = before - len(out_df)
+    out_df = out_df[out_df["codigo"].str.len() > 0]
     out_df = out_df.drop_duplicates(subset=["codigo"], keep="last")
-    if dropped_invalid:
-        print(
-            f"Aviso: se omitieron {dropped_invalid} filas sin código válido (#N/A de Excel, vacío, etc.).",
-            file=sys.stderr,
-        )
 
     records = out_df.to_dict("records")
     for r in records:
