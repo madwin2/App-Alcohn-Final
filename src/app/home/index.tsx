@@ -158,8 +158,31 @@ export default function HomePage() {
   const TOTAL_TANDAS = 3;
   useEffect(() => {
     let cooldown = false;
+    // Evita que el snap por tandas interfiera cuando hay un modal/diálogo abierto
+    // (Radix marca el diálogo con data-state="open") o cuando el evento viene de un
+    // control interactivo (inputs, textareas, selects, listas desplegables, etc.).
+    const isModalOpen = () =>
+      typeof document !== 'undefined' &&
+      document.querySelector(
+        '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+      ) !== null;
+    const isInteractiveTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      if (target.isContentEditable) return true;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (
+        target.closest(
+          '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"], [role="combobox"]',
+        )
+      ) {
+        return true;
+      }
+      return false;
+    };
     const handleWheel = (e: WheelEvent) => {
       if (Math.abs(e.deltaY) < 5) return;
+      if (isModalOpen() || isInteractiveTarget(e.target)) return;
       e.preventDefault();
       if (cooldown) return;
       cooldown = true;
@@ -173,6 +196,7 @@ export default function HomePage() {
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isModalOpen() || isInteractiveTarget(e.target)) return;
       if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
         e.preventDefault();
         setTanda((p) => Math.min(p + 1, TOTAL_TANDAS - 1));
