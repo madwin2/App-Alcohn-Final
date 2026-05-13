@@ -661,11 +661,11 @@ export default function EnviosPage() {
       // IA obligatoria: se usa IA y se completa con parser local solo en campos faltantes.
       const fallbackData = parseShippingText(rawShippingText);
       const merged = mergeShippingData(fallbackData, aiData);
-      const phoneFromParse = normalizePhoneDigitsForEnvios(merged.phone || '');
+      // Siempre el teléfono del cliente en el sistema: el texto pegado suele traer números erróneos.
       const phoneFromOrder = normalizePhoneDigitsForEnvios(selectedOrder.customer.phoneE164 || '');
       const parsedData: ShippingFormData = {
         ...merged,
-        phone: phoneFromParse.length > 0 ? phoneFromParse : phoneFromOrder,
+        phone: phoneFromOrder,
       };
 
       const normalized = normalizeShippingFormData(parsedData);
