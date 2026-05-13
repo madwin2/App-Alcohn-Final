@@ -10,6 +10,7 @@ import GastosPage from './app/gastos/index'
 import MockupsPage from './app/mockups/index'
 import PreciosPage from './app/precios/index'
 import LoginPage from './app/login/index'
+import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
 
@@ -104,6 +105,9 @@ function App() {
               </ProtectedRoute>
             }
           />
+          {import.meta.env.DEV ? (
+            <Route path="/dev/test-etiquetas-pdf" element={<TestEtiquetasPdfPage />} />
+          ) : null}
         </Routes>
       </div>
     </Router>

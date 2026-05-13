@@ -294,7 +294,7 @@ export function UploadTrackingDialog({
       toast({
         title: 'PDF generado',
         description:
-          'Etiquetas 50×152 mm (Zebra): sin cabecera del correo, con logo Alcohn, pedido al centro y previews a la derecha.',
+          'Etiquetas 100×152 mm: sin franja PAQ/Correo arriba; pedido y logos dentro del recuadro inferior de la etiqueta.',
       });
     }
   };

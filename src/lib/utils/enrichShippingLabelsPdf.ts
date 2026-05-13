@@ -5,24 +5,38 @@ import type { PageViewport } from 'pdfjs-dist/types/src/display/display_utils';
 import type { Order, OrderItem } from '@/lib/types';
 import { listTrackingNumbersByPage } from '@/lib/utils/trackingPdfParser';
 
-/** Zebra ZD220: 50 mm (ancho del rollo) × 152 mm (avance), vertical. */
+/**
+ * Etiqueta **100 mm × 152 mm**.
+ * - Del PDF MiCorreo (A4 apaisado) solo se **elimina la franja superior** (logo Correo + PAQ.AR CLASICO).
+ * - Se recortan márgenes blancos del A4.
+ * - Logos Alcohn / cliente y texto del pedido van **dentro del rectángulo inferior** de la tarjeta (sobre la imagen).
+ */
 const MM_TO_PT = 72 / 25.4;
-const LABEL_W_MM = 50;
+const LABEL_W_MM = 100;
 const LABEL_H_MM = 152;
-const LABEL_W_PT = (LABEL_W_MM * MM_TO_PT) as number;
-const LABEL_H_PT = (LABEL_H_MM * MM_TO_PT) as number;
+const LABEL_W_PT = LABEL_W_MM * MM_TO_PT;
+const LABEL_H_PT = LABEL_H_MM * MM_TO_PT;
 
-const FOOTER_PT = 36;
-const FOOTER_PAD_X = 3;
-const LOGO_ALCOHN_MAX_H = 22;
-const LOGO_ALCOHN_MAX_W = 36;
-const CLIENT_PREVIEW_MAX = 3;
-const CLIENT_PREVIEW_MAX_H = 22;
-const CLIENT_PREVIEW_MAX_W = 28;
-const CLIENT_PREVIEW_GAP = 2;
-const RENDER_SCALE = 3.25;
-/** Si no aparece «REMITENTE», recortar este % superior del raster. */
-const DEFAULT_TOP_CROP_FRAC = 0.19;
+/** Fracción de la **altura de la etiqueta dibujada** reservada al rectángulo inferior (pedido + logos). */
+const FOOTER_FRAC_OF_LABEL = 0.21;
+const RENDER_SCALE = 2.75;
+const HEADER_CROP_MARGIN_PX = 16;
+const MAX_HEADER_CROP_FRAC = 0.26;
+/** Umbral para recorte de márgenes A4 (más alto = más agresivo, menos “gris” como tinta). */
+const TRIM_WHITE_THRESHOLD = 252;
+const TRIM_PADDING_PX = 4;
+/** Si el recorte por texto casi no avanza, se recorta este % extra del alto ya aislado (franja PAQ en imagen). */
+const POST_TRIM_HEADER_FRAC_WEAK = 0.052;
+const POST_TRIM_HEADER_MAX_PX = 105;
+const WEAK_TEXT_CROP_PX = 14;
+const POST_TRIM_BOTTOM_CROP_PX = 86;
+const LABEL_BOUNDS_PAD_X = 28;
+const LABEL_BOUNDS_PAD_Y_TOP = 30;
+const LABEL_BOUNDS_PAD_Y_BOTTOM = 58;
+const LABEL_ASPECT_W_OVER_H = LABEL_W_MM / LABEL_H_MM;
+const FIT_ZOOM = 1.07;
+const TOP_PRINT_MARGIN_PT = MM_TO_PT * 13.2; // margen superior extra para evitar corte
+const HORIZONTAL_NUDGE_PT = MM_TO_PT * 1.2; // pequeño corrimiento a la derecha
 
 const itemTypeShortLabel = (item: OrderItem): string | null => {
   switch (item.itemType) {
@@ -59,7 +73,7 @@ const buildFooterContent = (order: Order): { imageCandidates: string[][]; captio
   }
 
   return {
-    imageCandidates: imageCandidates.slice(0, CLIENT_PREVIEW_MAX),
+    imageCandidates: imageCandidates.slice(0, 3),
     caption: [...new Set(captionBits)].join(' · '),
   };
 };
@@ -74,7 +88,7 @@ const buildCenterFooterLines = (order: Order | undefined, trackingNumber: string
       .filter((n): n is string => Boolean(n));
     if (designNames.length > 0) {
       const joined = designNames.slice(0, 3).join(', ');
-      lines.push(joined.length > 90 ? `${joined.slice(0, 87)}…` : joined);
+      lines.push(joined.length > 120 ? `${joined.slice(0, 117)}…` : joined);
     }
     const { caption } = buildFooterContent(order);
     if (caption) lines.push(caption);
@@ -84,8 +98,7 @@ const buildCenterFooterLines = (order: Order | undefined, trackingNumber: string
   return lines;
 };
 
-/** Fila superior de píxeles a descartar (encabezado del correo hasta ~REMITENTE). */
-const computeRemitenteCropTopPxStable = (viewport: PageViewport, items: TextItem[]): number | null => {
+const buildTextBuckets = (viewport: PageViewport, items: TextItem[]) => {
   type Bucket = { y: number; parts: Array<{ x: number; text: string }> };
   const buckets: Bucket[] = [];
 
@@ -104,26 +117,260 @@ const computeRemitenteCropTopPxStable = (viewport: PageViewport, items: TextItem
   }
 
   buckets.sort((a, b) => a.y - b.y);
+  return buckets;
+};
+
+const isCorreoTopHeaderToken = (t: string): boolean => {
+  const u = t.toUpperCase();
+  if (u.includes('CORREO') && u.includes('ARGENTINO')) return true;
+  if (u.includes('PAQ.AR')) return true;
+  if (u.includes('PAQ') && u.includes('CLASICO')) return true;
+  return false;
+};
+
+/**
+ * Primera fila de píxeles a **conservar**: todo lo anterior (franja PAQ / Correo) se descarta.
+ */
+const computeCorreoTopHeaderCropBottomPx = (
+  viewport: PageViewport,
+  items: TextItem[],
+  canvasHeight: number,
+): number => {
+  let maxY = -1;
+  const yScanMax = viewport.height * 0.34;
+
+  const buckets = buildTextBuckets(viewport, items);
   for (const bucket of buckets) {
+    if (bucket.y > yScanMax) break;
     const line = normalizeWhitespace(
       bucket.parts
         .sort((a, b) => a.x - b.x)
         .map((p) => p.text)
         .join(' '),
     );
-    if (line.toUpperCase().includes('REMITENTE')) {
-      const ty: number[] = [];
-      for (const item of items) {
-        const t = normalizeWhitespace(item.str || '');
-        if (!t) continue;
-        const m = Util.transform(viewport.transform, item.transform);
-        if (Math.abs(m[5] - bucket.y) <= 2) ty.push(m[5]);
-      }
-      if (ty.length === 0) return Math.max(0, Math.floor(bucket.y - 6));
-      return Math.max(0, Math.floor(Math.min(...ty) - 6));
+    if (!isCorreoTopHeaderToken(line)) continue;
+    for (const item of items) {
+      const t = normalizeWhitespace(item.str || '');
+      if (!t) continue;
+      const m = Util.transform(viewport.transform, item.transform);
+      if (Math.abs(m[5] - bucket.y) <= 2) maxY = Math.max(maxY, m[5]);
     }
   }
-  return null;
+
+  for (const item of items) {
+    const t = normalizeWhitespace(item.str || '');
+    if (!t || t.length > 90) continue;
+    const m = Util.transform(viewport.transform, item.transform);
+    if (m[5] > yScanMax) continue;
+    if (!isCorreoTopHeaderToken(t)) continue;
+    maxY = Math.max(maxY, m[5]);
+  }
+
+  if (maxY < 0) return 0;
+  const raw = Math.floor(maxY + HEADER_CROP_MARGIN_PX);
+  const cap = Math.floor(canvasHeight * MAX_HEADER_CROP_FRAC);
+  return Math.max(0, Math.min(raw, cap));
+};
+
+const isInkPixel = (
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  whiteThreshold: number,
+): boolean => {
+  const xi = Math.max(0, Math.min(width - 1, Math.floor(x)));
+  const yi = Math.max(0, Math.min(height - 1, Math.floor(y)));
+  const i = (yi * width + xi) * 4;
+  const a = data[i + 3];
+  if (a < 12) return false;
+  const r = data[i];
+  const g = data[i + 1];
+  const b = data[i + 2];
+  return r < whiteThreshold || g < whiteThreshold || b < whiteThreshold;
+};
+
+const trimCanvasToInkBounds = (source: HTMLCanvasElement): HTMLCanvasElement => {
+  const w = source.width;
+  const h = source.height;
+  const ctx = source.getContext('2d');
+  if (!ctx || w < 2 || h < 2) return source;
+
+  const { data } = ctx.getImageData(0, 0, w, h);
+
+  let top = 0;
+  while (top < h) {
+    let hit = false;
+    for (let x = 0; x < w; x += 2) {
+      if (isInkPixel(data, w, h, x, top, TRIM_WHITE_THRESHOLD)) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) break;
+    top += 1;
+  }
+
+  let bottom = h - 1;
+  while (bottom > top) {
+    let hit = false;
+    for (let x = 0; x < w; x += 2) {
+      if (isInkPixel(data, w, h, x, bottom, TRIM_WHITE_THRESHOLD)) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) break;
+    bottom -= 1;
+  }
+
+  let left = 0;
+  while (left < w) {
+    let hit = false;
+    for (let y = top; y <= bottom; y += 2) {
+      if (isInkPixel(data, w, h, left, y, TRIM_WHITE_THRESHOLD)) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) break;
+    left += 1;
+  }
+
+  let right = w - 1;
+  while (right > left) {
+    let hit = false;
+    for (let y = top; y <= bottom; y += 2) {
+      if (isInkPixel(data, w, h, right, y, TRIM_WHITE_THRESHOLD)) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) break;
+    right -= 1;
+  }
+
+  const pad = TRIM_PADDING_PX;
+  top = Math.max(0, top - pad);
+  left = Math.max(0, left - pad);
+  bottom = Math.min(h - 1, bottom + pad);
+  right = Math.min(w - 1, right + pad);
+
+  const cw = right - left + 1;
+  const ch = bottom - top + 1;
+  if (cw < 16 || ch < 16 || top > bottom || left > right) {
+    return source;
+  }
+
+  const out = document.createElement('canvas');
+  out.width = cw;
+  out.height = ch;
+  const octx = out.getContext('2d');
+  if (!octx) return source;
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0, 0, cw, ch);
+  octx.drawImage(source, left, top, cw, ch, 0, 0, cw, ch);
+  return out;
+};
+
+/** Recorta `px` filas desde arriba (tras aislar la tarjeta). */
+const cropTopPixels = (source: HTMLCanvasElement, px: number): HTMLCanvasElement => {
+  const p = Math.floor(px);
+  if (p <= 0) return source;
+  const w = source.width;
+  const nh = source.height - p;
+  if (nh < 40) return source;
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = nh;
+  const octx = out.getContext('2d');
+  if (!octx) return source;
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0, 0, w, nh);
+  octx.drawImage(source, 0, p, w, nh, 0, 0, w, nh);
+  return out;
+};
+
+/** Recorta `px` filas desde abajo para quitar líneas residuales. */
+const cropBottomPixels = (source: HTMLCanvasElement, px: number): HTMLCanvasElement => {
+  const p = Math.floor(px);
+  if (p <= 0) return source;
+  const w = source.width;
+  const nh = source.height - p;
+  if (nh < 120) return source;
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = nh;
+  const octx = out.getContext('2d');
+  if (!octx) return source;
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0, 0, w, nh);
+  octx.drawImage(source, 0, 0, w, nh, 0, 0, w, nh);
+  return out;
+};
+
+/** Aísla la etiqueta real del A4 usando el bloque de texto detectado. */
+const cropLabelByTextBounds = (
+  source: HTMLCanvasElement,
+  viewport: PageViewport,
+  items: TextItem[],
+  cropTop: number,
+): HTMLCanvasElement => {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const item of items) {
+    const text = normalizeWhitespace(item.str || '');
+    if (!text) continue;
+    const m = Util.transform(viewport.transform, item.transform);
+    const x = m[4];
+    const y = m[5] - cropTop;
+    if (y < -4 || y > source.height + 4) continue;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+    return source;
+  }
+
+  let left = Math.max(0, Math.floor(minX - LABEL_BOUNDS_PAD_X));
+  const top = Math.max(0, Math.floor(minY - LABEL_BOUNDS_PAD_Y_TOP));
+  let right = Math.min(source.width - 1, Math.ceil(maxX + LABEL_BOUNDS_PAD_X * 2.2));
+  const bottom = Math.min(source.height - 1, Math.ceil(maxY + LABEL_BOUNDS_PAD_Y_BOTTOM));
+
+  let cw = right - left + 1;
+  const ch = bottom - top + 1;
+  const minWidthFromAspect = Math.floor(ch * LABEL_ASPECT_W_OVER_H);
+
+  // Si falta ancho (caso típico: se corta el borde derecho), expandimos priorizando derecha.
+  if (cw < minWidthFromAspect) {
+    const missing = minWidthFromAspect - cw;
+    const growRight = Math.min(missing, source.width - 1 - right);
+    right += growRight;
+    const growLeft = Math.min(missing - growRight, left);
+    left -= growLeft;
+    cw = right - left + 1;
+  }
+
+  if (cw < 80 || ch < 120 || left >= right || top >= bottom) {
+    return source;
+  }
+
+  const out = document.createElement('canvas');
+  out.width = cw;
+  out.height = ch;
+  const octx = out.getContext('2d');
+  if (!octx) return source;
+  octx.fillStyle = '#ffffff';
+  octx.fillRect(0, 0, cw, ch);
+  octx.drawImage(source, left, top, cw, ch, 0, 0, cw, ch);
+  return out;
 };
 
 const embedPreviewImage = async (pdfDoc: PDFDocument, url: string) => {
@@ -159,10 +406,6 @@ const renderCroppedPagePng = async (page: PDFPageProxy): Promise<Uint8Array | nu
   const viewport = page.getViewport({ scale: RENDER_SCALE });
   const textContent = await page.getTextContent();
   const items = textContent.items.filter((i): i is TextItem => 'str' in i);
-  const cropTop =
-    computeRemitenteCropTopPxStable(viewport, items) ??
-    Math.round(viewport.height * DEFAULT_TOP_CROP_FRAC);
-  const safeCrop = Math.min(Math.max(0, cropTop), Math.floor(viewport.height * 0.52));
 
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(viewport.width);
@@ -177,24 +420,38 @@ const renderCroppedPagePng = async (page: PDFPageProxy): Promise<Uint8Array | nu
   });
   await renderTask.promise;
 
-  const sliceH = Math.max(1, canvas.height - safeCrop);
-  const out = document.createElement('canvas');
-  out.width = canvas.width;
-  out.height = sliceH;
-  const octx = out.getContext('2d');
-  if (!octx) return null;
-  octx.drawImage(canvas, 0, safeCrop, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+  const cropTop = computeCorreoTopHeaderCropBottomPx(viewport, items, canvas.height);
+  const sliceH = Math.max(1, canvas.height - cropTop);
+
+  const sliced = document.createElement('canvas');
+  sliced.width = canvas.width;
+  sliced.height = sliceH;
+  const sctx = sliced.getContext('2d');
+  if (!sctx) return null;
+  sctx.fillStyle = '#ffffff';
+  sctx.fillRect(0, 0, sliced.width, sliced.height);
+  sctx.drawImage(canvas, 0, cropTop, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+  const labelByText = cropLabelByTextBounds(sliced, viewport, items, cropTop);
+  let trimmed = trimCanvasToInkBounds(labelByText);
+  if (cropTop < WEAK_TEXT_CROP_PX && trimmed.height > 80) {
+    const shave = Math.min(
+      POST_TRIM_HEADER_MAX_PX,
+      Math.floor(trimmed.height * POST_TRIM_HEADER_FRAC_WEAK),
+    );
+    trimmed = cropTopPixels(trimmed, shave);
+  }
+  trimmed = cropBottomPixels(trimmed, POST_TRIM_BOTTOM_CROP_PX);
 
   const pngBlob: Blob = await new Promise((resolve) => {
-    out.toBlob((b) => resolve(b!), 'image/png');
+    trimmed.toBlob((b) => resolve(b!), 'image/png');
   });
   const ab = await pngBlob.arrayBuffer();
   return new Uint8Array(ab);
 };
 
 /**
- * Genera un PDF para Zebra 50×152 mm: recorta el encabezado del correo (desde «REMITENTE»),
- * escala el cuerpo y agrega pie con logo Alcohn (izq.), datos del pedido (centro) y previews del cliente (der.).
+ * PDF **100×152 mm**: sin franja superior MiCorreo; pedido y logos **dentro** del rectángulo inferior de la etiqueta.
  */
 export const enrichShippingLabelsPdf = async (
   pdfBytes: ArrayBuffer,
@@ -230,15 +487,16 @@ export const enrichShippingLabelsPdf = async (
 
     const embeddedPng = await outDoc.embedPng(pngBytes);
     const labelPage = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
-    const bodyH = LABEL_H_PT - FOOTER_PT;
 
     const iw = embeddedPng.width;
     const ih = embeddedPng.height;
-    const scale = Math.min(LABEL_W_PT / iw, bodyH / ih);
+    const fitW = LABEL_W_PT / iw;
+    const fitH = (LABEL_H_PT - TOP_PRINT_MARGIN_PT) / ih;
+    const scale = Math.min(fitW, fitH) * FIT_ZOOM;
     const dw = iw * scale;
     const dh = ih * scale;
-    const xImg = (LABEL_W_PT - dw) / 2;
-    const yImg = FOOTER_PT + (bodyH - dh) / 2;
+    const xImg = (LABEL_W_PT - dw) / 2 + HORIZONTAL_NUDGE_PT;
+    const yImg = Math.max(0, LABEL_H_PT - TOP_PRINT_MARGIN_PT - dh);
 
     labelPage.drawImage(embeddedPng, {
       x: xImg,
@@ -247,76 +505,110 @@ export const enrichShippingLabelsPdf = async (
       height: dh,
     });
 
-    labelPage.drawLine({
-      start: { x: 0, y: FOOTER_PT },
-      end: { x: LABEL_W_PT, y: FOOTER_PT },
-      thickness: 0.35,
-      color: rgb(0.35, 0.35, 0.35),
+    const bandH = dh * FOOTER_FRAC_OF_LABEL;
+    const pad = Math.max(3, dw * 0.024);
+    labelPage.drawRectangle({
+      x: xImg - 2,
+      y: yImg,
+      width: dw + 4,
+      height: bandH,
+      color: rgb(1, 1, 1),
+      borderWidth: 0,
     });
 
     const tn = trackingPerPage[i] ?? null;
     const order = tn ? trackingToOrder.get(tn) : undefined;
+    const footerContent = order ? buildFooterContent(order) : null;
+    const imageCandidates = footerContent?.imageCandidates ?? [];
     const centerLines = buildCenterFooterLines(order, tn);
 
-    const leftColW = embeddedAlcohn ? LOGO_ALCOHN_MAX_W + 2 : 0;
-    const rightColW = 40;
-    const centerX = FOOTER_PAD_X + leftColW;
-    const centerW = Math.max(24, LABEL_W_PT - FOOTER_PAD_X * 2 - leftColW - rightColW);
+    const leftColW = dw * 0.24;
+    const rightColW = dw * 0.24;
+    const centerX = xImg + leftColW + pad * 0.5;
+    const centerW = Math.max(28, dw - leftColW - rightColW - pad);
+    const logoMaxH = bandH * 0.72;
+    const logoMaxW = leftColW - pad * 1.2;
+    let leftBlockW = leftColW;
 
     if (embeddedAlcohn) {
-      const ls = Math.min(LOGO_ALCOHN_MAX_W / embeddedAlcohn.width, LOGO_ALCOHN_MAX_H / embeddedAlcohn.height);
+      const ls = Math.min(logoMaxW / embeddedAlcohn.width, logoMaxH / embeddedAlcohn.height);
       const lw = embeddedAlcohn.width * ls;
       const lh = embeddedAlcohn.height * ls;
+      const ly = yImg + (bandH - lh) / 2;
       labelPage.drawImage(embeddedAlcohn, {
-        x: FOOTER_PAD_X,
-        y: (FOOTER_PT - lh) / 2,
+        x: xImg + (leftColW - lw) / 2,
+        y: ly,
         width: lw,
         height: lh,
       });
+      leftBlockW = leftColW;
     }
 
-    let lineBaselineY = FOOTER_PT - 4;
-    for (const line of centerLines.slice(0, 4)) {
+    const slotW = Math.min(30, rightColW * 0.44);
+    const nPrev = imageCandidates.length;
+    const maxPrev = Math.min(2, nPrev);
+    const totalPrevW =
+      maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
+    const rightBlockW = rightColW;
+
+    const textLines = centerLines.slice(0, 3);
+    const textSize = Math.max(3.9, Math.min(5, bandH * 0.1));
+    const lineStep = textSize + 0.9;
+    const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
+    let textBaseline = yImg + (bandH + textBlockH) / 2 - textSize;
+    for (const line of textLines) {
       labelPage.drawText(line, {
         x: centerX,
-        y: lineBaselineY,
-        size: 4.2,
+        y: textBaseline,
+        size: textSize,
         font,
-        color: rgb(0.1, 0.1, 0.1),
+        color: rgb(0.06, 0.06, 0.06),
         maxWidth: centerW,
-        lineHeight: 5,
+        lineHeight: lineStep,
       });
-      lineBaselineY -= 5.2;
-      if (lineBaselineY < 2) break;
+      textBaseline -= lineStep;
+      if (textBaseline < yImg + 1) break;
     }
 
-    if (order) {
-      const { imageCandidates } = buildFooterContent(order);
-      const nPrev = imageCandidates.length;
-      const slotW = CLIENT_PREVIEW_MAX_W;
-      const totalW = nPrev * slotW + Math.max(0, nPrev - 1) * CLIENT_PREVIEW_GAP;
-      let px = LABEL_W_PT - FOOTER_PAD_X - totalW;
+    let drewClientPreview = false;
+    if (order && maxPrev > 0) {
+      let px = xImg + dw - rightColW + (rightColW - totalPrevW) / 2;
 
-      for (let j = 0; j < nPrev; j += 1) {
-        let embedded = null;
-        for (const candidateUrl of imageCandidates[j]) {
+      for (let j = 0; j < maxPrev; j += 1) {
+        let embedded: PDFImage | null = null;
+        for (const candidateUrl of imageCandidates[j] ?? []) {
           embedded = await embedPreviewImage(outDoc, candidateUrl);
           if (embedded) break;
         }
         if (!embedded) continue;
         const pw = embedded.width;
         const ph = embedded.height;
-        const sc = Math.min(slotW / pw, CLIENT_PREVIEW_MAX_H / ph);
+        const sc = Math.min(slotW / pw, logoMaxH / ph);
         const dwj = pw * sc;
         const dhj = ph * sc;
+        const py = yImg + (bandH - dhj) / 2;
         labelPage.drawImage(embedded, {
           x: px + (slotW - dwj) / 2,
-          y: (FOOTER_PT - dhj) / 2,
+          y: py,
           width: dwj,
           height: dhj,
         });
-        px += slotW + CLIENT_PREVIEW_GAP;
+        drewClientPreview = true;
+        px += slotW + 2;
       }
+    }
+
+    // Fallback visual: si no hubo logo cliente, mostramos Alcohn en la columna derecha.
+    if (!drewClientPreview && embeddedAlcohn) {
+      const rs = Math.min(rightColW * 0.62 / embeddedAlcohn.width, logoMaxH / embeddedAlcohn.height);
+      const rw = embeddedAlcohn.width * rs;
+      const rh = embeddedAlcohn.height * rs;
+      labelPage.drawImage(embeddedAlcohn, {
+        x: xImg + dw - rightColW + (rightColW - rw) / 2,
+        y: yImg + (bandH - rh) / 2,
+        width: rw,
+        height: rh,
+      });
     }
   }
 
