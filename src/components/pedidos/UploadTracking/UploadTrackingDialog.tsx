@@ -293,7 +293,8 @@ export function UploadTrackingDialog({
     if (showSuccessToast) {
       toast({
         title: 'PDF generado',
-        description: 'Se descargó una copia con previews en la franja inferior.',
+        description:
+          'Etiquetas 50×152 mm (Zebra): sin cabecera del correo, con logo Alcohn, pedido al centro y previews a la derecha.',
       });
     }
   };

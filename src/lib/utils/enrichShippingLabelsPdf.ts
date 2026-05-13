@@ -1,23 +1,28 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFImage } from 'pdf-lib';
+import { getDocument, Util } from 'pdfjs-dist';
+import type { PDFPageProxy, TextItem } from 'pdfjs-dist/types/src/display/api';
+import type { PageViewport } from 'pdfjs-dist/types/src/display/display_utils';
 import type { Order, OrderItem } from '@/lib/types';
 import { listTrackingNumbersByPage } from '@/lib/utils/trackingPdfParser';
 
-/** Franja inferior tipo MiCorreo A4 apaisado (~841×595 pt): previews + leyenda chica. */
-const FOOTER_MARGIN_X = 36;
-const FOOTER_BOTTOM_Y = 10;
-const CAPTION_FONT_SIZE = 6;
-const CAPTION_LINE_HEIGHT = 7;
-const IMAGE_MAX_HEIGHT = 48;
-const IMAGE_GAP = 5;
-const MAX_PREVIEWS = 4;
-const LOGO_MAX_H = 18;
-const LOGO_MAX_W = 48;
-const PREVIEW_SLOT_W = 72;
-const PREVIEW_START_Y = FOOTER_BOTTOM_Y + 6;
-/** Separación entre la franja gráfica (logo + previews) y la leyenda de texto. */
-const CAPTION_RIGHT_OF_GRAPHICS_GAP = 10;
-/** La leyenda va por encima de las miniaturas para que no pise los diseños. */
-const CAPTION_ABOVE_PREVIEWS = 14;
+/** Zebra ZD220: 50 mm (ancho del rollo) × 152 mm (avance), vertical. */
+const MM_TO_PT = 72 / 25.4;
+const LABEL_W_MM = 50;
+const LABEL_H_MM = 152;
+const LABEL_W_PT = (LABEL_W_MM * MM_TO_PT) as number;
+const LABEL_H_PT = (LABEL_H_MM * MM_TO_PT) as number;
+
+const FOOTER_PT = 36;
+const FOOTER_PAD_X = 3;
+const LOGO_ALCOHN_MAX_H = 22;
+const LOGO_ALCOHN_MAX_W = 36;
+const CLIENT_PREVIEW_MAX = 3;
+const CLIENT_PREVIEW_MAX_H = 22;
+const CLIENT_PREVIEW_MAX_W = 28;
+const CLIENT_PREVIEW_GAP = 2;
+const RENDER_SCALE = 3.25;
+/** Si no aparece «REMITENTE», recortar este % superior del raster. */
+const DEFAULT_TOP_CROP_FRAC = 0.19;
 
 const itemTypeShortLabel = (item: OrderItem): string | null => {
   switch (item.itemType) {
@@ -36,64 +41,89 @@ const itemTypeShortLabel = (item: OrderItem): string | null => {
   }
 };
 
+const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
+
 const buildFooterContent = (order: Order): { imageCandidates: string[][]; caption: string } => {
   const imageCandidates: string[][] = [];
   const captionBits: string[] = [];
 
   for (const item of order.items) {
-    // Priorizar archivo base y luego preview vectorial.
     const rawUrls = [item.files?.baseUrl, item.files?.vectorPreviewUrl];
     const candidates = rawUrls.filter(
       (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
     );
     if (candidates.length > 0) imageCandidates.push(candidates);
 
-    // Siempre mostrar etiquetas de items (aunque haya preview), así el PDF enriquecido nunca queda "igual".
     const t = itemTypeShortLabel(item);
     if (t) captionBits.push(t);
   }
 
   return {
-    imageCandidates: imageCandidates.slice(0, MAX_PREVIEWS),
+    imageCandidates: imageCandidates.slice(0, CLIENT_PREVIEW_MAX),
     caption: [...new Set(captionBits)].join(' · '),
   };
 };
 
-const svgUrlToPngBytes = async (svgUrl: string, pixelW = 256): Promise<Uint8Array | null> => {
-  try {
-    const res = await fetch(svgUrl);
-    if (!res.ok) return null;
-    const svgText = await res.text();
-    const svgBlob = new Blob([svgText], { type: 'image/svg+xml' });
-    const objectUrl = URL.createObjectURL(svgBlob);
-
-    const img = new Image();
-    img.decoding = 'async';
-    img.src = objectUrl;
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('No se pudo cargar el SVG del logo.'));
-    });
-
-    const ratio = img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1;
-    const w = Math.max(1, Math.round(pixelW));
-    const h = Math.max(1, Math.round(w / ratio));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.clearRect(0, 0, w, h);
-    ctx.drawImage(img, 0, 0, w, h);
-
-    URL.revokeObjectURL(objectUrl);
-
-    const pngBlob: Blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b!), 'image/png'));
-    const ab = await pngBlob.arrayBuffer();
-    return new Uint8Array(ab);
-  } catch {
-    return null;
+const buildCenterFooterLines = (order: Order | undefined, trackingNumber: string | null): string[] => {
+  const lines: string[] = [];
+  if (order) {
+    const shortId = order.id.replace(/-/g, '').slice(0, 14);
+    lines.push(`Pedido: ${shortId}`);
+    const designNames = order.items
+      .map((i) => i.designName?.trim())
+      .filter((n): n is string => Boolean(n));
+    if (designNames.length > 0) {
+      const joined = designNames.slice(0, 3).join(', ');
+      lines.push(joined.length > 90 ? `${joined.slice(0, 87)}…` : joined);
+    }
+    const { caption } = buildFooterContent(order);
+    if (caption) lines.push(caption);
+  } else if (trackingNumber) {
+    lines.push(`TN ${trackingNumber}`);
   }
+  return lines;
+};
+
+/** Fila superior de píxeles a descartar (encabezado del correo hasta ~REMITENTE). */
+const computeRemitenteCropTopPxStable = (viewport: PageViewport, items: TextItem[]): number | null => {
+  type Bucket = { y: number; parts: Array<{ x: number; text: string }> };
+  const buckets: Bucket[] = [];
+
+  for (const item of items) {
+    const text = normalizeWhitespace(item.str || '');
+    if (!text) continue;
+    const m = Util.transform(viewport.transform, item.transform);
+    const x = m[4];
+    const y = m[5];
+    let bucket = buckets.find((b) => Math.abs(b.y - y) <= 2);
+    if (!bucket) {
+      bucket = { y, parts: [] };
+      buckets.push(bucket);
+    }
+    bucket.parts.push({ x, text });
+  }
+
+  buckets.sort((a, b) => a.y - b.y);
+  for (const bucket of buckets) {
+    const line = normalizeWhitespace(
+      bucket.parts
+        .sort((a, b) => a.x - b.x)
+        .map((p) => p.text)
+        .join(' '),
+    );
+    if (line.toUpperCase().includes('REMITENTE')) {
+      const ty: number[] = [];
+      for (const item of items) {
+        const t = normalizeWhitespace(item.str || '');
+        if (!t) continue;
+        const m = Util.transform(viewport.transform, item.transform);
+        if (Math.abs(m[5] - bucket.y) <= 2) ty.push(m[5]);
+      }
+      if (ty.length === 0) return Math.max(0, Math.floor(bucket.y - 6));
+      return Math.max(0, Math.floor(Math.min(...ty) - 6));
+    }
+  }
+  return null;
 };
 
 const embedPreviewImage = async (pdfDoc: PDFDocument, url: string) => {
@@ -125,113 +155,174 @@ const embedPreviewImage = async (pdfDoc: PDFDocument, url: string) => {
   }
 };
 
+const renderCroppedPagePng = async (page: PDFPageProxy): Promise<Uint8Array | null> => {
+  const viewport = page.getViewport({ scale: RENDER_SCALE });
+  const textContent = await page.getTextContent();
+  const items = textContent.items.filter((i): i is TextItem => 'str' in i);
+  const cropTop =
+    computeRemitenteCropTopPxStable(viewport, items) ??
+    Math.round(viewport.height * DEFAULT_TOP_CROP_FRAC);
+  const safeCrop = Math.min(Math.max(0, cropTop), Math.floor(viewport.height * 0.52));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const renderTask = page.render({
+    canvasContext: ctx,
+    canvas,
+    viewport,
+  });
+  await renderTask.promise;
+
+  const sliceH = Math.max(1, canvas.height - safeCrop);
+  const out = document.createElement('canvas');
+  out.width = canvas.width;
+  out.height = sliceH;
+  const octx = out.getContext('2d');
+  if (!octx) return null;
+  octx.drawImage(canvas, 0, safeCrop, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+  const pngBlob: Blob = await new Promise((resolve) => {
+    out.toBlob((b) => resolve(b!), 'image/png');
+  });
+  const ab = await pngBlob.arrayBuffer();
+  return new Uint8Array(ab);
+};
+
 /**
- * Superpone en la parte inferior de cada página las previews del pedido y una leyenda breve.
- * Requiere que el TN de cada página coincida con una clave en `trackingToOrder`.
+ * Genera un PDF para Zebra 50×152 mm: recorta el encabezado del correo (desde «REMITENTE»),
+ * escala el cuerpo y agrega pie con logo Alcohn (izq.), datos del pedido (centro) y previews del cliente (der.).
  */
 export const enrichShippingLabelsPdf = async (
   pdfBytes: ArrayBuffer,
-  trackingToOrder: Map<string, Order>
+  trackingToOrder: Map<string, Order>,
 ): Promise<Uint8Array> => {
-  // Usamos copias separadas del PDF para pdfjs y pdf-lib para evitar errores de ArrayBuffer "detached".
-  const asUint8 = new Uint8Array(pdfBytes);
-  const bytesForPdfJs = asUint8.slice();
-  const bytesForPdfLib = asUint8.slice();
+  const root = new Uint8Array(pdfBytes);
+  const bytesForList = root.slice();
+  const bytesForRender = root.slice();
 
-  const trackingPerPage = await listTrackingNumbersByPage(bytesForPdfJs);
-  const pdfDoc = await PDFDocument.load(bytesForPdfLib);
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const pages = pdfDoc.getPages();
+  const trackingPerPage = await listTrackingNumbersByPage(bytesForList);
 
-  // Logo (SVG -> PNG) embebido una sola vez.
-  const logoPngBytes = await svgUrlToPngBytes('/isologo-pagina.svg');
-  const embeddedLogo = logoPngBytes ? await pdfDoc.embedPng(logoPngBytes) : null;
+  const loadingTask = getDocument({ data: bytesForRender });
+  const srcPdf = await loadingTask.promise;
+  const outDoc = await PDFDocument.create();
+  const font = await outDoc.embedFont(StandardFonts.Helvetica);
 
-  for (let i = 0; i < pages.length; i++) {
+  let embeddedAlcohn: PDFImage | null = null;
+  try {
+    const logoRes = await fetch('/logo-alcohn.jpg');
+    if (logoRes.ok) {
+      const logoBytes = await logoRes.arrayBuffer();
+      embeddedAlcohn = await outDoc.embedJpg(logoBytes);
+    }
+  } catch {
+    embeddedAlcohn = null;
+  }
+
+  const n = srcPdf.numPages;
+  for (let i = 0; i < n; i += 1) {
+    const page = await srcPdf.getPage(i + 1);
+    const pngBytes = await renderCroppedPagePng(page);
+    if (!pngBytes) continue;
+
+    const embeddedPng = await outDoc.embedPng(pngBytes);
+    const labelPage = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
+    const bodyH = LABEL_H_PT - FOOTER_PT;
+
+    const iw = embeddedPng.width;
+    const ih = embeddedPng.height;
+    const scale = Math.min(LABEL_W_PT / iw, bodyH / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    const xImg = (LABEL_W_PT - dw) / 2;
+    const yImg = FOOTER_PT + (bodyH - dh) / 2;
+
+    labelPage.drawImage(embeddedPng, {
+      x: xImg,
+      y: yImg,
+      width: dw,
+      height: dh,
+    });
+
+    labelPage.drawLine({
+      start: { x: 0, y: FOOTER_PT },
+      end: { x: LABEL_W_PT, y: FOOTER_PT },
+      thickness: 0.35,
+      color: rgb(0.35, 0.35, 0.35),
+    });
+
     const tn = trackingPerPage[i] ?? null;
-    if (!tn) continue;
+    const order = tn ? trackingToOrder.get(tn) : undefined;
+    const centerLines = buildCenterFooterLines(order, tn);
 
-    const order = trackingToOrder.get(tn);
-    if (!order) continue;
+    const leftColW = embeddedAlcohn ? LOGO_ALCOHN_MAX_W + 2 : 0;
+    const rightColW = 40;
+    const centerX = FOOTER_PAD_X + leftColW;
+    const centerW = Math.max(24, LABEL_W_PT - FOOTER_PAD_X * 2 - leftColW - rightColW);
 
-    const page = pages[i];
-    const { width } = page.getSize();
-    const { imageCandidates, caption } = buildFooterContent(order);
-
-    if (imageCandidates.length === 0 && !caption && !embeddedLogo) continue;
-
-    const innerLeft = FOOTER_MARGIN_X;
-    const innerRight = width - FOOTER_MARGIN_X;
-
-    const imageStackBottom = PREVIEW_START_Y;
-    const n = imageCandidates.length;
-
-    /** Ancho ocupado por el isologo a la izquierda de las previews (sin solaparse con la primera). */
-    const logoColumnW = embeddedLogo ? LOGO_MAX_W + IMAGE_GAP : 0;
-    const previewsRowW =
-      n > 0 ? n * PREVIEW_SLOT_W + Math.max(0, n - 1) * IMAGE_GAP : 0;
-    const graphicsBlockEnd = innerLeft + logoColumnW + previewsRowW;
-
-    /** Leyenda: más arriba y a la derecha del bloque de imágenes para que sea legible. */
-    const captionBaselineY =
-      imageStackBottom + IMAGE_MAX_HEIGHT + CAPTION_ABOVE_PREVIEWS;
-    const captionX =
-      n > 0 || embeddedLogo ? graphicsBlockEnd + CAPTION_RIGHT_OF_GRAPHICS_GAP : innerLeft;
-    const captionMaxWidth = Math.max(80, innerRight - captionX);
-
-    // Logo a la izquierda de la hilera de previews (misma altura útil que las miniaturas).
-    if (embeddedLogo) {
-      const scale = Math.min(LOGO_MAX_W / embeddedLogo.width, LOGO_MAX_H / embeddedLogo.height);
-      const dw = embeddedLogo.width * scale;
-      const dh = embeddedLogo.height * scale;
-      page.drawImage(embeddedLogo, {
-        x: innerLeft,
-        y: imageStackBottom + IMAGE_MAX_HEIGHT - dh,
-        width: dw,
-        height: dh,
+    if (embeddedAlcohn) {
+      const ls = Math.min(LOGO_ALCOHN_MAX_W / embeddedAlcohn.width, LOGO_ALCOHN_MAX_H / embeddedAlcohn.height);
+      const lw = embeddedAlcohn.width * ls;
+      const lh = embeddedAlcohn.height * ls;
+      labelPage.drawImage(embeddedAlcohn, {
+        x: FOOTER_PAD_X,
+        y: (FOOTER_PT - lh) / 2,
+        width: lw,
+        height: lh,
       });
     }
 
-    const slotW = PREVIEW_SLOT_W;
-    const maxSlotW = PREVIEW_SLOT_W;
-    const startX = innerLeft + logoColumnW;
-
-    for (let j = 0; j < n; j++) {
-      let embedded = null;
-      for (const candidateUrl of imageCandidates[j]) {
-        embedded = await embedPreviewImage(pdfDoc, candidateUrl);
-        if (embedded) break;
-      }
-      if (!embedded) continue;
-
-      const iw = embedded.width;
-      const ih = embedded.height;
-      const scale = Math.min(maxSlotW / iw, IMAGE_MAX_HEIGHT / ih);
-      const dw = iw * scale;
-      const dh = ih * scale;
-      const slotLeft = startX + j * (slotW + IMAGE_GAP);
-      const x = slotLeft + (slotW - dw) / 2;
-
-      page.drawImage(embedded, {
-        x,
-        y: imageStackBottom,
-        width: dw,
-        height: dh,
-      });
-    }
-
-    if (caption) {
-      page.drawText(caption, {
-        x: captionX,
-        y: captionBaselineY,
-        size: CAPTION_FONT_SIZE,
+    let lineBaselineY = FOOTER_PT - 4;
+    for (const line of centerLines.slice(0, 4)) {
+      labelPage.drawText(line, {
+        x: centerX,
+        y: lineBaselineY,
+        size: 4.2,
         font,
-        color: rgb(0.12, 0.12, 0.12),
-        maxWidth: captionMaxWidth,
-        lineHeight: CAPTION_LINE_HEIGHT,
+        color: rgb(0.1, 0.1, 0.1),
+        maxWidth: centerW,
+        lineHeight: 5,
       });
+      lineBaselineY -= 5.2;
+      if (lineBaselineY < 2) break;
+    }
+
+    if (order) {
+      const { imageCandidates } = buildFooterContent(order);
+      const nPrev = imageCandidates.length;
+      const slotW = CLIENT_PREVIEW_MAX_W;
+      const totalW = nPrev * slotW + Math.max(0, nPrev - 1) * CLIENT_PREVIEW_GAP;
+      let px = LABEL_W_PT - FOOTER_PAD_X - totalW;
+
+      for (let j = 0; j < nPrev; j += 1) {
+        let embedded = null;
+        for (const candidateUrl of imageCandidates[j]) {
+          embedded = await embedPreviewImage(outDoc, candidateUrl);
+          if (embedded) break;
+        }
+        if (!embedded) continue;
+        const pw = embedded.width;
+        const ph = embedded.height;
+        const sc = Math.min(slotW / pw, CLIENT_PREVIEW_MAX_H / ph);
+        const dwj = pw * sc;
+        const dhj = ph * sc;
+        labelPage.drawImage(embedded, {
+          x: px + (slotW - dwj) / 2,
+          y: (FOOTER_PT - dhj) / 2,
+          width: dwj,
+          height: dhj,
+        });
+        px += slotW + CLIENT_PREVIEW_GAP;
+      }
     }
   }
 
-  return pdfDoc.save();
+  if (outDoc.getPageCount() === 0) {
+    throw new Error('No se pudo generar ninguna página del PDF de etiquetas.');
+  }
+
+  return outDoc.save();
 };
