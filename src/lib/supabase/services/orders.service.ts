@@ -22,6 +22,8 @@ type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
 const ORDERS_IN_QUERY_CHUNK_SIZE = 150;
+/** PostgREST suele devolver como máximo 1000 filas por request; sin paginar la app “pierde” pedidos. */
+const ORDENES_PAGE_SIZE = 1000;
 
 const ORDER_REGISTERED_WEBHOOK_FN =
   (import.meta as any)?.env?.VITE_ORDER_WEBHOOK_FUNCTION_NAME || 'webhook-bot';
@@ -58,17 +60,41 @@ export const getOrders = async (): Promise<Order[]> => {
   try {
     // Ejecutar migraciones necesarias (solo la primera vez)
     await runMigrations();
-    // Obtener todas las órdenes con sus clientes
-    const { data: ordenes, error: ordenesError } = await supabase
-      .from('ordenes')
-      .select(`
+    // Obtener todas las órdenes con sus clientes (paginado: PostgREST devuelve ~1000 filas por request).
+    const ordenes: OrdenRow[] = [];
+    let rangeStart = 0;
+    let pageNum = 0;
+    const maxPages = 50; // tope de seguridad (~50k órdenes)
+    for (;;) {
+      pageNum += 1;
+      if (pageNum > maxPages) {
+        console.error(
+          `[getOrders] Se alcanzó el tope de ${maxPages} páginas (${maxPages * ORDENES_PAGE_SIZE} filas). Revisá el total en Supabase.`,
+        );
+        break;
+      }
+      const { data: page, error: ordenesError } = await supabase
+        .from('ordenes')
+        .select(`
         *,
         clientes (*)
       `)
-      .order('fecha', { ascending: false });
+        .order('fecha', { ascending: false })
+        .order('id', { ascending: false })
+        .range(rangeStart, rangeStart + ORDENES_PAGE_SIZE - 1);
 
-    if (ordenesError) throw ordenesError;
-    if (!ordenes) return [];
+      if (ordenesError) throw ordenesError;
+      if (!page?.length) break;
+      ordenes.push(...(page as OrdenRow[]));
+      if (page.length < ORDENES_PAGE_SIZE) break;
+      rangeStart += ORDENES_PAGE_SIZE;
+    }
+
+    if (import.meta.env.DEV && ordenes.length >= ORDENES_PAGE_SIZE) {
+      console.info(`[getOrders] ${ordenes.length} órdenes cargadas (${pageNum} página(s)).`);
+    }
+
+    if (!ordenes.length) return [];
 
     // Obtener todos los sellos para todas las órdenes
     const ordenIds = ordenes

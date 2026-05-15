@@ -15,6 +15,8 @@ build/
 .env.test.local
 .env.production.local
 
+.import-clientes-viejos.lock
+
 # IDE files
 .vscode/
 .idea/

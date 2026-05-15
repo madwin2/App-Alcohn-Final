@@ -1,11 +1,6 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { ListTodo } from 'lucide-react';
+import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -18,6 +13,9 @@ import { CommentsSection } from './CommentsSection';
 import { AttachmentsSection } from './AttachmentsSection';
 import { TaskChecklist } from './TaskChecklist';
 import { InnovationActivityLog } from './InnovationActivityLog';
+import { InnovacionDialogContent } from '@/components/innovacion/InnovacionDialog';
+import { InnovacionFieldLabel, InnovacionModalHeader } from '@/components/innovacion/InnovacionHints';
+import { innovacionFieldSurface } from '@/components/innovacion/innovacion-ui';
 import {
   INNOVATION_PRIORITIES,
   INNOVATION_STATUSES,
@@ -76,40 +74,44 @@ export function TaskDetailPanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Detalle de tarea</DialogTitle>
-        </DialogHeader>
+      <InnovacionDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <InnovacionModalHeader
+          icon={ListTodo}
+          title="Detalle de tarea"
+          description="Editá la tarea, checklist, comentarios y adjuntos. Los cambios se sincronizan con Mis tareas del responsable."
+        />
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="space-y-2">
-            <Label>Título</Label>
+            <InnovacionFieldLabel label="Título" hint="Nombre de la tarea en el tablero y en el inicio." />
             <Input
               value={task.title}
               onChange={(event) => onUpdateTask({ title: event.target.value })}
+              className={innovacionFieldSurface}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Descripción</Label>
+            <InnovacionFieldLabel label="Descripción" hint="Detalle, criterios de hecho o enlaces útiles." />
             <Textarea
               value={task.description ?? ''}
               onChange={(event) => onUpdateTask({ description: event.target.value || null })}
               rows={3}
+              className={innovacionFieldSurface}
             />
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <div className="space-y-2">
-              <Label>Responsable</Label>
+              <InnovacionFieldLabel label="Responsable" hint="Aparece en Mis tareas de esa persona." />
               <Select
                 value={task.assignedTo ?? 'none'}
                 onValueChange={(value) => onUpdateTask({ assignedTo: value === 'none' ? null : value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className={innovacionFieldSurface}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                   <SelectItem value="none">Sin asignar</SelectItem>
                   {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
@@ -121,12 +123,12 @@ export function TaskDetailPanel({
             </div>
 
             <div className="space-y-2">
-              <Label>Estado</Label>
+              <InnovacionFieldLabel label="Estado" hint="Etapa en el flujo de trabajo." />
               <Select value={task.status} onValueChange={(value) => onUpdateTask({ status: value as InnovationStatus })}>
-                <SelectTrigger>
+                <SelectTrigger className={innovacionFieldSurface}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                   {INNOVATION_STATUSES.map((status) => (
                     <SelectItem key={status} value={status}>
                       {status}
@@ -137,12 +139,12 @@ export function TaskDetailPanel({
             </div>
 
             <div className="space-y-2">
-              <Label>Prioridad</Label>
+              <InnovacionFieldLabel label="Prioridad" hint="Urgencia de esta tarea frente a otras." />
               <Select value={task.priority} onValueChange={(value) => onUpdateTask({ priority: value as InnovationPriority })}>
-                <SelectTrigger>
+                <SelectTrigger className={innovacionFieldSurface}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                   {INNOVATION_PRIORITIES.map((priority) => (
                     <SelectItem key={priority} value={priority}>
                       {priority}
@@ -153,46 +155,45 @@ export function TaskDetailPanel({
             </div>
 
             <div className="space-y-2">
-              <Label>Fecha límite</Label>
+              <InnovacionFieldLabel label="Fecha límite" hint="Referencia de vencimiento para el seguimiento." />
               <Input
                 type="date"
                 value={task.dueDate ?? ''}
                 onChange={(event) => onUpdateTask({ dueDate: event.target.value || null })}
+                className={innovacionFieldSurface}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Progreso ({task.progress}%)</Label>
+            <InnovacionFieldLabel label={`Progreso (${task.progress}%)`} hint="Deslizá para indicar avance manual de la tarea." />
             <Input
               type="range"
               min={0}
               max={100}
               value={task.progress}
               onChange={(event) => onUpdateTask({ progress: Number(event.target.value) })}
+              className="accent-amber-500"
             />
           </div>
 
-          <TaskChecklist
-            subtasks={subtasks}
-            onCreate={onCreateSubtask}
-            onToggle={onToggleSubtask}
-          />
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <TaskChecklist subtasks={subtasks} onCreate={onCreateSubtask} onToggle={onToggleSubtask} />
+          </div>
 
-          <CommentsSection
-            comments={comments}
-            usersMap={usersMap}
-            onCreateComment={onCreateComment}
-          />
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <CommentsSection comments={comments} usersMap={usersMap} onCreateComment={onCreateComment} />
+          </div>
 
-          <AttachmentsSection
-            attachments={attachments}
-            onUpload={onUploadAttachment}
-          />
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <AttachmentsSection attachments={attachments} onUpload={onUploadAttachment} />
+          </div>
 
-          <InnovationActivityLog logs={activity} usersMap={usersMap} />
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <InnovationActivityLog logs={activity} usersMap={usersMap} />
+          </div>
         </div>
-      </DialogContent>
+      </InnovacionDialogContent>
     </Dialog>
   );
 }

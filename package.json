@@ -11,7 +11,10 @@
     "preview": "vite preview",
     "setup": "node scripts/setup.js",
     "import:ventas": "node scripts/import-ventas-csv.mjs",
-    "import:ventas:dry": "node scripts/import-ventas-csv.mjs --dry-run"
+    "import:ventas:dry": "node scripts/import-ventas-csv.mjs --dry-run",
+    "import:clientes-viejos": "node scripts/import-clientes-viejos-csv.mjs",
+    "import:clientes-viejos:dry": "node scripts/import-clientes-viejos-csv.mjs --dry-run",
+    "import:clientes-viejos:insecure-win": "set IMPORT_SUPABASE_INSECURE_TLS=1&& node scripts/import-clientes-viejos-csv.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

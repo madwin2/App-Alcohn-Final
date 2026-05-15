@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Shapes } from 'lucide-react';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { InnovacionDialogContent } from '@/components/innovacion/InnovacionDialog';
+import { InnovacionFieldLabel, InnovacionModalHeader } from '@/components/innovacion/InnovacionHints';
+import { innovacionFieldSurface } from '@/components/innovacion/innovacion-ui';
 
 interface CreateAreaModalProps {
   open: boolean;
@@ -49,50 +46,76 @@ export function CreateAreaModal({ open, onOpenChange, onSubmit }: CreateAreaModa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Nueva área</DialogTitle>
-        </DialogHeader>
+      <InnovacionDialogContent className="sm:max-w-md">
+        <InnovacionModalHeader
+          icon={Shapes}
+          title="Nueva área"
+          description="Agrupá proyectos por equipo, producto o iniciativa. El color identifica la columna en el tablero."
+        />
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="area-name">Nombre</Label>
+            <InnovacionFieldLabel
+              htmlFor="area-name"
+              label="Nombre"
+              hint="Nombre corto y reconocible para la columna del tablero (ej. Producción, Marketing)."
+            />
             <Input
               id="area-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Ej: Producción"
+              className={innovacionFieldSurface}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="area-description">Descripción</Label>
+            <InnovacionFieldLabel
+              htmlFor="area-description"
+              label="Descripción"
+              hint="Opcional. Contexto para el equipo sobre qué tipo de proyectos van acá."
+            />
             <Textarea
               id="area-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={3}
               placeholder="Opcional"
+              className={innovacionFieldSurface}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="area-color">Color</Label>
+            <InnovacionFieldLabel
+              htmlFor="area-color"
+              label="Color"
+              hint="Se muestra en la barra superior de la columna para distinguir áreas de un vistazo."
+            />
             <Input
               id="area-color"
               type="color"
               value={color}
               onChange={(event) => setColor(event.target.value)}
-              className="h-10 w-20 p-1"
+              className="h-10 w-20 cursor-pointer border-white/10 bg-zinc-900 p-1"
             />
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+            className="border-white/15 text-zinc-200 hover:bg-white/10"
+          >
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !name.trim()}>
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting || !name.trim()}
+            className="bg-amber-600 text-white hover:bg-amber-500"
+          >
             {submitting ? 'Guardando...' : 'Crear área'}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </InnovacionDialogContent>
     </Dialog>
   );
 }
+

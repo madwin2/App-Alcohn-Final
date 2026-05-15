@@ -117,6 +117,18 @@ export default {
           "62%": { transform: "scale(1, 0.94) translateY(0)" },
           "100%": { transform: "scale(1, 1) translateY(0)" },
         },
+        /** Innovación: halo muy suave en el fondo (una sola capa animada; respetar motion-reduce vía utilidades). */
+        "innovacion-ambient": {
+          "0%, 100%": { opacity: "0.32", transform: "scale(1)" },
+          "50%": { opacity: "0.5", transform: "scale(1.03)" },
+        },
+        /** Innovación: brillo lateral en borde de tarjeta (sutil, baja frecuencia). */
+        "innovacion-edge-sheen": {
+          "0%": { transform: "translateX(-100%) skewX(-12deg)", opacity: "0" },
+          "12%": { opacity: "0.55" },
+          "28%": { opacity: "0.35" },
+          "100%": { transform: "translateX(180%) skewX(-12deg)", opacity: "0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -131,6 +143,8 @@ export default {
         "mockup-history-card-exit-down": "mockup-history-card-exit-down 0.7s cubic-bezier(0.22,1,0.36,1) both",
         "mockup-history-card-enter-below": "mockup-history-card-enter-below 0.7s cubic-bezier(0.22,1,0.36,1) both",
         "mockup-history-card-enter-above": "mockup-history-card-enter-above 0.7s cubic-bezier(0.22,1,0.36,1) both",
+        "innovacion-ambient": "innovacion-ambient 14s ease-in-out infinite",
+        "innovacion-edge-sheen": "innovacion-edge-sheen 9s ease-in-out infinite",
       },
     },
   },

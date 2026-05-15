@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react';
-import { PlusCircle, Trash2 } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { FolderKanban, PlusCircle, Trash2, Users } from 'lucide-react';
+import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { InnovacionDialogContent } from '@/components/innovacion/InnovacionDialog';
+import {
+  InnovacionFieldLabel,
+  InnovacionModalHeader,
+  InnovacionSectionHeading,
+} from '@/components/innovacion/InnovacionHints';
 import {
   Select,
   SelectContent,
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { InnovationActivityLog } from './InnovationActivityLog';
+import { innovacionFieldSurface } from '@/components/innovacion/innovacion-ui';
 import {
   INNOVATION_PRIORITIES,
   INNOVATION_STATUSES,
@@ -90,46 +92,50 @@ export function ProjectDetailPanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
-        <DialogHeader>
-          <DialogTitle>Detalle de proyecto</DialogTitle>
-        </DialogHeader>
+      <InnovacionDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
+        <InnovacionModalHeader
+          icon={FolderKanban}
+          title="Detalle de proyecto"
+          description="Editá datos del proyecto, colaboradores y tareas. Los cambios se guardan al modificar cada campo."
+        />
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Título</Label>
+              <InnovacionFieldLabel label="Título" hint="Nombre visible en el tablero y en Mis tareas del responsable." />
               <Input
                 value={project.title}
                 onChange={(event) => onUpdateProject({ title: event.target.value })}
+                className={innovacionFieldSurface}
               />
             </div>
             <div className="space-y-2">
-              <Label>Área</Label>
-              <div className="rounded-md border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-300">
+              <InnovacionFieldLabel label="Área" hint="Columna del tablero donde está listado este proyecto." />
+              <div className={`rounded-md px-3 py-2 text-sm text-zinc-300 ${innovacionFieldSurface}`}>
                 {area?.name ?? 'Sin área'}
               </div>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Descripción</Label>
+            <InnovacionFieldLabel label="Descripción" hint="Contexto, alcance o notas del proyecto para el equipo." />
             <Textarea
               value={project.description ?? ''}
               onChange={(event) => onUpdateProject({ description: event.target.value || null })}
               rows={3}
+              className={innovacionFieldSurface}
             />
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
             <div className="space-y-2">
-              <Label>Responsable</Label>
+              <InnovacionFieldLabel label="Responsable" hint="Dueño principal del proyecto." />
               <Select
                 value={project.ownerId ?? 'none'}
                 onValueChange={(value) => onUpdateProject({ ownerId: value === 'none' ? null : value })}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger className={innovacionFieldSurface}><SelectValue /></SelectTrigger>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                   <SelectItem value="none">Sin responsable</SelectItem>
                   {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
@@ -140,10 +146,10 @@ export function ProjectDetailPanel({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Estado</Label>
+              <InnovacionFieldLabel label="Estado" hint="Etapa actual en el flujo interno." />
               <Select value={project.status} onValueChange={(value) => onUpdateProject({ status: value as InnovationStatus })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger className={innovacionFieldSurface}><SelectValue /></SelectTrigger>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                   {INNOVATION_STATUSES.map((status) => (
                     <SelectItem key={status} value={status}>{status}</SelectItem>
                   ))}
@@ -151,10 +157,10 @@ export function ProjectDetailPanel({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Prioridad</Label>
+              <InnovacionFieldLabel label="Prioridad" hint="Urgencia relativa frente a otras iniciativas." />
               <Select value={project.priority} onValueChange={(value) => onUpdateProject({ priority: value as InnovationPriority })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger className={innovacionFieldSurface}><SelectValue /></SelectTrigger>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                   {INNOVATION_PRIORITIES.map((priority) => (
                     <SelectItem key={priority} value={priority}>{priority}</SelectItem>
                   ))}
@@ -162,27 +168,33 @@ export function ProjectDetailPanel({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Fecha límite</Label>
+              <InnovacionFieldLabel label="Fecha límite" hint="Referencia para seguimiento; no envía recordatorios automáticos." />
               <Input
                 type="date"
                 value={project.dueDate ?? ''}
                 onChange={(event) => onUpdateProject({ dueDate: event.target.value || null })}
+                className={innovacionFieldSurface}
               />
             </div>
             <div className="space-y-2">
-              <Label>Progreso ({project.progress}%)</Label>
+              <InnovacionFieldLabel label={`Progreso (${project.progress}%)`} hint="Porcentaje manual de avance del proyecto." />
               <Input
                 type="range"
                 min={0}
                 max={100}
                 value={project.progress}
                 onChange={(event) => onUpdateProject({ progress: Number(event.target.value) })}
+                className="accent-amber-500"
               />
             </div>
           </div>
 
-          <section className="space-y-2">
-            <Label>Colaboradores</Label>
+          <section className="space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <InnovacionSectionHeading
+              icon={Users}
+              title="Colaboradores"
+              hint="Personas que participan además del responsable. Clic para sumar o quitar."
+            />
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               {users.map((user) => {
                 const checked = selectedCollaborators.has(user.id);
@@ -210,12 +222,12 @@ export function ProjectDetailPanel({
             </div>
           </section>
 
-          <section className="rounded-xl border border-white/10 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h4 className="text-sm font-medium text-zinc-200">Tareas</h4>
-              <Badge variant="outline" className="border-white/20 text-zinc-300">
-                {project.tasks.length}
-              </Badge>
+          <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <InnovacionSectionHeading
+                title={`Tareas (${project.tasks.length})`}
+                hint="Clic en una tarea para abrir el detalle. Creá nuevas abajo."
+              />
             </div>
 
             <div className="space-y-2">
@@ -223,7 +235,7 @@ export function ProjectDetailPanel({
                 <button
                   key={task.id}
                   type="button"
-                  className="w-full rounded-md border border-white/10 bg-zinc-900/60 p-3 text-left hover:bg-zinc-900"
+                  className="w-full rounded-lg border border-white/10 bg-zinc-900/60 p-3 text-left transition hover:border-white/20 hover:bg-zinc-900"
                   onClick={() => onOpenTask(task)}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -241,26 +253,28 @@ export function ProjectDetailPanel({
               ) : null}
             </div>
 
-            <div className="mt-4 space-y-2 rounded-lg border border-dashed border-white/20 p-3">
+            <div className="mt-4 space-y-2 rounded-lg border border-dashed border-white/15 bg-zinc-950/40 p-3">
               <div className="flex items-center gap-2 text-sm text-zinc-200">
-                <PlusCircle className="h-4 w-4" />
+                <PlusCircle className="h-4 w-4 text-amber-400/90" />
                 Nueva tarea
               </div>
               <Input
                 value={newTaskTitle}
                 onChange={(event) => setNewTaskTitle(event.target.value)}
                 placeholder="Título"
+                className={innovacionFieldSurface}
               />
               <Textarea
                 value={newTaskDescription}
                 onChange={(event) => setNewTaskDescription(event.target.value)}
                 placeholder="Descripción opcional"
                 rows={2}
+                className={innovacionFieldSurface}
               />
               <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
                 <Select value={newTaskResponsible} onValueChange={setNewTaskResponsible}>
-                  <SelectTrigger><SelectValue placeholder="Responsable" /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className={innovacionFieldSurface}><SelectValue placeholder="Responsable" /></SelectTrigger>
+                  <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                     <SelectItem value="none">Sin asignar</SelectItem>
                     {users.map((user) => (
                       <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
@@ -268,22 +282,22 @@ export function ProjectDetailPanel({
                   </SelectContent>
                 </Select>
                 <Select value={newTaskPriority} onValueChange={(value) => setNewTaskPriority(value as InnovationPriority)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className={innovacionFieldSurface}><SelectValue /></SelectTrigger>
+                  <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                     {INNOVATION_PRIORITIES.map((priority) => (
                       <SelectItem key={priority} value={priority}>{priority}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Select value={newTaskStatus} onValueChange={(value) => setNewTaskStatus(value as InnovationStatus)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className={innovacionFieldSurface}><SelectValue /></SelectTrigger>
+                  <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                     {INNOVATION_STATUSES.map((status) => (
                       <SelectItem key={status} value={status}>{status}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Input type="date" value={newTaskDueDate} onChange={(event) => setNewTaskDueDate(event.target.value)} />
+                <Input type="date" value={newTaskDueDate} onChange={(event) => setNewTaskDueDate(event.target.value)} className={innovacionFieldSurface} />
               </div>
               <Button
                 onClick={async () => {
@@ -304,6 +318,7 @@ export function ProjectDetailPanel({
                   setNewTaskDueDate('');
                 }}
                 disabled={!newTaskTitle.trim()}
+                className="bg-amber-500 text-zinc-950 hover:bg-amber-400"
               >
                 Agregar tarea
               </Button>
@@ -311,15 +326,24 @@ export function ProjectDetailPanel({
           </section>
 
           <div className="flex justify-end">
-            <Button variant="destructive" className="gap-2" onClick={onDeleteProject}>
-              <Trash2 className="h-4 w-4" />
-              Eliminar proyecto
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="destructive" className="gap-2" onClick={onDeleteProject}>
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                  Eliminar proyecto
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[260px] text-left">
+                Elimina el proyecto y sus tareas asociadas. Esta acción no se puede deshacer.
+              </TooltipContent>
+            </Tooltip>
           </div>
 
-          <InnovationActivityLog logs={activity} usersMap={usersMap} />
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <InnovationActivityLog logs={activity} usersMap={usersMap} />
+          </div>
         </div>
-      </DialogContent>
+      </InnovacionDialogContent>
     </Dialog>
   );
 }

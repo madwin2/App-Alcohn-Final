@@ -36,8 +36,12 @@ import {
   type InnovationFiltersValue,
 } from '@/components/innovacion/InnovationFilters';
 import { InnovationAreaColumn } from '@/components/innovacion/InnovationAreaColumn';
+import { InnovacionPageLayout } from '@/components/innovacion/InnovacionPageLayout';
 import { ProjectDetailPanel } from '@/components/innovacion/ProjectDetailPanel';
 import { TaskDetailPanel } from '@/components/innovacion/TaskDetailPanel';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { FilterX, Shapes, Sparkles } from 'lucide-react';
 
 const DEFAULT_FILTERS: InnovationFiltersValue = {
   query: '',
@@ -245,55 +249,119 @@ export default function InnovacionPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <InnovacionPageLayout>
       <Sidebar />
-      <main className="ml-20 space-y-5 p-6">
-        <InnovationHeader
-          onOpenArea={() => setAreaModalOpen(true)}
-          onOpenIdea={() => setIdeaModalOpen(true)}
-        />
+      <main className="ml-20 flex min-h-screen flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6">
+          <InnovationHeader
+            onOpenArea={() => setAreaModalOpen(true)}
+            onOpenIdea={() => setIdeaModalOpen(true)}
+          />
 
-        <InnovationFilters
-          value={filters}
-          onChange={setFilters}
-          areas={areas.map((area) => ({ id: area.id, name: area.name }))}
-          users={users}
-        />
+          <InnovationFilters
+            value={filters}
+            onChange={setFilters}
+            areas={areas.map((area) => ({ id: area.id, name: area.name }))}
+            users={users}
+          />
 
-        {loading ? (
-          <div className="rounded-xl border border-white/10 bg-zinc-950/40 p-6 text-sm text-zinc-400">
-            Cargando mapa de innovación...
-          </div>
-        ) : (
-          <section className="grid grid-cols-1 gap-4 xl:grid-cols-3 2xl:grid-cols-4">
-            {filteredAreas.map((area) => (
-              <InnovationAreaColumn
-                key={area.id}
-                area={area}
-                usersMap={usersMap}
-                projects={area.projects}
-                onOpenProject={(project) => {
-                  setSelectedProjectId(project.id);
-                  setProjectPanelOpen(true);
-                }}
-                onCreateProject={async (input) => {
-                  if (!user?.id) return;
-                  await createInnovationProject(
-                    {
-                      areaId: area.id,
-                      title: input.title,
-                      description: input.description,
-                      priority: input.priority,
-                      status: input.status,
-                    },
-                    user.id,
-                  );
-                  await loadBoard();
-                }}
-              />
-            ))}
-          </section>
-        )}
+          {loading ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {[0, 1, 2].map((slot) => (
+                <div
+                  key={slot}
+                  className="animate-pulse rounded-2xl border border-white/10 bg-zinc-900/40 p-4 shadow-inner"
+                >
+                  <div className="mb-4 h-4 w-[40%] max-w-[10rem] rounded bg-zinc-800" />
+                  <div className="space-y-3">
+                    <div className="h-24 rounded-xl bg-zinc-800/80" />
+                    <div className="h-24 rounded-xl bg-zinc-800/60" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredAreas.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/15 bg-zinc-900/30 px-6 py-16 text-center motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-500 motion-reduce:animate-none">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_0_40px_rgba(251,191,36,0.08)]">
+                <Sparkles className="h-7 w-7 text-amber-300/90" strokeWidth={1.5} />
+              </div>
+              <div className="max-w-md space-y-2">
+                <h2 className="text-lg font-semibold tracking-tight text-white">
+                  {areas.length === 0 ? 'Empezá creando un área' : 'No hay resultados con estos filtros'}
+                </h2>
+                <p className="text-sm text-zinc-400">
+                  {areas.length === 0
+                    ? 'Las áreas agrupan proyectos e ideas. Podés crear la primera y después cargar ideas rápido desde el botón superior.'
+                    : 'Probá limpiar la búsqueda o cambiar área, responsable, estado o prioridad.'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      onClick={() => setAreaModalOpen(true)}
+                      className="gap-2 bg-amber-600 text-white hover:bg-amber-500"
+                    >
+                      <Shapes className="h-4 w-4" aria-hidden />
+                      Nueva área
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[240px] text-left">
+                    Creá una columna en el tablero para agrupar proyectos por equipo o tema.
+                  </TooltipContent>
+                </Tooltip>
+                {areas.length > 0 ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="gap-2 border-white/20 text-zinc-200 hover:bg-white/10"
+                        onClick={() => setFilters(DEFAULT_FILTERS)}
+                      >
+                        <FilterX className="h-4 w-4" aria-hidden />
+                        Limpiar filtros
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      Restablecé búsqueda, área, responsable, estado y prioridad.
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <section className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 [-ms-overflow-style:none] [scrollbar-width:thin] xl:grid xl:snap-none xl:grid-cols-3 xl:overflow-visible 2xl:grid-cols-4 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/15">
+              {filteredAreas.map((area) => (
+                <InnovationAreaColumn
+                  key={area.id}
+                  area={area}
+                  usersMap={usersMap}
+                  projects={area.projects}
+                  onOpenProject={(project) => {
+                    setSelectedProjectId(project.id);
+                    setProjectPanelOpen(true);
+                  }}
+                  onCreateProject={async (input) => {
+                    if (!user?.id) return;
+                    await createInnovationProject(
+                      {
+                        areaId: area.id,
+                        title: input.title,
+                        description: input.description,
+                        priority: input.priority,
+                        status: input.status,
+                      },
+                      user.id,
+                    );
+                    await loadBoard();
+                  }}
+                />
+              ))}
+            </section>
+          )}
+        </div>
       </main>
 
       <CreateAreaModal open={areaModalOpen} onOpenChange={setAreaModalOpen} onSubmit={createArea} />
@@ -402,6 +470,6 @@ export default function InnovacionPage() {
       />
 
       <Toaster />
-    </div>
+    </InnovacionPageLayout>
   );
 }

@@ -1,14 +1,8 @@
 import { useEffect, useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Lightbulb } from 'lucide-react';
+import { Dialog, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -23,6 +17,9 @@ import {
   type InnovationPriority,
   type InnovationStatus,
 } from '@/lib/supabase/services/innovation.service';
+import { InnovacionDialogContent } from '@/components/innovacion/InnovacionDialog';
+import { InnovacionFieldLabel, InnovacionModalHeader } from '@/components/innovacion/InnovacionHints';
+import { innovacionFieldSurface } from '@/components/innovacion/innovacion-ui';
 
 interface CreateIdeaModalProps {
   open: boolean;
@@ -84,27 +81,38 @@ export function CreateIdeaModal({ open, onOpenChange, areas, users, onSubmit }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Nueva idea</DialogTitle>
-        </DialogHeader>
+      <InnovacionDialogContent className="sm:max-w-lg">
+        <InnovacionModalHeader
+          icon={Lightbulb}
+          title="Nueva idea"
+          description="Registrá una mejora o iniciativa como proyecto en el área que corresponda. Podés ajustar estado y prioridad después."
+        />
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="idea-title">Título</Label>
+            <InnovacionFieldLabel
+              htmlFor="idea-title"
+              label="Título"
+              hint="Nombre claro de la idea o proyecto. Aparece en la tarjeta del tablero."
+            />
             <Input
               id="idea-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               placeholder="Ej: Optimización de tiempos CNC"
+              className={innovacionFieldSurface}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="idea-area">Área</Label>
+            <InnovacionFieldLabel
+              htmlFor="idea-area"
+              label="Área"
+              hint="Columna del tablero donde se listará este proyecto."
+            />
             <Select value={areaId} onValueChange={setAreaId}>
-              <SelectTrigger id="idea-area">
+              <SelectTrigger id="idea-area" className={innovacionFieldSurface}>
                 <SelectValue placeholder="Seleccionar área" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                 {areas.map((area) => (
                   <SelectItem key={area.id} value={area.id}>
                     {area.name}
@@ -114,23 +122,28 @@ export function CreateIdeaModal({ open, onOpenChange, areas, users, onSubmit }: 
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="idea-description">Descripción</Label>
+            <InnovacionFieldLabel
+              htmlFor="idea-description"
+              label="Descripción"
+              hint="Contexto, alcance o criterios de éxito. Opcional pero recomendado."
+            />
             <Textarea
               id="idea-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={3}
               placeholder="Opcional"
+              className={innovacionFieldSurface}
             />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label>Responsable</Label>
+              <InnovacionFieldLabel label="Responsable" hint="Dueño del proyecto. Podés dejarlo sin asignar." />
               <Select value={ownerId} onValueChange={setOwnerId}>
-                <SelectTrigger>
+                <SelectTrigger className={innovacionFieldSurface}>
                   <SelectValue placeholder="Opcional" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                   <SelectItem value="none">Sin asignar</SelectItem>
                   {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
@@ -141,12 +154,12 @@ export function CreateIdeaModal({ open, onOpenChange, areas, users, onSubmit }: 
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Prioridad</Label>
+              <InnovacionFieldLabel label="Prioridad" hint="Urgencia relativa frente a otras iniciativas del área." />
               <Select value={priority} onValueChange={(next) => setPriority(next as InnovationPriority)}>
-                <SelectTrigger>
+                <SelectTrigger className={innovacionFieldSurface}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                   {INNOVATION_PRIORITIES.map((item) => (
                     <SelectItem key={item} value={item}>
                       {item}
@@ -156,12 +169,12 @@ export function CreateIdeaModal({ open, onOpenChange, areas, users, onSubmit }: 
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Estado</Label>
+              <InnovacionFieldLabel label="Estado" hint="Etapa actual del proyecto en el flujo interno." />
               <Select value={status} onValueChange={(next) => setStatus(next as InnovationStatus)}>
-                <SelectTrigger>
+                <SelectTrigger className={innovacionFieldSurface}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-white/10 bg-zinc-950 text-zinc-100">
                   {INNOVATION_STATUSES.map((item) => (
                     <SelectItem key={item} value={item}>
                       {item}
@@ -172,15 +185,26 @@ export function CreateIdeaModal({ open, onOpenChange, areas, users, onSubmit }: 
             </div>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+            className="border-white/15 text-zinc-200 hover:bg-white/10"
+          >
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={!title.trim() || !areaId || submitting}>
+          <Button
+            onClick={handleSubmit}
+            disabled={!title.trim() || !areaId || submitting}
+            className="bg-amber-600 text-white hover:bg-amber-500"
+          >
             {submitting ? 'Guardando...' : 'Guardar idea'}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </InnovacionDialogContent>
     </Dialog>
   );
 }
+
+

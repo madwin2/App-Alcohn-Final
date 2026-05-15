@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useOrders } from '@/lib/hooks/useOrders';
+import { parseOrderDateLocal } from '@/lib/utils/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -144,7 +145,8 @@ const itemTypeOf = (item: OrderItem): 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MAN
 };
 
 const orderMonthKey = (order: Order): string => {
-  const d = order.orderDate ? new Date(order.orderDate) : new Date();
+  const d = order.orderDate ? parseOrderDateLocal(order.orderDate) : new Date();
+  if (isNaN(d.getTime())) return '0000-00';
   const y = d.getFullYear();
   const m = `${d.getMonth() + 1}`.padStart(2, '0');
   return `${y}-${m}`;
