@@ -33,6 +33,7 @@ import {
   getUserInicioImage,
   getUserProfileImage,
 } from '@/lib/utils/userImages';
+import { UserTaskWidget } from '@/components/home/UserTaskWidget';
 
 const NOTE_SIZE = 82;
 
@@ -128,7 +129,7 @@ function groupStampsByOrder(stamps: StampWithOrder[]): OrderWithItems[] {
 
 export default function HomePage() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
-  const { orders, loading, error } = useOrders();
+  const { orders } = useOrders();
 
   const userName =
     user?.user_metadata?.nombre
@@ -850,10 +851,13 @@ export default function HomePage() {
 
               {/* Columna 3: Espacio futuro - sin borde (placeholder hasta agregar contenido) */}
               <div
-                className="rounded-2xl overflow-hidden flex items-center justify-center transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+                className="rounded-2xl overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
                 style={placeholderStyle}
               >
-                <p className="text-sm text-muted-foreground">Espacio reservado para próxima tarjeta</p>
+                <UserTaskWidget
+                  userId={user?.id || ''}
+                  users={approvedUsers.length ? approvedUsers : user?.id ? [{ id: user.id, name: userName }] : []}
+                />
               </div>
             </div>
           );

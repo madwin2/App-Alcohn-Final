@@ -15,6 +15,7 @@ import {
   Package,
   Image,
   Tag,
+  Sparkles,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SidebarItem } from './SidebarItem';
@@ -31,6 +32,7 @@ const sidebarItems = [
   { icon: Truck, label: 'Envíos', path: '/envios', disabled: false },
   { icon: Package, label: 'Stock', path: '/stock', disabled: false },
   { icon: Image, label: 'Mockups', path: '/mockups', disabled: false },
+  { icon: Sparkles, label: 'Innovación', path: '/innovacion', disabled: false },
   { icon: Layers, label: 'Vectorización', path: '/vectorizacion', disabled: true },
   { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },
   { icon: Calendar, label: 'Programas', path: '/programas', disabled: true },
@@ -108,7 +110,7 @@ export function Sidebar() {
 
       {/* Navigation Items */}
       <nav className="flex-1 flex flex-col p-3 space-y-1 items-stretch">
-        {sidebarItems.map((item, index) => (
+        {sidebarItems.map((item) => (
           <div
             key={item.path}
             className="flex justify-start"

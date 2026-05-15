@@ -9,6 +9,7 @@ import EconomiaPage from './app/economia/index'
 import GastosPage from './app/gastos/index'
 import MockupsPage from './app/mockups/index'
 import PreciosPage from './app/precios/index'
+import InnovacionPage from './app/innovacion/index'
 import LoginPage from './app/login/index'
 import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
@@ -102,6 +103,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <PreciosPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/innovacion"
+            element={
+              <ProtectedRoute>
+                <InnovacionPage />
               </ProtectedRoute>
             }
           />
