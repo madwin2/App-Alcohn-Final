@@ -34,6 +34,7 @@ import {
   getUserProfileImage,
 } from '@/lib/utils/userImages';
 import { UserTaskWidget } from '@/components/home/UserTaskWidget';
+import { HomeUserDock } from '@/components/home/HomeUserDock';
 
 const NOTE_SIZE = 82;
 
@@ -522,26 +523,7 @@ export default function HomePage() {
               return <div className="min-h-[120px]" />;
             }
 
-            return (
-              <div className="flex justify-center min-h-[120px]">
-                <div className="flex items-center gap-4 px-10 py-1.5 rounded-full border-2 border-white/15 bg-black/40 shadow-[0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-sm max-w-full overflow-x-auto">
-                  {usersWithPhoto.map((u) => (
-                    <div
-                      key={u.id}
-                      title={u.name}
-                      className="group h-[72px] w-[72px] rounded-full overflow-hidden flex items-center justify-center bg-transparent cursor-pointer transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.18] hover:shadow-[0_8px_24px_rgba(0,0,0,0.55)] hover:z-10"
-                    >
-                      <img
-                        src={u.profile}
-                        alt={u.name}
-                        className="h-full w-full object-cover transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-105"
-                        draggable={false}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
+            return <HomeUserDock users={usersWithPhoto} />;
           })()}
 
           {/* Botones add - al mismo nivel que Objetivos y usuarios */}
