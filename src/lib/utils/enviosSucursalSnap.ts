@@ -32,6 +32,25 @@ export type GeoFormSlice = {
  * en el padrón `correo_sucursales` (mismo shape que `DireccionCatalogRow`), para
  * que coincidan con los desplegables después de interpretar texto.
  */
+/** Solo provincia (modo domicilio): no inventa localidad ni domicilio. */
+export function snapProvinceToCorreoSucursalCatalog(
+  province: string,
+  rows: DireccionCatalogRow[],
+): string {
+  if (!rows.length) return province;
+  const provinces = catalogProvinceOptions(rows);
+  const fpCanon = canonicalizeProvince(province) || province.trim();
+  return (
+    provinces.find((p) => p === fpCanon) ||
+    provinces.find((p) => canonicalizeProvince(p) === fpCanon) ||
+    provinces.find((p) => norm(p) === norm(province)) ||
+    provinces.find(
+      (p) => norm(province).includes(norm(p)) || norm(p).includes(norm(province)),
+    ) ||
+    ''
+  );
+}
+
 export function snapFormToCorreoSucursalCatalog(
   form: GeoFormSlice,
   rows: DireccionCatalogRow[],
@@ -66,7 +85,9 @@ export function snapFormToCorreoSucursalCatalog(
   }
 
   const locForAddr =
-    bestProvince === 'Capital Federal' ? getCorreoCapitalFederalLocality() : bestLocality;
+    bestProvince === 'Capital Federal'
+      ? bestLocality || catalogLocalityOptions(rows, bestProvince)[0] || getCorreoCapitalFederalLocality()
+      : bestLocality;
   const addresses = catalogAddressOptions(rows, bestProvince, locForAddr);
   const fa = norm(form.address);
   const bestAddress =

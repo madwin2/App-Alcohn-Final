@@ -31,17 +31,22 @@ import { resolveCorreoCsvPaqueteFromOrderItems } from '@/lib/utils/correoCsvPack
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
 import {
   catalogAddressOptions,
+  catalogContainsLocality,
+  catalogContainsProvince,
+  catalogContainsSucursalAddress,
   catalogLocalityOptions,
   catalogProvinceOptions,
   correoSucursalToCatalogRow,
   findPostalCodeInCatalog,
-  mergeOption,
   type DireccionCatalogRow,
 } from '@/lib/utils/enviosAddressCatalog';
-import { snapFormToCorreoSucursalCatalog } from '@/lib/utils/enviosSucursalSnap';
+import { emailToPersistOnCliente, resolveEnvioEmail } from '@/lib/utils/enviosEmail';
+import {
+  snapFormToCorreoSucursalCatalog,
+  snapProvinceToCorreoSucursalCatalog,
+} from '@/lib/utils/enviosSucursalSnap';
 import {
   canonicalizeProvince,
-  getCorreoCapitalFederalLocality,
   normalizeLocality,
   normalizeLocalityForCorreo,
   normalizePhoneDigits,
@@ -168,12 +173,6 @@ export default function EnviosPage() {
       setIsLoadingAddressCatalog(false);
       return;
     }
-    if (shippingTypeDraft === 'DOMICILIO') {
-      setAddressCatalogRows([]);
-      setIsLoadingAddressCatalog(false);
-      return;
-    }
-
     let cancelled = false;
     setIsLoadingAddressCatalog(true);
     void (async () => {
@@ -230,35 +229,33 @@ export default function EnviosPage() {
     };
   }, [selectedOrder, shippingTypeDraft]);
 
-  const provinceSelectOptions = useMemo(() => {
-    const base = catalogProvinceOptions(addressCatalogRows);
-    return mergeOption(base, shippingForm.province);
-  }, [addressCatalogRows, shippingForm.province]);
+  const provinceSelectOptions = useMemo(
+    () => catalogProvinceOptions(addressCatalogRows),
+    [addressCatalogRows],
+  );
 
   const localitySelectOptions = useMemo(() => {
     const pCanon = canonicalizeProvince(shippingForm.province) || shippingForm.province.trim();
-    if (!pCanon) return mergeOption([], shippingForm.locality);
-    const base = catalogLocalityOptions(addressCatalogRows, pCanon);
-    return mergeOption(base, shippingForm.locality);
-  }, [addressCatalogRows, shippingForm.province, shippingForm.locality]);
+    if (!pCanon) return [];
+    return catalogLocalityOptions(addressCatalogRows, pCanon);
+  }, [addressCatalogRows, shippingForm.province]);
 
   const addressSelectOptions = useMemo(() => {
     const pCanon = canonicalizeProvince(shippingForm.province) || shippingForm.province.trim();
-    if (!pCanon) return mergeOption([], shippingForm.address);
+    if (!pCanon) return [];
     const loc =
       pCanon === 'Capital Federal'
-        ? getCorreoCapitalFederalLocality()
+        ? localitySelectOptions[0] || shippingForm.locality.trim()
         : shippingForm.locality.trim();
-    const base = catalogAddressOptions(addressCatalogRows, pCanon, loc);
-    return mergeOption(base, shippingForm.address);
-  }, [addressCatalogRows, shippingForm.province, shippingForm.locality, shippingForm.address]);
+    return catalogAddressOptions(addressCatalogRows, pCanon, loc);
+  }, [addressCatalogRows, shippingForm.province, shippingForm.locality, localitySelectOptions]);
 
   const sucursalAddressOptionsWithCode = useMemo(() => {
     const pCanon = canonicalizeProvince(shippingForm.province) || shippingForm.province.trim();
     if (!pCanon) return [];
     const loc =
       pCanon === 'Capital Federal'
-        ? getCorreoCapitalFederalLocality()
+        ? catalogLocalityOptions(addressCatalogRows, pCanon)[0] || shippingForm.locality.trim()
         : shippingForm.locality.trim();
     if (!loc) return [];
 
@@ -281,8 +278,45 @@ export default function EnviosPage() {
     return items;
   }, [addressCatalogRows, shippingForm.province, shippingForm.locality]);
 
-  /** Padrón MiCorreo (`correo_sucursales`) para modo Sucursal. */
+  /** Padrón MiCorreo (`correo_sucursales`) para provincia (domicilio y sucursal). */
   const hasAddressCatalog = addressCatalogRows.length > 0;
+
+  /** Tras cargar el padrón o interpretar texto, alinear valores a opciones del catálogo. */
+  useEffect(() => {
+    if (!selectedOrder || !addressCatalogRows.length) return;
+    if (shippingTypeDraft === 'SUCURSAL') {
+      const snapped = snapFormToCorreoSucursalCatalog(
+        {
+          province: shippingForm.province,
+          locality: shippingForm.locality,
+          address: shippingForm.address,
+          postalCode: shippingForm.postalCode,
+        },
+        addressCatalogRows,
+      );
+      setShippingForm((prev) => {
+        if (
+          prev.province === snapped.province &&
+          prev.locality === snapped.locality &&
+          prev.address === snapped.address &&
+          prev.postalCode === snapped.postalCode
+        ) {
+          return prev;
+        }
+        return { ...prev, ...snapped };
+      });
+    } else {
+      const snappedProvince = snapProvinceToCorreoSucursalCatalog(shippingForm.province, addressCatalogRows);
+      if (!snappedProvince || snappedProvince === shippingForm.province) return;
+      setShippingForm((prev) => ({
+        ...prev,
+        province: snappedProvince,
+        locality: normalizeLocalityForCorreo(snappedProvince, prev.locality),
+      }));
+    }
+    // Solo re-snap cuando cambia el padrón o el tipo; no en cada tecla del formulario.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addressCatalogRows, shippingTypeDraft, selectedOrder?.id]);
 
   const eligibleOrders = useMemo(() => {
     return orders.filter(isEligibleForShipping);
@@ -464,7 +498,9 @@ export default function EnviosPage() {
           domicilio: address.domicilio || '',
           codigoPostal: address.codigo_postal || '',
           nombreCompleto: `${address.nombre || order.customer.firstName} ${address.apellido || order.customer.lastName}`,
-          email: customerById.get(order.customer.id)?.mail || order.customer.email || '',
+          email: resolveEnvioEmail({
+            customerEmail: customerById.get(order.customer.id)?.mail || order.customer.email,
+          }),
           telefono: address.telefono || order.customer.phoneE164 || '',
           tipoEnvio: isSucursal ? 'Sucursal' : 'Domicilio',
           codigoSucursalManual: isSucursal && codigoGuardado ? codigoGuardado : undefined,
@@ -572,7 +608,7 @@ export default function EnviosPage() {
     setShippingForm({
       ...emptyForm,
       fullName: `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim(),
-      email: order.customer.email || '',
+      email: resolveEnvioEmail({ customerEmail: order.customer.email }),
       phone: normalizePhoneDigitsForEnvios(order.customer.phoneE164 || ''),
     });
     setShowParseConfirmation(false);
@@ -596,7 +632,7 @@ export default function EnviosPage() {
         locality: normalizeLocalityForCorreo(canonProv, existingAddress?.localidad || ''),
         address: existingAddress?.domicilio || '',
         postalCode: existingAddress?.codigo_postal || '',
-        email: order.customer.email || '',
+        email: resolveEnvioEmail({ customerEmail: order.customer.email }),
         phone: normalizePhoneDigitsForEnvios(existingAddress?.telefono || order.customer.phoneE164 || ''),
       });
       setManualSucursalCode(
@@ -665,27 +701,46 @@ export default function EnviosPage() {
       const phoneFromOrder = normalizePhoneDigitsForEnvios(selectedOrder.customer.phoneE164 || '');
       const parsedData: ShippingFormData = {
         ...merged,
+        email: resolveEnvioEmail({
+          customerEmail: selectedOrder.customer.email,
+          parsedEmail: merged.email,
+        }),
         phone: phoneFromOrder,
       };
 
       const normalized = normalizeShippingFormData(parsedData);
-      if (shippingTypeDraft === 'SUCURSAL' && addressCatalogRows.length > 0) {
-        const snapped = snapFormToCorreoSucursalCatalog(
-          {
-            province: normalized.province,
-            locality: normalized.locality,
-            address: normalized.address,
-            postalCode: normalized.postalCode,
-          },
-          addressCatalogRows,
-        );
-        setShippingForm({
-          ...normalized,
-          province: snapped.province,
-          locality: snapped.locality,
-          address: snapped.address,
-          postalCode: snapped.postalCode,
-        });
+      if (addressCatalogRows.length > 0) {
+        if (shippingTypeDraft === 'SUCURSAL') {
+          const snapped = snapFormToCorreoSucursalCatalog(
+            {
+              province: normalized.province,
+              locality: normalized.locality,
+              address: normalized.address,
+              postalCode: normalized.postalCode,
+            },
+            addressCatalogRows,
+          );
+          setShippingForm({
+            ...normalized,
+            province: snapped.province,
+            locality: snapped.locality,
+            address: snapped.address,
+            postalCode: snapped.postalCode,
+          });
+        } else {
+          const snappedProvince = snapProvinceToCorreoSucursalCatalog(
+            normalized.province,
+            addressCatalogRows,
+          );
+          setShippingForm({
+            ...normalized,
+            province: snappedProvince || normalized.province,
+            locality: normalizeLocalityForCorreo(
+              snappedProvince || normalized.province,
+              normalized.locality,
+            ),
+          });
+        }
       } else {
         setShippingForm(normalized);
       }
@@ -693,8 +748,8 @@ export default function EnviosPage() {
       toast({
         title: 'Parseo IA listo',
         description:
-          shippingTypeDraft === 'SUCURSAL' && addressCatalogRows.length > 0
-            ? 'Se interpretó y se ajustó a las opciones del padrón Correo cuando hubo coincidencia.'
+          addressCatalogRows.length > 0
+            ? 'Se interpretó y se ajustó al padrón Correo (provincia y, en sucursal, localidad/oficina) cuando hubo coincidencia.'
             : 'Se interpretó con IA. Revisá antes de confirmar.',
       });
     } catch (error) {
@@ -721,10 +776,55 @@ export default function EnviosPage() {
       if (!canonicalProvince) {
         toast({
           title: 'Provincia inválida',
-          description: 'La provincia debe ser una de las 24 provincias/Capital Federal (sin abreviaturas).',
+          description: 'Elegí una provincia del desplegable (padrón Correo Argentino).',
           variant: 'destructive',
         });
         return;
+      }
+
+      if (!hasAddressCatalog) {
+        toast({
+          title: 'Padrón no disponible',
+          description:
+            'No se pudo cargar `correo_sucursales`. Revisá la tabla y permisos antes de guardar.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (!catalogContainsProvince(addressCatalogRows, canonicalProvince)) {
+        toast({
+          title: 'Provincia no válida',
+          description: 'La provincia debe ser una de las que figuran en el padrón de Correo Argentino.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (shippingTypeDraft === 'SUCURSAL' && !manualSucursalCode.trim()) {
+        if (!catalogContainsLocality(addressCatalogRows, canonicalProvince, normalizedForm.locality)) {
+          toast({
+            title: 'Localidad no válida',
+            description: 'Elegí una localidad del desplegable (padrón Correo). No se acepta texto libre.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        if (
+          !catalogContainsSucursalAddress(
+            addressCatalogRows,
+            canonicalProvince,
+            normalizedForm.locality,
+            normalizedForm.address,
+          )
+        ) {
+          toast({
+            title: 'Sucursal no válida',
+            description: 'Elegí la dirección de la sucursal en el desplegable o ingresá el código MiCorreo a mano.',
+            variant: 'destructive',
+          });
+          return;
+        }
       }
 
       const cleanName = normalizedForm.fullName.trim();
@@ -770,10 +870,14 @@ export default function EnviosPage() {
 
       if (orderError) throw orderError;
 
-      if (normalizedForm.email.trim()) {
+      const mailParaCliente = emailToPersistOnCliente({
+        customerEmail: selectedOrder.customer.email,
+        parsedEmail: normalizedForm.email,
+      });
+      if (mailParaCliente) {
         await supabase
           .from('clientes')
-          .update({ mail: normalizedForm.email.trim() })
+          .update({ mail: mailParaCliente })
           .eq('id', selectedOrder.customer.id);
       }
 
@@ -832,6 +936,15 @@ export default function EnviosPage() {
     if (!selectedOrder) return;
     try {
       const normalizedForm = normalizeShippingFormData(shippingForm);
+      const canonicalProvince = canonicalizeProvince(normalizedForm.province);
+      if (!canonicalProvince || !hasAddressCatalog || !catalogContainsProvince(addressCatalogRows, canonicalProvince)) {
+        toast({
+          title: 'Provincia no válida',
+          description: 'Elegí una provincia del desplegable (padrón Correo Argentino).',
+          variant: 'destructive',
+        });
+        return;
+      }
       if (shippingTypeDraft === 'SUCURSAL') {
         const manual = manualSucursalCode.trim();
         if (!manual) {
@@ -848,6 +961,29 @@ export default function EnviosPage() {
             });
             return;
           }
+          if (!catalogContainsLocality(addressCatalogRows, canonicalProvince, normalizedForm.locality)) {
+            toast({
+              title: 'Localidad no válida',
+              description: 'Elegí una localidad del desplegable (padrón Correo).',
+              variant: 'destructive',
+            });
+            return;
+          }
+          if (
+            !catalogContainsSucursalAddress(
+              addressCatalogRows,
+              canonicalProvince,
+              normalizedForm.locality,
+              normalizedForm.address,
+            )
+          ) {
+            toast({
+              title: 'Sucursal no válida',
+              description: 'Elegí la oficina en el desplegable del padrón.',
+              variant: 'destructive',
+            });
+            return;
+          }
         }
       }
       const paquete = resolveCorreoCsvPaqueteFromOrderItems(selectedOrder.items);
@@ -857,7 +993,12 @@ export default function EnviosPage() {
         domicilio: normalizedForm.address || '',
         codigoPostal: normalizedForm.postalCode || '',
         nombreCompleto: normalizedForm.fullName || `${selectedOrder.customer.firstName} ${selectedOrder.customer.lastName}`,
-        email: normalizedForm.email || selectedOrder.customer.email || '',
+        email: resolveEnvioEmail({
+          customerEmail: selectedOrder.customer.email,
+          parsedEmail: selectedOrder.customer.email?.trim()
+            ? undefined
+            : normalizedForm.email,
+        }),
         telefono: normalizedForm.phone || selectedOrder.customer.phoneE164 || '',
         tipoEnvio: shippingTypeDraft === 'SUCURSAL' ? 'Sucursal' : 'Domicilio',
         codigoSucursalManual:
@@ -1272,20 +1413,46 @@ export default function EnviosPage() {
               </div>
               {shippingTypeDraft === 'DOMICILIO' ? (
                 <>
+                  {isLoadingAddressCatalog ? (
+                    <p className="text-xs text-muted-foreground">Cargando padrón de provincias…</p>
+                  ) : null}
+                  {!isLoadingAddressCatalog && !hasAddressCatalog ? (
+                    <p className="text-xs text-muted-foreground">
+                      Sin padrón en correo_sucursales. No se puede elegir provincia hasta cargar la tabla.
+                    </p>
+                  ) : null}
                   <div className="space-y-2">
                     <Label>Provincia</Label>
-                    <Input
-                      value={shippingForm.province}
-                      onChange={(event) =>
-                        setShippingForm((prev) => {
-                          const raw = event.target.value;
-                          const canon = canonicalizeProvince(raw);
-                          const provinceVal = canon || raw;
-                          const loc = normalizeLocalityForCorreo(canon, prev.locality);
-                          return { ...prev, province: provinceVal, locality: loc };
-                        })
-                      }
-                    />
+                    <Select
+                      disabled={isLoadingAddressCatalog || !hasAddressCatalog}
+                      value={shippingForm.province.trim() ? shippingForm.province : SELECT_EMPTY_VALUE}
+                      onValueChange={(newProvince) => {
+                        if (newProvince === SELECT_EMPTY_VALUE) {
+                          setShippingForm((prev) => ({ ...prev, province: '' }));
+                          return;
+                        }
+                        setShippingForm((prev) => ({
+                          ...prev,
+                          province: newProvince,
+                          locality: normalizeLocalityForCorreo(
+                            canonicalizeProvince(newProvince) || newProvince,
+                            prev.locality,
+                          ),
+                        }));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Provincia (padrón Correo)" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[min(60vh,320px)]">
+                        <SelectItem value={SELECT_EMPTY_VALUE}>(vacío)</SelectItem>
+                        {provinceSelectOptions.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Localidad</Label>
@@ -1334,27 +1501,16 @@ export default function EnviosPage() {
                         }
                         setShippingForm((prev) => {
                           const pCanon = canonicalizeProvince(newProvince) || newProvince.trim();
-                          const locMerged = mergeOption(
-                            catalogLocalityOptions(addressCatalogRows, pCanon),
-                            prev.locality,
-                          );
-                          const newLoc =
-                            pCanon === 'Capital Federal'
-                              ? getCorreoCapitalFederalLocality()
-                              : locMerged.includes(prev.locality)
-                                ? prev.locality
-                                : locMerged[0] ?? '';
-                          const locForAddr =
-                            pCanon === 'Capital Federal' ? getCorreoCapitalFederalLocality() : newLoc;
-                          const addrOpts = mergeOption(
-                            catalogAddressOptions(addressCatalogRows, pCanon, locForAddr),
-                            prev.address,
-                          );
-                          const newAddr = addrOpts.includes(prev.address) ? prev.address : addrOpts[0] ?? '';
+                          const locOpts = catalogLocalityOptions(addressCatalogRows, pCanon);
+                          const newLoc = locOpts[0] ?? '';
+                          const addrOpts = newLoc
+                            ? catalogAddressOptions(addressCatalogRows, pCanon, newLoc)
+                            : [];
+                          const newAddr = addrOpts[0] ?? '';
                           const cp = findPostalCodeInCatalog(
                             addressCatalogRows,
                             pCanon,
-                            locForAddr,
+                            newLoc,
                             newAddr,
                           );
                           return {
@@ -1362,7 +1518,7 @@ export default function EnviosPage() {
                             province: newProvince,
                             locality: newLoc,
                             address: newAddr,
-                            postalCode: cp ?? prev.postalCode,
+                            postalCode: cp ?? '',
                           };
                         });
                       }}
@@ -1392,11 +1548,8 @@ export default function EnviosPage() {
                         }
                         setShippingForm((prev) => {
                           const pCanon = canonicalizeProvince(prev.province) || prev.province.trim();
-                          const addrOpts = mergeOption(
-                            catalogAddressOptions(addressCatalogRows, pCanon, newLoc),
-                            prev.address,
-                          );
-                          const newAddr = addrOpts.includes(prev.address) ? prev.address : addrOpts[0] ?? '';
+                          const addrOpts = catalogAddressOptions(addressCatalogRows, pCanon, newLoc);
+                          const newAddr = addrOpts[0] ?? '';
                           const cp = findPostalCodeInCatalog(
                             addressCatalogRows,
                             pCanon,
@@ -1407,7 +1560,7 @@ export default function EnviosPage() {
                             ...prev,
                             locality: newLoc,
                             address: newAddr,
-                            postalCode: cp ?? prev.postalCode,
+                            postalCode: cp ?? '',
                           };
                         });
                       }}
@@ -1451,7 +1604,7 @@ export default function EnviosPage() {
                           const pCanon = canonicalizeProvince(prev.province) || prev.province.trim();
                           const loc =
                             pCanon === 'Capital Federal'
-                              ? getCorreoCapitalFederalLocality()
+                              ? catalogLocalityOptions(addressCatalogRows, pCanon)[0] || prev.locality.trim()
                               : prev.locality.trim();
                           const cp = findPostalCodeInCatalog(addressCatalogRows, pCanon, loc, domicilio);
                           return {

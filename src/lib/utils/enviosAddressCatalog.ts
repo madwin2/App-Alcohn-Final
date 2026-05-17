@@ -72,22 +72,61 @@ export function mergeOption(list: string[], value: string | undefined): string[]
   return [...list, v].sort((a, b) => a.localeCompare(b, 'es'));
 }
 
+/**
+ * Localidades tal como figuran en `correo_sucursales.localidad` (una por clave normalizada).
+ */
 export function catalogLocalityOptions(
   rows: DireccionCatalogRow[],
   canonicalProvince: string,
 ): string[] {
   const p = canonicalProvince.trim();
   if (!p) return [];
-  if (p === 'Capital Federal') {
-    return [getCorreoCapitalFederalLocality()];
-  }
-  const s = new Set<string>();
+  const byKey = new Map<string, string>();
   for (const r of rows) {
     if (provinceKeyForCatalogRow(r) !== p) continue;
-    const loc = localityKey(r.localidad);
-    if (loc) s.add(loc);
+    const raw = (r.localidad || '').trim();
+    if (!raw) continue;
+    const key = localityKey(raw);
+    if (!byKey.has(key)) byKey.set(key, raw);
   }
-  return Array.from(s).sort((a, b) => a.localeCompare(b, 'es'));
+  if (p === 'Capital Federal' && !byKey.size) {
+    return [getCorreoCapitalFederalLocality()];
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+export function catalogContainsProvince(rows: DireccionCatalogRow[], province: string): boolean {
+  const pCanon = canonicalizeProvince(province) || province.trim();
+  if (!pCanon) return false;
+  return catalogProvinceOptions(rows).includes(pCanon);
+}
+
+export function catalogContainsLocality(
+  rows: DireccionCatalogRow[],
+  province: string,
+  locality: string,
+): boolean {
+  const pCanon = canonicalizeProvince(province) || province.trim();
+  const loc = (locality || '').trim();
+  if (!pCanon || !loc) return false;
+  const opts = catalogLocalityOptions(rows, pCanon);
+  const locNorm = localityKey(loc);
+  return opts.some((o) => localityKey(o) === locNorm);
+}
+
+export function catalogContainsSucursalAddress(
+  rows: DireccionCatalogRow[],
+  province: string,
+  locality: string,
+  domicilio: string,
+): boolean {
+  const pCanon = canonicalizeProvince(province) || province.trim();
+  const dom = (domicilio || '').trim();
+  if (!pCanon || !dom) return false;
+  const locForAddr =
+    pCanon === 'Capital Federal' ? catalogLocalityOptions(rows, pCanon)[0] || locality : locality;
+  const opts = catalogAddressOptions(rows, pCanon, locForAddr.trim());
+  return opts.some((o) => o.trim() === dom);
 }
 
 export function catalogAddressOptions(
