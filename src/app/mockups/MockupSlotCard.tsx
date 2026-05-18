@@ -15,8 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils/cn';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase/client';
 import { uploadFile } from '@/lib/supabase/services/storage.service';
@@ -133,11 +133,19 @@ export type MockupSlotHandle = {
   acceptFile: (file: File) => void;
 };
 
-const STEP_META: { step: UiStep; label: string; short: string }[] = [
-  { step: 1, label: 'Datos e imagen', short: '1' },
-  { step: 2, label: 'Revisar', short: '2' },
-  { step: 3, label: 'Listo', short: '3' },
-];
+/** Mide el archivo que quedó guardado como optimizado (no el original subido). */
+async function measureLogoForStoredAsset(
+  storedFile: File,
+  storedUrl: string,
+  slug: string,
+): Promise<LogoInkMeasurements> {
+  try {
+    const fromStorage = await fetchUrlAsFile(storedUrl, `medir_${slug}.png`);
+    return await measureLogoInkBoundsFromFile(fromStorage);
+  } catch {
+    return await measureLogoInkBoundsFromFile(storedFile);
+  }
+}
 
 type Props = {
   slotIndex: number;
@@ -331,9 +339,11 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     if (!id) return null;
     const fromLs = leerAlternativasMedidasLocal(id);
     if (fromLs && fromLs.length > 0) return fromLs;
-    const rh = activeRow?.logo_trazo_ratio_w_h;
+    const rh =
+      logoMetrics && logoMetrics.ratioWOverH > 0
+        ? logoMetrics.ratioWOverH
+        : activeRow?.logo_trazo_ratio_w_h;
     if (rh != null && rh > 0) return medidasAlternativasCmDesdeRatio(rh);
-    if (logoMetrics) return medidasAlternativasCmDesdeRatio(logoMetrics.ratioWOverH);
     return null;
   }, [activeRow?.id, activeRow?.logo_trazo_ratio_w_h, logoMetrics]);
 
@@ -605,8 +615,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const optimizedPath = `mockups/solicitudes/${id}/optimizado.png`;
       const optimizedUrl = await uploadFile('foto', optimizedFile, optimizedPath);
-
-      const m = await measureLogoInkBoundsFromFile(optimizedFile);
+      const m = await measureLogoForStoredAsset(optimizedFile, optimizedUrl, finalSlug);
       setLogoMetrics(m);
       const parsedAncho = parseAnchoDisenoCm(anchoDisenoCm.trim());
       const medidasAlts =
@@ -755,8 +764,8 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const optimizedPath = `mockups/solicitudes/${id}/optimizado.png`;
       const optimizedUrl = await uploadFile('foto', simplifiedFile, optimizedPath);
-
-      const m = await measureLogoInkBoundsFromFile(simplifiedFile);
+      const slugForMedidas = sanitizeDesignName(sampleName.trim() || provisionalSlug);
+      const m = await measureLogoForStoredAsset(simplifiedFile, optimizedUrl, slugForMedidas);
       setLogoMetrics(m);
       const parsedAncho = parseAnchoDisenoCm(anchoDisenoCm.trim());
       const medidasAlts =
@@ -853,7 +862,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const nextIntentos = (activeRow.intentos_optimizacion ?? 0) + 1;
 
-      const m = await measureLogoInkBoundsFromFile(optimizedFile);
+      const m = await measureLogoForStoredAsset(optimizedFile, optimizedUrl, slug);
       setLogoMetrics(m);
       const parsedAncho = parseAnchoDisenoCm(anchoDisenoCm.trim());
       const medidasAlts =
@@ -1067,32 +1076,19 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
   const isBusy = processing !== 'idle';
 
-  const stepper = (
-    <div className="flex flex-wrap items-center gap-2" aria-label="Pasos del mockup">
-      {STEP_META.map(({ step, label, short }, idx) => {
-        const active = uiStep === step;
-        const done = uiStep > step;
-        return (
-          <div key={step} className="flex items-center gap-2">
-            {idx > 0 ? <span className="text-muted-foreground/40 text-[10px]">·</span> : null}
-            <span
-              className={`inline-flex min-h-[1.75rem] items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                active
-                  ? 'bg-foreground text-background shadow-sm'
-                  : done
-                    ? 'bg-white/[0.08] text-foreground/75 ring-1 ring-white/10'
-                    : 'bg-white/[0.04] text-muted-foreground ring-1 ring-white/[0.06]'
-              }`}
-              title={label}
-            >
-              <span className="tabular-nums opacity-80">{short}</span>
-              <span className="hidden max-w-[5.5rem] truncate min-[360px]:inline sm:max-w-none">{label}</span>
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
+  const setMaterial = useCallback((next: 'cuero' | 'madera' | 'ambos') => {
+    if (next === 'cuero') {
+      setUseCuero(true);
+      setUseMadera(false);
+    } else if (next === 'madera') {
+      setUseCuero(false);
+      setUseMadera(true);
+    } else {
+      setUseCuero(true);
+      setUseMadera(true);
+    }
+  }, []);
+
 
   return (
     <Card
@@ -1101,125 +1097,146 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       }`}
       data-mockup-slot={slotIndex}
     >
-      <CardHeader className="shrink-0 min-w-0 space-y-2 border-b border-white/[0.08] bg-white/[0.03] px-4 pb-2.5 pt-3 backdrop-blur-sm sm:px-5">
-        <div className="flex items-start justify-between gap-3">
+      <CardHeader className="shrink-0 min-w-0 space-y-3 border-b border-white/[0.06] px-4 pb-3 pt-3.5 sm:px-5">
+        <div className="flex items-center justify-between gap-3">
           <CardTitle className="text-base font-semibold tracking-tight text-foreground sm:text-[1.05rem]">{title}</CardTitle>
-          {activeRow?.estado ? (
-            <Badge variant="outline" className="shrink-0 border-white/15 bg-white/[0.06] text-[10px] uppercase tracking-wide text-muted-foreground">
-              {activeRow.estado.replace(/_/g, ' ')}
-            </Badge>
-          ) : null}
+          <div className="flex items-center gap-1.5" aria-label="Progreso">
+            {([1, 2, 3] as const).map((step) => (
+              <span
+                key={step}
+                className={cn(
+                  'flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-medium tabular-nums transition-colors',
+                  uiStep === step
+                    ? 'bg-foreground text-background'
+                    : uiStep > step
+                      ? 'bg-foreground/20 text-foreground'
+                      : 'bg-white/[0.06] text-muted-foreground',
+                )}
+              >
+                {step}
+              </span>
+            ))}
+          </div>
         </div>
-        {stepper}
+        <div className="flex gap-1" role="progressbar" aria-valuenow={uiStep} aria-valuemin={1} aria-valuemax={3}>
+          {([1, 2, 3] as const).map((step) => (
+            <div
+              key={step}
+              className={cn(
+                'h-0.5 flex-1 rounded-full transition-colors duration-300',
+                uiStep >= step ? 'bg-foreground/85' : 'bg-white/[0.08]',
+              )}
+            />
+          ))}
+        </div>
       </CardHeader>
-      <CardContent className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-2 overflow-hidden bg-transparent p-3 sm:p-4">
+      <CardContent className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-3 overflow-hidden p-3 sm:p-4">
         {uiStep === 1 && (
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-            <section className="shrink-0 space-y-2 rounded-xl border border-white/[0.07] bg-white/[0.04] p-2.5 sm:p-3">
-              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/90">Datos</p>
-              <div className="flex flex-col gap-2">
-                <div className="w-fit max-w-full space-y-1">
-                  <Label htmlFor={`sample-name-${slotIndex}`} className="text-[11px] font-medium text-foreground/85">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+            <div className="shrink-0 space-y-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_4.5rem]">
+                <div className="space-y-1">
+                  <Label htmlFor={`sample-name-${slotIndex}`} className="text-[11px] text-muted-foreground">
                     Nombre
                   </Label>
                   <Input
                     id={`sample-name-${slotIndex}`}
-                    className="h-8 w-[min(100%,14rem)] rounded-md border-white/10 bg-black/25 text-sm placeholder:text-muted-foreground/60"
+                    className="h-9 border-white/10 bg-black/20 text-sm"
                     value={sampleName}
                     onChange={(e) => setSampleName(e.target.value)}
                     placeholder="Opcional"
                   />
                 </div>
-                <div className="w-fit max-w-full space-y-1">
-                  <Label htmlFor={`wa-${slotIndex}`} className="text-[11px] font-medium text-foreground/85">
+                <div className="space-y-1">
+                  <Label htmlFor={`wa-${slotIndex}`} className="text-[11px] text-muted-foreground">
                     WhatsApp
                   </Label>
                   <Input
                     id={`wa-${slotIndex}`}
-                    className="h-8 w-[min(100%,11rem)] rounded-md border-white/10 bg-black/25 text-sm placeholder:text-muted-foreground/60"
+                    className="h-9 border-white/10 bg-black/20 text-sm"
                     value={whatsapp}
                     onChange={(e) => setWhatsapp(e.target.value)}
                     placeholder="+54 9 …"
                   />
                 </div>
-                <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
-                  <div className="space-y-1">
-                    <Label htmlFor={`ancho-diseno-${slotIndex}`} className="text-[11px] font-medium text-foreground/85">
-                      Ancho (cm)
-                    </Label>
-                    <Input
-                      id={`ancho-diseno-${slotIndex}`}
-                      className="h-8 w-[4.5rem] rounded-md border-white/10 bg-black/25 text-center text-sm tabular-nums placeholder:text-muted-foreground/60"
-                      inputMode="decimal"
-                      value={anchoDisenoCm}
-                      onChange={(e) => setAnchoDisenoCm(e.target.value)}
-                      placeholder="—"
-                      title="Vacío: 4 / 6 / 8 cm. Con número: ese ancho."
-                    />
-                  </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`ancho-diseno-${slotIndex}`} className="text-[11px] text-muted-foreground">
+                    Ancho
+                  </Label>
+                  <Input
+                    id={`ancho-diseno-${slotIndex}`}
+                    className="h-9 border-white/10 bg-black/20 text-center text-sm tabular-nums"
+                    inputMode="decimal"
+                    value={anchoDisenoCm}
+                    onChange={(e) => setAnchoDisenoCm(e.target.value)}
+                    placeholder="cm"
+                    title="Vacío: 4 / 6 / 8 cm. Con número: ese ancho."
+                  />
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/[0.06] pt-2">
-                <span className="text-[11px] font-medium text-foreground/85">Materiales</span>
-                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/90">
-                  <Checkbox checked={useCuero} onCheckedChange={(v) => setUseCuero(v === true)} />
-                  Cuero
-                </label>
-                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/90">
-                  <Checkbox checked={useMadera} onCheckedChange={(v) => setUseMadera(v === true)} />
-                  Madera
-                </label>
-                <Badge variant="outline" className="border-white/12 bg-black/20 text-[10px] font-normal text-muted-foreground">
-                  {materialChoice === 'ambos' ? 'Ambos' : `Solo ${materialChoice}`}
-                </Badge>
-              </div>
-
-              <div
-                className="flex items-center gap-2 rounded-lg bg-black/20 px-2 py-1.5 ring-1 ring-white/[0.06]"
-                title="Usa el archivo sin validar ni optimizar con IA."
-              >
-                <Checkbox
-                  id={`skip-${slotIndex}`}
-                  checked={skipAnalysis}
-                  onCheckedChange={(v) => setSkipAnalysis(v === true)}
-                />
-                <label htmlFor={`skip-${slotIndex}`} className="cursor-pointer text-xs font-medium text-foreground/90">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-0.5 text-[11px] text-muted-foreground">Material</span>
+                {(['cuero', 'madera', 'ambos'] as const).map((mat) => (
+                  <button
+                    key={mat}
+                    type="button"
+                    onClick={() => setMaterial(mat)}
+                    className={cn(
+                      'rounded-full px-2.5 py-1 text-[11px] font-medium capitalize transition-colors',
+                      materialChoice === mat
+                        ? 'bg-foreground text-background'
+                        : 'bg-white/[0.06] text-muted-foreground hover:bg-white/[0.1] hover:text-foreground',
+                    )}
+                  >
+                    {mat === 'ambos' ? 'Ambos' : mat}
+                  </button>
+                ))}
+                <label
+                  className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground"
+                  title="Usa el archivo sin validar ni optimizar con IA."
+                >
+                  <Checkbox
+                    id={`skip-${slotIndex}`}
+                    checked={skipAnalysis}
+                    onCheckedChange={(v) => setSkipAnalysis(v === true)}
+                  />
                   Omitir análisis
                 </label>
               </div>
-            </section>
+            </div>
 
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               {!sourcePreview ? (
                 <div
-                  className={`flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-white/15 bg-black/15 px-3 py-4 text-center transition-colors ${
-                    isDragging ? 'border-primary/60 bg-primary/10' : ''
-                  }`}
-                  onDragOver={(e) => {
+                  className={cn(
+                    'flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-white/12 bg-black/10 px-4 py-6 text-center transition-colors',
+                    isDragging && 'border-primary/50 bg-primary/5',
+                  )}                  onDragOver={(e) => {
                     e.preventDefault();
                     setIsDragging(true);
                   }}
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={onDrop}
                 >
-                  <p className="text-sm font-medium text-foreground/90">Vista del logo</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground/90">Arrastrá · Ctrl+V · archivo</p>
+                  <p className="text-sm font-medium text-foreground/90">Logo</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Arrastrá, pegá con Ctrl+V o elegí un archivo</p>
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                     size="sm"
-                    className="mt-2 h-8 rounded-md px-4 text-xs"
+                    className="mt-3 h-8 rounded-full px-5 text-xs"
                     onClick={() => inputRef.current?.click()}
                   >
-                    Seleccionar
+                    Elegir imagen
                   </Button>
                 </div>
               ) : (
                 <div
-                  className={`group relative min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-white ${
-                    isDragging ? 'ring-2 ring-primary/50' : ''
-                  }`}
+                  className={cn(
+                    'group relative min-h-0 flex-1 overflow-hidden rounded-xl bg-white',
+                    isDragging && 'ring-2 ring-primary/40',
+                  )}
                   onDragOver={(e) => {
                     e.preventDefault();
                     setIsDragging(true);
@@ -1227,7 +1244,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={onDrop}
                 >
-                  <div className="relative h-full min-h-[8rem] w-full overflow-hidden bg-white">
+                  <div className="relative h-full min-h-[9rem] w-full overflow-hidden">
                     <img
                       src={sourcePreview}
                       alt="Vista previa del logo"
@@ -1237,11 +1254,11 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
                     <button
                       type="button"
                       onClick={() => clearSourceImage()}
-                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-background/90 text-foreground shadow-md ring-1 ring-border transition-opacity hover:bg-destructive hover:text-destructive-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white transition-opacity hover:bg-destructive sm:opacity-0 sm:group-hover:opacity-100"
                       aria-label="Quitar imagen"
                       title="Quitar imagen"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
@@ -1260,7 +1277,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
               }}
             />
 
-            <div className="flex shrink-0 flex-col gap-2 border-t border-white/[0.06] pt-2">
+            <div className="flex shrink-0 flex-col gap-1.5">
               {processing === 'generar' ? (
                 <div
                   className="w-full overflow-hidden rounded-xl border border-primary/30 bg-black/25 px-3 py-3 shadow-inner transition-all duration-300 ease-out"
