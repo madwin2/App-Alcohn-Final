@@ -121,6 +121,8 @@ export const getChannelIcon = (channel: string): string => {
       return 'FACEBOOK';
     case 'MAIL':
       return 'MAIL';
+    case 'WEB':
+      return 'WEB';
     default:
       return 'WHATSAPP';
   }

@@ -153,22 +153,24 @@ export const mapStampTypeToDB = (tipo: StampType): string => {
 };
 
 // Mapeo de canal de contacto
-const mapContactChannel = (medio: string | null): 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'OTRO' => {
-  const mapping: Record<string, 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'OTRO'> = {
+const mapContactChannel = (medio: string | null): 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'WEB' | 'OTRO' => {
+  const mapping: Record<string, 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'WEB' | 'OTRO'> = {
     'Whatsapp': 'WHATSAPP',
     'Instagram': 'INSTAGRAM',
     'Facebook': 'FACEBOOK',
     'Mail': 'MAIL',
+    'Web': 'WEB',
   };
   return medio ? (mapping[medio] || 'OTRO') : 'OTRO';
 };
 
-const mapContactChannelToDB = (channel: 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'OTRO'): string => {
+const mapContactChannelToDB = (channel: 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'WEB' | 'OTRO'): string => {
   const mapping: Record<string, string> = {
     'WHATSAPP': 'Whatsapp',
     'INSTAGRAM': 'Instagram',
     'FACEBOOK': 'Facebook',
     'MAIL': 'Mail',
+    'WEB': 'Web',
     'OTRO': 'Whatsapp', // Default
   };
   return mapping[channel] || 'Whatsapp';
@@ -332,7 +334,7 @@ export const mapCustomerToCliente = (customer: Customer) => ({
   telefono: customer.phoneE164,
   mail: customer.email || null,
   dni: customer.dni || null,
-  medio_contacto: mapContactChannelToDB(customer.phoneE164 ? 'WHATSAPP' : 'OTRO') as 'Whatsapp' | 'Facebook' | 'Instagram' | 'Mail',
+  medio_contacto: mapContactChannelToDB(customer.phoneE164 ? 'WHATSAPP' : 'OTRO') as 'Whatsapp' | 'Facebook' | 'Instagram' | 'Mail' | 'Web',
 });
 
 export const mapOrderItemToSello = (

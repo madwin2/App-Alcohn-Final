@@ -63,7 +63,7 @@ const filtersSchema = z.object({
     .optional(),
   types: z.array(z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE'] as any)).optional(),
   channels: z
-    .array(z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL'] as any))
+    .array(z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'WEB'] as any))
     .optional(),
   uploaders: z.array(z.string()).optional(),
 });
@@ -115,6 +115,7 @@ const channelOptions = [
   { value: 'INSTAGRAM', label: 'Instagram' },
   { value: 'FACEBOOK', label: 'Facebook' },
   { value: 'MAIL', label: 'Mail' },
+  { value: 'WEB', label: 'Web' },
 ];
 
 // uploaderOptions se obtendrá dinámicamente desde la BD

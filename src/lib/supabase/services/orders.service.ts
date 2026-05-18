@@ -396,7 +396,8 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
           medio_contacto: formData.customer.channel === 'WHATSAPP' ? 'Whatsapp' : 
                         formData.customer.channel === 'INSTAGRAM' ? 'Instagram' :
                         formData.customer.channel === 'FACEBOOK' ? 'Facebook' :
-                        formData.customer.channel === 'MAIL' ? 'Mail' : 'Whatsapp',
+                        formData.customer.channel === 'MAIL' ? 'Mail' :
+                        formData.customer.channel === 'WEB' ? 'Web' : 'Whatsapp',
           created_at: null,
           updated_at: null,
         }

@@ -26,7 +26,7 @@ const customerSchema = z.object({
     lastName: z.string().min(1, 'El apellido es requerido'),
     phoneE164: z.string().min(1, 'El teléfono es requerido'),
     email: z.string().email('Email inválido').optional().or(z.literal('')),
-    channel: z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'OTRO']),
+    channel: z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'WEB', 'OTRO']),
   }),
   /** No enviar webhook de pedido registrado (alta tardía manual). */
   skipConfirmationWebhook: z.boolean().optional(),
@@ -102,6 +102,7 @@ const channelOptions = [
   { value: 'INSTAGRAM', label: 'Instagram' },
   { value: 'FACEBOOK', label: 'Facebook' },
   { value: 'MAIL', label: 'Email' },
+  { value: 'WEB', label: 'Web' },
   { value: 'OTRO', label: 'Otro' },
 ];
 

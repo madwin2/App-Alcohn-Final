@@ -7,7 +7,7 @@ export interface Database {
           id: string;
           nombre: string;
           apellido: string;
-          medio_contacto: 'Whatsapp' | 'Facebook' | 'Instagram' | 'Mail' | null;
+          medio_contacto: 'Whatsapp' | 'Facebook' | 'Instagram' | 'Mail' | 'Web' | null;
           telefono: string;
           dni: string | null;
           mail: string | null;

@@ -13,7 +13,7 @@ CREATE TABLE clientes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nombre VARCHAR(100) NOT NULL,
     apellido VARCHAR(100) NOT NULL,
-    medio_contacto VARCHAR(20) CHECK (medio_contacto IN ('Whatsapp', 'Facebook', 'Instagram', 'Mail')),
+    medio_contacto VARCHAR(20) CHECK (medio_contacto IN ('Whatsapp', 'Facebook', 'Instagram', 'Mail', 'Web')),
     telefono VARCHAR(20) NOT NULL,
     dni VARCHAR(20) UNIQUE,
     mail VARCHAR(255) UNIQUE,

@@ -129,7 +129,7 @@ export interface OrderItem {
     photoUrl?: string;
   };
   contact: { 
-    channel: 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'OTRO'; 
+    channel: 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'WEB' | 'OTRO'; 
     phoneE164: string; 
   };
   carrierBlock?: { 
@@ -149,7 +149,7 @@ export interface Filters {
   sale?: SaleState[];
   shipping?: ShippingState[];
   types?: StampType[];
-  channels?: ('WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL')[];
+  channels?: ('WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'WEB')[];
   uploaders?: string[];
 }
 
@@ -263,7 +263,7 @@ export interface NewOrderFormData {
     lastName: string;
     phoneE164: string;
     email?: string;
-    channel: 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'OTRO';
+    channel: 'WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'WEB' | 'OTRO';
   };
   order: {
     itemType?: ItemType;
