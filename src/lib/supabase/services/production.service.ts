@@ -91,6 +91,8 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         ordenes!inner (
           id,
           taken_by,
+          origen,
+          estado_pago_web,
           clientes (*)
         )
       `)
@@ -99,8 +101,21 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
     if (sellosError) throw sellosError;
     if (!sellos) return [];
 
+    /**
+     * Defensa en profundidad: con la regla "Opción A" la web NO debería crear sellos
+     * mientras el pago está pendiente, pero por seguridad ocultamos en Producción
+     * cualquier sello cuya orden web no esté pagada.
+     * Si la migración web aún no se aplicó, las columnas son `undefined` → no afecta.
+     */
+    const sellosVisibles = sellos.filter((s) => {
+      const o = (s as any).ordenes as { origen?: string | null; estado_pago_web?: string | null } | undefined;
+      if (!o) return true;
+      if (o.origen !== 'Web') return true;
+      return o.estado_pago_web === 'pagado';
+    });
+
     // Obtener todas las tareas para todas las órdenes (solo tareas de producción)
-    const ordenIds = [...new Set(sellos.map(s => s.orden_id))];
+    const ordenIds = [...new Set(sellosVisibles.map(s => s.orden_id))];
     const { data: tareas, error: tareasError } = await supabase
       .from('tareas')
       .select('*')
@@ -120,7 +135,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
     });
 
     // Obtener información de usuarios únicos que han creado pedidos (si existe taken_by)
-    const takenByUserIds = [...new Set(sellos.map(s => (s.ordenes as any)?.taken_by).filter(Boolean))];
+    const takenByUserIds = [...new Set(sellosVisibles.map(s => (s.ordenes as any)?.taken_by).filter(Boolean))];
     const usersMap = new Map<string, { id: string; name: string }>();
     
     if (takenByUserIds.length > 0) {
@@ -160,7 +175,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
     });
 
     // Mapear a ProductionItem
-    const items: ProductionItem[] = sellos.map(sello => {
+    const items: ProductionItem[] = sellosVisibles.map(sello => {
       const orden = sello.ordenes as unknown as OrdenRow & { clientes: ClienteRow; taken_by?: string | null };
       const cliente = orden.clientes;
       const takenByUserId = orden.taken_by;

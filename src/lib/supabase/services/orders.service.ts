@@ -25,6 +25,27 @@ const ORDERS_IN_QUERY_CHUNK_SIZE = 150;
 /** PostgREST suele devolver como máximo 1000 filas por request; sin paginar la app “pierde” pedidos. */
 const ORDENES_PAGE_SIZE = 1000;
 
+/**
+ * Pedidos generados desde la web pasan por checkout y crean la `ordenes` antes de pagar.
+ * Mientras el pago no esté confirmado no queremos que aparezcan en la app interna (ni en
+ * Pedidos ni en Producción), porque todavía no son ventas reales.
+ *
+ * Reglas:
+ *  - `origen` NULL o distinto de 'Web' → es un pedido de la app, se muestra siempre.
+ *  - `origen` = 'Web' → solo se muestra cuando `estado_pago_web` = 'pagado'.
+ *
+ * Se filtra en JS para que la app siga funcionando aunque la migración web todavía no
+ * esté aplicada (en ese caso las columnas son `undefined` y se comporta igual que antes).
+ */
+export const isWebOrderHiddenFromInternalApp = (
+  orden: Pick<OrdenRow, 'id'> & { origen?: string | null; estado_pago_web?: string | null } & Record<string, any>
+): boolean => {
+  const origen = (orden as any).origen as string | null | undefined;
+  if (!origen || origen !== 'Web') return false;
+  const estadoPago = (orden as any).estado_pago_web as string | null | undefined;
+  return estadoPago !== 'pagado';
+};
+
 const ORDER_REGISTERED_WEBHOOK_FN =
   (import.meta as any)?.env?.VITE_ORDER_WEBHOOK_FUNCTION_NAME || 'webhook-bot';
 
@@ -85,7 +106,8 @@ export const getOrders = async (): Promise<Order[]> => {
 
       if (ordenesError) throw ordenesError;
       if (!page?.length) break;
-      ordenes.push(...(page as OrdenRow[]));
+      const visibles = (page as OrdenRow[]).filter((o) => !isWebOrderHiddenFromInternalApp(o));
+      ordenes.push(...visibles);
       if (page.length < ORDENES_PAGE_SIZE) break;
       rangeStart += ORDENES_PAGE_SIZE;
     }
@@ -207,6 +229,9 @@ export const getOrderById = async (orderId: string): Promise<Order | null> => {
 
     if (ordenError) throw ordenError;
     if (!orden) return null;
+    if (isWebOrderHiddenFromInternalApp(orden as OrdenRow)) {
+      return null;
+    }
 
     const { data: sellos, error: sellosError } = await supabase
       .from('sellos')

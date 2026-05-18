@@ -62,6 +62,30 @@ export interface Database {
             | 'Seguimiento Enviado'
             | null;
           taken_by: string | null;
+          /** Pedidos de la web Alcohn (ver migración 001_web_alcohn_integration.sql). */
+          origen?: 'Web' | 'App' | null;
+          metodo_pago?: 'Openpay' | 'Transferencia' | null;
+          estado_pago_web?:
+            | 'pendiente'
+            | 'pago_fallido'
+            | 'esperando_comprobante'
+            | 'pagado'
+            | 'abandonado'
+            | null;
+          mockup_solicitud_id?: string | null;
+          web_checkout_ref?: string | null;
+          openpay_order_id?: string | null;
+          pago_error_codigo?: string | null;
+          pago_error_mensaje?: string | null;
+          ultimo_intento_pago_at?: string | null;
+          pago_confirmado_at?: string | null;
+          comprobante_path?: string | null;
+          comprobante_url?: string | null;
+          comprobante_subido_at?: string | null;
+          comprobante_validado_at?: string | null;
+          comprobante_validado_por?: string | null;
+          notas_web?: Record<string, unknown> | null;
+          carrito_json?: Record<string, unknown> | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -96,6 +120,8 @@ export interface Database {
           item_config: Record<string, any> | null;
           largo_real: number | null;
           ancho_real: number | null;
+          /** Solicitud de mockup web asociada (cuando el sello viene del wizard). */
+          mockup_solicitud_id?: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -249,10 +275,24 @@ export interface Database {
           nombre_muestra: string | null;
           nombre_slug: string;
           whatsapp: string | null;
-          material: 'cuero' | 'madera' | 'ambos';
+          /**
+           * App actual: 'cuero' | 'madera' | 'ambos'. La migración web añade
+           * 'ceramica' | 'alimentos' | 'otros' al CHECK constraint.
+           */
+          material: 'cuero' | 'madera' | 'ambos' | 'ceramica' | 'alimentos' | 'otros';
           omitir_analisis: boolean;
           preparado_con_simplificar_ia: boolean;
           estado: 'procesando' | 'pendiente_aprobacion' | 'completado' | 'error';
+          /** Web Alcohn (ver migración 001_web_alcohn_integration.sql). */
+          cliente_id?: string | null;
+          orden_id?: string | null;
+          origen?: 'app' | 'web';
+          email?: string | null;
+          checkout_iniciado_at?: string | null;
+          checkout_completado_at?: string | null;
+          carrito_json?: Record<string, unknown> | null;
+          metadata_web?: Record<string, unknown>;
+          web_session_id?: string | null;
           archivo_base_url: string | null;
           archivo_base_path: string | null;
           validacion: Record<string, unknown> | null;
@@ -279,7 +319,7 @@ export interface Database {
           nombre_muestra?: string | null;
           nombre_slug: string;
           whatsapp?: string | null;
-          material: 'cuero' | 'madera' | 'ambos';
+          material: 'cuero' | 'madera' | 'ambos' | 'ceramica' | 'alimentos' | 'otros';
           omitir_analisis?: boolean;
           preparado_con_simplificar_ia?: boolean;
           estado?: 'procesando' | 'pendiente_aprobacion' | 'completado' | 'error';
@@ -308,7 +348,7 @@ export interface Database {
           nombre_muestra: string | null;
           nombre_slug: string;
           whatsapp: string | null;
-          material: 'cuero' | 'madera' | 'ambos';
+          material: 'cuero' | 'madera' | 'ambos' | 'ceramica' | 'alimentos' | 'otros';
           omitir_analisis: boolean;
           preparado_con_simplificar_ia: boolean;
           estado: 'procesando' | 'pendiente_aprobacion' | 'completado' | 'error';
