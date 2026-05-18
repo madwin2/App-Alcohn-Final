@@ -15,6 +15,9 @@ import { findCustomerByPhone } from '@/lib/supabase/services/orders.service';
 import { fetchPreciosResolverInputForCotizacion } from '@/lib/supabase/services/preciosPro.service';
 import type { PreciosResolverInput } from '@/lib/precios/resolverPrecioSello';
 import { cotizarSelloRectangularCm, mmPedidoAcm, parseMedidaMmAString } from '@/lib/precios/cotizacionMedida';
+import { NewOrderDesignTabs } from './NewOrderDesignTabs';
+import { measureInputFromDesign, type SavedDesignData } from './newOrderDesignUtils';
+import type { SaveDesignOptions } from './NewOrderDialog';
 
 // Schema para el paso 1 (Información del cliente)
 const customerSchema = z.object({
@@ -72,15 +75,27 @@ type OrderFormData = z.infer<typeof orderSchema>;
 
 interface NewOrderStepFormProps {
   currentStep: number;
-  onStepSubmit: (data: any, step: number, shouldCreateOrder?: boolean) => void;
+  onStepSubmit: (data: any, step: number) => void;
+  onDesignSave: (data: SavedDesignData, options?: SaveDesignOptions) => void;
   onCancel: () => void;
   onBack: () => void;
-  onAddDesign: () => void;
-  onCreateOrder?: (currentStepData?: any) => void;
+  onCreateOrder?: (currentDesign?: SavedDesignData, editIndex?: number) => void;
   initialData: Partial<NewOrderFormData>;
-  designsCount?: number;
+  savedDesigns?: SavedDesignData[];
   isSubmitting?: boolean;
 }
+
+const emptyDesignFormValues = {
+  order: {
+    itemType: 'SELLO' as ItemType,
+    stampType: 'CLASICO' as StampType,
+    requestedWidthMm: 1,
+    requestedHeightMm: 1,
+  },
+  values: { totalValue: 0, depositValue: 20000 },
+  shipping: { carrier: undefined, service: undefined },
+  states: { fabrication: 'SIN_HACER' as FabricationState, isPriority: false, deadline: undefined },
+};
 
 const channelOptions = [
   { value: 'WHATSAPP', label: 'WhatsApp' },
@@ -164,12 +179,23 @@ const shippingOptions = [
   { value: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado' },
 ];
 
-export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, onAddDesign, onCreateOrder, initialData, designsCount = 0, isSubmitting = false }: NewOrderStepFormProps) {
+export function NewOrderStepForm({
+  currentStep,
+  onStepSubmit,
+  onDesignSave,
+  onCancel,
+  onBack,
+  onCreateOrder,
+  initialData,
+  savedDesigns = [],
+  isSubmitting = false,
+}: NewOrderStepFormProps) {
   const [files, setFiles] = useState<{
     base?: File;
     vector?: File;
     photo?: File;
   }>({});
+  const [activeSlot, setActiveSlot] = useState<number | 'new'>('new');
   const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
   const phoneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoFilledRef = useRef(false);
@@ -363,63 +389,112 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
     setFiles(prev => ({ ...prev, [type]: file }));
   };
 
+  const resetDesignForm = useCallback(() => {
+    orderForm.reset(emptyDesignFormValues);
+    setFiles({});
+    setMeasureInput('');
+    setActiveSlot('new');
+  }, [orderForm]);
+
+  const loadDesignIntoForm = useCallback(
+    (design: SavedDesignData) => {
+      orderForm.reset({
+        order: { ...emptyDesignFormValues.order, ...design.order },
+        values: design.values,
+        shipping: design.shipping,
+        states: design.states,
+      });
+      setFiles(design.files ?? {});
+      setMeasureInput(measureInputFromDesign(design.order));
+    },
+    [orderForm],
+  );
+
+  const captureCurrentDesign = useCallback((): SavedDesignData => {
+    const values = orderForm.getValues();
+    const itemType = values.order.itemType;
+    return {
+      order: {
+        ...values.order,
+        designName: itemType === 'SELLO' ? (values.order.designName || '') : '',
+      },
+      values: values.values,
+      shipping: values.shipping,
+      states: values.states,
+      files: { ...files },
+    };
+  }, [orderForm, files]);
+
+  const buildDesignPayload = (data: OrderFormData): SavedDesignData => ({
+    ...data,
+    order: {
+      ...data.order,
+      designName: selectedItemType === 'SELLO' ? (data.order.designName || '') : '',
+    },
+    files,
+  });
+
+  const persistActiveSlotDraft = useCallback(() => {
+    if (activeSlot === 'new') return;
+    onDesignSave(captureCurrentDesign(), { index: activeSlot });
+  }, [activeSlot, captureCurrentDesign, onDesignSave]);
+
+  const handleSelectDesign = (index: number) => {
+    if (activeSlot !== 'new' && activeSlot !== index) {
+      persistActiveSlotDraft();
+    }
+    loadDesignIntoForm(savedDesigns[index]);
+    setActiveSlot(index);
+  };
+
+  const handleSelectNewDesign = () => {
+    if (activeSlot !== 'new') {
+      persistActiveSlotDraft();
+    }
+    resetDesignForm();
+  };
+
   const handleCustomerSubmit = (data: CustomerFormData) => {
     onStepSubmit(data, 1);
   };
 
   const handleOrderSubmit = (data: OrderFormData) => {
-    // En el paso 2, cuando se hace submit, solo agregar el diseño (no crear pedido)
-    const finalData = {
-      ...data,
-      order: {
-        ...data.order,
-        designName: selectedItemType === 'SELLO' ? (data.order.designName || '') : '',
-      },
-      files,
-    };
-    onStepSubmit(finalData, 2);
+    onDesignSave(buildDesignPayload(data), {
+      index: activeSlot === 'new' ? undefined : activeSlot,
+      advanceToStep3: true,
+    });
+    resetDesignForm();
   };
 
-  const handleAddDesign = () => {
-    // Validar el formulario antes de agregar diseño
+  const handleSaveAndAddAnother = () => {
     orderForm.handleSubmit((data) => {
-      const finalData = {
-        ...data,
-        order: {
-          ...data.order,
-          designName: selectedItemType === 'SELLO' ? (data.order.designName || '') : '',
-        },
-        files,
-      };
-      onStepSubmit(finalData, 2);
-      // Limpiar el formulario para el siguiente diseño
-      orderForm.reset({
-        order: {
-          itemType: 'SELLO',
-          stampType: 'CLASICO',
-          requestedWidthMm: 1,
-          requestedHeightMm: 1,
-        },
-        values: {
-          totalValue: 0,
-          depositValue: 20000,
-        },
-        shipping: {
-          carrier: undefined,
-          service: undefined,
-        },
-        states: {
-          fabrication: 'SIN_HACER',
-          isPriority: false,
-          deadline: undefined,
-        },
+      onDesignSave(buildDesignPayload(data), {
+        index: activeSlot === 'new' ? undefined : activeSlot,
+        advanceToStep3: currentStep === 2,
       });
-      setFiles({});
-      setMeasureInput('');
-      // Avanzar al paso 3
-      onAddDesign();
+      resetDesignForm();
     })();
   };
+
+  const handleCreateOrderClick = () => {
+    orderForm.handleSubmit((data) => {
+      onCreateOrder?.(buildDesignPayload(data), activeSlot === 'new' ? undefined : activeSlot);
+    })();
+  };
+
+  const designsCountOnSubmit =
+    activeSlot === 'new' ? savedDesigns.length + 1 : savedDesigns.length;
+
+  const designTabs =
+    savedDesigns.length > 0 ? (
+      <NewOrderDesignTabs
+        savedDesigns={savedDesigns}
+        activeSlot={activeSlot}
+        onSelectDesign={handleSelectDesign}
+        onSelectNew={handleSelectNewDesign}
+        className="pb-2"
+      />
+    ) : null;
 
   if (currentStep === 1) {
     return (
@@ -542,6 +617,7 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
 
   return (
     <form onSubmit={orderForm.handleSubmit(handleOrderSubmit)} className="space-y-8">
+      {designTabs}
       {/* Diseño */}
       <div className="space-y-4">
         <h3 className="text-lg font-medium">Diseño</h3>
@@ -877,335 +953,22 @@ export function NewOrderStepForm({ currentStep, onStepSubmit, onCancel, onBack, 
           Atrás
         </Button>
         <div className="flex gap-3">
-          <Button type="button" variant="secondary" onClick={handleAddDesign}>
-            Agregar Diseño
+          <Button type="button" variant="secondary" onClick={handleSaveAndAddAnother}>
+            {currentStep === 3 && savedDesigns.length > 0 ? 'Agregar Otro Diseño' : 'Agregar Diseño'}
           </Button>
           {onCreateOrder && (
-            <Button 
-              type="button" 
-              onClick={() => {
-                // Validar y agregar el diseño actual, luego crear el pedido
-                orderForm.handleSubmit((data) => {
-                  const finalData = {
-                    ...data,
-                    files,
-                    step: 2,
-                  };
-                  onCreateOrder(finalData);
-                })();
-              }} 
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Creando...' : `Crear Pedido${designsCount > 0 ? ` (${designsCount + 1} diseño${designsCount > 0 ? 's' : ''})` : ''}`}
+            <Button type="button" onClick={handleCreateOrderClick} disabled={isSubmitting}>
+              {isSubmitting
+                ? 'Creando...'
+                : `${currentStep === 3 ? 'Finalizar' : 'Crear'} Pedido${
+                    designsCountOnSubmit > 0
+                      ? ` (${designsCountOnSubmit} diseño${designsCountOnSubmit > 1 ? 's' : ''})`
+                      : ''
+                  }`}
             </Button>
           )}
         </div>
       </div>
     </form>
   );
-
-  // Paso 3: Agregar Diseño (igual al paso 2 pero para diseños adicionales)
-  if (currentStep === 3) {
-    return (
-      <form onSubmit={orderForm.handleSubmit(handleOrderSubmit)} className="space-y-8">
-        <div className="space-y-6">
-          <h3 className="text-lg font-medium">Agregar Diseño</h3>
-          
-          {/* Diseño */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Diseño</h3>
-            <div className="grid grid-cols-6 gap-4">
-              <div className="col-span-2">
-                <Input
-                  id="designName"
-                  placeholder="Nombre del Diseño * (Ej: Logo Empresa ABC)"
-                  {...orderForm.register('order.designName')}
-                  className={orderForm.formState.errors.order?.designName ? 'border-red-500' : ''}
-                />
-                {orderForm.formState.errors.order?.designName && (
-                  <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.order?.designName?.message}</p>
-                )}
-              </div>
-              <div className="col-span-2">
-                <Input
-                  id="measureInput-step3"
-                  type="text"
-                  placeholder="Medida * en mm (ej: 40×40 o 35)"
-                  value={measureInput}
-                  onChange={(e) => aplicarMedidaDesdeTexto(e.target.value)}
-                  className={orderForm.formState.errors.order?.requestedWidthMm ? 'border-red-500' : ''}
-                />
-                {orderForm.formState.errors.order?.requestedWidthMm && (
-                  <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.order?.requestedWidthMm?.message}</p>
-                )}
-                {measureInput && !parseMedidaMmAString(measureInput) && (
-                  <p className="text-xs text-yellow-500 mt-1">Formato: 40×40 o 35 (milímetros)</p>
-                )}
-              </div>
-              <div className="col-span-2">
-                <Select 
-                  value={orderForm.watch('order.stampType') || 'CLASICO'}
-                  onValueChange={(value) => orderForm.setValue('order.stampType', value as StampType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo de Sello" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stampTypeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-6">
-                <Textarea
-                  id="notes"
-                  {...orderForm.register('order.notes')}
-                  placeholder="Notas adicionales sobre el diseño..."
-                  rows={2}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Valores */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Valores</h3>
-            <div className="grid grid-cols-6 gap-4">
-              <div className="col-span-2">
-                <Input
-                  id="totalValue"
-                  type="number"
-                  placeholder="Valor Total *"
-                  {...orderForm.register('values.totalValue', { valueAsNumber: true })}
-                  className={orderForm.formState.errors.values?.totalValue ? 'border-red-500' : ''}
-                />
-                {orderForm.formState.errors.values?.totalValue && (
-                  <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.values?.totalValue?.message}</p>
-                )}
-              </div>
-              <div className="col-span-2">
-                <Input
-                  id="depositValue"
-                  type="number"
-                  placeholder="Seña"
-                  {...orderForm.register('values.depositValue', { valueAsNumber: true })}
-                  className={orderForm.formState.errors.values?.depositValue ? 'border-red-500' : ''}
-                />
-                {orderForm.formState.errors.values?.depositValue && (
-                  <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.values?.depositValue?.message}</p>
-                )}
-              </div>
-              <div className="col-span-2">
-                <Input
-                  value={`$${restante.toLocaleString()}`}
-                  disabled
-                  className="bg-muted"
-                  placeholder="Restante"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Transportista y Estado */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Transportista y Estado</h3>
-            <div className="grid grid-cols-6 gap-4">
-              <div className="col-span-3">
-                <Select onValueChange={(value) => {
-                  if (value === 'NONE') {
-                    orderForm.setValue('shipping.carrier', undefined);
-                    orderForm.setValue('shipping.service', undefined);
-                  } else if (value === 'OTRO') {
-                    orderForm.setValue('shipping.carrier', 'OTRO');
-                    orderForm.setValue('shipping.service', undefined);
-                  } else {
-                    const [carrier, service] = value.split('_') as [ShippingCarrier, ShippingServiceDest];
-                    orderForm.setValue('shipping.carrier', carrier);
-                    orderForm.setValue('shipping.service', service);
-                  }
-                }} value={(() => {
-                  const carrier = orderForm.watch('shipping.carrier');
-                  const service = orderForm.watch('shipping.service');
-                  if (!carrier) return 'NONE';
-                  if (carrier === 'OTRO') return 'OTRO';
-                  if (carrier && service) return `${carrier}_${service}` as ShippingOption;
-                  return 'NONE';
-                })()}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Transportista" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {carrierOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-3">
-                <Select 
-                  value={orderForm.watch('states.fabrication') || 'SIN_HACER'}
-                  onValueChange={(value) => orderForm.setValue('states.fabrication', value as FabricationState)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Estado de Fabricación" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fabricationOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="isPriority-step3" 
-                      checked={orderForm.watch('states.isPriority')}
-                      onCheckedChange={(checked) => orderForm.setValue('states.isPriority', !!checked)}
-                    />
-                    <Label htmlFor="isPriority-step3" className="text-sm font-medium">
-                      🔥 Pedido Prioritario
-                    </Label>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="deadline-step3" className="text-sm font-medium">
-                      📅 Fecha Límite
-                    </Label>
-                    <DatePicker
-                      date={orderForm.watch('states.deadline')}
-                      onDateChange={(date) => orderForm.setValue('states.deadline', date)}
-                      placeholder="Seleccionar fecha límite"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Archivos */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium">Archivos</h3>
-            <div className="grid grid-cols-6 gap-4">
-              {(['base', 'vector'] as const).map((type) => (
-                <div key={type} className="col-span-3 space-y-2">
-                  <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4 text-center">
-                    {files[type] ? (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium truncate">{files[type]?.name}</p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleFileChange(type, undefined)}
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Quitar
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
-                        <p className="text-xs text-muted-foreground">Subir archivo</p>
-                        <input
-                          type="file"
-                          accept="image/*,.pdf,.ai,.eps"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleFileChange(type, file);
-                          }}
-                          className="hidden"
-                          id={`file-${type}`}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => document.getElementById(`file-${type}`)?.click()}
-                        >
-                          Seleccionar
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Botones */}
-        <div className="flex justify-between pt-6 border-t">
-          <Button type="button" variant="outline" onClick={onBack}>
-            Atrás
-          </Button>
-          <div className="flex gap-3">
-            <Button 
-              type="button" 
-              variant="secondary" 
-              onClick={() => {
-                // Validar y agregar diseño actual
-                orderForm.handleSubmit((data) => {
-                  const finalData = {
-                    ...data,
-                    files,
-                  };
-                  onStepSubmit(finalData, 3);
-                  // Limpiar el formulario para el siguiente diseño
-                  orderForm.reset({
-                    order: {
-                      stampType: 'CLASICO',
-                    },
-                    values: {
-                      totalValue: 0,
-                      depositValue: 20000,
-                    },
-                    shipping: {
-                      carrier: undefined,
-                      service: undefined,
-                    },
-                    states: {
-                      fabrication: 'SIN_HACER',
-                      isPriority: false,
-                      deadline: undefined,
-                    },
-                  });
-                  setFiles({});
-                  setMeasureInput('');
-                })();
-              }}
-            >
-              Agregar Otro Diseño
-            </Button>
-            {onCreateOrder && (
-              <Button 
-                type="button" 
-                onClick={() => {
-                  // Validar y agregar diseño actual antes de crear
-                  orderForm.handleSubmit((data) => {
-                    const finalData = {
-                      ...data,
-                      files,
-                      step: 3,
-                    };
-                    onCreateOrder?.(finalData);
-                  })();
-                }} 
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? 'Creando...' : `Finalizar Pedido${designsCount > 0 ? ` (${designsCount + 1} diseño${designsCount > 0 ? 's' : ''})` : ''}`}
-              </Button>
-            )}
-          </div>
-        </div>
-      </form>
-    );
-  }
 }

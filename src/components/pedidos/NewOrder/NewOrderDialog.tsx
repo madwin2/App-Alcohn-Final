@@ -6,6 +6,7 @@ import { useSound } from '@/lib/hooks/useSound';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { useState } from 'react';
 import { notifyOrderRegistered } from '@/lib/supabase/services/orders.service';
+import type { SavedDesignData } from './newOrderDesignUtils';
 
 interface NewOrderDialogProps {
   open: boolean;
@@ -23,13 +24,13 @@ interface NewOrderDialogProps {
   fetchOrders?: () => Promise<void>;
 }
 
-interface DesignData {
-  order: NewOrderFormData['order'];
-  values: NewOrderFormData['values'];
-  shipping: NewOrderFormData['shipping'];
-  states: NewOrderFormData['states'];
-  files?: NewOrderFormData['files'];
-}
+export type SaveDesignOptions = {
+  /** Si se indica, reemplaza el diseño en ese índice en lugar de agregar uno nuevo. */
+  index?: number;
+  createOrder?: boolean;
+  /** Tras guardar el primer diseño, pasar al paso 3 para agregar más. */
+  advanceToStep3?: boolean;
+};
 
 export function NewOrderDialog({
   open,
@@ -47,175 +48,131 @@ export function NewOrderDialog({
   const [currentStep, setCurrentStep] = useState(1);
   const [customerData, setCustomerData] = useState<NewOrderFormData['customer'] | null>(null);
   const [skipConfirmationWebhook, setSkipConfirmationWebhook] = useState(false);
-  const [designs, setDesigns] = useState<DesignData[]>([]);
+  const [designs, setDesigns] = useState<SavedDesignData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleStepSubmit = (stepData: any, step: number, shouldCreateOrder: boolean = false) => {
+  const handleStepSubmit = (stepData: { customer?: NewOrderFormData['customer']; skipConfirmationWebhook?: boolean }, step: number) => {
     if (step === 1) {
-      setCustomerData(stepData.customer);
+      setCustomerData(stepData.customer!);
       setSkipConfirmationWebhook(stepData.skipConfirmationWebhook === true);
       setCurrentStep(2);
-    } else if (step === 2) {
-      // Agregar diseño a la lista
-      const designData: DesignData = {
-        order: stepData.order,
-        values: stepData.values,
-        shipping: stepData.shipping,
-        states: stepData.states,
-        files: stepData.files,
-      };
-      setDesigns(prev => {
-        const updated = [...prev, designData];
-        // Si se debe crear el pedido, hacerlo después de actualizar el estado
-        if (shouldCreateOrder) {
-          // Capturar customerData en el closure
-          const currentCustomerData = customerData;
-          // Usar el estado actualizado en el callback
-          setTimeout(() => {
-            // Acceder al estado más reciente usando una función
-            setDesigns(currentDesigns => {
-              // currentDesigns ya incluye el diseño recién agregado
-              if (currentDesigns.length > 0 && currentCustomerData) {
-                handleFinalSubmitWithDesigns(currentDesigns, currentCustomerData);
-              }
-              return currentDesigns; // No modificar el estado, solo usarlo
-            });
-          }, 100);
-        }
-        return updated;
-      });
-      
-      if (!shouldCreateOrder) {
-        // No crear pedido, solo avanzar al paso 3 para agregar otro diseño
-        setCurrentStep(3);
+    }
+  };
+
+  const handleDesignSave = (designData: SavedDesignData, options: SaveDesignOptions = {}) => {
+    setDesigns((prev) => {
+      const updated =
+        options.index !== undefined
+          ? prev.map((d, i) => (i === options.index ? designData : d))
+          : [...prev, designData];
+
+      if (options.createOrder && customerData) {
+        setTimeout(() => {
+          handleFinalSubmitWithDesigns(updated, customerData);
+        }, 100);
       }
-    } else if (step === 3) {
-      // Agregar otro diseño a la lista
-      const designData: DesignData = {
-        order: stepData.order,
-        values: stepData.values,
-        shipping: stepData.shipping,
-        states: stepData.states,
-        files: stepData.files,
-      };
-      setDesigns(prev => {
-        const updated = [...prev, designData];
-        // Si se debe crear el pedido, hacerlo después de actualizar el estado
-        if (shouldCreateOrder) {
-          // Capturar customerData en el closure
-          const currentCustomerData = customerData;
-          // Usar el estado actualizado en el callback
-          setTimeout(() => {
-            // Acceder al estado más reciente usando una función
-            setDesigns(currentDesigns => {
-              // currentDesigns ya incluye el diseño recién agregado
-              if (currentDesigns.length > 0 && currentCustomerData) {
-                handleFinalSubmitWithDesigns(currentDesigns, currentCustomerData);
-              }
-              return currentDesigns; // No modificar el estado, solo usarlo
-            });
-          }, 100);
-        }
-        return updated;
-      });
-      // Permanecer en el paso 3 para agregar más diseños (a menos que se deba crear)
+
+      return updated;
+    });
+
+    if (options.advanceToStep3) {
+      setCurrentStep(3);
     }
   };
 
   const handleFinalSubmit = async () => {
     if (!customerData || designs.length === 0) {
       toast({
-        title: "Error",
-        description: "Debe completar la información del cliente y agregar al menos un diseño",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Debe completar la información del cliente y agregar al menos un diseño',
+        variant: 'destructive',
       });
       return;
     }
     handleFinalSubmitWithDesigns(designs, customerData);
   };
 
-  const handleFinalSubmitWithDesigns = async (designsToUse: DesignData[], customerToUse: NewOrderFormData['customer']) => {
+  const handleFinalSubmitWithDesigns = async (
+    designsToUse: SavedDesignData[],
+    customerToUse: NewOrderFormData['customer'],
+  ) => {
     if (!customerToUse || designsToUse.length === 0) {
       toast({
-        title: "Error",
-        description: "Debe completar la información del cliente y agregar al menos un diseño",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Debe completar la información del cliente y agregar al menos un diseño',
+        variant: 'destructive',
       });
       return;
     }
 
     try {
       setIsSubmitting(true);
-      
-      // Crear el pedido con el primer diseño
+
       const firstDesign = designsToUse[0];
       const orderData: NewOrderFormData = {
         customer: customerToUse,
         order: {
           ...firstDesign.order,
-          requestedHeightMm: firstDesign.order.requestedHeightMm || firstDesign.order.requestedWidthMm, // Usar altura si existe, sino usar el ancho
+          requestedHeightMm: firstDesign.order.requestedHeightMm || firstDesign.order.requestedWidthMm,
         },
         values: firstDesign.values,
         shipping: firstDesign.shipping,
         states: firstDesign.states,
         files: firstDesign.files || {},
       };
-      
+
       const createdOrder = await createOrder(orderData);
-      
-      // Agregar los diseños restantes a la orden creada
+
       for (let i = 1; i < designsToUse.length; i++) {
         const design = designsToUse[i];
-        // Usar addStampToOrder del hook para agregar sellos adicionales (actualiza el estado local)
-        await addStampToOrder(createdOrder.id, {
-          designName: design.order.designName,
-          requestedWidthMm: design.order.requestedWidthMm,
-          requestedHeightMm: design.order.requestedHeightMm || design.order.requestedWidthMm, // Usar altura si existe, sino usar el ancho
-          itemType: design.order.itemType || 'SELLO',
-          stampType: design.order.stampType,
-          itemConfig: {
-            soldadorPower: design.order.soldadorPower,
-            abecedarioTipografia: design.order.abecedarioTipografia,
-            abecedarioAlturaMm: design.order.abecedarioAlturaMm,
-            abecedarioCase: design.order.abecedarioCase,
-            abecedarioExtraLetters: design.order.abecedarioExtraLetters,
+        await addStampToOrder(
+          createdOrder.id,
+          {
+            designName: design.order.designName,
+            requestedWidthMm: design.order.requestedWidthMm,
+            requestedHeightMm: design.order.requestedHeightMm || design.order.requestedWidthMm,
+            itemType: design.order.itemType || 'SELLO',
+            stampType: design.order.stampType,
+            itemConfig: {
+              soldadorPower: design.order.soldadorPower,
+              abecedarioTipografia: design.order.abecedarioTipografia,
+              abecedarioAlturaMm: design.order.abecedarioAlturaMm,
+              abecedarioCase: design.order.abecedarioCase,
+              abecedarioExtraLetters: design.order.abecedarioExtraLetters,
+            },
+            notes: design.order.notes,
+            itemValue: design.values.totalValue,
+            fabricationState: design.states.fabrication,
+            isPriority: design.states.isPriority,
+            saleState: design.states.sale || 'SEÑADO',
+            shippingState: design.states.shipping || 'SIN_ENVIO',
+            depositValueItem: design.values.depositValue,
+            restPaidAmountItem: design.values.totalValue - design.values.depositValue,
+            paidAmountItemCached: design.values.depositValue,
+            balanceItemCached: design.values.totalValue - design.values.depositValue,
+            files: {},
+            contact: {
+              channel: customerToUse.channel,
+              phoneE164: customerToUse.phoneE164,
+            },
           },
-          notes: design.order.notes,
-          itemValue: design.values.totalValue,
-          fabricationState: design.states.fabrication,
-          isPriority: design.states.isPriority,
-          saleState: design.states.sale || 'SEÑADO',
-          shippingState: design.states.shipping || 'SIN_ENVIO',
-          depositValueItem: design.values.depositValue,
-          restPaidAmountItem: design.values.totalValue - design.values.depositValue,
-          paidAmountItemCached: design.values.depositValue,
-          balanceItemCached: design.values.totalValue - design.values.depositValue,
-          files: {},
-          contact: {
-            channel: customerToUse.channel,
-            phoneE164: customerToUse.phoneE164,
-          },
-        }, design.files);
+          design.files,
+        );
       }
-      
-      // Refrescar la orden completa después de agregar todos los sellos
-      // Esto asegura que el estado local tenga todos los datos actualizados
+
       await fetchOrders();
 
-      // Notificar al bot recién cuando el pedido ya quedó completo (opcional si no se silenció en paso 1)
       if (!skipConfirmationWebhook) {
         await notifyOrderRegistered(createdOrder);
       }
-      
-      // Reproducir sonido de éxito
+
       playSound('success');
-      
+
       toast({
-        title: "¡Pedido creado!",
+        title: '¡Pedido creado!',
         description: `Se ha creado el pedido con ${designsToUse.length} diseño(s) para ${customerToUse.firstName} ${customerToUse.lastName}`,
       });
-      
-      // Reset form
+
       setCurrentStep(1);
       setCustomerData(null);
       setSkipConfirmationWebhook(false);
@@ -224,9 +181,9 @@ export function NewOrderDialog({
     } catch (error) {
       console.error('Error creating order:', error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "No se pudo crear el pedido",
-        variant: "destructive",
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo crear el pedido',
+        variant: 'destructive',
       });
     } finally {
       setIsSubmitting(false);
@@ -249,29 +206,24 @@ export function NewOrderDialog({
     }
   };
 
-  const handleAddDesign = () => {
-    // Validar que el diseño actual esté completo antes de agregar otro
-    // Esto se maneja en el formulario, aquí solo avanzamos al paso 3
-    setCurrentStep(3);
-  };
-
-  const handleCreateOrder = (currentStepData?: any) => {
-    // Si se pasa data del paso actual, agregarlo primero y luego crear el pedido
-    if (currentStepData) {
-      const step = currentStepData.step || 2;
-      handleStepSubmit(currentStepData, step, true); // true = crear pedido después
-    } else {
-      // Si no hay diseños aún, esperar a que se agregue
-      if (designs.length === 0) {
-        toast({
-          title: "Error",
-          description: "Debe agregar al menos un diseño antes de crear el pedido",
-          variant: "destructive",
-        });
-        return;
-      }
-      handleFinalSubmit();
+  const handleCreateOrder = (currentDesign?: SavedDesignData, editIndex?: number) => {
+    if (currentDesign) {
+      handleDesignSave(currentDesign, {
+        index: editIndex,
+        createOrder: true,
+      });
+      return;
     }
+
+    if (designs.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Debe agregar al menos un diseño antes de crear el pedido',
+        variant: 'destructive',
+      });
+      return;
+    }
+    handleFinalSubmit();
   };
 
   return (
@@ -287,18 +239,18 @@ export function NewOrderDialog({
             )}
           </DialogTitle>
         </DialogHeader>
-        <NewOrderStepForm 
+        <NewOrderStepForm
           currentStep={currentStep}
           onStepSubmit={handleStepSubmit}
+          onDesignSave={handleDesignSave}
           onCancel={handleCancel}
           onBack={handleBack}
-          onAddDesign={handleAddDesign}
           onCreateOrder={handleCreateOrder}
           initialData={{
             ...(customerData ? { customer: customerData } : {}),
             skipConfirmationWebhook,
           }}
-          designsCount={designs.length}
+          savedDesigns={designs}
           isSubmitting={isSubmitting}
         />
       </DialogContent>
