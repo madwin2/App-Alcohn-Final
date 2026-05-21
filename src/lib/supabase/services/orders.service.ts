@@ -114,75 +114,74 @@ const paginateOrdenesRows = async (
   return ordenes;
 };
 
-/** IDs de órdenes visibles: últimos 6 meses ∪ pedidos no cerrados (hecho + despachado). */
-const collectOperationalOrderIds = async (): Promise<string[]> => {
-  const ids = new Set<string>();
-  const cutoff = getSixMonthsCutoffDate();
+const OPEN_SHIPPING_OR =
+  'estado_envio.is.null,estado_envio.eq.Sin envio,estado_envio.eq.Hacer Etiqueta,estado_envio.eq.Error de Etiqueta,estado_envio.eq.Etiqueta Lista';
 
-  let rangeStart = 0;
-  for (let pageNum = 0; pageNum < 50; pageNum += 1) {
+/** Últimos 6 meses con cliente (una pasada paginada, sin re-leer por ID). */
+const fetchRecentOrdenesSince = async (cutoff: string): Promise<OrdenRowWithCliente[]> =>
+  paginateOrdenesRows(async (from, to) => {
     const q = applyInternalOrdersVisibility(
       supabase
         .from('ordenes')
-        .select('id, origen, estado_pago_web')
+        .select(`*, clientes (*)`)
         .gte('fecha', cutoff)
         .order('fecha', { ascending: false })
         .order('id', { ascending: false }),
     );
-    const { data, error } = await q.range(rangeStart, rangeStart + ORDENES_PAGE_SIZE - 1);
-    if (error) throw error;
-    if (!data?.length) break;
-    for (const row of data) {
-      if (!isWebOrderHiddenFromInternalApp(row as OrdenRow)) {
-        ids.add(row.id);
-      }
-    }
-    if (data.length < ORDENES_PAGE_SIZE) break;
-    rangeStart += ORDENES_PAGE_SIZE;
+    return q.range(from, to);
+  });
+
+/** Pedidos viejos (>6 meses) aún abiertos; consultas acotadas (no barrido completo de sellos). */
+const fetchOlderOpenOrdenes = async (
+  cutoff: string,
+  recentIds: Set<string>,
+  maxOrders = 400,
+): Promise<OrdenRowWithCliente[]> => {
+  const ids = new Set<string>();
+
+  const { data: oldEnvio, error: envioErr } = await applyInternalOrdersVisibility(
+    supabase
+      .from('ordenes')
+      .select('id')
+      .lt('fecha', cutoff)
+      .or(OPEN_SHIPPING_OR)
+      .order('fecha', { ascending: false })
+      .limit(maxOrders),
+  );
+  if (envioErr) throw envioErr;
+  for (const row of oldEnvio ?? []) {
+    if (!recentIds.has(row.id)) ids.add(row.id);
   }
 
-  const addIdsFromPagedSelect = async (
-    runPage: (from: number, to: number) => PromiseLike<{ data: Array<{ orden_id?: string; id?: string }> | null; error: unknown }>,
-    pickId: (row: { orden_id?: string; id?: string }) => string | undefined,
-  ) => {
-    let rangeStart = 0;
-    for (let pageNum = 0; pageNum < 50; pageNum += 1) {
-      const { data, error } = await runPage(rangeStart, rangeStart + ORDENES_PAGE_SIZE - 1);
-      if (error) throw error;
-      if (!data?.length) break;
-      for (const row of data) {
-        const id = pickId(row);
-        if (id) ids.add(id);
-      }
-      if (data.length < ORDENES_PAGE_SIZE) break;
-      rangeStart += ORDENES_PAGE_SIZE;
+  const { data: sellosOpen, error: sellosErr } = await supabase
+    .from('sellos')
+    .select('orden_id')
+    .or('estado_fabricacion.neq.Hecho,estado_fabricacion.is.null')
+    .limit(5000);
+  if (sellosErr) throw sellosErr;
+
+  const candidateOrdenIds = [
+    ...new Set(
+      (sellosOpen ?? [])
+        .map((s) => s.orden_id)
+        .filter((id): id is string => Boolean(id) && !recentIds.has(id)),
+    ),
+  ];
+
+  for (let i = 0; i < candidateOrdenIds.length && ids.size < maxOrders; i += ORDERS_IN_QUERY_CHUNK_SIZE) {
+    const chunk = candidateOrdenIds.slice(i, i + ORDERS_IN_QUERY_CHUNK_SIZE);
+    const { data: ordenRows, error: ordenErr } = await applyInternalOrdersVisibility(
+      supabase.from('ordenes').select('id, fecha').in('id', chunk).lt('fecha', cutoff),
+    );
+    if (ordenErr) throw ordenErr;
+    for (const row of ordenRows ?? []) {
+      ids.add(row.id);
+      if (ids.size >= maxOrders) break;
     }
-  };
+  }
 
-  await addIdsFromPagedSelect(
-    (from, to) =>
-      supabase
-        .from('sellos')
-        .select('orden_id')
-        .or('estado_fabricacion.neq.Hecho,estado_fabricacion.is.null')
-        .range(from, to),
-    (row) => row.orden_id,
-  );
-
-  await addIdsFromPagedSelect(
-    (from, to) =>
-      applyInternalOrdersVisibility(
-        supabase
-          .from('ordenes')
-          .select('id')
-          .or(
-            'estado_envio.is.null,estado_envio.eq.Sin envio,estado_envio.eq.Hacer Etiqueta,estado_envio.eq.Error de Etiqueta,estado_envio.eq.Etiqueta Lista',
-          ),
-      ).range(from, to),
-    (row) => row.id,
-  );
-
-  return [...ids];
+  if (!ids.size) return [];
+  return fetchOrdenesWithClientsByIds([...ids]);
 };
 
 const fetchOrdenesWithClientsByIds = async (orderIds: string[]): Promise<OrdenRowWithCliente[]> => {
@@ -222,23 +221,31 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
   const sellos: SelloRow[] = [];
   const tareas: any[] = [];
 
-  for (let i = 0; i < ordenIds.length; i += ORDERS_IN_QUERY_CHUNK_SIZE) {
-    const idsChunk = ordenIds.slice(i, i + ORDERS_IN_QUERY_CHUNK_SIZE);
+  const chunkStarts = Array.from(
+    { length: Math.ceil(ordenIds.length / ORDERS_IN_QUERY_CHUNK_SIZE) },
+    (_, i) => i * ORDERS_IN_QUERY_CHUNK_SIZE,
+  );
 
-    const { data: sellosChunk, error: sellosError } = await supabase
-      .from('sellos')
-      .select('*')
-      .in('orden_id', idsChunk);
-    if (sellosError) throw sellosError;
-    if (sellosChunk?.length) sellos.push(...sellosChunk);
+  const chunkResults = await Promise.all(
+    chunkStarts.map(async (start) => {
+      const idsChunk = ordenIds.slice(start, start + ORDERS_IN_QUERY_CHUNK_SIZE);
+      const [sellosRes, tareasRes] = await Promise.all([
+        supabase.from('sellos').select('*').in('orden_id', idsChunk),
+        supabase
+          .from('tareas')
+          .select('*')
+          .eq('contexto', 'PEDIDOS')
+          .in('orden_id', idsChunk),
+      ]);
+      if (sellosRes.error) throw sellosRes.error;
+      if (tareasRes.error) throw tareasRes.error;
+      return { sellos: sellosRes.data ?? [], tareas: tareasRes.data ?? [] };
+    }),
+  );
 
-    const { data: tareasChunk, error: tareasError } = await supabase
-      .from('tareas')
-      .select('*')
-      .eq('contexto', 'PEDIDOS')
-      .in('orden_id', idsChunk);
-    if (tareasError) throw tareasError;
-    if (tareasChunk?.length) tareas.push(...tareasChunk);
+  for (const chunk of chunkResults) {
+    if (chunk.sellos.length) sellos.push(...chunk.sellos);
+    if (chunk.tareas.length) tareas.push(...chunk.tareas);
   }
 
   const takenByUserIds = [...new Set(ordenes.map((o) => (o as any).taken_by).filter(Boolean))];
@@ -293,18 +300,55 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
 
 export interface GetOrdersOptions {
   scope?: GetOrdersScope;
+  /** Solo últimos 6 meses (rápido). Por defecto en operativa: false = incluye viejos abiertos. */
+  recentOnly?: boolean;
 }
+
+/** Carga rápida: últimos 6 meses. */
+export const getOrdersRecentOperational = async (): Promise<Order[]> => {
+  await runMigrations();
+  const cutoff = getSixMonthsCutoffDate();
+  const ordenes = await fetchRecentOrdenesSince(cutoff);
+  if (import.meta.env.DEV) {
+    console.info(`[getOrders:operational:recent] ${ordenes.length} órdenes.`);
+  }
+  return buildOrdersFromOrdenes(ordenes);
+};
+
+/** Complemento en background: viejos abiertos no incluidos en `recent`. */
+export const getOrdersOlderOpenOperational = async (recentOrders: Order[]): Promise<Order[]> => {
+  const cutoff = getSixMonthsCutoffDate();
+  const recentIds = new Set(recentOrders.map((o) => o.id));
+  const olderRows = await fetchOlderOpenOrdenes(cutoff, recentIds);
+  if (!olderRows.length) return [];
+  if (import.meta.env.DEV) {
+    console.info(`[getOrders:operational:older-open] +${olderRows.length} órdenes.`);
+  }
+  return buildOrdersFromOrdenes(olderRows);
+};
+
+const mergeOrdersById = (base: Order[], extra: Order[]): Order[] => {
+  const byId = new Map<string, Order>();
+  for (const o of base) byId.set(o.id, o);
+  for (const o of extra) {
+    if (!byId.has(o.id)) byId.set(o.id, o);
+  }
+  return [...byId.values()].sort((a, b) => {
+    const da = a.orderDate || '';
+    const db = b.orderDate || '';
+    if (da !== db) return db.localeCompare(da);
+    return b.id.localeCompare(a.id);
+  });
+};
 
 /** Órdenes con relaciones. `operational` = recientes ∪ abiertos; `full` = histórico visible. */
 export const getOrders = async (options?: GetOrdersOptions): Promise<Order[]> => {
   try {
-    await runMigrations();
     const scope = options?.scope ?? 'operational';
 
-    let ordenes: OrdenRowWithCliente[];
-
     if (scope === 'full') {
-      ordenes = await paginateOrdenesRows(async (from, to) => {
+      await runMigrations();
+      const ordenes = await paginateOrdenesRows(async (from, to) => {
         const q = applyInternalOrdersVisibility(
           supabase
             .from('ordenes')
@@ -317,15 +361,14 @@ export const getOrders = async (options?: GetOrdersOptions): Promise<Order[]> =>
       if (import.meta.env.DEV && ordenes.length > 0) {
         console.info(`[getOrders:full] ${ordenes.length} órdenes.`);
       }
-    } else {
-      const ids = await collectOperationalOrderIds();
-      ordenes = await fetchOrdenesWithClientsByIds(ids);
-      if (import.meta.env.DEV && ordenes.length > 0) {
-        console.info(`[getOrders:operational] ${ordenes.length} órdenes.`);
-      }
+      return buildOrdersFromOrdenes(ordenes);
     }
 
-    return buildOrdersFromOrdenes(ordenes);
+    const recent = await getOrdersRecentOperational();
+    if (options?.recentOnly) return recent;
+
+    const older = await getOrdersOlderOpenOperational(recent);
+    return mergeOrdersById(recent, older);
   } catch (error) {
     console.error('Error fetching orders:', error);
     throw error;

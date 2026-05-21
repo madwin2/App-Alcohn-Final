@@ -62,7 +62,7 @@ export default function PedidosPage() {
     <AppMain>
         {/* Header */}
         <div className="border-b bg-background p-6">
-          {!loading && !error && (
+          {(!loading || orders.length > 0) && !error && (
             <OrdersHeader
               orders={deferredOrders}
               onNewOrder={() => setShowNewOrder(true)}
@@ -79,7 +79,7 @@ export default function PedidosPage() {
 
         {/* Table */}
         <div className="flex-1 p-6 overflow-hidden">
-          {loading ? (
+          {loading && orders.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-muted-foreground">Cargando órdenes...</p>
             </div>

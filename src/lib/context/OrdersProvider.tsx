@@ -17,6 +17,11 @@ import {
   readEconomiaOrdersCache,
   writeEconomiaOrdersCache,
 } from '@/lib/economia/economiaOrdersCache';
+import {
+  clearOperationalOrdersCache,
+  readOperationalOrdersCache,
+  writeOperationalOrdersCache,
+} from '@/lib/orders/operationalOrdersCache';
 
 const applyOptimisticPatch = (order: Order, updates: Partial<Order>): Order => {
   let nextOrder = { ...order };
@@ -62,6 +67,26 @@ const patchOrderList = (
     if (order.id !== orderId) return order;
     return typeof patch === 'function' ? patch(order) : applyOptimisticPatch(order, patch);
   });
+
+const mergeOperationalOrders = (base: Order[], extra: Order[]): Order[] => {
+  if (!extra.length) return base;
+  const byId = new Map(base.map((o) => [o.id, o]));
+  for (const o of extra) {
+    if (!byId.has(o.id)) byId.set(o.id, o);
+  }
+  return [...byId.values()].sort((a, b) => {
+    const da = a.orderDate || '';
+    const db = b.orderDate || '';
+    if (da !== db) return db.localeCompare(da);
+    return b.id.localeCompare(a.id);
+  });
+};
+
+const mergeRecentIntoOperationalList = (prev: Order[], recent: Order[]): Order[] => {
+  const recentIds = new Set(recent.map((o) => o.id));
+  const rest = prev.filter((o) => !recentIds.has(o.id));
+  return mergeOperationalOrders(recent, rest);
+};
 
 export interface UseOrdersOptions {
   /** Usar histórico completo (Economía o búsqueda en toda la base). */
@@ -114,6 +139,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
   const bumpInvalidation = useCallback(() => {
     clearEconomiaOrdersCache();
+    clearOperationalOrdersCache();
   }, []);
 
   const applyOrdersState = useCallback((scope: 'operational' | 'full', data: Order[]) => {
@@ -139,9 +165,36 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         if (!silent && scope === 'operational') setLoading(true);
         if (!silent && scope === 'full') setLoadingFullCatalog(true);
         setError(null);
-        const data = await ordersService.getOrders({ scope });
-        if (gen !== fetchGenerationRef.current) return;
-        applyOrdersState(scope, data);
+        if (scope === 'operational') {
+          const recent = await ordersService.getOrdersRecentOperational();
+          if (gen !== fetchGenerationRef.current) return;
+          startTransition(() => {
+            setOperationalOrders((prev) => {
+              const merged = mergeRecentIntoOperationalList(prev, recent);
+              writeOperationalOrdersCache(merged);
+              return merged;
+            });
+          });
+          void (async () => {
+            try {
+              const older = await ordersService.getOrdersOlderOpenOperational(recent);
+              if (gen !== fetchGenerationRef.current || !older.length) return;
+              startTransition(() => {
+                setOperationalOrders((prev) => {
+                  const merged = mergeOperationalOrders(prev, older);
+                  writeOperationalOrdersCache(merged);
+                  return merged;
+                });
+              });
+            } catch (e) {
+              console.warn('[orders] Refresh pedidos viejos abiertos:', e);
+            }
+          })();
+        } else {
+          const data = await ordersService.getOrders({ scope });
+          if (gen !== fetchGenerationRef.current) return;
+          applyOrdersState(scope, data);
+        }
       } catch (err) {
         if (gen !== fetchGenerationRef.current) return;
         setError(err instanceof Error ? err : new Error('Error al cargar órdenes'));
@@ -188,8 +241,54 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, [bumpInvalidation, fetchOrders]);
 
   useEffect(() => {
-    void fetchOrders({ scope: 'operational' });
-  }, [fetchOrders]);
+    let cancelled = false;
+
+    const loadOperational = async () => {
+      const cached = readOperationalOrdersCache();
+      if (cached?.length && !cancelled) {
+        setOperationalOrders(cached);
+        setLoading(false);
+      }
+
+      try {
+        const recent = await ordersService.getOrdersRecentOperational();
+        if (cancelled) return;
+        startTransition(() => {
+          setOperationalOrders((prev) => {
+            const merged = mergeRecentIntoOperationalList(prev, recent);
+            writeOperationalOrdersCache(merged);
+            return merged;
+          });
+        });
+        setLoading(false);
+
+        void (async () => {
+          try {
+            const older = await ordersService.getOrdersOlderOpenOperational(recent);
+            if (cancelled || !older.length) return;
+            startTransition(() => {
+              setOperationalOrders((prev) => {
+                const merged = mergeOperationalOrders(prev, older);
+                writeOperationalOrdersCache(merged);
+                return merged;
+              });
+            });
+          } catch (e) {
+            console.warn('[orders] No se pudieron cargar pedidos viejos abiertos:', e);
+          }
+        })();
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err : new Error('Error al cargar órdenes'));
+        setLoading(false);
+      }
+    };
+
+    void loadOperational();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const channel = supabase
