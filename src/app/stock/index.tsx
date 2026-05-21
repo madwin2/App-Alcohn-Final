@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Toaster } from '@/components/ui/toaster';
@@ -107,10 +107,7 @@ export default function StockPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col ml-20">
+    <AppMain className="flex flex-col">
         <div className="border-b bg-background p-6">
           <h1 className="text-2xl font-semibold">Stock</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -218,8 +215,7 @@ export default function StockPage() {
             </div>
           </div>
         </div>
-      </div>
       <Toaster />
-    </div>
+    </AppMain>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -215,19 +215,14 @@ export default function PreciosPage() {
 
   if (loading || !state) {
     return (
-      <div className="min-h-screen bg-background">
-        <Sidebar />
-        <div className="ml-20 flex min-h-screen flex-1 flex-col p-8">
-          <p className="text-muted-foreground">Cargando datos…</p>
-        </div>
-      </div>
+      <AppMain className="flex flex-col p-8">
+        <p className="text-muted-foreground">Cargando datos…</p>
+      </AppMain>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
-      <div className="ml-20 flex min-h-screen flex-1 flex-col">
+    <AppMain className="flex min-h-screen flex-col">
         <div className="w-full max-w-6xl flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
           <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -464,8 +459,7 @@ export default function PreciosPage() {
             </Card>
           </div>
         </div>
-      </div>
       <Toaster />
-    </div>
+    </AppMain>
   );
 }

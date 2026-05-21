@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Toaster } from '@/components/ui/toaster';
@@ -1200,10 +1200,7 @@ export default function EnviosPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col ml-20">
+    <AppMain className="flex flex-col">
         <div className="border-b bg-background p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -1321,7 +1318,6 @@ export default function EnviosPage() {
             </>
           )}
         </div>
-      </div>
 
       <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && closeShippingDialog()}>
         <DialogContent className="max-w-3xl">
@@ -1706,6 +1702,6 @@ export default function EnviosPage() {
       </Dialog>
 
       <Toaster />
-    </div>
+    </AppMain>
   );
 }

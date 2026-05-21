@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { ProductionHeader } from '@/components/produccion/Header/ProductionHeader';
 import { ProductionTable } from '@/components/produccion/Table/ProductionTable';
 import { ProductionFiltersDialog } from '@/components/produccion/Filters/ProductionFiltersDialog';
@@ -37,12 +37,7 @@ export default function ProduccionPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Sidebar */}
-      <Sidebar />
-      
-      {/* Main Content - Siempre con margen fijo para que la tabla no cambie de tamaño */}
-      <div className="flex-1 flex flex-col ml-20">
+    <AppMain className="flex flex-col">
         {/* Header */}
         <div className="border-b bg-background p-6">
           {!loading && !error && (
@@ -68,7 +63,6 @@ export default function ProduccionPage() {
             <ProductionTable items={items} onUpdateItem={updateItem} onRefreshItems={fetchItems} />
           )}
         </div>
-      </div>
 
       {/* Dialogs */}
       <ProductionFiltersDialog
@@ -84,6 +78,6 @@ export default function ProduccionPage() {
 
       {/* Toast notifications */}
       <Toaster />
-    </div>
+    </AppMain>
   );
 }

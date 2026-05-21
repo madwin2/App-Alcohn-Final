@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  startTransition,
   type ReactNode,
 } from 'react';
 import { Order, NewOrderFormData, OrderItem } from '@/lib/types/index';
@@ -52,14 +53,29 @@ const applyOptimisticPatch = (order: Order, updates: Partial<Order>): Order => {
   return nextOrder;
 };
 
+const patchOrderList = (
+  list: Order[],
+  orderId: string,
+  patch: Partial<Order> | ((order: Order) => Order),
+): Order[] =>
+  list.map((order) => {
+    if (order.id !== orderId) return order;
+    return typeof patch === 'function' ? patch(order) : applyOptimisticPatch(order, patch);
+  });
+
 export interface UseOrdersOptions {
-  /** @deprecated El provider gestiona realtime globalmente. */
+  /** Usar histórico completo (Economía o búsqueda en toda la base). */
+  useFullCatalog?: boolean;
   enableRealtime?: boolean;
-  /** @deprecated El provider gestiona polling globalmente. */
   enablePolling?: boolean;
 }
 
-export interface OrdersContextValue {
+interface OrdersContextValue {
+  /** Lista operativa (rápida): recientes + abiertos. */
+  operationalOrders: Order[];
+  /** Histórico completo; solo se llena bajo demanda. */
+  fullOrders: Order[] | null;
+  /** Alias de operationalOrders o fullOrders según `useFullCatalog`. */
   orders: Order[];
   loading: boolean;
   loadingFullCatalog: boolean;
@@ -80,11 +96,12 @@ export interface OrdersContextValue {
 
 const OrdersContext = createContext<OrdersContextValue | null>(null);
 
-const REALTIME_DEBOUNCE_MS = 2500;
-const POLLING_INTERVAL_MS = 60_000;
+const REALTIME_DEBOUNCE_MS = 4000;
+const POLLING_INTERVAL_MS = 90_000;
 
 export function OrdersProvider({ children }: { children: ReactNode }) {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [operationalOrders, setOperationalOrders] = useState<Order[]>([]);
+  const [fullOrders, setFullOrders] = useState<Order[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingFullCatalog, setLoadingFullCatalog] = useState(false);
   const [fullCatalogLoaded, setFullCatalogLoaded] = useState(false);
@@ -99,32 +116,44 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     clearEconomiaOrdersCache();
   }, []);
 
+  const applyOrdersState = useCallback((scope: 'operational' | 'full', data: Order[]) => {
+    startTransition(() => {
+      if (scope === 'full') {
+        setFullOrders(data);
+        fullCatalogLoadedRef.current = true;
+        setFullCatalogLoaded(true);
+        writeEconomiaOrdersCache(data);
+      } else {
+        setOperationalOrders(data);
+      }
+    });
+  }, []);
+
   const fetchOrders = useCallback(
     async (options?: { silent?: boolean; scope?: 'operational' | 'full' }) => {
       const silent = options?.silent ?? false;
-      const scope = options?.scope ?? (fullCatalogLoadedRef.current ? 'full' : 'operational');
+      const scope = options?.scope ?? 'operational';
       const gen = ++fetchGenerationRef.current;
 
       try {
-        if (!silent) setLoading(true);
+        if (!silent && scope === 'operational') setLoading(true);
+        if (!silent && scope === 'full') setLoadingFullCatalog(true);
         setError(null);
         const data = await ordersService.getOrders({ scope });
         if (gen !== fetchGenerationRef.current) return;
-        setOrders(data);
-        if (scope === 'full') {
-          fullCatalogLoadedRef.current = true;
-          setFullCatalogLoaded(true);
-          writeEconomiaOrdersCache(data);
-        }
+        applyOrdersState(scope, data);
       } catch (err) {
         if (gen !== fetchGenerationRef.current) return;
         setError(err instanceof Error ? err : new Error('Error al cargar órdenes'));
         console.error('Error fetching orders:', err);
       } finally {
-        if (gen === fetchGenerationRef.current && !silent) setLoading(false);
+        if (gen === fetchGenerationRef.current) {
+          if (!silent && scope === 'operational') setLoading(false);
+          if (!silent && scope === 'full') setLoadingFullCatalog(false);
+        }
       }
     },
-    [],
+    [applyOrdersState],
   );
 
   const ensureFullCatalog = useCallback(async () => {
@@ -134,17 +163,13 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     const run = async () => {
       const cached = readEconomiaOrdersCache();
       if (cached?.length) {
-        setOrders(cached);
-        fullCatalogLoadedRef.current = true;
-        setFullCatalogLoaded(true);
-        setLoading(false);
+        startTransition(() => {
+          setFullOrders(cached);
+          fullCatalogLoadedRef.current = true;
+          setFullCatalogLoaded(true);
+        });
       }
-      setLoadingFullCatalog(true);
-      try {
-        await fetchOrders({ scope: 'full', silent: !!cached?.length });
-      } finally {
-        setLoadingFullCatalog(false);
-      }
+      await fetchOrders({ scope: 'full', silent: !!cached?.length });
     };
 
     ensureFullInFlightRef.current = run().finally(() => {
@@ -153,15 +178,12 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     return ensureFullInFlightRef.current;
   }, [fetchOrders]);
 
-  const scheduleSilentRefresh = useCallback(() => {
+  const scheduleOperationalRefresh = useCallback(() => {
     if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
     realtimeTimerRef.current = setTimeout(() => {
       realtimeTimerRef.current = null;
       bumpInvalidation();
-      void fetchOrders({
-        silent: true,
-        scope: fullCatalogLoadedRef.current ? 'full' : 'operational',
-      });
+      void fetchOrders({ silent: true, scope: 'operational' });
     }, REALTIME_DEBOUNCE_MS);
   }, [bumpInvalidation, fetchOrders]);
 
@@ -172,23 +194,20 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const channel = supabase
       .channel('orders-realtime-global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, scheduleSilentRefresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sellos' }, scheduleSilentRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, scheduleOperationalRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sellos' }, scheduleOperationalRefresh)
       .subscribe();
 
     return () => {
       if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
       supabase.removeChannel(channel);
     };
-  }, [scheduleSilentRefresh]);
+  }, [scheduleOperationalRefresh]);
 
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        void fetchOrders({
-          silent: true,
-          scope: fullCatalogLoadedRef.current ? 'full' : 'operational',
-        });
+        void fetchOrders({ silent: true, scope: 'operational' });
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -198,19 +217,28 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const interval = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return;
-      void fetchOrders({
-        silent: true,
-        scope: fullCatalogLoadedRef.current ? 'full' : 'operational',
-      });
+      void fetchOrders({ silent: true, scope: 'operational' });
     }, POLLING_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [fetchOrders]);
+
+  const syncBothLists = useCallback(
+    (orderId: string, patch: Partial<Order> | ((order: Order) => Order)) => {
+      startTransition(() => {
+        setOperationalOrders((prev) => patchOrderList(prev, orderId, patch));
+        setFullOrders((prev) => (prev ? patchOrderList(prev, orderId, patch) : prev));
+      });
+    },
+    [],
+  );
 
   const createOrder = useCallback(
     async (formData: NewOrderFormData): Promise<Order> => {
       const newOrder = await ordersService.createOrder(formData);
       bumpInvalidation();
-      setOrders((prev) => [newOrder, ...prev]);
+      startTransition(() => {
+        setOperationalOrders((prev) => [newOrder, ...prev]);
+      });
       return newOrder;
     },
     [bumpInvalidation],
@@ -218,36 +246,47 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
   const updateOrder = useCallback(
     async (orderId: string, updates: Partial<Order>): Promise<Order> => {
-      let previousOrdersSnapshot: Order[] | null = null;
+      let previousOperational: Order[] | null = null;
+      let previousFull: Order[] | null = null;
       try {
-        setOrders((prevOrders) => {
-          previousOrdersSnapshot = prevOrders;
-          return prevOrders.map((order) =>
-            order.id === orderId ? applyOptimisticPatch(order, updates) : order,
-          );
+        startTransition(() => {
+          setOperationalOrders((prev) => {
+            previousOperational = prev;
+            return patchOrderList(prev, orderId, updates);
+          });
+          setFullOrders((prev) => {
+            if (!prev) return prev;
+            previousFull = prev;
+            return patchOrderList(prev, orderId, updates);
+          });
         });
 
         const updatedOrder = await ordersService.updateOrder(orderId, updates);
         bumpInvalidation();
-        setOrders((prevOrders) =>
-          prevOrders.map((order) => (order.id === orderId ? updatedOrder : order)),
-        );
+        syncBothLists(orderId, updatedOrder);
         return updatedOrder;
       } catch (err) {
-        if (previousOrdersSnapshot) setOrders(previousOrdersSnapshot);
+        if (previousOperational) setOperationalOrders(previousOperational);
+        if (previousFull) setFullOrders(previousFull);
         const e = err instanceof Error ? err : new Error('Error al actualizar orden');
         setError(e);
         throw e;
       }
     },
-    [bumpInvalidation],
+    [bumpInvalidation, syncBothLists],
   );
 
-  const deleteOrder = useCallback(async (orderId: string): Promise<void> => {
-    await ordersService.deleteOrder(orderId);
-    bumpInvalidation();
-    setOrders((prev) => prev.filter((order) => order.id !== orderId));
-  }, [bumpInvalidation]);
+  const deleteOrder = useCallback(
+    async (orderId: string): Promise<void> => {
+      await ordersService.deleteOrder(orderId);
+      bumpInvalidation();
+      startTransition(() => {
+        setOperationalOrders((prev) => prev.filter((order) => order.id !== orderId));
+        setFullOrders((prev) => (prev ? prev.filter((order) => order.id !== orderId) : prev));
+      });
+    },
+    [bumpInvalidation],
+  );
 
   const addStampToOrder = useCallback(
     async (
@@ -259,33 +298,32 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       bumpInvalidation();
       const updatedOrder = await ordersService.getOrderById(orderId);
       if (updatedOrder) {
-        setOrders((prev) => prev.map((order) => (order.id === orderId ? updatedOrder : order)));
+        syncBothLists(orderId, updatedOrder);
       }
       return newStamp;
     },
-    [bumpInvalidation],
+    [bumpInvalidation, syncBothLists],
   );
 
   const deleteStamp = useCallback(
     async (stampId: string): Promise<void> => {
-      const orderWithStamp = orders.find((o) => o.items.some((i) => i.id === stampId));
+      const orderWithStamp = operationalOrders.find((o) => o.items.some((i) => i.id === stampId));
       await ordersService.deleteStamp(stampId);
       bumpInvalidation();
       if (orderWithStamp) {
         const updatedOrder = await ordersService.getOrderById(orderWithStamp.id);
         if (updatedOrder) {
-          setOrders((prev) =>
-            prev.map((order) => (order.id === orderWithStamp.id ? updatedOrder : order)),
-          );
+          syncBothLists(orderWithStamp.id, updatedOrder);
         }
       }
     },
-    [bumpInvalidation, orders],
+    [bumpInvalidation, operationalOrders, syncBothLists],
   );
 
-  const value = useMemo(
-    (): OrdersContextValue => ({
-      orders,
+  const contextValue = useMemo((): OrdersContextValue => {
+    const base = {
+      operationalOrders,
+      fullOrders,
       loading,
       loadingFullCatalog,
       fullCatalogLoaded,
@@ -297,30 +335,38 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       deleteOrder,
       addStampToOrder,
       deleteStamp,
-    }),
-    [
-      orders,
-      loading,
-      loadingFullCatalog,
-      fullCatalogLoaded,
-      error,
-      fetchOrders,
-      ensureFullCatalog,
-      createOrder,
-      updateOrder,
-      deleteOrder,
-      addStampToOrder,
-      deleteStamp,
-    ],
-  );
+    };
+    return { ...base, orders: operationalOrders };
+  }, [
+    operationalOrders,
+    fullOrders,
+    loading,
+    loadingFullCatalog,
+    fullCatalogLoaded,
+    error,
+    fetchOrders,
+    ensureFullCatalog,
+    createOrder,
+    updateOrder,
+    deleteOrder,
+    addStampToOrder,
+    deleteStamp,
+  ]);
 
-  return <OrdersContext.Provider value={value}>{children}</OrdersContext.Provider>;
+  return <OrdersContext.Provider value={contextValue}>{children}</OrdersContext.Provider>;
 }
 
-export function useOrders(_options?: UseOrdersOptions): OrdersContextValue {
+export function useOrders(options?: UseOrdersOptions): OrdersContextValue {
   const ctx = useContext(OrdersContext);
   if (!ctx) {
     throw new Error('useOrders debe usarse dentro de OrdersProvider');
   }
-  return ctx;
+
+  const useFull = options?.useFullCatalog ?? false;
+  const orders =
+    useFull && ctx.fullCatalogLoaded && ctx.fullOrders
+      ? ctx.fullOrders
+      : ctx.operationalOrders;
+
+  return { ...ctx, orders };
 }

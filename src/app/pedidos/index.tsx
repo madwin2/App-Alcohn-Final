@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { OrdersHeader } from '@/components/pedidos/Header/OrdersHeader';
 import { OrdersTable } from '@/components/pedidos/Table/OrdersTable';
 import { FiltersDialog } from '@/components/pedidos/Filters/FiltersDialog';
@@ -15,7 +15,9 @@ import { FabricationState } from '@/lib/types/index';
 import { exportVentasToCsv } from '@/lib/utils/exportVentas';
 
 export default function PedidosPage() {
-  const { orders, loading, error, createOrder, updateOrder, deleteOrder, addStampToOrder, deleteStamp, fetchOrders } = useOrders();
+  const searchAcrossDatabase = useOrdersStore((s) => s.searchAcrossDatabase);
+  const { orders, loading, error, createOrder, updateOrder, deleteOrder, addStampToOrder, deleteStamp, fetchOrders } =
+    useOrders({ useFullCatalog: searchAcrossDatabase });
   const [showFilters, setShowFilters] = useState(false);
   const [showSorter, setShowSorter] = useState(false);
   const [showNewOrder, setShowNewOrder] = useState(false);
@@ -54,12 +56,7 @@ export default function PedidosPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Sidebar */}
-      <Sidebar />
-      
-      {/* Main Content - Siempre con margen fijo para que la tabla no cambie de tamaño */}
-      <div className="flex-1 flex flex-col ml-20">
+    <AppMain>
         {/* Header */}
         <div className="border-b bg-background p-6">
           {!loading && !error && (
@@ -101,7 +98,6 @@ export default function PedidosPage() {
             />
           )}
         </div>
-      </div>
 
       {/* Dialogs */}
       <FiltersDialog
@@ -180,6 +176,6 @@ export default function PedidosPage() {
 
       {/* Toast notifications */}
       <Toaster />
-    </div>
+    </AppMain>
   );
 }

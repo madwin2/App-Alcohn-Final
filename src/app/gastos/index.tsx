@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -523,9 +523,7 @@ export default function GastosPage() {
   const paramsDisabled = paramsLoading || paramsSaving;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
-      <div className="ml-20 flex min-h-screen flex-1 flex-col">
+    <AppMain className="flex min-h-screen flex-col">
         <div className="w-full max-w-[1920px] flex-1 space-y-8 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
           <header className="flex flex-col gap-1 border-b border-border pb-4 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
             <h1 className="text-3xl font-semibold tracking-tight">Gastos</h1>
@@ -1023,7 +1021,6 @@ export default function GastosPage() {
           </Card>
       </div>
       <Toaster />
-    </div>
-    </div>
+    </AppMain>
   );
 }

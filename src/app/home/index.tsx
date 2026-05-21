@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { Package } from 'lucide-react';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -465,10 +465,8 @@ export default function HomePage() {
   const dailyProgress = DAILY_GOAL > 0 ? Math.min((dailyItems / DAILY_GOAL) * 100, 100) : 0;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
-
-      <main className="ml-20 relative h-screen overflow-hidden">
+    <AppMain className="relative h-screen overflow-hidden p-0">
+      <main className="relative h-screen overflow-hidden">
         {/* HERO siempre visible: top bar + 3 columnas (Stock | Personaje | Espacio).
             No hay scroll de página: cada gesto de scroll dispara una tanda. */}
         <section className="absolute inset-0 flex flex-col px-8 pt-8 pb-0 overflow-hidden">
@@ -966,7 +964,7 @@ export default function HomePage() {
       </main>
 
       <Toaster />
-    </div>
+    </AppMain>
   );
 }
 

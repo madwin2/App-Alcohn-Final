@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Search, X } from 'lucide-react';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Toaster } from '@/components/ui/toaster';
@@ -389,9 +389,8 @@ export default function MockupsPage() {
   }, [tanda, historyPage, totalPages]);
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-transparent">
-      <Sidebar />
-      <main className="relative ml-20 flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-transparent px-4 py-3 sm:px-6 sm:py-4 max-w-[1920px]">
+    <AppMain className="flex h-dvh min-h-0 flex-col overflow-hidden bg-transparent p-0">
+      <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-transparent px-4 py-3 sm:px-6 sm:py-4 max-w-[1920px]">
         <div className="relative z-10 flex min-h-0 flex-1 flex-col bg-transparent">
           <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 pb-3">
             <div className="min-w-0 space-y-0.5 rounded-lg bg-black/25 px-1 py-0.5 backdrop-blur-md sm:bg-black/20">
@@ -612,6 +611,6 @@ export default function MockupsPage() {
         </div>
       </main>
       <Toaster />
-    </div>
+    </AppMain>
   );
 }

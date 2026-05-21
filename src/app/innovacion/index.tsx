@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
 import { Toaster } from '@/components/ui/toaster';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
@@ -250,8 +249,7 @@ export default function InnovacionPage() {
 
   return (
     <InnovacionPageLayout>
-      <Sidebar />
-      <main className="ml-20 flex min-h-screen flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="flex min-h-screen flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 ml-0">
         <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6">
           <InnovationHeader
             onOpenArea={() => setAreaModalOpen(true)}

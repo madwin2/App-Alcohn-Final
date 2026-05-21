@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { 
   Home, 
   ShoppingCart, 
@@ -40,7 +41,7 @@ const sidebarItems = [
   { icon: MessageCircle, label: 'WhatsApp Bot', path: '/whatsapp', disabled: true },
 ];
 
-export function Sidebar() {
+function SidebarInner() {
   const { sidebarExpanded, sidebarHovered, setSidebarExpanded, setSidebarHovered } = useOrdersStore();
   const { user, signOut } = useAuth();
   const { toast } = useToast();
@@ -203,3 +204,5 @@ export function Sidebar() {
     </div>
   );
 }
+
+export const Sidebar = memo(SidebarInner);

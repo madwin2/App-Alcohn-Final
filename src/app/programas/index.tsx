@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { ProgramsHeader } from '@/components/programas/Header/ProgramsHeader';
 import { ProgramsGrid } from '@/components/programas/Grid/ProgramsGrid';
 import { NewProgramDialog } from '@/components/programas/NewProgram/NewProgramDialog';
@@ -15,12 +15,7 @@ export default function ProgramasPage() {
   const { showFilters, showSorter, setShowFilters, setShowSorter } = useProgramsStore();
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Sidebar */}
-      <Sidebar />
-      
-      {/* Main Content - Siempre con margen fijo para que el contenido no cambie de tamaño */}
-      <div className="flex-1 flex flex-col ml-20">
+    <AppMain className="flex flex-col">
         {/* Header */}
         <div className="border-b bg-background p-6">
           <ProgramsHeader
@@ -44,7 +39,6 @@ export default function ProgramasPage() {
             <ProgramsGrid programs={programs} />
           )}
         </div>
-      </div>
 
       {/* Dialogs */}
       <NewProgramDialog
@@ -62,6 +56,6 @@ export default function ProgramasPage() {
 
       {/* Toast notifications */}
       <Toaster />
-    </div>
+    </AppMain>
   );
 }

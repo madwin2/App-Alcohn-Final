@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Sidebar } from '@/components/pedidos/Sidebar/Sidebar';
+import { AppMain } from '@/components/layout/AppMain';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { parseOrderDateLocal } from '@/lib/utils/format';
@@ -248,7 +248,9 @@ function PendingPieChart({
 
 export default function EconomiaPage() {
   const { user, loading: authLoading } = useAuth();
-  const { orders, loading, ensureFullCatalog } = useOrders();
+  const { orders, loading, loadingFullCatalog, fullCatalogLoaded, ensureFullCatalog } = useOrders({
+    useFullCatalog: true,
+  });
   const { toast } = useToast();
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
@@ -642,7 +644,7 @@ export default function EconomiaPage() {
     [pendingBreakdown],
   );
 
-  if (authLoading || (loading && !orders.length)) {
+  if (authLoading || ((loading || loadingFullCatalog) && !fullCatalogLoaded)) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   }
 
@@ -684,9 +686,7 @@ export default function EconomiaPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
-      <div className="ml-20 flex min-h-screen flex-1 flex-col">
+    <AppMain className="flex min-h-screen flex-col">
         <div className="w-full max-w-[1920px] flex-1 flex flex-col gap-6 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
           <Card>
             <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -1311,8 +1311,7 @@ export default function EconomiaPage() {
             </TabsContent>
           </Tabs>
         </div>
-      </div>
       <Toaster />
-    </div>
+    </AppMain>
   );
 }
