@@ -192,7 +192,6 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
   useEffect(() => {
     if (open) {
       setMeasureInput('');
-      setMeasureTick(0);
       setValue('requestedWidthMm', 1);
       setValue('requestedHeightMm', 1);
     }
@@ -271,7 +270,6 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
       reset();
       setFiles({});
       setMeasureInput('');
-      setMeasureTick(0);
       onOpenChange(false);
     } catch (error) {
       console.error('Error adding stamp:', error);
