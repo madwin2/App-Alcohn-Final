@@ -17,11 +17,6 @@ import {
   readEconomiaOrdersCache,
   writeEconomiaOrdersCache,
 } from '@/lib/economia/economiaOrdersCache';
-import {
-  clearOperationalOrdersCache,
-  readOperationalOrdersCache,
-  scheduleOperationalOrdersCacheWrite,
-} from '@/lib/orders/operationalOrdersCache';
 
 const applyOptimisticPatch = (order: Order, updates: Partial<Order>): Order => {
   let nextOrder = { ...order };
@@ -68,53 +63,27 @@ const patchOrderList = (
     return typeof patch === 'function' ? patch(order) : applyOptimisticPatch(order, patch);
   });
 
-const mergeOperationalOrders = (base: Order[], extra: Order[]): Order[] => {
-  if (!extra.length) return base;
-  const byId = new Map(base.map((o) => [o.id, o]));
-  for (const o of extra) {
-    if (!byId.has(o.id)) byId.set(o.id, o);
-  }
-  return [...byId.values()].sort((a, b) => {
-    const da = a.orderDate || '';
-    const db = b.orderDate || '';
-    if (da !== db) return db.localeCompare(da);
-    return b.id.localeCompare(a.id);
-  });
-};
-
-const mergeRecentIntoOperationalList = (prev: Order[], recent: Order[]): Order[] => {
-  const recentIds = new Set(recent.map((o) => o.id));
-  const rest = prev.filter((o) => !recentIds.has(o.id));
-  return mergeOperationalOrders(recent, rest);
-};
-
-const commitOperationalList = (_prev: Order[], next: Order[], cacheComplete = false): Order[] => {
-  scheduleOperationalOrdersCacheWrite(next, { complete: cacheComplete });
-  return next;
-};
-
-const OLDER_OPEN_DEFER_MS = 3_000;
-const MIN_REFRESH_GAP_MS = 60_000;
-
 export interface UseOrdersOptions {
-  /** Usar histórico completo (Economía o búsqueda en toda la base). */
   useFullCatalog?: boolean;
-  enableRealtime?: boolean;
-  enablePolling?: boolean;
 }
 
-interface OrdersContextValue {
-  /** Lista operativa (rápida): recientes + abiertos. */
+interface OrdersStateContextValue {
   operationalOrders: Order[];
-  /** Histórico completo; solo se llena bajo demanda. */
   fullOrders: Order[] | null;
-  /** Alias de operationalOrders o fullOrders según `useFullCatalog`. */
   orders: Order[];
   loading: boolean;
   loadingFullCatalog: boolean;
   fullCatalogLoaded: boolean;
   error: Error | null;
-  fetchOrders: (options?: { silent?: boolean; scope?: 'operational' | 'full' }) => Promise<void>;
+}
+
+interface OrdersActionsContextValue {
+  fetchOrders: (options?: {
+    silent?: boolean;
+    scope?: 'operational' | 'full';
+    /** Incluye pedidos viejos abiertos (más lento). Por defecto false. */
+    includeOlderOpen?: boolean;
+  }) => Promise<void>;
   ensureFullCatalog: () => Promise<void>;
   createOrder: (formData: NewOrderFormData) => Promise<Order>;
   updateOrder: (orderId: string, updates: Partial<Order>) => Promise<Order>;
@@ -127,10 +96,12 @@ interface OrdersContextValue {
   deleteStamp: (stampId: string) => Promise<void>;
 }
 
-const OrdersContext = createContext<OrdersContextValue | null>(null);
+export type OrdersContextValue = OrdersStateContextValue & OrdersActionsContextValue;
 
-const REALTIME_DEBOUNCE_MS = 8_000;
-const POLLING_INTERVAL_MS = 120_000;
+const OrdersStateContext = createContext<OrdersStateContextValue | null>(null);
+const OrdersActionsContext = createContext<OrdersActionsContextValue | null>(null);
+
+const REALTIME_DEBOUNCE_MS = 15_000;
 
 export function OrdersProvider({ children }: { children: ReactNode }) {
   const [operationalOrders, setOperationalOrders] = useState<Order[]>([]);
@@ -144,40 +115,15 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   const fetchGenerationRef = useRef(0);
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ensureFullInFlightRef = useRef<Promise<void> | null>(null);
-  const olderOpenLoadedRef = useRef(false);
-  const lastOperationalFetchAtRef = useRef(0);
+  const operationalOrdersRef = useRef<Order[]>([]);
 
-  const bumpInvalidation = useCallback(() => {
-    clearEconomiaOrdersCache();
-    clearOperationalOrdersCache();
-    olderOpenLoadedRef.current = false;
-  }, []);
+  useEffect(() => {
+    operationalOrdersRef.current = operationalOrders;
+  }, [operationalOrders]);
 
-  const bumpEconomiaCacheOnly = useCallback(() => {
+  const bumpEconomiaCache = useCallback(() => {
     clearEconomiaOrdersCache();
   }, []);
-
-  const mergeOlderOpenInBackground = useCallback(
-    (recent: Order[], gen: number, cancelled?: () => boolean) => {
-      if (olderOpenLoadedRef.current) return;
-      const run = async () => {
-        try {
-          const older = await ordersService.getOrdersOlderOpenOperational(recent);
-          if (cancelled?.() || gen !== fetchGenerationRef.current || !older.length) return;
-          olderOpenLoadedRef.current = true;
-          startTransition(() => {
-            setOperationalOrders((prev) =>
-              commitOperationalList(prev, mergeOperationalOrders(prev, older), true),
-            );
-          });
-        } catch (e) {
-          console.warn('[orders] Pedidos viejos abiertos:', e);
-        }
-      };
-      void run();
-    },
-    [],
-  );
 
   const applyOrdersState = useCallback((scope: 'operational' | 'full', data: Order[]) => {
     startTransition(() => {
@@ -193,7 +139,11 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const fetchOrders = useCallback(
-    async (options?: { silent?: boolean; scope?: 'operational' | 'full' }) => {
+    async (options?: {
+      silent?: boolean;
+      scope?: 'operational' | 'full';
+      includeOlderOpen?: boolean;
+    }) => {
       const silent = options?.silent ?? false;
       const scope = options?.scope ?? 'operational';
       const gen = ++fetchGenerationRef.current;
@@ -202,25 +152,13 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         if (!silent && scope === 'operational') setLoading(true);
         if (!silent && scope === 'full') setLoadingFullCatalog(true);
         setError(null);
-        if (scope === 'operational') {
-          const recent = await ordersService.getOrdersRecentOperational();
-          if (gen !== fetchGenerationRef.current) return;
-          lastOperationalFetchAtRef.current = Date.now();
-          startTransition(() => {
-            setOperationalOrders((prev) =>
-              commitOperationalList(prev, mergeRecentIntoOperationalList(prev, recent)),
-            );
-          });
-          if (!olderOpenLoadedRef.current) {
-            window.setTimeout(() => {
-              if (gen === fetchGenerationRef.current) mergeOlderOpenInBackground(recent, gen);
-            }, OLDER_OPEN_DEFER_MS);
-          }
-        } else {
-          const data = await ordersService.getOrders({ scope });
-          if (gen !== fetchGenerationRef.current) return;
-          applyOrdersState(scope, data);
-        }
+
+        const data = await ordersService.getOrders({
+          scope,
+          recentOnly: scope === 'operational' && !options?.includeOlderOpen,
+        });
+        if (gen !== fetchGenerationRef.current) return;
+        applyOrdersState(scope, data);
       } catch (err) {
         if (gen !== fetchGenerationRef.current) return;
         setError(err instanceof Error ? err : new Error('Error al cargar órdenes'));
@@ -232,7 +170,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [applyOrdersState, mergeOlderOpenInBackground],
+    [applyOrdersState],
   );
 
   const ensureFullCatalog = useCallback(async () => {
@@ -261,48 +199,14 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
     realtimeTimerRef.current = setTimeout(() => {
       realtimeTimerRef.current = null;
-      bumpEconomiaCacheOnly();
+      bumpEconomiaCache();
       void fetchOrders({ silent: true, scope: 'operational' });
     }, REALTIME_DEBOUNCE_MS);
-  }, [bumpEconomiaCacheOnly, fetchOrders]);
+  }, [bumpEconomiaCache, fetchOrders]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadOperational = async () => {
-      const cached = readOperationalOrdersCache();
-      if (cached?.orders.length && !cancelled) {
-        setOperationalOrders(cached.orders);
-        if (cached.complete) olderOpenLoadedRef.current = true;
-        setLoading(false);
-      }
-
-      try {
-        const recent = await ordersService.getOrdersRecentOperational();
-        if (cancelled) return;
-        lastOperationalFetchAtRef.current = Date.now();
-        startTransition(() => {
-          setOperationalOrders((prev) =>
-            commitOperationalList(prev, mergeRecentIntoOperationalList(prev, recent)),
-          );
-        });
-        setLoading(false);
-
-        window.setTimeout(() => {
-          if (!cancelled) mergeOlderOpenInBackground(recent, fetchGenerationRef.current, () => cancelled);
-        }, OLDER_OPEN_DEFER_MS);
-      } catch (err) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err : new Error('Error al cargar órdenes'));
-        setLoading(false);
-      }
-    };
-
-    void loadOperational();
-    return () => {
-      cancelled = true;
-    };
-  }, [mergeOlderOpenInBackground]);
+    void fetchOrders({ scope: 'operational' });
+  }, [fetchOrders]);
 
   useEffect(() => {
     const channel = supabase
@@ -315,24 +219,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       supabase.removeChannel(channel);
     };
   }, [scheduleOperationalRefresh]);
-
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (Date.now() - lastOperationalFetchAtRef.current < MIN_REFRESH_GAP_MS) return;
-      void fetchOrders({ silent: true, scope: 'operational' });
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [fetchOrders]);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      void fetchOrders({ silent: true, scope: 'operational' });
-    }, POLLING_INTERVAL_MS);
-    return () => window.clearInterval(interval);
-  }, [fetchOrders]);
 
   const syncBothLists = useCallback(
     (orderId: string, patch: Partial<Order> | ((order: Order) => Order)) => {
@@ -347,13 +233,13 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   const createOrder = useCallback(
     async (formData: NewOrderFormData): Promise<Order> => {
       const newOrder = await ordersService.createOrder(formData);
-      bumpInvalidation();
+      bumpEconomiaCache();
       startTransition(() => {
         setOperationalOrders((prev) => [newOrder, ...prev]);
       });
       return newOrder;
     },
-    [bumpInvalidation],
+    [bumpEconomiaCache],
   );
 
   const updateOrder = useCallback(
@@ -374,7 +260,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         });
 
         const updatedOrder = await ordersService.updateOrder(orderId, updates);
-        bumpInvalidation();
+        bumpEconomiaCache();
         syncBothLists(orderId, updatedOrder);
         return updatedOrder;
       } catch (err) {
@@ -385,19 +271,19 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         throw e;
       }
     },
-    [bumpInvalidation, syncBothLists],
+    [bumpEconomiaCache, syncBothLists],
   );
 
   const deleteOrder = useCallback(
     async (orderId: string): Promise<void> => {
       await ordersService.deleteOrder(orderId);
-      bumpInvalidation();
+      bumpEconomiaCache();
       startTransition(() => {
         setOperationalOrders((prev) => prev.filter((order) => order.id !== orderId));
         setFullOrders((prev) => (prev ? prev.filter((order) => order.id !== orderId) : prev));
       });
     },
-    [bumpInvalidation],
+    [bumpEconomiaCache],
   );
 
   const addStampToOrder = useCallback(
@@ -407,21 +293,23 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       files?: { base?: File; vector?: File; photo?: File },
     ) => {
       const newStamp = await ordersService.addStampToOrder(orderId, item, files);
-      bumpInvalidation();
+      bumpEconomiaCache();
       const updatedOrder = await ordersService.getOrderById(orderId);
       if (updatedOrder) {
         syncBothLists(orderId, updatedOrder);
       }
       return newStamp;
     },
-    [bumpInvalidation, syncBothLists],
+    [bumpEconomiaCache, syncBothLists],
   );
 
   const deleteStamp = useCallback(
     async (stampId: string): Promise<void> => {
-      const orderWithStamp = operationalOrders.find((o) => o.items.some((i) => i.id === stampId));
+      const orderWithStamp = operationalOrdersRef.current.find((o) =>
+        o.items.some((i) => i.id === stampId),
+      );
       await ordersService.deleteStamp(stampId);
-      bumpInvalidation();
+      bumpEconomiaCache();
       if (orderWithStamp) {
         const updatedOrder = await ordersService.getOrderById(orderWithStamp.id);
         if (updatedOrder) {
@@ -429,17 +317,24 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [bumpInvalidation, operationalOrders, syncBothLists],
+    [bumpEconomiaCache, syncBothLists],
   );
 
-  const contextValue = useMemo((): OrdersContextValue => {
-    const base = {
+  const stateValue = useMemo(
+    (): OrdersStateContextValue => ({
       operationalOrders,
       fullOrders,
+      orders: operationalOrders,
       loading,
       loadingFullCatalog,
       fullCatalogLoaded,
       error,
+    }),
+    [operationalOrders, fullOrders, loading, loadingFullCatalog, fullCatalogLoaded, error],
+  );
+
+  const actionsValue = useMemo(
+    (): OrdersActionsContextValue => ({
       fetchOrders,
       ensureFullCatalog,
       createOrder,
@@ -447,38 +342,45 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       deleteOrder,
       addStampToOrder,
       deleteStamp,
-    };
-    return { ...base, orders: operationalOrders };
-  }, [
-    operationalOrders,
-    fullOrders,
-    loading,
-    loadingFullCatalog,
-    fullCatalogLoaded,
-    error,
-    fetchOrders,
-    ensureFullCatalog,
-    createOrder,
-    updateOrder,
-    deleteOrder,
-    addStampToOrder,
-    deleteStamp,
-  ]);
+    }),
+    [
+      fetchOrders,
+      ensureFullCatalog,
+      createOrder,
+      updateOrder,
+      deleteOrder,
+      addStampToOrder,
+      deleteStamp,
+    ],
+  );
 
-  return <OrdersContext.Provider value={contextValue}>{children}</OrdersContext.Provider>;
+  return (
+    <OrdersActionsContext.Provider value={actionsValue}>
+      <OrdersStateContext.Provider value={stateValue}>{children}</OrdersStateContext.Provider>
+    </OrdersActionsContext.Provider>
+  );
+}
+
+export function useOrdersState(): OrdersStateContextValue {
+  const ctx = useContext(OrdersStateContext);
+  if (!ctx) throw new Error('useOrdersState debe usarse dentro de OrdersProvider');
+  return ctx;
+}
+
+export function useOrdersActions(): OrdersActionsContextValue {
+  const ctx = useContext(OrdersActionsContext);
+  if (!ctx) throw new Error('useOrdersActions debe usarse dentro de OrdersProvider');
+  return ctx;
 }
 
 export function useOrders(options?: UseOrdersOptions): OrdersContextValue {
-  const ctx = useContext(OrdersContext);
-  if (!ctx) {
-    throw new Error('useOrders debe usarse dentro de OrdersProvider');
-  }
-
+  const state = useOrdersState();
+  const actions = useOrdersActions();
   const useFull = options?.useFullCatalog ?? false;
   const orders =
-    useFull && ctx.fullCatalogLoaded && ctx.fullOrders
-      ? ctx.fullOrders
-      : ctx.operationalOrders;
+    useFull && state.fullCatalogLoaded && state.fullOrders
+      ? state.fullOrders
+      : state.operationalOrders;
 
-  return { ...ctx, orders };
+  return { ...state, ...actions, orders };
 }

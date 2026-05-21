@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { useOrders } from '@/lib/hooks/useOrders';
+import { useOrdersActions, useOrdersState } from '@/lib/hooks/useOrders';
 import { Search, Filter, ArrowUpDown, Plus, Image, Download, FileUp, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +32,8 @@ export function OrdersHeader({
   activeStates 
 }: OrdersHeaderProps) {
   const { searchQuery, setSearchQuery, searchAcrossDatabase, setSearchAcrossDatabase, filters, sort } = useOrdersStore();
-  const { ensureFullCatalog, loadingFullCatalog, fullCatalogLoaded } = useOrders();
+  const { ensureFullCatalog } = useOrdersActions();
+  const { loadingFullCatalog, fullCatalogLoaded } = useOrdersState();
 
   useEffect(() => {
     if (!searchAcrossDatabase) return;

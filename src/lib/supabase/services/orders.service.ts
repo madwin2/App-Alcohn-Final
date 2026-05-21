@@ -153,33 +153,6 @@ const fetchOlderOpenOrdenes = async (
     if (!recentIds.has(row.id)) ids.add(row.id);
   }
 
-  const { data: sellosOpen, error: sellosErr } = await supabase
-    .from('sellos')
-    .select('orden_id')
-    .or('estado_fabricacion.neq.Hecho,estado_fabricacion.is.null')
-    .limit(2000);
-  if (sellosErr) throw sellosErr;
-
-  const candidateOrdenIds = [
-    ...new Set(
-      (sellosOpen ?? [])
-        .map((s) => s.orden_id)
-        .filter((id): id is string => Boolean(id) && !recentIds.has(id)),
-    ),
-  ];
-
-  for (let i = 0; i < candidateOrdenIds.length && ids.size < maxOrders; i += ORDERS_IN_QUERY_CHUNK_SIZE) {
-    const chunk = candidateOrdenIds.slice(i, i + ORDERS_IN_QUERY_CHUNK_SIZE);
-    const { data: ordenRows, error: ordenErr } = await applyInternalOrdersVisibility(
-      supabase.from('ordenes').select('id, fecha').in('id', chunk).lt('fecha', cutoff),
-    );
-    if (ordenErr) throw ordenErr;
-    for (const row of ordenRows ?? []) {
-      ids.add(row.id);
-      if (ids.size >= maxOrders) break;
-    }
-  }
-
   if (!ids.size) return [];
   return fetchOrdenesWithClientsByIds([...ids]);
 };
@@ -300,7 +273,7 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
 
 export interface GetOrdersOptions {
   scope?: GetOrdersScope;
-  /** Solo últimos 6 meses (rápido). Por defecto en operativa: false = incluye viejos abiertos. */
+  /** Solo últimos 6 meses. Por defecto true en operativa (un solo pase, sin carga extra). */
   recentOnly?: boolean;
 }
 
@@ -364,8 +337,9 @@ export const getOrders = async (options?: GetOrdersOptions): Promise<Order[]> =>
       return buildOrdersFromOrdenes(ordenes);
     }
 
+    const recentOnly = options?.recentOnly !== false;
     const recent = await getOrdersRecentOperational();
-    if (options?.recentOnly) return recent;
+    if (recentOnly) return recent;
 
     const older = await getOrdersOlderOpenOperational(recent);
     return mergeOrdersById(recent, older);

@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useState, useCallback, useRef, useDeferredValue } from 'react';
 import { Package } from 'lucide-react';
 import { AppMain } from '@/components/layout/AppMain';
-import { useOrders } from '@/lib/hooks/useOrders';
+import { useOrdersState } from '@/lib/hooks/useOrders';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -130,8 +130,8 @@ function groupStampsByOrder(stamps: StampWithOrder[]): OrderWithItems[] {
 
 export default function HomePage() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
-  const { orders } = useOrders();
-  const deferredOrders = useDeferredValue(orders);
+  const { operationalOrders } = useOrdersState();
+  const deferredOrders = useDeferredValue(operationalOrders);
 
   const userName =
     user?.user_metadata?.nombre
