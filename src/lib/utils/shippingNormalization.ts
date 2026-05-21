@@ -140,11 +140,22 @@ export const canonicalizeProvince = (value: string): string => {
   return '';
 };
 
+const collapseLocalityWhitespace = (value: string, trimEnds: boolean): string => {
+  let cleaned = value.replace(/[.,;:_-]+/g, ' ').replace(/\s+/g, ' ');
+  if (trimEnds) {
+    cleaned = cleaned.trim();
+  } else {
+    cleaned = cleaned.replace(/^\s+/, '');
+  }
+  return cleaned;
+};
+
+/** Mientras se escribe: no recorta espacios al final (permite "La " → "Plata"). */
+export const normalizeLocalityWhileTyping = (value: string): string =>
+  collapseLocalityWhitespace(value, false);
+
 export const normalizeLocality = (value: string): string => {
-  let cleaned = value
-    .replace(/[.,;:_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const cleaned = collapseLocalityWhitespace(value, true);
   if (!cleaned) return '';
 
   const parts = cleaned.split(' ').map((word) => {

@@ -49,6 +49,7 @@ import {
   canonicalizeProvince,
   normalizeLocality,
   normalizeLocalityForCorreo,
+  normalizeLocalityWhileTyping,
   normalizePhoneDigits,
   normalizePhoneDigitsForEnvios,
 } from '@/lib/utils/shippingNormalization';
@@ -1461,7 +1462,16 @@ export default function EnviosPage() {
                       onChange={(event) =>
                         setShippingForm((prev) => ({
                           ...prev,
-                          locality: normalizeLocality(event.target.value),
+                          locality: normalizeLocalityWhileTyping(event.target.value),
+                        }))
+                      }
+                      onBlur={(event) =>
+                        setShippingForm((prev) => ({
+                          ...prev,
+                          locality: normalizeLocalityForCorreo(
+                            canonicalizeProvince(prev.province) || prev.province,
+                            event.target.value,
+                          ),
                         }))
                       }
                     />
