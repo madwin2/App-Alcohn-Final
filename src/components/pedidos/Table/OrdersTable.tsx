@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useDeferredValue, memo } from 'react';
+import { useMemo, useState, useEffect, useDeferredValue, memo, Fragment, createElement } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -528,7 +528,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                             >
                               {typeof column.cell === 'function' 
                                 ? column.cell({ row: mockRow } as any) 
-                                : column.cell ? React.createElement(column.cell as any, { row: mockRow } as any) : null}
+                                : column.cell ? createElement(column.cell as any, { row: mockRow } as any) : null}
                           </td>
                         );
                         });
@@ -554,7 +554,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
               
               // Si tiene múltiples items, mostrar fila expandible
               return (
-                <React.Fragment key={order.id}>
+                <Fragment key={order.id}>
                   {/* Fila resumen con animación mejorada */}
                   <tr className={`border-b hover:bg-primary/5 transition-colors duration-150 cursor-pointer group ${isExpandedState ? 'summary-row-expanded' : ''} ${isCollapsing(order.id) ? 'summary-row-collapsing' : ''} ${isExpanding(order.id) ? 'summary-row-expanding' : ''}`}>
                     {(() => {
@@ -590,7 +590,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                           {/* Usar el mismo componente de celda que las filas individuales */}
                           {typeof column.cell === 'function' 
                             ? column.cell({ row: mockRow } as any) 
-                            : column.cell ? React.createElement(column.cell as any, { row: mockRow } as any) : null}
+                            : column.cell ? createElement(column.cell as any, { row: mockRow } as any) : null}
                         </td>
                       );
                       });
@@ -652,7 +652,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                                   // Mostrar contenido normal para otras columnas
                                   typeof column.cell === 'function' 
                                     ? column.cell({ row: mockRow } as any) 
-                                    : column.cell ? React.createElement(column.cell as any, { row: mockRow } as any) : null
+                                    : column.cell ? createElement(column.cell as any, { row: mockRow } as any) : null
                                 )}
                               </td>
                             );
@@ -695,7 +695,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                       </ContextMenuContent>
                     </ContextMenu>
                   ))}
-                </React.Fragment>
+                </Fragment>
               );
             })}
           </tbody>
