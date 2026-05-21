@@ -157,7 +157,7 @@ const fetchOlderOpenOrdenes = async (
     .from('sellos')
     .select('orden_id')
     .or('estado_fabricacion.neq.Hecho,estado_fabricacion.is.null')
-    .limit(5000);
+    .limit(2000);
   if (sellosErr) throw sellosErr;
 
   const candidateOrdenIds = [

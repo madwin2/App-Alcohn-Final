@@ -20,7 +20,7 @@ import {
 import {
   clearOperationalOrdersCache,
   readOperationalOrdersCache,
-  writeOperationalOrdersCache,
+  scheduleOperationalOrdersCacheWrite,
 } from '@/lib/orders/operationalOrdersCache';
 
 const applyOptimisticPatch = (order: Order, updates: Partial<Order>): Order => {
@@ -88,6 +88,14 @@ const mergeRecentIntoOperationalList = (prev: Order[], recent: Order[]): Order[]
   return mergeOperationalOrders(recent, rest);
 };
 
+const commitOperationalList = (_prev: Order[], next: Order[], cacheComplete = false): Order[] => {
+  scheduleOperationalOrdersCacheWrite(next, { complete: cacheComplete });
+  return next;
+};
+
+const OLDER_OPEN_DEFER_MS = 3_000;
+const MIN_REFRESH_GAP_MS = 60_000;
+
 export interface UseOrdersOptions {
   /** Usar histórico completo (Economía o búsqueda en toda la base). */
   useFullCatalog?: boolean;
@@ -121,8 +129,8 @@ interface OrdersContextValue {
 
 const OrdersContext = createContext<OrdersContextValue | null>(null);
 
-const REALTIME_DEBOUNCE_MS = 4000;
-const POLLING_INTERVAL_MS = 90_000;
+const REALTIME_DEBOUNCE_MS = 8_000;
+const POLLING_INTERVAL_MS = 120_000;
 
 export function OrdersProvider({ children }: { children: ReactNode }) {
   const [operationalOrders, setOperationalOrders] = useState<Order[]>([]);
@@ -136,11 +144,40 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   const fetchGenerationRef = useRef(0);
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ensureFullInFlightRef = useRef<Promise<void> | null>(null);
+  const olderOpenLoadedRef = useRef(false);
+  const lastOperationalFetchAtRef = useRef(0);
 
   const bumpInvalidation = useCallback(() => {
     clearEconomiaOrdersCache();
     clearOperationalOrdersCache();
+    olderOpenLoadedRef.current = false;
   }, []);
+
+  const bumpEconomiaCacheOnly = useCallback(() => {
+    clearEconomiaOrdersCache();
+  }, []);
+
+  const mergeOlderOpenInBackground = useCallback(
+    (recent: Order[], gen: number, cancelled?: () => boolean) => {
+      if (olderOpenLoadedRef.current) return;
+      const run = async () => {
+        try {
+          const older = await ordersService.getOrdersOlderOpenOperational(recent);
+          if (cancelled?.() || gen !== fetchGenerationRef.current || !older.length) return;
+          olderOpenLoadedRef.current = true;
+          startTransition(() => {
+            setOperationalOrders((prev) =>
+              commitOperationalList(prev, mergeOperationalOrders(prev, older), true),
+            );
+          });
+        } catch (e) {
+          console.warn('[orders] Pedidos viejos abiertos:', e);
+        }
+      };
+      void run();
+    },
+    [],
+  );
 
   const applyOrdersState = useCallback((scope: 'operational' | 'full', data: Order[]) => {
     startTransition(() => {
@@ -168,28 +205,17 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         if (scope === 'operational') {
           const recent = await ordersService.getOrdersRecentOperational();
           if (gen !== fetchGenerationRef.current) return;
+          lastOperationalFetchAtRef.current = Date.now();
           startTransition(() => {
-            setOperationalOrders((prev) => {
-              const merged = mergeRecentIntoOperationalList(prev, recent);
-              writeOperationalOrdersCache(merged);
-              return merged;
-            });
+            setOperationalOrders((prev) =>
+              commitOperationalList(prev, mergeRecentIntoOperationalList(prev, recent)),
+            );
           });
-          void (async () => {
-            try {
-              const older = await ordersService.getOrdersOlderOpenOperational(recent);
-              if (gen !== fetchGenerationRef.current || !older.length) return;
-              startTransition(() => {
-                setOperationalOrders((prev) => {
-                  const merged = mergeOperationalOrders(prev, older);
-                  writeOperationalOrdersCache(merged);
-                  return merged;
-                });
-              });
-            } catch (e) {
-              console.warn('[orders] Refresh pedidos viejos abiertos:', e);
-            }
-          })();
+          if (!olderOpenLoadedRef.current) {
+            window.setTimeout(() => {
+              if (gen === fetchGenerationRef.current) mergeOlderOpenInBackground(recent, gen);
+            }, OLDER_OPEN_DEFER_MS);
+          }
         } else {
           const data = await ordersService.getOrders({ scope });
           if (gen !== fetchGenerationRef.current) return;
@@ -206,7 +232,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [applyOrdersState],
+    [applyOrdersState, mergeOlderOpenInBackground],
   );
 
   const ensureFullCatalog = useCallback(async () => {
@@ -235,48 +261,36 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
     realtimeTimerRef.current = setTimeout(() => {
       realtimeTimerRef.current = null;
-      bumpInvalidation();
+      bumpEconomiaCacheOnly();
       void fetchOrders({ silent: true, scope: 'operational' });
     }, REALTIME_DEBOUNCE_MS);
-  }, [bumpInvalidation, fetchOrders]);
+  }, [bumpEconomiaCacheOnly, fetchOrders]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadOperational = async () => {
       const cached = readOperationalOrdersCache();
-      if (cached?.length && !cancelled) {
-        setOperationalOrders(cached);
+      if (cached?.orders.length && !cancelled) {
+        setOperationalOrders(cached.orders);
+        if (cached.complete) olderOpenLoadedRef.current = true;
         setLoading(false);
       }
 
       try {
         const recent = await ordersService.getOrdersRecentOperational();
         if (cancelled) return;
+        lastOperationalFetchAtRef.current = Date.now();
         startTransition(() => {
-          setOperationalOrders((prev) => {
-            const merged = mergeRecentIntoOperationalList(prev, recent);
-            writeOperationalOrdersCache(merged);
-            return merged;
-          });
+          setOperationalOrders((prev) =>
+            commitOperationalList(prev, mergeRecentIntoOperationalList(prev, recent)),
+          );
         });
         setLoading(false);
 
-        void (async () => {
-          try {
-            const older = await ordersService.getOrdersOlderOpenOperational(recent);
-            if (cancelled || !older.length) return;
-            startTransition(() => {
-              setOperationalOrders((prev) => {
-                const merged = mergeOperationalOrders(prev, older);
-                writeOperationalOrdersCache(merged);
-                return merged;
-              });
-            });
-          } catch (e) {
-            console.warn('[orders] No se pudieron cargar pedidos viejos abiertos:', e);
-          }
-        })();
+        window.setTimeout(() => {
+          if (!cancelled) mergeOlderOpenInBackground(recent, fetchGenerationRef.current, () => cancelled);
+        }, OLDER_OPEN_DEFER_MS);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err : new Error('Error al cargar órdenes'));
@@ -288,13 +302,12 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mergeOlderOpenInBackground]);
 
   useEffect(() => {
     const channel = supabase
       .channel('orders-realtime-global')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, scheduleOperationalRefresh)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sellos' }, scheduleOperationalRefresh)
       .subscribe();
 
     return () => {
@@ -305,9 +318,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        void fetchOrders({ silent: true, scope: 'operational' });
-      }
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastOperationalFetchAtRef.current < MIN_REFRESH_GAP_MS) return;
+      void fetchOrders({ silent: true, scope: 'operational' });
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);

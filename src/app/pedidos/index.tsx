@@ -1,5 +1,4 @@
 import { useState, useEffect, useDeferredValue } from 'react';
-import { useShowAfterPaint } from '@/lib/hooks/useShowAfterPaint';
 import { AppMain } from '@/components/layout/AppMain';
 import { OrdersHeader } from '@/components/pedidos/Header/OrdersHeader';
 import { OrdersTable } from '@/components/pedidos/Table/OrdersTable';
@@ -20,7 +19,6 @@ export default function PedidosPage() {
   const { orders, loading, error, createOrder, updateOrder, deleteOrder, addStampToOrder, deleteStamp, fetchOrders } =
     useOrders({ useFullCatalog: searchAcrossDatabase });
   const deferredOrders = useDeferredValue(orders);
-  const showTable = useShowAfterPaint();
   const [showFilters, setShowFilters] = useState(false);
   const [showSorter, setShowSorter] = useState(false);
   const [showNewOrder, setShowNewOrder] = useState(false);
@@ -87,13 +85,9 @@ export default function PedidosPage() {
             <div className="flex items-center justify-center h-full">
               <p className="text-destructive">Error: {error.message}</p>
             </div>
-          ) : !showTable ? (
-            <div className="flex h-full min-h-[240px] items-center justify-center rounded-md border border-dashed bg-muted/20">
-              <p className="text-sm text-muted-foreground">Preparando tabla de pedidos…</p>
-            </div>
           ) : (
             <OrdersTable
-              orders={orders}
+              orders={deferredOrders}
               onUpdate={updateOrder}
               onDelete={deleteOrder}
               onAddStamp={async (orderId, item, files) => {
