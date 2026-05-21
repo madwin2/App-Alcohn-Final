@@ -23,10 +23,10 @@ export function SidebarItem({
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       className={cn(
-        "rounded-xl text-sm font-medium transition-all duration-300 ease-out",
+        "rounded-xl text-sm font-medium transition-colors duration-150 ease-out",
         disabled
           ? "opacity-60 cursor-not-allowed text-gray-700 dark:text-gray-400"
-          : "hover:bg-accent/50 hover:text-accent-foreground hover:scale-105 hover:shadow-md transform-gpu active:scale-95",
+          : "hover:bg-accent/50 hover:text-accent-foreground active:scale-[0.98]",
         isActive && !disabled
           ? "bg-primary text-primary-foreground shadow-lg" 
           : !disabled && "text-muted-foreground hover:text-foreground",
@@ -41,7 +41,7 @@ export function SidebarItem({
         disabled && "opacity-50"
       )} />
       <div className={cn(
-        "transition-all duration-700 ease-in-out overflow-hidden",
+        "transition-all duration-200 ease-out overflow-hidden",
         isExpanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"
       )}>
         <span className={cn(

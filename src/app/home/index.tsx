@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef, useDeferredValue } from 'react';
 import { Package } from 'lucide-react';
 import { AppMain } from '@/components/layout/AppMain';
 import { useOrders } from '@/lib/hooks/useOrders';
@@ -131,6 +131,7 @@ function groupStampsByOrder(stamps: StampWithOrder[]): OrderWithItems[] {
 export default function HomePage() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const { orders } = useOrders();
+  const deferredOrders = useDeferredValue(orders);
 
   const userName =
     user?.user_metadata?.nombre
@@ -401,7 +402,7 @@ export default function HomePage() {
 
       const allStamps: StampWithOrder[] = [];
 
-      for (const order of orders) {
+      for (const order of deferredOrders) {
         // Usar fecha de creación real de la orden (created_at) para "cargados en el sistema"
         const createdAt = order.createdAt ? new Date(order.createdAt) : null;
         const orderDateStr = order.orderDate?.split('T')[0];
@@ -455,7 +456,7 @@ export default function HomePage() {
         stampsDeudores,
         priorityStamps,
       };
-    }, [orders, currentMonth, currentYear, todayKey]);
+    }, [deferredOrders, currentMonth, currentYear, todayKey]);
 
   // Objetivos fijos (por ahora definidos en código; más adelante pueden venir de BD)
   const MONTHLY_GOAL = 200;

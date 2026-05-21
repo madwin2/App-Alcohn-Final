@@ -1,5 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
-import React from 'react';
+import { useMemo, useState, useEffect, useDeferredValue, memo } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -36,7 +35,7 @@ interface OrdersTableProps {
   onDeleteStamp?: (stampId: string) => Promise<void>;
 }
 
-export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteStamp }: OrdersTableProps) {
+function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStamp }: OrdersTableProps) {
   const { 
     searchQuery, 
     searchAcrossDatabase,
@@ -72,9 +71,13 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
     };
   }, [setEditingRow]);
 
+  const deferredOrders = useDeferredValue(orders);
+
   const filteredOrders = useMemo(() => {
-    return filterOrders(orders, searchQuery, filters, sort, searchAcrossDatabase);
-  }, [orders, searchQuery, filters, sort, searchAcrossDatabase]);
+    return filterOrders(deferredOrders, searchQuery, filters, sort, searchAcrossDatabase);
+  }, [deferredOrders, searchQuery, filters, sort, searchAcrossDatabase]);
+
+  const isStale = deferredOrders !== orders;
 
   const handleUpdate = async (orderId: string, patch: Partial<Order>) => {
     if (!onUpdate) {
@@ -442,7 +445,9 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
   const handleRowDoubleClick = (orderId: string) => setEditingRow(orderId);
 
   return (
-    <div className="rounded-md border bg-card">
+    <div
+      className={`rounded-md border bg-card transition-opacity duration-150 ${isStale ? 'opacity-70 pointer-events-none' : ''}`}
+    >
       <DndTableContainer 
         columnIds={columnIds} 
         onReorder={reorderColumns}
@@ -714,3 +719,5 @@ export function OrdersTable({ orders, onUpdate, onDelete, onAddStamp, onDeleteSt
     </div>
   );
 }
+
+export const OrdersTable = memo(OrdersTableInner);

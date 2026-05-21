@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { 
   Home, 
   ShoppingCart, 
@@ -50,6 +50,10 @@ function SidebarInner() {
 
   const isExpanded = sidebarExpanded || sidebarHovered;
 
+  useEffect(() => {
+    setSidebarHovered(false);
+  }, [location.pathname, setSidebarHovered]);
+
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -77,10 +81,9 @@ function SidebarInner() {
   return (
     <div 
       className={cn(
-        "fixed left-4 top-4 bottom-4 flex flex-col bg-card/95 backdrop-blur-sm border rounded-2xl shadow-2xl transition-all duration-700 ease-in-out",
+        "fixed left-4 top-4 bottom-4 flex flex-col bg-card/95 backdrop-blur-sm border rounded-2xl shadow-2xl transition-[width,box-shadow,background-color] duration-200 ease-out",
         "hover:shadow-3xl hover:bg-card/98",
-        "will-change-transform",
-        isExpanded ? "w-64 z-[100]" : "w-16 z-10"
+        isExpanded ? "w-64 z-40" : "w-16 z-30"
       )}
       onMouseEnter={() => setSidebarHovered(true)}
       onMouseLeave={() => setSidebarHovered(false)}
@@ -88,7 +91,7 @@ function SidebarInner() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-border/50">
         <div className={cn(
-          "transition-all duration-700 ease-in-out overflow-hidden",
+          "transition-all duration-200 ease-out overflow-hidden",
           isExpanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"
         )}>
           <h2 className="text-lg font-semibold whitespace-nowrap">App Interna</h2>
