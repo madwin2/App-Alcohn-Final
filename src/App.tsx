@@ -14,6 +14,7 @@ import LoginPage from './app/login/index'
 import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
+import { OrdersScopeLayout } from './components/orders/OrdersScope'
 
 function App() {
   return (
@@ -23,13 +24,15 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<AuthenticatedLayout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/pedidos" element={<PedidosPage />} />
+            <Route element={<OrdersScopeLayout />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/pedidos" element={<PedidosPage />} />
+              <Route path="/envios" element={<EnviosPage />} />
+              <Route path="/economia" element={<EconomiaPage />} />
+            </Route>
             <Route path="/produccion" element={<ProduccionPage />} />
             <Route path="/programas" element={<ProgramasPage />} />
-            <Route path="/envios" element={<EnviosPage />} />
             <Route path="/stock" element={<StockPage />} />
-            <Route path="/economia" element={<EconomiaPage />} />
             <Route path="/gastos" element={<GastosPage />} />
             <Route path="/mockups" element={<MockupsPage />} />
             <Route path="/precios" element={<PreciosPage />} />

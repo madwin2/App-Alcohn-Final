@@ -11,7 +11,6 @@ import {
 } from 'react';
 import { Order, NewOrderFormData, OrderItem } from '@/lib/types/index';
 import * as ordersService from '@/lib/supabase/services/orders.service';
-import { supabase } from '@/lib/supabase/client';
 import {
   clearEconomiaOrdersCache,
   readEconomiaOrdersCache,
@@ -101,8 +100,6 @@ export type OrdersContextValue = OrdersStateContextValue & OrdersActionsContextV
 const OrdersStateContext = createContext<OrdersStateContextValue | null>(null);
 const OrdersActionsContext = createContext<OrdersActionsContextValue | null>(null);
 
-const REALTIME_DEBOUNCE_MS = 15_000;
-
 export function OrdersProvider({ children }: { children: ReactNode }) {
   const [operationalOrders, setOperationalOrders] = useState<Order[]>([]);
   const [fullOrders, setFullOrders] = useState<Order[] | null>(null);
@@ -113,7 +110,6 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
   const fullCatalogLoadedRef = useRef(false);
   const fetchGenerationRef = useRef(0);
-  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ensureFullInFlightRef = useRef<Promise<void> | null>(null);
   const operationalOrdersRef = useRef<Order[]>([]);
 
@@ -195,30 +191,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     return ensureFullInFlightRef.current;
   }, [fetchOrders]);
 
-  const scheduleOperationalRefresh = useCallback(() => {
-    if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-    realtimeTimerRef.current = setTimeout(() => {
-      realtimeTimerRef.current = null;
-      bumpEconomiaCache();
-      void fetchOrders({ silent: true, scope: 'operational' });
-    }, REALTIME_DEBOUNCE_MS);
-  }, [bumpEconomiaCache, fetchOrders]);
-
   useEffect(() => {
     void fetchOrders({ scope: 'operational' });
   }, [fetchOrders]);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('orders-realtime-global')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, scheduleOperationalRefresh)
-      .subscribe();
-
-    return () => {
-      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-      supabase.removeChannel(channel);
-    };
-  }, [scheduleOperationalRefresh]);
 
   const syncBothLists = useCallback(
     (orderId: string, patch: Partial<Order> | ((order: Order) => Order)) => {

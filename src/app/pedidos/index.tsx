@@ -1,4 +1,4 @@
-import { useState, useEffect, useDeferredValue } from 'react';
+import { useState, useEffect, useDeferredValue, startTransition } from 'react';
 import { AppMain } from '@/components/layout/AppMain';
 import { OrdersHeader } from '@/components/pedidos/Header/OrdersHeader';
 import { OrdersTable } from '@/components/pedidos/Table/OrdersTable';
@@ -19,6 +19,7 @@ export default function PedidosPage() {
   const { orders, loading, error, createOrder, updateOrder, deleteOrder, addStampToOrder, deleteStamp, fetchOrders } =
     useOrders({ useFullCatalog: searchAcrossDatabase });
   const deferredOrders = useDeferredValue(orders);
+  const [mountTable, setMountTable] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showSorter, setShowSorter] = useState(false);
   const [showNewOrder, setShowNewOrder] = useState(false);
@@ -32,6 +33,20 @@ export default function PedidosPage() {
     loadConfig,
     getConfigForSave,
   } = store;
+
+  useEffect(() => {
+    if (loading && orders.length === 0) {
+      setMountTable(false);
+      return;
+    }
+    const schedule = () => startTransition(() => setMountTable(true));
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(schedule, { timeout: 400 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(schedule, 50);
+    return () => window.clearTimeout(t);
+  }, [loading, orders.length]);
 
   // Marcar como cargado si no hay usuario (para evitar esperar)
   useEffect(() => {
@@ -84,6 +99,10 @@ export default function PedidosPage() {
           ) : error ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-destructive">Error: {error.message}</p>
+            </div>
+          ) : !mountTable ? (
+            <div className="flex h-full min-h-[200px] items-center justify-center">
+              <p className="text-sm text-muted-foreground">Preparando tabla…</p>
             </div>
           ) : (
             <OrdersTable

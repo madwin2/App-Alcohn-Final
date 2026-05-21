@@ -1,4 +1,7 @@
 import { useMemo, useState, useEffect, useDeferredValue, memo, Fragment, createElement } from 'react';
+import { Button } from '@/components/ui/button';
+
+const ORDERS_PAGE_SIZE = 40;
 import {
   flexRender,
   getCoreRowModel,
@@ -54,6 +57,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   const { toggleRow, isExpanded, isCollapsing, isExpanding } = useExpandableRows();
   const [addStampDialogOpen, setAddStampDialogOpen] = useState(false);
   const [selectedOrderForStamp, setSelectedOrderForStamp] = useState<Order | null>(null);
+  const [visibleCount, setVisibleCount] = useState(ORDERS_PAGE_SIZE);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -73,9 +77,19 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
 
   const deferredOrders = useDeferredValue(orders);
 
+  useEffect(() => {
+    setVisibleCount(ORDERS_PAGE_SIZE);
+  }, [deferredOrders, searchQuery, filters, sort, searchAcrossDatabase]);
+
   const filteredOrders = useMemo(() => {
     return filterOrders(deferredOrders, searchQuery, filters, sort, searchAcrossDatabase);
   }, [deferredOrders, searchQuery, filters, sort, searchAcrossDatabase]);
+
+  const visibleOrders = useMemo(
+    () => filteredOrders.slice(0, visibleCount),
+    [filteredOrders, visibleCount],
+  );
+  const hasMoreOrders = visibleCount < filteredOrders.length;
 
   const isStale = deferredOrders !== orders;
 
@@ -427,7 +441,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   const columnIds = columns.map(col => col.id);
 
   const table = useReactTable({
-    data: filteredOrders,
+    data: visibleOrders,
     columns: sortedColumns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -482,7 +496,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
               ))}
             </thead>
           <tbody className="divide-y divide-border">
-            {filteredOrders.map((order) => {
+            {visibleOrders.map((order) => {
               const hasMultipleItems = order.items.length > 1;
               const isExpandedState = isExpanded(order.id);
               
@@ -701,6 +715,21 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
           </tbody>
         </table>
       </div>
+      {hasMoreOrders && (
+        <div className="flex items-center justify-between border-t px-4 py-3 text-sm text-muted-foreground">
+          <span>
+            Mostrando {visibleOrders.length} de {filteredOrders.length} pedidos
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setVisibleCount((n) => n + ORDERS_PAGE_SIZE)}
+          >
+            Cargar más ({Math.min(ORDERS_PAGE_SIZE, filteredOrders.length - visibleCount)})
+          </Button>
+        </div>
+      )}
       </DndTableContainer>
       
       {/* Diálogo para agregar sello */}
