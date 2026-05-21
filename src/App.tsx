@@ -12,7 +12,7 @@ import PreciosPage from './app/precios/index'
 import InnovacionPage from './app/innovacion/index'
 import LoginPage from './app/login/index'
 import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
-import { ProtectedRoute } from './components/auth/ProtectedRoute'
+import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
 
 function App() {
@@ -22,98 +22,20 @@ function App() {
         <OrderTasksOverlay />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route 
-            path="/" 
-            element={
-              <ProtectedRoute>
-                <HomePage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/pedidos" 
-            element={
-              <ProtectedRoute>
-                <PedidosPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/produccion" 
-            element={
-              <ProtectedRoute>
-                <ProduccionPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/programas" 
-            element={
-              <ProtectedRoute>
-                <ProgramasPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route
-            path="/envios"
-            element={
-              <ProtectedRoute>
-                <EnviosPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/stock"
-            element={
-              <ProtectedRoute>
-                <StockPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route 
-            path="/admin/registros"
-            element={<Navigate to="/pedidos" replace />}
-          />
-          <Route
-            path="/economia"
-            element={
-              <ProtectedRoute>
-                <EconomiaPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/gastos"
-            element={
-              <ProtectedRoute>
-                <GastosPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/mockups"
-            element={
-              <ProtectedRoute>
-                <MockupsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/precios"
-            element={
-              <ProtectedRoute>
-                <PreciosPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/innovacion"
-            element={
-              <ProtectedRoute>
-                <InnovacionPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route element={<AuthenticatedLayout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/pedidos" element={<PedidosPage />} />
+            <Route path="/produccion" element={<ProduccionPage />} />
+            <Route path="/programas" element={<ProgramasPage />} />
+            <Route path="/envios" element={<EnviosPage />} />
+            <Route path="/stock" element={<StockPage />} />
+            <Route path="/economia" element={<EconomiaPage />} />
+            <Route path="/gastos" element={<GastosPage />} />
+            <Route path="/mockups" element={<MockupsPage />} />
+            <Route path="/precios" element={<PreciosPage />} />
+            <Route path="/innovacion" element={<InnovacionPage />} />
+          </Route>
+          <Route path="/admin/registros" element={<Navigate to="/pedidos" replace />} />
           {import.meta.env.DEV ? (
             <Route path="/dev/test-etiquetas-pdf" element={<TestEtiquetasPdfPage />} />
           ) : null}

@@ -144,32 +144,18 @@ export default function PedidosPage() {
           for (const match of matches) {
             try {
               const hasNonTransferredItems = match.order.items.some((item) => item.saleState !== 'TRANSFERIDO');
-
-              // 1) Primero venta -> TRANSFERIDO (solo si hace falta)
-              if (hasNonTransferredItems) {
-                await updateOrder(match.order.id, {
-                  items: match.order.items.map((item) => ({
-                    id: item.id,
-                    saleState: 'TRANSFERIDO',
-                  })) as any,
-                });
-              }
-
-              // 2) Luego completar seguimiento
-              await updateOrder(match.order.id, {
+              const patch: Partial<import('@/lib/types/index').Order> = {
                 shipping: {
                   ...match.order.shipping,
                   trackingNumber: match.trackingNumber,
                 },
-              });
-
-              // 3) Por último pasar envío a DESPACHADO
-              await updateOrder(match.order.id, {
                 items: match.order.items.map((item) => ({
                   id: item.id,
-                  shippingState: 'DESPACHADO',
+                  shippingState: 'DESPACHADO' as const,
+                  ...(hasNonTransferredItems ? { saleState: 'TRANSFERIDO' as const } : {}),
                 })) as any,
-              });
+              };
+              await updateOrder(match.order.id, patch);
 
               appliedMatches.push(match);
             } catch (error) {

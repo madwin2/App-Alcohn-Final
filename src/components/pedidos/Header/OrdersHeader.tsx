@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useOrders } from '@/lib/hooks/useOrders';
 import { Search, Filter, ArrowUpDown, Plus, Image, Download, FileUp, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,7 +32,16 @@ export function OrdersHeader({
   activeStates 
 }: OrdersHeaderProps) {
   const { searchQuery, setSearchQuery, searchAcrossDatabase, setSearchAcrossDatabase, filters, sort } = useOrdersStore();
-  
+  const { ensureFullCatalog, loadingFullCatalog, fullCatalogLoaded } = useOrders();
+
+  useEffect(() => {
+    if (!searchAcrossDatabase) return;
+    const q = searchQuery.trim();
+    if (q.length >= MIN_SEARCH_CHARS_FULL_DATABASE || !fullCatalogLoaded) {
+      void ensureFullCatalog();
+    }
+  }, [searchAcrossDatabase, searchQuery, ensureFullCatalog, fullCatalogLoaded]);
+
   // Filtrar pedidos según los filtros aplicados
   const filteredOrders = useMemo(() => {
     return filterOrders(orders, searchQuery, filters, sort, searchAcrossDatabase);
@@ -74,12 +84,17 @@ export function OrdersHeader({
           <Button
             variant={searchAcrossDatabase ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setSearchAcrossDatabase(!searchAcrossDatabase)}
+            onClick={() => {
+              const next = !searchAcrossDatabase;
+              setSearchAcrossDatabase(next);
+              if (next) void ensureFullCatalog();
+            }}
             className="gap-2"
             title="Con 4+ caracteres en el buscador: búsqueda en toda la base sin filtros. Con menos: misma vista que con filtros."
+            disabled={loadingFullCatalog}
           >
             <Database className="h-4 w-4" />
-            Toda la base
+            {loadingFullCatalog ? 'Cargando…' : 'Toda la base'}
           </Button>
 
           {/* Ordenar */}

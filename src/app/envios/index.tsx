@@ -36,11 +36,11 @@ import {
   catalogContainsSucursalAddress,
   catalogLocalityOptions,
   catalogProvinceOptions,
-  correoSucursalToCatalogRow,
   findPostalCodeInCatalog,
   type DireccionCatalogRow,
 } from '@/lib/utils/enviosAddressCatalog';
 import { emailToPersistOnCliente, resolveEnvioEmail } from '@/lib/utils/enviosEmail';
+import { loadCorreoSucursalesCatalogCached } from '@/lib/utils/correoSucursalesCatalogCache';
 import {
   snapFormToCorreoSucursalCatalog,
   snapProvinceToCorreoSucursalCatalog,
@@ -169,50 +169,25 @@ export default function EnviosPage() {
   const [isLoadingAddressCatalog, setIsLoadingAddressCatalog] = useState(false);
 
   useEffect(() => {
-    if (!selectedOrder) {
-      setAddressCatalogRows([]);
-      setIsLoadingAddressCatalog(false);
-      return;
-    }
     let cancelled = false;
     setIsLoadingAddressCatalog(true);
     void (async () => {
       try {
-        const pageSize = 1000;
-        const accumulated: DireccionCatalogRow[] = [];
-
-        let offset = 0;
-        let padronOk = true;
-        while (!cancelled) {
-          const { data, error } = await supabase
-            .from('correo_sucursales')
-            .select('codigo,provincia,localidad,calle,numero')
-            .or('activa.is.null,activa.eq.true')
-            .order('id', { ascending: true })
-            .range(offset, offset + pageSize - 1);
-          if (cancelled) break;
-          if (error) {
-            console.error('Catálogo sucursales (correo_sucursales):', error);
-            padronOk = false;
-            break;
+        const rows = await loadCorreoSucursalesCatalogCached();
+        if (!cancelled) {
+          if (!rows.length) {
+            toast({
+              title: 'Catálogo incompleto',
+              description:
+                'Revisá la tabla `correo_sucursales` (padrón MiCorreo) y permisos RLS. Los desplegables de sucursal usan solo esa tabla.',
+              variant: 'destructive',
+            });
           }
-          const chunk = data ?? [];
-          for (const row of chunk) {
-            accumulated.push(
-              correoSucursalToCatalogRow({
-                codigo: String((row as any).codigo ?? ''),
-                provincia: String(row.provincia ?? ''),
-                localidad: String(row.localidad ?? ''),
-                calle: String(row.calle ?? ''),
-                numero: row.numero != null ? String(row.numero) : null,
-              }),
-            );
-          }
-          if (chunk.length < pageSize) break;
-          offset += pageSize;
+          setAddressCatalogRows(rows);
         }
-
-        if (!cancelled && !padronOk) {
+      } catch (e) {
+        console.error('Catálogo sucursales (correo_sucursales):', e);
+        if (!cancelled) {
           toast({
             title: 'Catálogo incompleto',
             description:
@@ -220,7 +195,6 @@ export default function EnviosPage() {
             variant: 'destructive',
           });
         }
-        if (!cancelled) setAddressCatalogRows(accumulated);
       } finally {
         if (!cancelled) setIsLoadingAddressCatalog(false);
       }
@@ -228,7 +202,7 @@ export default function EnviosPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedOrder, shippingTypeDraft]);
+  }, [toast]);
 
   const provinceSelectOptions = useMemo(
     () => catalogProvinceOptions(addressCatalogRows),

@@ -248,9 +248,15 @@ function PendingPieChart({
 
 export default function EconomiaPage() {
   const { user, loading: authLoading } = useAuth();
-  const { orders, loading } = useOrders();
+  const { orders, loading, ensureFullCatalog } = useOrders();
   const { toast } = useToast();
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
+
+  useEffect(() => {
+    if (!authLoading && isAllowed) {
+      void ensureFullCatalog();
+    }
+  }, [authLoading, isAllowed, ensureFullCatalog]);
 
   const [usdRate, setUsdRate] = useState(1200);
   const [gastosStorageTick, setGastosStorageTick] = useState(0);
@@ -636,7 +642,7 @@ export default function EconomiaPage() {
     [pendingBreakdown],
   );
 
-  if (authLoading || loading) {
+  if (authLoading || (loading && !orders.length)) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   }
 
