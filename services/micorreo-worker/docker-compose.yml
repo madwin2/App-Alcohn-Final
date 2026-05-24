@@ -1,0 +1,25 @@
+services:
+  micorreo-worker:
+    build: .
+    container_name: micorreo-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - micorreo-artifacts:/app/artifacts
+    shm_size: "1gb"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  micorreo-artifacts:

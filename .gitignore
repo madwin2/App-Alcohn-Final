@@ -87,3 +87,12 @@ jspm_packages/
 
 # TernJS port file
 .tern-port
+
+# MiCorreo worker (servicio externo)
+services/micorreo-worker/node_modules/
+services/micorreo-worker/dist/
+services/micorreo-worker/.env
+services/micorreo-worker/artifacts/
+services/micorreo-worker/tmp/
+services/micorreo-worker/playwright-report/
+services/micorreo-worker/test-results/

@@ -1,0 +1,27 @@
+[
+  {
+    "id": "sucursal-invalida",
+    "file": "fixtures/errors/error-sucursal-invalida.csv",
+    "descripcion": "Sucursal destino con código inventado (ZZZZ) en provincia B",
+    "appStateEsperado": "ERROR_ETIQUETA"
+  },
+  {
+    "id": "domicilio-cp-provincia",
+    "file": "fixtures/errors/error-domicilio-cp-provincia.csv",
+    "descripcion": "Domicilio provincia B + CP 5000 (Córdoba) — MiCorreo NO rechaza; validar en app",
+    "appStateEsperado": "ERROR_ETIQUETA",
+    "nota": "MiCorreo acepta el CSV (ok). La app debe validar CP/provincia antes de enviar."
+  },
+  {
+    "id": "cp-inexistente",
+    "file": "fixtures/errors/error-cp-inexistente.csv",
+    "descripcion": "CP 99999 (no existe en padrón MiCorreo)",
+    "appStateEsperado": "ERROR_ETIQUETA"
+  },
+  {
+    "id": "provincia-invalida",
+    "file": "fixtures/errors/error-provincia-invalida.csv",
+    "descripcion": "Código provincia ZZ inventado",
+    "appStateEsperado": "ERROR_ETIQUETA"
+  }
+]

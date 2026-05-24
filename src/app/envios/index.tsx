@@ -27,6 +27,11 @@ import { formatDate, getShippingChipVisual, getShippingLabel } from '@/lib/utils
 import { Order, ShippingState } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
+import {
+  downloadCorreoCsv,
+  shippingStateFromMicorreoUpload,
+  uploadCorreoCsvToWorker,
+} from '@/lib/utils/micorreoUpload';
 import { resolveCorreoCsvPaqueteFromOrderItems } from '@/lib/utils/correoCsvPackageFromOrder';
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
 import {
@@ -520,45 +525,65 @@ export default function EnviosPage() {
 
       const csvBody = rows.map((row) => row.join(';')).join('\n');
       const csvContent = `${CSV_FIELDS.join(';')}\n${csvBody}`;
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `carga_correo_${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      const csvFilename = `carga_correo_${new Date().toISOString().slice(0, 10)}.csv`;
 
       const exportedIdSet = new Set(exportedOrderIdsInOrder);
       const exportedOrders = csvOrders.filter((order) => exportedIdSet.has(order.id));
+
+      const uploadResult = await uploadCorreoCsvToWorker({
+        csvContent,
+        orderId: exportedOrderIdsInOrder.length === 1 ? exportedOrderIdsInOrder[0] : undefined,
+        filename: csvFilename,
+      });
+
+      const nextShippingState = shippingStateFromMicorreoUpload(uploadResult.status);
 
       for (const order of exportedOrders) {
         await updateOrder(order.id, {
           items: order.items.map((item) => ({
             id: item.id,
-            shippingState: 'ETIQUETA_LISTA',
+            shippingState: nextShippingState,
           })) as any,
         });
       }
 
+      if (uploadResult.status === 'system_error') {
+        downloadCorreoCsv(csvContent, csvFilename);
+      }
+
       await fetchOrders();
       setLastCsvSkipped(skipped);
-      toast({
-        title: 'CSV generado',
-        description:
-          skipped.length > 0
-            ? `Se exportaron ${exportedOrders.length} órdenes. ${skipped.length} con fallo quedaron en Error de Etiqueta (no se incluirán en el próximo CSV hasta que cambies el estado).`
-            : `Se exportaron ${exportedOrders.length} órdenes y se marcaron como Etiqueta Lista.`,
-      });
+
+      if (uploadResult.status === 'ok') {
+        toast({
+          title: 'Etiquetas cargadas en MiCorreo',
+          description:
+            skipped.length > 0
+              ? `Se subieron ${exportedOrders.length} órdenes. ${skipped.length} con fallo previo quedaron en Error de Etiqueta.`
+              : `Se subieron ${exportedOrders.length} órdenes y quedaron en Etiqueta Lista.`,
+        });
+      } else if (uploadResult.status === 'data_error') {
+        toast({
+          title: 'MiCorreo rechazó los datos',
+          description: `${uploadResult.message}${skipped.length > 0 ? ` (${skipped.length} órdenes ya excluidas por validación local.)` : ''}`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'No se pudo subir a MiCorreo',
+          description: `${uploadResult.message} Se descargó el CSV para carga manual. Las órdenes quedaron en Hacer Etiqueta.`,
+          variant: 'destructive',
+        });
+      }
     } catch (generateError) {
       const msg =
         generateError && typeof generateError === 'object' && 'message' in generateError
           ? String((generateError as { message: string }).message)
           : String(generateError);
-      console.error('Generar CSV:', generateError);
+      console.error('Subir a MiCorreo:', generateError);
       toast({
-        title: 'Error al generar CSV',
-        description: msg || 'No se pudo completar la exportación.',
+        title: 'Error al subir a MiCorreo',
+        description: msg || 'No se pudo completar la subida automática.',
         variant: 'destructive',
       });
     } finally {
@@ -1210,7 +1235,7 @@ export default function EnviosPage() {
               </p>
             </div>
             <Button onClick={handleGenerateCsv} disabled={!csvOrders.length || isGeneratingCsv}>
-              {isGeneratingCsv ? 'Generando CSV...' : `Generar CSV (${csvOrders.length})`}
+              {isGeneratingCsv ? 'Subiendo a MiCorreo...' : `Subir a MiCorreo (${csvOrders.length})`}
             </Button>
           </div>
         </div>

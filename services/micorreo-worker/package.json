@@ -1,0 +1,30 @@
+{
+  "name": "@alcohn/micorreo-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Worker externo: sube CSV de carga masiva a MiCorreo (Correo Argentino) vía Playwright",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "upload:test": "tsx src/scripts/cli-upload.ts",
+    "upload:test:errors": "tsx src/scripts/cli-upload-errors.ts",
+    "codegen": "playwright codegen https://www.correoargentino.com.ar/MiCorreo/public/",
+    "playwright:install": "playwright install chromium",
+    "install:insecure-win": "set NODE_TLS_REJECT_UNAUTHORIZED=0&& npm install --strict-ssl=false && npm run playwright:install"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "playwright": "^1.51.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
