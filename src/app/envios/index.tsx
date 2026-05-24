@@ -27,11 +27,12 @@ import { formatDate, getShippingChipVisual, getShippingLabel } from '@/lib/utils
 import { Order, ShippingState } from '@/lib/types';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
+import { downloadCorreoCsv } from '@/lib/utils/micorreoUpload';
 import {
-  downloadCorreoCsv,
-  shippingStateFromMicorreoUpload,
-  uploadCorreoCsvToWorker,
-} from '@/lib/utils/micorreoUpload';
+  isMicorreoUploadRunning,
+  subscribeMicorreoUploadActivity,
+  triggerMicorreoUploadForOrder,
+} from '@/lib/utils/micorreoBackgroundUpload';
 import { resolveCorreoCsvPaqueteFromOrderItems } from '@/lib/utils/correoCsvPackageFromOrder';
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
 import {
@@ -58,7 +59,8 @@ import {
   normalizePhoneDigits,
   normalizePhoneDigitsForEnvios,
 } from '@/lib/utils/shippingNormalization';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const isEligibleForShipping = (order: Order): boolean => {
   if (!order.items.length) return false;
@@ -157,6 +159,7 @@ export default function EnviosPage() {
   const { orders, loading, error, updateOrder, fetchOrders } = useOrders();
   const { toast } = useToast();
   const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
+  const [micorreoUploadBusy, setMicorreoUploadBusy] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [shippingTypeDraft, setShippingTypeDraft] = useState<'DOMICILIO' | 'SUCURSAL'>('DOMICILIO');
   const [rawShippingText, setRawShippingText] = useState('');
@@ -208,6 +211,21 @@ export default function EnviosPage() {
       cancelled = true;
     };
   }, [toast]);
+
+  useEffect(() => {
+    setMicorreoUploadBusy(isMicorreoUploadRunning());
+    return subscribeMicorreoUploadActivity(() => {
+      setMicorreoUploadBusy(isMicorreoUploadRunning());
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!micorreoUploadBusy) return;
+    const intervalId = window.setInterval(() => {
+      void fetchOrders();
+    }, 4000);
+    return () => window.clearInterval(intervalId);
+  }, [micorreoUploadBusy, fetchOrders]);
 
   const provinceSelectOptions = useMemo(
     () => catalogProvinceOptions(addressCatalogRows),
@@ -302,12 +320,11 @@ export default function EnviosPage() {
     return orders.filter(isEligibleForShipping);
   }, [orders]);
 
-  /** Incluibles al CSV: dirección lista; se omiten Etiqueta lista y Error de etiqueta (reintento manual). */
+  /** CSV manual de respaldo: solo órdenes en Hacer Etiqueta (fallo de sistema / carga manual en MiCorreo). */
   const csvOrders = useMemo(() => {
     return eligibleOrders.filter((order) => {
       if (!order.direccionId) return false;
-      const st = order.items[0]?.shippingState;
-      return st !== 'ETIQUETA_LISTA' && st !== 'ERROR_ETIQUETA';
+      return order.items[0]?.shippingState === 'HACER_ETIQUETA';
     });
   }, [eligibleOrders]);
 
@@ -527,63 +544,26 @@ export default function EnviosPage() {
       const csvContent = `${CSV_FIELDS.join(';')}\n${csvBody}`;
       const csvFilename = `carga_correo_${new Date().toISOString().slice(0, 10)}.csv`;
 
-      const exportedIdSet = new Set(exportedOrderIdsInOrder);
-      const exportedOrders = csvOrders.filter((order) => exportedIdSet.has(order.id));
-
-      const uploadResult = await uploadCorreoCsvToWorker({
-        csvContent,
-        orderId: exportedOrderIdsInOrder.length === 1 ? exportedOrderIdsInOrder[0] : undefined,
-        filename: csvFilename,
-      });
-
-      const nextShippingState = shippingStateFromMicorreoUpload(uploadResult.status);
-
-      for (const order of exportedOrders) {
-        await updateOrder(order.id, {
-          items: order.items.map((item) => ({
-            id: item.id,
-            shippingState: nextShippingState,
-          })) as any,
-        });
-      }
-
-      if (uploadResult.status === 'system_error') {
-        downloadCorreoCsv(csvContent, csvFilename);
-      }
+      downloadCorreoCsv(csvContent, csvFilename);
 
       await fetchOrders();
       setLastCsvSkipped(skipped);
-
-      if (uploadResult.status === 'ok') {
-        toast({
-          title: 'Etiquetas cargadas en MiCorreo',
-          description:
-            skipped.length > 0
-              ? `Se subieron ${exportedOrders.length} órdenes. ${skipped.length} con fallo previo quedaron en Error de Etiqueta.`
-              : `Se subieron ${exportedOrders.length} órdenes y quedaron en Etiqueta Lista.`,
-        });
-      } else if (uploadResult.status === 'data_error') {
-        toast({
-          title: 'MiCorreo rechazó los datos',
-          description: `${uploadResult.message}${skipped.length > 0 ? ` (${skipped.length} órdenes ya excluidas por validación local.)` : ''}`,
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'No se pudo subir a MiCorreo',
-          description: `${uploadResult.message} Se descargó el CSV para carga manual. Las órdenes quedaron en Hacer Etiqueta.`,
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'CSV descargado',
+        description:
+          skipped.length > 0
+            ? `Se exportaron ${rows.length} filas en Hacer Etiqueta. ${skipped.length} con fallo de validación pasaron a Error de Etiqueta.`
+            : `Se exportaron ${rows.length} filas para carga manual en MiCorreo (solo pedidos en Hacer Etiqueta).`,
+      });
     } catch (generateError) {
       const msg =
         generateError && typeof generateError === 'object' && 'message' in generateError
           ? String((generateError as { message: string }).message)
           : String(generateError);
-      console.error('Subir a MiCorreo:', generateError);
+      console.error('Generar CSV:', generateError);
       toast({
-        title: 'Error al subir a MiCorreo',
-        description: msg || 'No se pudo completar la subida automática.',
+        title: 'Error al generar CSV',
+        description: msg || 'No se pudo completar la exportación.',
         variant: 'destructive',
       });
     } finally {
@@ -893,10 +873,14 @@ export default function EnviosPage() {
       }
 
       await fetchOrders();
+      const orderIdForUpload = selectedOrder.id;
       closeShippingDialog();
       toast({
         title: 'Datos de envío guardados',
-        description: 'Se guardaron en Supabase y se actualizó el estado de venta cuando correspondía.',
+        description: 'MiCorreo: subiendo la etiqueta en segundo plano. Podés seguir usando la app.',
+      });
+      triggerMicorreoUploadForOrder(orderIdForUpload, () => {
+        void fetchOrders();
       });
     } catch (saveError) {
       toast({
@@ -1037,6 +1021,8 @@ export default function EnviosPage() {
     const hasShippingTypeSelected = isSucursal || isDomicilio;
     const shippingState = order.items[0]?.shippingState;
     const shippingChipVisual = getShippingChipVisual(shippingState || 'SIN_ENVIO');
+    const uploadInProgress = isMicorreoUploadRunning(order.id);
+    const labelError = order.shippingLabelError?.trim();
 
     const csvLine = opts?.showCsvLine ? csvLineNumberByOrderId.get(order.id) : undefined;
     const phoneDigitsCopiar = normalizePhoneDigits(order.customer.phoneE164 || '');
@@ -1166,6 +1152,29 @@ export default function EnviosPage() {
                 })}
               </SelectContent>
             </Select>
+            {uploadInProgress ? (
+              <Loader2
+                className="h-4 w-4 shrink-0 animate-spin text-orange-500"
+                aria-label="Subiendo a MiCorreo"
+              />
+            ) : null}
+            {shippingState === 'ERROR_ETIQUETA' ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="inline-flex h-5 w-5 shrink-0 cursor-help items-center justify-center rounded-full border border-red-500/45 bg-red-500/15 text-red-600 dark:text-red-400"
+                      aria-label="Ver error de etiqueta"
+                    >
+                      <AlertCircle className="h-3.5 w-3.5" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap">
+                    {labelError || 'Error al subir la etiqueta. Editá los datos y confirmá de nuevo.'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
           </div>
         </td>
         <td className="px-4 py-3">
@@ -1231,12 +1240,26 @@ export default function EnviosPage() {
             <div>
               <h1 className="text-2xl font-semibold">Envíos</h1>
               <p className="text-sm text-muted-foreground mt-1">
-                Con datos de envío listos para el CSV; abajo, pendientes de carga.
+                Al confirmar datos se sube a MiCorreo automáticamente. El CSV manual incluye solo pedidos en Hacer Etiqueta.
               </p>
             </div>
-            <Button onClick={handleGenerateCsv} disabled={!csvOrders.length || isGeneratingCsv}>
-              {isGeneratingCsv ? 'Subiendo a MiCorreo...' : `Subir a MiCorreo (${csvOrders.length})`}
+            <Button
+              onClick={handleGenerateCsv}
+              disabled={!csvOrders.length || isGeneratingCsv}
+              title={
+                csvOrders.length
+                  ? 'Descarga CSV para carga manual en MiCorreo (solo Hacer Etiqueta)'
+                  : 'No hay pedidos en Hacer Etiqueta para exportar'
+              }
+            >
+              {isGeneratingCsv ? 'Generando CSV...' : `Generar CSV (${csvOrders.length})`}
             </Button>
+            {micorreoUploadBusy ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Subiendo a MiCorreo…
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -1688,7 +1711,8 @@ export default function EnviosPage() {
 
           {showParseConfirmation ? (
             <div className="rounded-md border p-3 bg-muted/30 text-sm">
-              Confirmación final: se guardará la dirección en Supabase y la venta pasará a Transferido si corresponde.
+              Confirmación final: se guardará la dirección, la venta pasará a Transferido si corresponde, y la
+              etiqueta se subirá a MiCorreo en segundo plano.
             </div>
           ) : null}
 
@@ -1702,7 +1726,7 @@ export default function EnviosPage() {
               </Button>
             ) : (
               <Button onClick={handleSaveShippingData} disabled={isSavingShippingData}>
-                {isSavingShippingData ? 'Guardando...' : 'Confirmar y guardar'}
+                {isSavingShippingData ? 'Guardando...' : 'Confirmar y subir etiqueta'}
               </Button>
             )}
           </DialogFooter>

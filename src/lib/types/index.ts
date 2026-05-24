@@ -83,6 +83,8 @@ export interface Order {
   balanceAmountCached: number;
   /** Vinculación a `direcciones` en Supabase; indica si ya hay datos de envío cargados */
   direccionId?: string | null;
+  /** Último mensaje de error al subir etiqueta a MiCorreo (desde `ordenes.error_etiqueta_mensaje`) */
+  shippingLabelError?: string | null;
   shipping: {
     carrier: ShippingCarrier | null;
     service: ShippingServiceDest | null;

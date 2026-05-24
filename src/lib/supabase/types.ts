@@ -61,6 +61,7 @@ export interface Database {
             | 'Despachado'
             | 'Seguimiento Enviado'
             | null;
+          error_etiqueta_mensaje?: string | null;
           taken_by: string | null;
           /** Pedidos de la web Alcohn (ver migración 001_web_alcohn_integration.sql). */
           origen?: 'Web' | 'App' | null;
