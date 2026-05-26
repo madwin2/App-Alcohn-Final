@@ -11,11 +11,45 @@ import {
 } from 'react';
 import { Order, NewOrderFormData, OrderItem } from '@/lib/types/index';
 import * as ordersService from '@/lib/supabase/services/orders.service';
+import { supabase } from '@/lib/supabase/client';
 import {
   clearEconomiaOrdersCache,
   readEconomiaOrdersCache,
   writeEconomiaOrdersCache,
 } from '@/lib/economia/economiaOrdersCache';
+
+const REALTIME_DEBOUNCE_MS = 1_500;
+const VISIBILITY_REFRESH_GAP_MS = 45_000;
+
+type RealtimeRow = Record<string, unknown> & { id?: string; orden_id?: string };
+
+const orderIdFromRealtimePayload = (
+  table: 'ordenes' | 'sellos' | 'tareas',
+  payload: { eventType: string; new: RealtimeRow; old: RealtimeRow },
+): string | null => {
+  const { eventType, new: rowNew, old: rowOld } = payload;
+  if (table === 'ordenes') {
+    if (eventType === 'DELETE') return (rowOld?.id as string) ?? null;
+    return (rowNew?.id as string) ?? (rowOld?.id as string) ?? null;
+  }
+  return (rowNew?.orden_id as string) ?? (rowOld?.orden_id as string) ?? null;
+};
+
+const sortOrdersByDateDesc = (list: Order[]): Order[] =>
+  [...list].sort((a, b) => {
+    const da = a.orderDate || '';
+    const db = b.orderDate || '';
+    if (da !== db) return db.localeCompare(da);
+    return b.id.localeCompare(a.id);
+  });
+
+const upsertOrderInList = (list: Order[], order: Order): Order[] => {
+  const idx = list.findIndex((o) => o.id === order.id);
+  if (idx === -1) return sortOrdersByDateDesc([order, ...list]);
+  const next = [...list];
+  next[idx] = order;
+  return next;
+};
 
 const applyOptimisticPatch = (order: Order, updates: Partial<Order>): Order => {
   let nextOrder = { ...order };
@@ -112,6 +146,11 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   const fetchGenerationRef = useRef(0);
   const ensureFullInFlightRef = useRef<Promise<void> | null>(null);
   const operationalOrdersRef = useRef<Order[]>([]);
+  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingOrderIdsRef = useRef(new Set<string>());
+  const needsFullOperationalRefreshRef = useRef(false);
+  const lastVisibilityRefreshRef = useRef(0);
+  const fetchOrdersRef = useRef<OrdersActionsContextValue['fetchOrders'] | null>(null);
 
   useEffect(() => {
     operationalOrdersRef.current = operationalOrders;
@@ -119,6 +158,20 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
   const bumpEconomiaCache = useCallback(() => {
     clearEconomiaOrdersCache();
+  }, []);
+
+  const mergeOrderIntoState = useCallback((order: Order) => {
+    startTransition(() => {
+      setOperationalOrders((prev) => upsertOrderInList(prev, order));
+      setFullOrders((prev) => (prev ? upsertOrderInList(prev, order) : prev));
+    });
+  }, []);
+
+  const removeOrderFromState = useCallback((orderId: string) => {
+    startTransition(() => {
+      setOperationalOrders((prev) => prev.filter((o) => o.id !== orderId));
+      setFullOrders((prev) => (prev ? prev.filter((o) => o.id !== orderId) : prev));
+    });
   }, []);
 
   const applyOrdersState = useCallback((scope: 'operational' | 'full', data: Order[]) => {
@@ -169,6 +222,67 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     [applyOrdersState],
   );
 
+  fetchOrdersRef.current = fetchOrders;
+
+  const flushRealtimeUpdates = useCallback(async () => {
+    realtimeTimerRef.current = null;
+
+    if (needsFullOperationalRefreshRef.current) {
+      needsFullOperationalRefreshRef.current = false;
+      pendingOrderIdsRef.current.clear();
+      await fetchOrdersRef.current?.({ silent: true, scope: 'operational' });
+      if (fullCatalogLoadedRef.current) {
+        await fetchOrdersRef.current?.({ silent: true, scope: 'full' });
+      }
+      return;
+    }
+
+    const ids = [...pendingOrderIdsRef.current];
+    pendingOrderIdsRef.current.clear();
+    if (!ids.length) return;
+
+    const results = await Promise.all(ids.map((id) => ordersService.getOrderById(id)));
+    for (let i = 0; i < ids.length; i++) {
+      const order = results[i];
+      const id = ids[i];
+      if (order) mergeOrderIntoState(order);
+      else removeOrderFromState(id);
+    }
+  }, [mergeOrderIntoState, removeOrderFromState]);
+
+  const scheduleRealtimeUpdate = useCallback(
+    (orderId?: string | null, options?: { fullRefresh?: boolean }) => {
+      if (options?.fullRefresh) {
+        needsFullOperationalRefreshRef.current = true;
+        pendingOrderIdsRef.current.clear();
+      } else if (orderId) {
+        pendingOrderIdsRef.current.add(orderId);
+      } else {
+        needsFullOperationalRefreshRef.current = true;
+      }
+
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      realtimeTimerRef.current = setTimeout(() => {
+        void flushRealtimeUpdates();
+      }, REALTIME_DEBOUNCE_MS);
+    },
+    [flushRealtimeUpdates],
+  );
+
+  const handleRealtimeChange = useCallback(
+    (table: 'ordenes' | 'sellos' | 'tareas') =>
+      (payload: { eventType: string; new: RealtimeRow; old: RealtimeRow }) => {
+        if (table === 'ordenes' && payload.eventType === 'DELETE') {
+          const id = orderIdFromRealtimePayload(table, payload);
+          if (id) removeOrderFromState(id);
+          return;
+        }
+        const orderId = orderIdFromRealtimePayload(table, payload);
+        scheduleRealtimeUpdate(orderId);
+      },
+    [removeOrderFromState, scheduleRealtimeUpdate],
+  );
+
   const ensureFullCatalog = useCallback(async () => {
     if (fullCatalogLoadedRef.current) return;
     if (ensureFullInFlightRef.current) return ensureFullInFlightRef.current;
@@ -194,6 +308,48 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void fetchOrders({ scope: 'operational' });
   }, [fetchOrders]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('orders-realtime-global')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ordenes' },
+        handleRealtimeChange('ordenes'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sellos' },
+        handleRealtimeChange('sellos'),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tareas', filter: 'contexto=eq.PEDIDOS' },
+        handleRealtimeChange('tareas'),
+      )
+      .subscribe((status) => {
+        if (import.meta.env.DEV && status === 'SUBSCRIBED') {
+          console.info('[orders] Realtime activo (ordenes, sellos, tareas)');
+        }
+      });
+
+    return () => {
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [handleRealtimeChange]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastVisibilityRefreshRef.current < VISIBILITY_REFRESH_GAP_MS) return;
+      lastVisibilityRefreshRef.current = now;
+      scheduleRealtimeUpdate(null, { fullRefresh: true });
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [scheduleRealtimeUpdate]);
 
   const syncBothLists = useCallback(
     (orderId: string, patch: Partial<Order> | ((order: Order) => Order)) => {
