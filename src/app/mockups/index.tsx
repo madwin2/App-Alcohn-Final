@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/context-menu';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabase/client';
 import { downloadFile } from '@/lib/supabase/services/storage.service';
 import { cn } from '@/lib/utils/cn';
 import { listMockupSolicitudes, type MockupSolicitudRow } from '@/lib/supabase/services/mockupSolicitudes.service';
@@ -65,11 +66,43 @@ function optimizedDownloadFilename(item: MockupSolicitudRow): string {
   return `${slug}_optimizado.png`;
 }
 
+function hasOptimizedAsset(item: MockupSolicitudRow): boolean {
+  return Boolean(item.imagen_optimizada_path?.trim() || item.imagen_optimizada_url?.trim());
+}
+
+async function downloadOptimizedMockupFile(item: MockupSolicitudRow): Promise<void> {
+  const filename = optimizedDownloadFilename(item);
+  const storagePath = item.imagen_optimizada_path?.trim();
+
+  if (storagePath) {
+    const { data, error } = await supabase.storage.from('foto').download(storagePath);
+    if (error) throw error;
+    if (!data) throw new Error('No se encontró el archivo optimizado en storage');
+
+    const blobUrl = window.URL.createObjectURL(data);
+    try {
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      window.URL.revokeObjectURL(blobUrl);
+    }
+    return;
+  }
+
+  const url = item.imagen_optimizada_url?.trim();
+  if (!url) throw new Error('Sin archivo optimizado');
+  await downloadFile(url, filename);
+}
+
 function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
   const { toast } = useToast();
   const thumb = thumbUrl(item);
   const href = primaryHref(item);
-  const optimizedUrl = item.imagen_optimizada_url?.trim() || null;
+  const canDownloadOptimized = hasOptimizedAsset(item);
   const name = item.nombre_muestra || item.nombre_slug || 'Sin nombre';
   const phone = item.whatsapp?.trim() || null;
   const dateStr = new Date(item.created_at).toLocaleString('es-AR', {
@@ -79,8 +112,12 @@ function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
     minute: '2-digit',
   });
 
+  const openPreview = () => {
+    if (href) window.open(href, '_blank', 'noopener,noreferrer');
+  };
+
   const handleDownloadOptimized = async () => {
-    if (!optimizedUrl) {
+    if (!canDownloadOptimized) {
       toast({
         title: 'Sin archivo optimizado',
         description: 'Esta muestra no tiene imagen optimizada guardada.',
@@ -89,7 +126,7 @@ function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
       return;
     }
     try {
-      await downloadFile(optimizedUrl, optimizedDownloadFilename(item));
+      await downloadOptimizedMockupFile(item);
       toast({
         title: 'Descarga iniciada',
         description: 'Se está descargando el archivo optimizado.',
@@ -131,24 +168,39 @@ function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        {href ? (
-          <a
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            onContextMenu={(e) => e.preventDefault()}
-            className="group block w-full min-w-0 max-w-full rounded-3xl outline-none [-webkit-tap-highlight-color:transparent] ring-offset-0 focus-visible:ring-2 focus-visible:ring-white/35 focus-visible:ring-offset-0"
-          >
-            {shell}
-          </a>
-        ) : (
-          <div className="group w-full min-w-0 max-w-full rounded-3xl">{shell}</div>
-        )}
+        <div
+          role={href ? 'button' : undefined}
+          tabIndex={href ? 0 : undefined}
+          title={
+            href
+              ? 'Clic izquierdo: abrir mockup · clic derecho: descargar optimizado'
+              : canDownloadOptimized
+                ? 'Clic derecho: descargar optimizado'
+                : undefined
+          }
+          onClick={(e) => {
+            if (e.button !== 0) return;
+            openPreview();
+          }}
+          onKeyDown={(e) => {
+            if (!href) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openPreview();
+            }
+          }}
+          className={cn(
+            'group block w-full min-w-0 max-w-full rounded-3xl outline-none [-webkit-tap-highlight-color:transparent] ring-offset-0 focus-visible:ring-2 focus-visible:ring-white/35 focus-visible:ring-offset-0',
+            href && 'cursor-pointer',
+          )}
+        >
+          {shell}
+        </div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
+      <ContextMenuContent className="z-[200]">
         <ContextMenuItem
-          disabled={!optimizedUrl}
-          onClick={() => void handleDownloadOptimized()}
+          disabled={!canDownloadOptimized}
+          onSelect={() => void handleDownloadOptimized()}
         >
           <Download className="mr-2 h-4 w-4" aria-hidden />
           Descargar archivo optimizado
