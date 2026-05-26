@@ -113,6 +113,8 @@ export interface Database {
           archivo_base: string | null;
           foto_sello: string | null;
           archivo_vector_preview: string | null;
+          estado_vectorizacion?: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR' | null;
+          error_vectorizacion_mensaje?: string | null;
           tipo_planchuela: 100 | 63 | 38 | 25 | 19 | 12 | null;
           tiempo: number | null;
           maquina: 'C' | 'G' | 'XL' | null;
@@ -128,6 +130,51 @@ export interface Database {
         };
         Insert: Omit<Database['public']['Tables']['sellos']['Row'], 'id' | 'created_at' | 'updated_at' | 'restante'>;
         Update: Partial<Database['public']['Tables']['sellos']['Insert']>;
+      };
+      vector_jobs: {
+        Row: {
+          id: string;
+          sello_id: string;
+          orden_id: string;
+          estado: 'PENDING' | 'PROCESSING' | 'DONE' | 'ERROR';
+          attempts: number;
+          max_attempts: number;
+          locked_at: string | null;
+          run_after: string | null;
+          last_error: string | null;
+          worker_id: string | null;
+          created_at: string;
+          updated_at: string;
+          finished_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          sello_id: string;
+          orden_id: string;
+          estado?: 'PENDING' | 'PROCESSING' | 'DONE' | 'ERROR';
+          attempts?: number;
+          max_attempts?: number;
+          locked_at?: string | null;
+          run_after?: string | null;
+          last_error?: string | null;
+          worker_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          finished_at?: string | null;
+        };
+        Update: Partial<{
+          sello_id: string;
+          orden_id: string;
+          estado: 'PENDING' | 'PROCESSING' | 'DONE' | 'ERROR';
+          attempts: number;
+          max_attempts: number;
+          locked_at: string | null;
+          run_after: string | null;
+          last_error: string | null;
+          worker_id: string | null;
+          updated_at: string;
+          finished_at: string | null;
+        }>;
       };
       programa: {
         Row: {

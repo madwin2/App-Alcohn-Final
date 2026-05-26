@@ -98,3 +98,76 @@ export function micorreoUploadDevProxy(env: Record<string, string>): Plugin {
     },
   };
 }
+
+/** En `npm run dev`, reenvía POST /api/vectorize-enqueue al worker de vectorización. */
+export function vectorizeEnqueueDevProxy(env: Record<string, string>): Plugin {
+  return {
+    name: 'vectorize-enqueue-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/vectorize-enqueue', async (req, res) => {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { status: 'system_error', message: 'Method not allowed', httpStatus: 405 });
+          return;
+        }
+
+        const baseUrl = (env.VECTOR_WORKER_URL || '').replace(/\/$/, '');
+        const apiKey = env.VECTOR_WORKER_API_KEY || '';
+        if (!baseUrl || !apiKey) {
+          sendJson(res, 503, {
+            status: 'system_error',
+            message: 'Configurá VECTOR_WORKER_URL y VECTOR_WORKER_API_KEY en .env.local para desarrollo.',
+            httpStatus: 503,
+          });
+          return;
+        }
+
+        try {
+          const body = await readJsonBody(req);
+          const selloId = typeof body.selloId === 'string' ? body.selloId.trim() : '';
+          const orderId = typeof body.orderId === 'string' ? body.orderId.trim() : '';
+          const fileUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : '';
+          const reason = typeof body.reason === 'string' ? body.reason.trim() : 'BASE_UPLOADED';
+
+          if (!selloId || !orderId || !fileUrl) {
+            sendJson(res, 400, {
+              status: 'system_error',
+              message: 'Faltan selloId, orderId o baseUrl.',
+              httpStatus: 400,
+            });
+            return;
+          }
+
+          const response = await fetch(`${baseUrl}/enqueue`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ selloId, orderId, baseUrl: fileUrl, reason }),
+          });
+
+          const raw = await response.text();
+          let data: unknown;
+          try {
+            data = raw ? JSON.parse(raw) : {};
+          } catch {
+            sendJson(res, 503, {
+              status: 'system_error',
+              message: 'Respuesta inválida del worker de vectorización.',
+              httpStatus: 503,
+            });
+            return;
+          }
+
+          sendJson(res, response.status, data);
+        } catch (error) {
+          sendJson(res, 503, {
+            status: 'system_error',
+            message: error instanceof Error ? error.message : 'No se pudo contactar al vector worker.',
+            httpStatus: 503,
+          });
+        }
+      });
+    },
+  };
+}

@@ -11,7 +11,8 @@ const vectorizationToFabricationMap: Record<VectorizationState, string> = {
   'BASE': 'SIN_HACER',        // Base en gris (como Sin Hacer)
   'VECTORIZADO': 'HECHO',     // Vectorizado en verde (como Hecho)
   'DESCARGADO': 'VERIFICAR',  // Descargado en naranja (como Verificar)
-  'EN_PROCESO': 'HACIENDO'    // En Proceso en azul (como Haciendo)
+  'EN_PROCESO': 'HACIENDO',   // En Proceso en azul (como Haciendo)
+  'ERROR': 'REHACER',         // Error en rojo (como Rehacer)
 };
 
 const fabricationToVectorizationMap: Record<string, VectorizationState> = {
@@ -19,7 +20,7 @@ const fabricationToVectorizationMap: Record<string, VectorizationState> = {
   'HECHO': 'VECTORIZADO',
   'VERIFICAR': 'DESCARGADO',
   'HACIENDO': 'EN_PROCESO',
-  'REHACER': 'BASE',
+  'REHACER': 'ERROR',
   'RETOCAR': 'BASE'
 };
 
@@ -67,6 +68,16 @@ const getVectorizationChipVisual = (state: VectorizationState) => {
         textColor: `rgba(249,115,22,0.82)`,
         width: '80px'
       };
+    case 'ERROR':
+      return {
+        backgroundImage: `linear-gradient(60deg, rgba(239,68,68,0.06) 0%, rgba(239,68,68,0) 100%)`,
+        backgroundColor: `rgba(239,68,68,0.12)`,
+        boxShadow: 'none',
+        borderColor: `rgba(239,68,68,0.75)`,
+        textClass: '',
+        textColor: `rgba(239,68,68,0.85)`,
+        width: '80px'
+      };
     default:
       return {
         backgroundImage: `linear-gradient(60deg, rgba(107,114,128,0.05) 0%, rgba(107,114,128,0) 100%)`,
@@ -90,6 +101,8 @@ const getVectorizationLabel = (state: VectorizationState): string => {
       return 'D';
     case 'EN_PROCESO':
       return 'EP';
+    case 'ERROR':
+      return 'ER';
     default:
       return 'AB';
   }

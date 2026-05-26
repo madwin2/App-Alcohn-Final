@@ -167,7 +167,7 @@ export interface SortState {
 
 // Production Types
 export type ProductionState = 'PENDIENTE' | 'EN_PROGRESO' | 'COMPLETADO' | 'REVISAR' | 'REHACER';
-export type VectorizationState = 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO';
+export type VectorizationState = 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR';
 export type ProgramType = 'ILLUSTRATOR' | 'PHOTOSHOP' | 'COREL' | 'AUTOCAD' | 'OTRO';
 
 export interface ProductionTask {

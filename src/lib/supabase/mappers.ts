@@ -232,12 +232,11 @@ export const mapSelloToOrderItem = (sello: SelloRow, cliente: ClienteRow): Order
     program: (sello as any).programa_nombre || undefined,
     files: {
       baseUrl: sello.archivo_base || undefined,
-      // Si hay preview de vector, inferir que el vectorUrl es el EPS original
-      // (reemplazando _preview.png por .eps)
-      vectorUrl: (sello as any).archivo_vector_preview 
-        ? (sello as any).archivo_vector_preview.replace(/_preview\.png$/i, '.eps')
+      // Compatibilidad: EPS con _preview.png y nuevos SVG directos del worker.
+      vectorUrl: (sello as any).archivo_vector_preview
+        ? String((sello as any).archivo_vector_preview).replace(/_preview\.(png|jpg|jpeg)$/i, '.eps')
         : undefined,
-      vectorPreviewUrl: (sello as any).archivo_vector_preview || undefined, // Preview PNG para EPS
+      vectorPreviewUrl: (sello as any).archivo_vector_preview || undefined,
       photoUrl: sello.foto_sello || undefined,
     },
     contact: {

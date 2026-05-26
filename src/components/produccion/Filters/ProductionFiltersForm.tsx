@@ -41,7 +41,8 @@ const vectorizationLabels: Record<VectorizationState, string> = {
   'BASE': 'Base',
   'VECTORIZADO': 'Vectorizado',
   'DESCARGADO': 'Descargado',
-  'EN_PROCESO': 'En Proceso'
+  'EN_PROCESO': 'En Proceso',
+  'ERROR': 'Error',
 };
 
 const filtersSchema = z.object({
@@ -50,7 +51,7 @@ const filtersSchema = z.object({
     to: z.string().optional(),
   }).optional(),
   production: z.array(z.enum(['PENDIENTE', 'EN_PROGRESO', 'COMPLETADO', 'REVISAR', 'REHACER'])).optional(),
-  vectorization: z.array(z.enum(['BASE', 'VECTORIZADO', 'DESCARGADO', 'EN_PROCESO'])).optional(),
+  vectorization: z.array(z.enum(['BASE', 'VECTORIZADO', 'DESCARGADO', 'EN_PROCESO', 'ERROR'])).optional(),
 });
 
 type FiltersFormData = z.infer<typeof filtersSchema>;
@@ -263,7 +264,7 @@ export function ProductionFiltersForm({ onSubmit, onClear, initialData }: Produc
       <div className="space-y-3">
         <Label className="text-base font-semibold">Estado de vectorización</Label>
         <div className="grid grid-cols-2 gap-3">
-          {(['BASE', 'VECTORIZADO', 'DESCARGADO', 'EN_PROCESO'] as VectorizationState[]).map((state) => (
+          {(['BASE', 'VECTORIZADO', 'DESCARGADO', 'EN_PROCESO', 'ERROR'] as VectorizationState[]).map((state) => (
             <div 
               key={state} 
               className={`flex items-center space-x-3 p-2.5 rounded-lg border transition-colors ${

@@ -204,10 +204,10 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
 
       // Obtener estado de vectorización desde la BD
       // Por defecto BASE si no está seteado
-      let vectorizationState: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' = 'BASE';
+      let vectorizationState: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR' = 'BASE';
       
       if ((sello as any).estado_vectorizacion) {
-        vectorizationState = (sello as any).estado_vectorizacion as 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO';
+        vectorizationState = (sello as any).estado_vectorizacion as 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR';
       }
 
       // Obtener programa desde el campo programa_nombre
@@ -239,9 +239,9 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         takenBy,
         files: {
           baseUrl: sello.archivo_base || undefined,
-          // Si hay preview de vector (EPS), la URL del EPS se deriva del path del preview
+          // Compatibilidad: EPS con _preview.png y nuevos SVG directos del worker.
           vectorUrl: (sello as any).archivo_vector_preview
-            ? (sello as any).archivo_vector_preview.replace(/_preview\.png$/i, '.eps')
+            ? String((sello as any).archivo_vector_preview).replace(/_preview\.(png|jpg|jpeg)$/i, '.eps')
             : undefined,
           vectorPreviewUrl: (sello as any).archivo_vector_preview || undefined,
           photoUrl: sello.foto_sello || undefined,
@@ -270,18 +270,18 @@ export const updateProductionItem = async (
     // Obtener también los archivos del sello para calcular vectorizationState si es necesario
     const { data: currentSello } = await supabase
       .from('sellos')
-      .select('archivo_base, foto_sello')
+      .select('archivo_base, foto_sello, estado_vectorizacion')
       .eq('id', itemId)
       .single();
     
     // Usar el vectorizationState actual del item si existe, sino usar el de la BD
-    let currentVectorizationState: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' = 'BASE';
+    let currentVectorizationState: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR' = 'BASE';
     if (currentItem && currentItem.vectorizationState) {
       // Si tenemos el item actual, usar su vectorizationState
       currentVectorizationState = currentItem.vectorizationState;
     } else if (currentSello && (currentSello as any).estado_vectorizacion) {
       // Si no tenemos el item, usar el estado guardado en la BD
-      currentVectorizationState = (currentSello as any).estado_vectorizacion as 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO';
+      currentVectorizationState = (currentSello as any).estado_vectorizacion as 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR';
     }
 
     // Mapear estado de producción a estado de fabricación
@@ -429,14 +429,14 @@ export const updateProductionItem = async (
     const itemType = mapItemType((updatedSello as any).item_type);
 
     // Obtener estado de vectorización desde la BD actualizada, o usar el valor de updates
-    let vectorizationState: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO';
+    let vectorizationState: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR';
     
     if (updates.vectorizationState !== undefined) {
       // Si se especificó explícitamente en updates, usar ese valor (ya se guardó en la BD)
       vectorizationState = updates.vectorizationState;
     } else if ((updatedSello as any).estado_vectorizacion) {
       // Si no se especificó en updates, usar el valor guardado en la BD
-      vectorizationState = (updatedSello as any).estado_vectorizacion as 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO';
+      vectorizationState = (updatedSello as any).estado_vectorizacion as 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR';
     } else {
       // Si no hay valor en la BD, mantener el valor actual que calculamos antes de actualizar
       vectorizationState = currentVectorizationState;
@@ -502,7 +502,10 @@ export const updateProductionItem = async (
       takenBy,
       files: {
         baseUrl: updatedSello.archivo_base || undefined,
-        vectorUrl: undefined,
+        vectorUrl: (updatedSello as any).archivo_vector_preview
+          ? String((updatedSello as any).archivo_vector_preview).replace(/_preview\.(png|jpg|jpeg)$/i, '.eps')
+          : undefined,
+        vectorPreviewUrl: (updatedSello as any).archivo_vector_preview || undefined,
         photoUrl: updatedSello.foto_sello || undefined,
       },
       tasks: productionTasks,

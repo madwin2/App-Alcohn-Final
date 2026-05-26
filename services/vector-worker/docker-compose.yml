@@ -1,0 +1,9 @@
+services:
+  vector-worker:
+    build: .
+    container_name: vector-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8790:8790"
