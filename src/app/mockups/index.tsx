@@ -1,11 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { Download, Plus, Search, X } from 'lucide-react';
 import { AppMain } from '@/components/layout/AppMain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { Toaster } from '@/components/ui/toaster';
+import { useToast } from '@/components/ui/use-toast';
+import { downloadFile } from '@/lib/supabase/services/storage.service';
 import { cn } from '@/lib/utils/cn';
 import { listMockupSolicitudes, type MockupSolicitudRow } from '@/lib/supabase/services/mockupSolicitudes.service';
 import { MockupSlotCard, type MockupSlotHandle } from './MockupSlotCard';
@@ -50,9 +58,18 @@ function primaryHref(item: MockupSolicitudRow): string | null {
   return item.mockup_cuero_url || item.mockup_madera_url || item.imagen_optimizada_url || item.archivo_base_url || null;
 }
 
+function optimizedDownloadFilename(item: MockupSolicitudRow): string {
+  const slug = (item.nombre_slug || item.nombre_muestra || `muestra-${item.id.slice(0, 8)}`)
+    .trim()
+    .replace(/[^\w.-]+/g, '_');
+  return `${slug}_optimizado.png`;
+}
+
 function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
+  const { toast } = useToast();
   const thumb = thumbUrl(item);
   const href = primaryHref(item);
+  const optimizedUrl = item.imagen_optimizada_url?.trim() || null;
   const name = item.nombre_muestra || item.nombre_slug || 'Sin nombre';
   const phone = item.whatsapp?.trim() || null;
   const dateStr = new Date(item.created_at).toLocaleString('es-AR', {
@@ -61,6 +78,30 @@ function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  const handleDownloadOptimized = async () => {
+    if (!optimizedUrl) {
+      toast({
+        title: 'Sin archivo optimizado',
+        description: 'Esta muestra no tiene imagen optimizada guardada.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      await downloadFile(optimizedUrl, optimizedDownloadFilename(item));
+      toast({
+        title: 'Descarga iniciada',
+        description: 'Se está descargando el archivo optimizado.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error al descargar',
+        description: error instanceof Error ? error.message : 'No se pudo descargar el archivo optimizado',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const shell = (
     <div className="relative w-full min-w-0 max-w-full aspect-[4/3] overflow-hidden rounded-3xl bg-muted/25 shadow-[0_14px_44px_-14px_rgba(0,0,0,0.55)]">
@@ -87,19 +128,34 @@ function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
     </div>
   );
 
-  if (href) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        className="group block w-full min-w-0 max-w-full rounded-3xl outline-none [-webkit-tap-highlight-color:transparent] ring-offset-0 focus-visible:ring-2 focus-visible:ring-white/35 focus-visible:ring-offset-0"
-      >
-        {shell}
-      </a>
-    );
-  }
-  return <div className="group w-full min-w-0 max-w-full rounded-3xl">{shell}</div>;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            onContextMenu={(e) => e.preventDefault()}
+            className="group block w-full min-w-0 max-w-full rounded-3xl outline-none [-webkit-tap-highlight-color:transparent] ring-offset-0 focus-visible:ring-2 focus-visible:ring-white/35 focus-visible:ring-offset-0"
+          >
+            {shell}
+          </a>
+        ) : (
+          <div className="group w-full min-w-0 max-w-full rounded-3xl">{shell}</div>
+        )}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          disabled={!optimizedUrl}
+          onClick={() => void handleDownloadOptimized()}
+        >
+          <Download className="mr-2 h-4 w-4" aria-hidden />
+          Descargar archivo optimizado
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
 }
 
 export default function MockupsPage() {
