@@ -5,6 +5,8 @@ import { useState, useRef } from 'react';
 import { uploadFile, generateFilePath, deleteFile, downloadFile, getFilePathFromUrl } from '@/lib/supabase/services/storage.service';
 import { useToast } from '@/components/ui/use-toast';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
+import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
+import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
 
 interface CellFotoProps {
   order: Order;
@@ -15,6 +17,7 @@ interface CellFotoProps {
 export function CellFoto({ order, onUpdate, editingRowId }: CellFotoProps) {
   const { showPreviews } = useOrdersStore();
   const { toast } = useToast();
+  const { preview, openPreview, closePreview } = useImagePreviewLightbox();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const item = order.items[0];
@@ -202,7 +205,10 @@ export function CellFoto({ order, onUpdate, editingRowId }: CellFotoProps) {
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div 
-            onClick={handleClick}
+            onClick={(e) => {
+              e.stopPropagation();
+              openPreview(hasFile, 'Foto del sello');
+            }}
             onContextMenu={(e) => e.stopPropagation()} // Prevenir que se propague al menú del pedido
             className={`w-10 h-10 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity relative ${uploading ? 'opacity-50' : ''}`}
           >
@@ -226,6 +232,10 @@ export function CellFoto({ order, onUpdate, editingRowId }: CellFotoProps) {
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+          <ContextMenuItem onClick={handleClick}>
+            <Upload className="mr-2 h-4 w-4" />
+            Reemplazar foto
+          </ContextMenuItem>
           <ContextMenuItem onClick={handleDownload}>
             <Download className="mr-2 h-4 w-4" />
             Descargar archivo
@@ -237,6 +247,11 @@ export function CellFoto({ order, onUpdate, editingRowId }: CellFotoProps) {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      <ImagePreviewLightbox
+        src={preview?.src ?? null}
+        alt={preview?.alt}
+        onClose={closePreview}
+      />
     </>
   );
 }

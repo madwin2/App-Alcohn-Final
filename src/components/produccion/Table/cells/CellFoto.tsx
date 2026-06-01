@@ -1,6 +1,8 @@
 import { Upload } from 'lucide-react';
 import { ProductionItem } from '@/lib/types/index';
 import { useProductionStore } from '@/lib/state/production.store';
+import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
+import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
 
 interface CellFotoProps {
   item: ProductionItem;
@@ -8,6 +10,7 @@ interface CellFotoProps {
 
 export function CellFoto({ item }: CellFotoProps) {
   const { showPreviews } = useProductionStore();
+  const { preview, openPreview, closePreview } = useImagePreviewLightbox();
   const hasFile = item.files?.photoUrl;
   
   if (!showPreviews) {
@@ -29,29 +32,42 @@ export function CellFoto({ item }: CellFotoProps) {
 
   // Cuando las previsualizaciones están habilitadas, mostrar la imagen
   return (
-    <div className="w-full h-12 flex items-center justify-center">
-      {!hasFile ? (
-        <div className="flex items-center justify-center w-10 h-10 border-2 border-dashed border-muted-foreground/25 rounded">
-          <Upload className="h-4 w-4 text-muted-foreground" />
-        </div>
-      ) : (
-        <div className="w-10 h-10 rounded border overflow-hidden">
-          <img
-            src={hasFile}
-            alt="Foto"
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              // Si falla la imagen, mostrar el ícono de subir
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.nextElementSibling?.classList.remove('hidden');
-            }}
-          />
-          <div className="hidden w-full h-full flex items-center justify-center bg-muted">
+    <>
+      <div className="w-full h-12 flex items-center justify-center">
+        {!hasFile ? (
+          <div className="flex items-center justify-center w-10 h-10 border-2 border-dashed border-muted-foreground/25 rounded">
             <Upload className="h-4 w-4 text-muted-foreground" />
           </div>
-        </div>
-      )}
-    </div>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openPreview(hasFile, 'Foto del sello');
+            }}
+            className="w-10 h-10 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+          >
+            <img
+              src={hasFile}
+              alt="Foto"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+            <div className="hidden w-full h-full flex items-center justify-center bg-muted">
+              <Upload className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </button>
+        )}
+      </div>
+      <ImagePreviewLightbox
+        src={preview?.src ?? null}
+        alt={preview?.alt}
+        onClose={closePreview}
+      />
+    </>
   );
 }
 

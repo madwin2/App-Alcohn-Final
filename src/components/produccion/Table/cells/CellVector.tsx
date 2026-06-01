@@ -4,6 +4,8 @@ import { useProductionStore } from '@/lib/state/production.store';
 import { downloadFile } from '@/lib/supabase/services/storage.service';
 import { useToast } from '@/components/ui/use-toast';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu';
+import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
+import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
 
 interface CellVectorProps {
   item: ProductionItem;
@@ -12,6 +14,7 @@ interface CellVectorProps {
 export function CellVector({ item }: CellVectorProps) {
   const { showPreviews } = useProductionStore();
   const { toast } = useToast();
+  const { preview, openPreview, closePreview } = useImagePreviewLightbox();
 
   const hasFile = item.files?.vectorUrl;
   const previewUrl = item.files?.vectorPreviewUrl;
@@ -63,6 +66,7 @@ export function CellVector({ item }: CellVectorProps) {
   }
 
   return (
+    <>
     <div className="flex h-12 w-full items-center justify-center">
       {!hasFile ? (
         <div className="flex size-10 items-center justify-center rounded border-2 border-dashed border-muted-foreground/25">
@@ -91,7 +95,15 @@ export function CellVector({ item }: CellVectorProps) {
       ) : (
         <ContextMenu>
           <ContextMenuTrigger asChild>
-            <button type="button" className="relative size-10 overflow-hidden rounded border p-0" title="Vector">
+            <button
+              type="button"
+              className="relative size-10 overflow-hidden rounded border p-0 cursor-pointer hover:opacity-80 transition-opacity"
+              title="Vector"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (displayUrl) openPreview(displayUrl, 'Vector');
+              }}
+            >
               {displayUrl ? (
                 <>
                   <img
@@ -122,5 +134,11 @@ export function CellVector({ item }: CellVectorProps) {
         </ContextMenu>
       )}
     </div>
+    <ImagePreviewLightbox
+      src={preview?.src ?? null}
+      alt={preview?.alt}
+      onClose={closePreview}
+    />
+    </>
   );
 }

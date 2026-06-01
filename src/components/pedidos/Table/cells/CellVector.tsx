@@ -12,6 +12,8 @@ import {
 } from '@/lib/supabase/services/storage.service';
 import { useToast } from '@/components/ui/use-toast';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
+import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
+import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
 
 interface CellVectorProps {
   order: Order;
@@ -22,6 +24,7 @@ interface CellVectorProps {
 export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   const { showPreviews } = useOrdersStore();
   const { toast } = useToast();
+  const { preview, openPreview, closePreview } = useImagePreviewLightbox();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const item = order.items[0];
@@ -333,7 +336,10 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
             </button>
           ) : (
             <div
-              onClick={handleClick}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (displayUrl) openPreview(displayUrl, isEps ? 'Vector EPS' : 'Vector');
+              }}
               onContextMenu={(e) => e.stopPropagation()}
               className={`relative h-10 w-10 cursor-pointer overflow-hidden rounded border transition-opacity hover:opacity-80 ${uploading ? 'opacity-50' : ''}`}
             >
@@ -368,6 +374,10 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
           )}
         </ContextMenuTrigger>
         <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+          <ContextMenuItem onClick={handleClick}>
+            <Upload className="mr-2 h-4 w-4" />
+            Reemplazar archivo
+          </ContextMenuItem>
           <ContextMenuItem onClick={(e) => void handleDownload(e)}>
             <Download className="mr-2 h-4 w-4" />
             Descargar archivo
@@ -379,6 +389,11 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      <ImagePreviewLightbox
+        src={preview?.src ?? null}
+        alt={preview?.alt}
+        onClose={closePreview}
+      />
     </>
   );
 }
