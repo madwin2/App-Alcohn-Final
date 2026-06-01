@@ -2,7 +2,14 @@ import { Upload, Loader2, Download, Trash2, FileType2 } from 'lucide-react';
 import { Order } from '@/lib/types/index';
 import { useOrdersStore } from '@/lib/state/orders.store';
 import { useState, useRef } from 'react';
-import { uploadFile, generateFilePath, deleteFile, downloadFile, getFilePathFromUrl } from '@/lib/supabase/services/storage.service';
+import {
+  uploadFile,
+  generateFilePath,
+  deleteFile,
+  downloadBaseFile,
+  getFilePathFromUrl,
+  sanitizeDownloadFilename,
+} from '@/lib/supabase/services/storage.service';
 import { useToast } from '@/components/ui/use-toast';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
@@ -150,11 +157,8 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
     if (!hasFile) return;
 
     try {
-      // Extraer el nombre del archivo de la URL
-      const urlParts = hasFile.split('/');
-      const filename = urlParts[urlParts.length - 1] || 'archivo-base.jpg';
-      
-      await downloadFile(hasFile, filename);
+      const filename = `${sanitizeDownloadFilename(item.designName)}_archivo_base.jpg`;
+      await downloadBaseFile(hasFile, filename);
       
       toast({
         title: 'Descarga iniciada',

@@ -18,7 +18,11 @@ import { DndTableContainer } from './DndTableContainer';
 import { ResizableHeader } from './ResizableHeader';
 import { Checkbox } from '@/components/ui/checkbox';
 import { createTask, updateTask, deleteTask } from '@/lib/supabase/services/orders.service';
-import { downloadFile } from '@/lib/supabase/services/storage.service';
+import {
+  downloadBaseFile,
+  downloadFile,
+  sanitizeDownloadFilename,
+} from '@/lib/supabase/services/storage.service';
 import { supabase } from '@/lib/supabase/client';
 import {
   createOrderStickyTask,
@@ -371,13 +375,8 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
   const handleDownloadBase = async (item: ProductionItem) => {
     if (!item.files?.baseUrl) return;
     try {
-      const urlParts = item.files.baseUrl.split('/');
-      const nameFromUrl = urlParts[urlParts.length - 1] || '';
-      const hasExtension = /\.(jpg|jpeg|png|gif|webp|pdf)$/i.test(nameFromUrl);
-      const filename = hasExtension
-        ? `${item.designName}_archivo_base.${(nameFromUrl.match(/\.([^.]+)$/)?.[1] || 'jpg')}`
-        : `${item.designName}_archivo_base.jpg`;
-      await downloadFile(item.files.baseUrl, filename);
+      const filename = `${sanitizeDownloadFilename(item.designName)}_archivo_base.jpg`;
+      await downloadBaseFile(item.files.baseUrl, filename);
       toast({ title: 'Descarga iniciada', description: 'Archivo base descargándose...' });
     } catch (error) {
       console.error('Error downloading base file:', error);

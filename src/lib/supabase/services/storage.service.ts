@@ -125,6 +125,65 @@ export const getFilePathFromUrl = (url: string, bucket: BucketType): string | nu
   }
 };
 
+const JPEG_DOWNLOAD_QUALITY = 0.92;
+
+const triggerBlobDownload = (blob: Blob, filename: string): void => {
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(downloadUrl);
+};
+
+const isPdfUrl = (url: string): boolean => /\.pdf(\?|#|$)/i.test(url);
+
+const isJpegSource = (url: string, blob: Blob): boolean => {
+  if (/^image\/jpe?g$/i.test(blob.type)) return true;
+  if (blob.type && blob.type !== 'application/octet-stream') return false;
+  return /\.jpe?g(\?|#|$)/i.test(url);
+};
+
+/** Nombre seguro para guardar en disco (Windows/macOS). */
+export const sanitizeDownloadFilename = (name: string): string =>
+  name.replace(/[<>:"/\\|?*]/g, '_').trim() || 'archivo';
+
+/** Fuerza extensión .jpg en el nombre de descarga. */
+export const ensureJpgFilename = (filename: string): string =>
+  `${filename.replace(/\.[^.]+$/i, '')}.jpg`;
+
+const blobToJpeg = (blob: Blob, quality = JPEG_DOWNLOAD_QUALITY): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('No se pudo procesar la imagen'));
+        return;
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(
+        (jpeg) => (jpeg ? resolve(jpeg) : reject(new Error('No se pudo convertir a JPG'))),
+        'image/jpeg',
+        quality,
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('No se pudo cargar la imagen'));
+    };
+    img.src = objectUrl;
+  });
+
 /**
  * Descarga un archivo desde su URL
  * @param url - URL del archivo a descargar
@@ -136,18 +195,45 @@ export const downloadFile = async (url: string, filename: string): Promise<void>
     if (!response.ok) {
       throw new Error('Error al descargar el archivo');
     }
-    
-    const blob = await response.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(downloadUrl);
+
+    triggerBlobDownload(await response.blob(), filename);
   } catch (error) {
     console.error('Error downloading file:', error);
+    throw error;
+  }
+};
+
+/**
+ * Descarga un archivo base: PDF tal cual; imágenes (PNG, WebP, etc.) como JPG.
+ */
+export const downloadBaseFile = async (url: string, filename: string): Promise<void> => {
+  try {
+    if (isPdfUrl(url)) {
+      const pdfName = /\.pdf$/i.test(filename) ? filename : `${filename.replace(/\.[^.]+$/i, '')}.pdf`;
+      await downloadFile(url, pdfName);
+      return;
+    }
+
+    const jpgFilename = ensureJpgFilename(filename);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Error al descargar el archivo');
+    }
+
+    const blob = await response.blob();
+    if (isJpegSource(url, blob)) {
+      triggerBlobDownload(blob, jpgFilename);
+      return;
+    }
+
+    try {
+      triggerBlobDownload(await blobToJpeg(blob), jpgFilename);
+    } catch {
+      // Si falla la conversión (p. ej. CORS), descargar el original
+      triggerBlobDownload(blob, jpgFilename);
+    }
+  } catch (error) {
+    console.error('Error downloading base file:', error);
     throw error;
   }
 };
