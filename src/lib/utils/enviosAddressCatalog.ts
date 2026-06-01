@@ -2,10 +2,11 @@ import {
   canonicalizeProvince,
   getCorreoCapitalFederalLocality,
   normalizeLocality,
+  stripAccents,
 } from '@/lib/utils/shippingNormalization';
 
-/** Misma localidad con distinto casing / puntuación (ej. LA PLATA vs La Plata). */
-const localityKey = (localidad: string) => normalizeLocality(localidad);
+/** Misma localidad con distinto casing / puntuación / tildes (ej. LA PLATA vs La Plata). */
+const localityKey = (localidad: string) => stripAccents(normalizeLocality(localidad));
 
 export type DireccionCatalogRow = {
   provincia: string;
@@ -87,7 +88,7 @@ export function catalogLocalityOptions(
     const raw = (r.localidad || '').trim();
     if (!raw) continue;
     const key = localityKey(raw);
-    if (!byKey.has(key)) byKey.set(key, raw);
+    if (!byKey.has(key)) byKey.set(key, stripAccents(raw));
   }
   if (p === 'Capital Federal' && !byKey.size) {
     return [getCorreoCapitalFederalLocality()];
@@ -126,7 +127,8 @@ export function catalogContainsSucursalAddress(
   const locForAddr =
     pCanon === 'Capital Federal' ? catalogLocalityOptions(rows, pCanon)[0] || locality : locality;
   const opts = catalogAddressOptions(rows, pCanon, locForAddr.trim());
-  return opts.some((o) => o.trim() === dom);
+  const domNorm = stripAccents(dom);
+  return opts.some((o) => stripAccents(o.trim()) === domNorm);
 }
 
 export function catalogAddressOptions(
@@ -142,7 +144,7 @@ export function catalogAddressOptions(
     for (const r of rows) {
       if (provinceKeyForCatalogRow(r) !== 'Capital Federal') continue;
       const dom = (r.domicilio || '').trim();
-      if (dom) s.add(dom);
+      if (dom) s.add(stripAccents(dom));
     }
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'es'));
   }
@@ -151,7 +153,7 @@ export function catalogAddressOptions(
     if (provinceKeyForCatalogRow(r) !== p) continue;
     if (localityKey(r.localidad) !== locNorm) continue;
     const dom = (r.domicilio || '').trim();
-    if (dom) s.add(dom);
+    if (dom) s.add(stripAccents(dom));
   }
   return Array.from(s).sort((a, b) => a.localeCompare(b, 'es'));
 }
@@ -165,11 +167,11 @@ export function findPostalCodeInCatalog(
 ): string | null {
   const p = canonicalProvince.trim();
   const locNorm = localityKey(locality);
-  const dom = (domicilio || '').trim();
+  const dom = stripAccents((domicilio || '').trim());
   if (!p || !dom) return null;
   for (const r of rows) {
     if (provinceKeyForCatalogRow(r) !== p) continue;
-    if ((r.domicilio || '').trim() !== dom) continue;
+    if (stripAccents((r.domicilio || '').trim()) !== dom) continue;
     if (p === 'Capital Federal') {
       return (r.codigo_postal || '').trim() || null;
     }

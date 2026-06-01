@@ -58,6 +58,7 @@ import {
   normalizeLocalityWhileTyping,
   normalizePhoneDigits,
   normalizePhoneDigitsForEnvios,
+  stripAccents,
 } from '@/lib/utils/shippingNormalization';
 import { ChevronDown, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -147,10 +148,15 @@ const mergeShippingData = (
 
 const normalizeShippingFormData = (data: ShippingFormData): ShippingFormData => {
   const canonicalProvince = canonicalizeProvince(data.province);
+  const province = stripAccents(canonicalProvince || data.province.trim());
   return {
     ...data,
-    province: canonicalProvince || data.province.trim(),
+    fullName: stripAccents(data.fullName.trim()),
+    province,
     locality: normalizeLocalityForCorreo(canonicalProvince, data.locality),
+    address: stripAccents(data.address.trim()),
+    postalCode: data.postalCode.trim(),
+    email: data.email.trim(),
     phone: normalizePhoneDigitsForEnvios(data.phone),
   };
 };
@@ -228,14 +234,14 @@ export default function EnviosPage() {
   }, [micorreoUploadBusy, fetchOrders]);
 
   const provinceSelectOptions = useMemo(
-    () => catalogProvinceOptions(addressCatalogRows),
+    () => catalogProvinceOptions(addressCatalogRows).map(stripAccents),
     [addressCatalogRows],
   );
 
   const localitySelectOptions = useMemo(() => {
     const pCanon = canonicalizeProvince(shippingForm.province) || shippingForm.province.trim();
     if (!pCanon) return [];
-    return catalogLocalityOptions(addressCatalogRows, pCanon);
+    return catalogLocalityOptions(addressCatalogRows, pCanon).map(stripAccents);
   }, [addressCatalogRows, shippingForm.province]);
 
   const addressSelectOptions = useMemo(() => {
@@ -245,7 +251,7 @@ export default function EnviosPage() {
       pCanon === 'Capital Federal'
         ? localitySelectOptions[0] || shippingForm.locality.trim()
         : shippingForm.locality.trim();
-    return catalogAddressOptions(addressCatalogRows, pCanon, loc);
+    return catalogAddressOptions(addressCatalogRows, pCanon, loc).map(stripAccents);
   }, [addressCatalogRows, shippingForm.province, shippingForm.locality, localitySelectOptions]);
 
   const sucursalAddressOptionsWithCode = useMemo(() => {
@@ -262,7 +268,7 @@ export default function EnviosPage() {
       .filter((r) => (canonicalizeProvince(r.provincia) || r.provincia.trim()) === pCanon)
       .filter((r) => normalizeLocality(r.localidad) === normalizeLocality(loc))
       .map((r) => {
-        const domicilio = (r.domicilio || '').trim();
+        const domicilio = stripAccents((r.domicilio || '').trim());
         const codigo = (r.codigo_sucursal || '').trim();
         return {
           domicilio,
@@ -301,16 +307,18 @@ export default function EnviosPage() {
         ) {
           return prev;
         }
-        return { ...prev, ...snapped };
+        return normalizeShippingFormData({ ...prev, ...snapped });
       });
     } else {
       const snappedProvince = snapProvinceToCorreoSucursalCatalog(shippingForm.province, addressCatalogRows);
       if (!snappedProvince || snappedProvince === shippingForm.province) return;
-      setShippingForm((prev) => ({
-        ...prev,
-        province: snappedProvince,
-        locality: normalizeLocalityForCorreo(snappedProvince, prev.locality),
-      }));
+      setShippingForm((prev) =>
+        normalizeShippingFormData({
+          ...prev,
+          province: snappedProvince,
+          locality: prev.locality,
+        }),
+      );
     }
     // Solo re-snap cuando cambia el padrón o el tipo; no en cada tecla del formulario.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -585,12 +593,14 @@ export default function EnviosPage() {
     setShippingTypeDraft(order.shipping.service === 'SUCURSAL' ? 'SUCURSAL' : 'DOMICILIO');
     setRawShippingText('');
     setManualSucursalCode('');
-    setShippingForm({
-      ...emptyForm,
-      fullName: `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim(),
-      email: resolveEnvioEmail({ customerEmail: order.customer.email }),
-      phone: normalizePhoneDigitsForEnvios(order.customer.phoneE164 || ''),
-    });
+    setShippingForm(
+      normalizeShippingFormData({
+        ...emptyForm,
+        fullName: `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim(),
+        email: resolveEnvioEmail({ customerEmail: order.customer.email }),
+        phone: normalizePhoneDigitsForEnvios(order.customer.phoneE164 || ''),
+      }),
+    );
     setShowParseConfirmation(false);
 
     if (!order.direccionId) return;
@@ -606,15 +616,17 @@ export default function EnviosPage() {
 
       const fullName = `${existingAddress?.nombre || order.customer.firstName || ''} ${existingAddress?.apellido || order.customer.lastName || ''}`.trim();
       const canonProv = canonicalizeProvince(existingAddress?.provincia || '');
-      setShippingForm({
-        fullName,
-        province: canonProv || (existingAddress?.provincia || '').trim(),
-        locality: normalizeLocalityForCorreo(canonProv, existingAddress?.localidad || ''),
-        address: existingAddress?.domicilio || '',
-        postalCode: existingAddress?.codigo_postal || '',
-        email: resolveEnvioEmail({ customerEmail: order.customer.email }),
-        phone: normalizePhoneDigitsForEnvios(existingAddress?.telefono || order.customer.phoneE164 || ''),
-      });
+      setShippingForm(
+        normalizeShippingFormData({
+          fullName,
+          province: canonProv || (existingAddress?.provincia || '').trim(),
+          locality: existingAddress?.localidad || '',
+          address: existingAddress?.domicilio || '',
+          postalCode: existingAddress?.codigo_postal || '',
+          email: resolveEnvioEmail({ customerEmail: order.customer.email }),
+          phone: normalizePhoneDigitsForEnvios(existingAddress?.telefono || order.customer.phoneE164 || ''),
+        }),
+      );
       setManualSucursalCode(
         ((existingAddress as { codigo_sucursal_micorreo?: string | null })?.codigo_sucursal_micorreo || '').trim(),
       );
@@ -823,7 +835,7 @@ export default function EnviosPage() {
           cliente_id: selectedOrder.customer.id,
           activa: true,
           codigo_postal: normalizedForm.postalCode || '0000',
-          provincia: canonicalProvince || 'SIN DEFINIR',
+          provincia: normalizedForm.province || 'SIN DEFINIR',
           localidad:
             normalizeLocalityForCorreo(canonicalProvince, normalizedForm.locality) || 'SIN DEFINIR',
           domicilio: normalizedForm.address || 'SIN DEFINIR',
@@ -1428,6 +1440,9 @@ export default function EnviosPage() {
                 <Input
                   value={shippingForm.fullName}
                   onChange={(event) => setShippingForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                  onBlur={(event) =>
+                    setShippingForm((prev) => ({ ...prev, fullName: stripAccents(event.target.value.trim()) }))
+                  }
                 />
               </div>
               {shippingTypeDraft === 'DOMICILIO' ? (
@@ -1499,6 +1514,9 @@ export default function EnviosPage() {
                     <Input
                       value={shippingForm.address}
                       onChange={(event) => setShippingForm((prev) => ({ ...prev, address: event.target.value }))}
+                      onBlur={(event) =>
+                        setShippingForm((prev) => ({ ...prev, address: stripAccents(event.target.value.trim()) }))
+                      }
                       placeholder="Calle, número, piso…"
                     />
                   </div>

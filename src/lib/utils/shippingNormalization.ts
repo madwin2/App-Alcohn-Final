@@ -27,6 +27,15 @@ const PROVINCES = [
 
 type ProvinceName = (typeof PROVINCES)[number];
 
+/**
+ * Quita tildes y diacríticos (á→a, é→e, ó→o, etc.) para Correo Argentino / MiCorreo.
+ * Mantiene ñ y el resto del texto sin forzar mayúsculas.
+ */
+export const stripAccents = (value: string): string =>
+  (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
 const normalize = (value: string) =>
   value
     .normalize('NFD')
@@ -190,8 +199,8 @@ export const getCorreoCapitalFederalLocality = (): string =>
  */
 export const normalizeLocalityForCorreo = (canonicalProvince: string, locality: string): string => {
   if (canonicalProvince === 'Capital Federal') {
-    return getCorreoCapitalFederalLocality();
+    return stripAccents(getCorreoCapitalFederalLocality());
   }
-  return normalizeLocality(locality);
+  return stripAccents(normalizeLocality(locality));
 };
 
