@@ -33,12 +33,15 @@ def main() -> int:
 
         try:
             content = path.read_bytes()
-            eps_bytes, preview_jpg = vectorize_logo(content, settings)
-            out_eps = out_dir / f"{path.stem}.eps"
+            vector_bytes, preview_jpg, vector_ext, meta = vectorize_logo(content, settings)
+            out_vector = out_dir / f"{path.stem}.{vector_ext}"
             out_jpg = out_dir / f"{path.stem}_preview.jpg"
-            out_eps.write_bytes(eps_bytes)
+            out_vector.write_bytes(vector_bytes)
             out_jpg.write_bytes(preview_jpg)
-            print(f"[OK] {path.name} -> {out_eps} | {out_jpg}")
+            print(
+                f"[OK] {path.name} -> {out_vector} | {out_jpg} "
+                f"(upscale={meta.get('upscaled')} x{meta.get('upscale_factor')} mkbitmap_s={meta.get('mkbitmap_scale')})"
+            )
             ok += 1
         except VectorizationError as exc:
             print(f"[ERROR] {path.name}: {exc}")

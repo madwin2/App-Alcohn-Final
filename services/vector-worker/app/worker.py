@@ -43,20 +43,29 @@ class VectorWorkerLoop:
             sello = self.repo.fetch_sello(sello_id)
             if not sello:
                 raise VectorizationError("Sello inexistente.")
-            base_url = (sello.get("archivo_base") or "").strip()
+            base_url = (job.get("base_url") or sello.get("archivo_base") or "").strip()
             if not base_url:
                 raise VectorizationError("El sello no tiene archivo_base.")
 
             source = self.repo.download_base_file(base_url)
-            eps_content, preview_jpg_content = vectorize_logo(source, self.settings)
-            _eps_url, preview_url = self.repo.upload_vector_eps_and_preview_jpg(
+            vector_content, preview_jpg_content, vector_ext, meta = vectorize_logo(source, self.settings)
+            _vector_url, preview_url = self.repo.upload_vector_and_preview(
                 order_id=str(sello["orden_id"]),
                 sello_id=str(sello_id),
-                eps_content=eps_content,
+                vector_content=vector_content,
+                vector_ext=vector_ext,
                 preview_jpg_content=preview_jpg_content,
             )
             self.repo.mark_job_done(job_id, preview_url)
-            print(f"[vector-worker] job done: {job_id} -> {sello_id}")
+            print(
+                f"[vector-worker] job done: {job_id} -> {sello_id} ({vector_ext}) "
+                f"pipeline={meta.get('pipeline')} ai={meta.get('ai_enhanced')} cv_x{meta.get('opencv_upscale')} "
+                f"binarize={meta.get('binarize')} "
+                f"upscale={meta.get('upscaled')} mkbitmap_s={meta.get('mkbitmap_scale')} "
+                f"bg_norm={meta.get('background_normalized')}"
+                + (f" ai_err={meta.get('ai_enhance_error')}" if meta.get("ai_enhance_error") else "")
+                + (f" upscale_err={meta.get('upscale_error')}" if meta.get("upscale_error") else "")
+            )
         except Exception as exc:
             terminal = isinstance(exc, VectorizationError)
             self.repo.mark_job_error(job_id, str(exc), terminal=terminal)

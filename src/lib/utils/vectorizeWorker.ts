@@ -1,3 +1,5 @@
+import { isVectorAutoEnabled } from '@/lib/config/vectorAuto';
+
 export type VectorizeEnqueueStatus = 'queued' | 'ignored' | 'system_error';
 
 export type VectorizeEnqueueResult = {
@@ -15,6 +17,14 @@ type VectorizeEnqueueInput = {
 };
 
 export async function enqueueVectorization(input: VectorizeEnqueueInput): Promise<VectorizeEnqueueResult> {
+  if (!isVectorAutoEnabled()) {
+    return {
+      status: 'ignored',
+      message: 'Vectorización automática desactivada.',
+      httpStatus: 200,
+    };
+  }
+
   const response = await fetch('/api/vectorize-enqueue', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

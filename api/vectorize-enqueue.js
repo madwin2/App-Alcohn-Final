@@ -6,9 +6,23 @@ function workerBaseUrl() {
   return safeTrim(process.env.VECTOR_WORKER_URL).replace(/\/$/, '');
 }
 
+function vectorAutoEnabled() {
+  const raw = process.env.VECTOR_AUTO_ENABLED ?? process.env.VITE_VECTOR_AUTO_ENABLED;
+  return raw === 'true' || raw === '1';
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ status: 'system_error', message: 'Method not allowed', httpStatus: 405 });
+    return;
+  }
+
+  if (!vectorAutoEnabled()) {
+    res.status(200).json({
+      status: 'ignored',
+      message: 'Vectorización automática desactivada.',
+      httpStatus: 200,
+    });
     return;
   }
 
@@ -59,6 +73,21 @@ export default async function handler(req, res) {
         httpStatus: 503,
       });
       return;
+    }
+
+    if (!data.status) {
+      const detail = data.detail;
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((entry) => entry?.msg || entry?.message || String(entry)).join(', ')
+            : 'Error del worker de vectorización.';
+      data = {
+        status: 'system_error',
+        message,
+        httpStatus: response.status,
+      };
     }
 
     res.status(response.status).json(data);

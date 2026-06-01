@@ -1,5 +1,6 @@
 import { Order, OrderItem, Customer, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, StampType, ProgressStep, Task, ItemType } from '../types/index';
 import { Database } from './types';
+import { vectorUrlFromPreview } from '../utils/vectorUrlFromPreview';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -232,10 +233,7 @@ export const mapSelloToOrderItem = (sello: SelloRow, cliente: ClienteRow): Order
     program: (sello as any).programa_nombre || undefined,
     files: {
       baseUrl: sello.archivo_base || undefined,
-      // Compatibilidad: EPS con _preview.png y nuevos SVG directos del worker.
-      vectorUrl: (sello as any).archivo_vector_preview
-        ? String((sello as any).archivo_vector_preview).replace(/_preview\.(png|jpg|jpeg)$/i, '.eps')
-        : undefined,
+      vectorUrl: vectorUrlFromPreview((sello as any).archivo_vector_preview),
       vectorPreviewUrl: (sello as any).archivo_vector_preview || undefined,
       photoUrl: sello.foto_sello || undefined,
     },

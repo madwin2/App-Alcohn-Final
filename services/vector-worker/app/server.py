@@ -27,6 +27,7 @@ def build_app() -> FastAPI:
 
     @app.on_event("startup")
     async def on_startup() -> None:
+        repo.release_orphan_locks_on_startup()
         app.state.worker_task = asyncio.create_task(loop.run_forever())
         print("[vector-worker] startup ok")
 
@@ -62,8 +63,22 @@ def build_app() -> FastAPI:
         if authorization != expected:
             raise HTTPException(status_code=401, detail="No autorizado")
 
-        repo.mark_sello_enqueued(body.selloId)
-        job = repo.enqueue_job(sello_id=body.selloId, orden_id=body.orderId)
+        try:
+            repo.mark_sello_enqueued(body.selloId, base_url=body.baseUrl)
+            job = repo.enqueue_job(
+                sello_id=body.selloId,
+                orden_id=body.orderId,
+                base_url=body.baseUrl,
+            )
+        except Exception as exc:
+            message = str(exc)
+            if "Invalid API key" in message or "401" in message:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Supabase rechazó la service role key del worker. Actualizá SUPABASE_SERVICE_ROLE_KEY en Hetzner.",
+                ) from exc
+            raise HTTPException(status_code=503, detail=f"No se pudo encolar vectorización: {message}") from exc
+
         return {
             "status": "queued",
             "message": "Vectorización encolada.",

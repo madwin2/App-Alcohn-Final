@@ -159,7 +159,22 @@ export function vectorizeEnqueueDevProxy(env: Record<string, string>): Plugin {
             return;
           }
 
-          sendJson(res, response.status, data);
+          if (!(data as { status?: string }).status) {
+            const detail = (data as { detail?: unknown }).detail;
+            const message =
+              typeof detail === 'string'
+                ? detail
+                : Array.isArray(detail)
+                  ? detail.map((entry: { msg?: string; message?: string }) => entry?.msg || entry?.message || String(entry)).join(', ')
+                  : 'Error del worker de vectorización.';
+            data = {
+              status: 'system_error',
+              message,
+              httpStatus: response.status,
+            };
+          }
+
+          sendJson(res, response.status, data as Record<string, unknown>);
         } catch (error) {
           sendJson(res, 503, {
             status: 'system_error',

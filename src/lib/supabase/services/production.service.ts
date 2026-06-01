@@ -2,6 +2,7 @@ import { supabase } from '../client';
 import { ProductionItem, ProductionTask } from '../../types/index';
 import { mapSelloToOrderItem, mapClienteToCustomer } from '../mappers';
 import { Database } from '../types';
+import { vectorUrlFromPreview } from '../../utils/vectorUrlFromPreview';
 
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
@@ -239,10 +240,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         takenBy,
         files: {
           baseUrl: sello.archivo_base || undefined,
-          // Compatibilidad: EPS con _preview.png y nuevos SVG directos del worker.
-          vectorUrl: (sello as any).archivo_vector_preview
-            ? String((sello as any).archivo_vector_preview).replace(/_preview\.(png|jpg|jpeg)$/i, '.eps')
-            : undefined,
+          vectorUrl: vectorUrlFromPreview((sello as any).archivo_vector_preview),
           vectorPreviewUrl: (sello as any).archivo_vector_preview || undefined,
           photoUrl: sello.foto_sello || undefined,
         },
@@ -502,9 +500,7 @@ export const updateProductionItem = async (
       takenBy,
       files: {
         baseUrl: updatedSello.archivo_base || undefined,
-        vectorUrl: (updatedSello as any).archivo_vector_preview
-          ? String((updatedSello as any).archivo_vector_preview).replace(/_preview\.(png|jpg|jpeg)$/i, '.eps')
-          : undefined,
+        vectorUrl: vectorUrlFromPreview((updatedSello as any).archivo_vector_preview),
         vectorPreviewUrl: (updatedSello as any).archivo_vector_preview || undefined,
         photoUrl: updatedSello.foto_sello || undefined,
       },

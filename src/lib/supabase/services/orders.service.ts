@@ -18,6 +18,7 @@ import { Database } from '../types';
 import { uploadFile, generateFilePath, uploadVectorFileWithPreview } from './storage.service';
 import { runMigrations } from '../migrations';
 import { getSixMonthsCutoffDate } from '../../utils/orderLifecycle';
+import { isVectorAutoEnabled, vectorizationStateAfterBaseUpload } from '../../config/vectorAuto';
 import { enqueueVectorization } from '../../utils/vectorizeWorker';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
@@ -70,6 +71,7 @@ const enqueueVectorizationSafely = async (input: {
   baseUrl: string;
   reason: 'BASE_UPLOADED' | 'BASE_REPLACED';
 }): Promise<void> => {
+  if (!isVectorAutoEnabled()) return;
   try {
     await enqueueVectorization(input);
   } catch (error) {
@@ -646,13 +648,15 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
       if (fileUrls.vectorPreviewUrl) updateData.archivo_vector_preview = fileUrls.vectorPreviewUrl;
       
       // Si se subió un vector, setear estado_vectorizacion = 'VECTORIZADO'
-      // Si solo hay base, setear EN_PROCESO y encolar worker automático.
+      // Si solo hay base: EN_PROCESO solo si la vectorización automática está activa.
       if (fileUrls.vectorUrl || fileUrls.vectorPreviewUrl) {
         updateData.estado_vectorizacion = 'VECTORIZADO';
       } else {
-        updateData.estado_vectorizacion = fileUrls.baseUrl ? 'EN_PROCESO' : 'BASE';
+        updateData.estado_vectorizacion = fileUrls.baseUrl
+          ? vectorizationStateAfterBaseUpload()
+          : 'BASE';
       }
-      
+
       await supabase
         .from('sellos')
         .update(updateData)
@@ -827,11 +831,12 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
         if (item.files && 'baseUrl' in item.files) {
           selloData.archivo_base = item.files.baseUrl || null;
           if (item.files.baseUrl) {
-            // Si se reemplaza base, invalida vector anterior y dispara reproceso automático.
             selloData.archivo_vector_preview = null;
-            selloData.estado_vectorizacion = 'EN_PROCESO';
             selloData.error_vectorizacion_mensaje = null;
-            vectorizationQueue.push({ selloId: item.id, baseUrl: item.files.baseUrl });
+            selloData.estado_vectorizacion = vectorizationStateAfterBaseUpload();
+            if (isVectorAutoEnabled()) {
+              vectorizationQueue.push({ selloId: item.id, baseUrl: item.files.baseUrl });
+            }
           }
         }
         if (item.files && 'photoUrl' in item.files) {
@@ -1066,13 +1071,14 @@ export const addStampToOrder = async (orderId: string, item: Partial<OrderItem>,
       if (fileUrls.vectorPreviewUrl) updateData.archivo_vector_preview = fileUrls.vectorPreviewUrl;
       
       // Si se subió un vector, setear estado_vectorizacion = 'VECTORIZADO'
-      // Si solo hay base, setear EN_PROCESO y encolar worker automático.
       if (fileUrls.vectorUrl || fileUrls.vectorPreviewUrl) {
         updateData.estado_vectorizacion = 'VECTORIZADO';
       } else {
-        updateData.estado_vectorizacion = fileUrls.baseUrl ? 'EN_PROCESO' : 'BASE';
+        updateData.estado_vectorizacion = fileUrls.baseUrl
+          ? vectorizationStateAfterBaseUpload()
+          : 'BASE';
       }
-      
+
       await supabase
         .from('sellos')
         .update(updateData)
