@@ -1,4 +1,8 @@
-import { Upload, Loader2, Download, Trash2, FileType2 } from 'lucide-react';
+import { Upload, Loader2, Download, Trash2, FileType2, FileImage } from 'lucide-react';
+import {
+  storageFileKindFromUrl,
+  storageFileKindLabel,
+} from '@/lib/utils/storageFileKind';
 import { Order } from '@/lib/types/index';
 import { useOrdersStore } from '@/lib/state/orders.store';
 import { useState, useRef } from 'react';
@@ -32,7 +36,9 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
   if (!item) return null;
 
   const hasFile = item.files?.baseUrl;
-  const isPdfUrl = Boolean(hasFile && typeof hasFile === 'string' && hasFile.toLowerCase().includes('.pdf'));
+  const baseFileKind =
+    hasFile && typeof hasFile === 'string' ? storageFileKindFromUrl(hasFile) : null;
+  const isPdfUrl = baseFileKind === 'pdf';
   
   // Si es un archivo resumido (para pedidos con múltiples items)
   if (hasFile === 'summary') {
@@ -198,7 +204,9 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
     );
   }
 
-  if (!showPreviews && isPdfUrl) {
+  if (!showPreviews && hasFile && baseFileKind) {
+    const kindLabel = storageFileKindLabel(baseFileKind);
+    const Icon = baseFileKind === 'image' ? FileImage : FileType2;
     return (
       <>
         <input
@@ -212,16 +220,24 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
           <ContextMenuTrigger asChild>
             <button
               type="button"
-              title="PDF — clic para reemplazar; derecho para descargar"
+              title={`${kindLabel} cargado — clic para reemplazar; derecho para más opciones`}
               onClick={handleClick}
               onContextMenu={(e) => e.stopPropagation()}
               className={`relative flex size-10 items-center justify-center rounded border border-blue-500/55 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 ${uploading ? 'opacity-50' : ''}`}
             >
-              <FileType2 className="size-5 text-blue-700 dark:text-blue-300" />
+              {uploading ? (
+                <Loader2 className="size-4 animate-spin text-blue-700 dark:text-blue-300" />
+              ) : (
+                <Icon className="size-5 text-blue-700 dark:text-blue-300" />
+              )}
               <Download className="pointer-events-none absolute bottom-0.5 right-0.5 size-3 text-blue-600" aria-hidden />
             </button>
           </ContextMenuTrigger>
           <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+            <ContextMenuItem onClick={handleClick}>
+              <Upload className="mr-2 h-4 w-4" />
+              Reemplazar archivo
+            </ContextMenuItem>
             <ContextMenuItem onClick={(e) => void handleDownload(e)}>
               <Download className="mr-2 h-4 w-4" />
               Descargar archivo
@@ -233,30 +249,6 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
-      </>
-    );
-  }
-
-  if (!showPreviews) {
-    return (
-      <>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        <div 
-          onClick={handleClick}
-          className={`flex items-center justify-center w-10 h-10 border-2 border-dashed border-muted-foreground/25 rounded cursor-pointer hover:border-primary/50 transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          {uploading ? (
-            <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
-          ) : (
-            <Upload className="h-4 w-4 text-muted-foreground" />
-          )}
-        </div>
       </>
     );
   }

@@ -1,4 +1,5 @@
 import { Upload, FileType2, Download } from 'lucide-react';
+import { storageFileKindFromUrl, storageFileKindLabel } from '@/lib/utils/storageFileKind';
 import { ProductionItem } from '@/lib/types/index';
 import { useProductionStore } from '@/lib/state/production.store';
 import { downloadFile } from '@/lib/supabase/services/storage.service';
@@ -18,14 +19,16 @@ export function CellVector({ item }: CellVectorProps) {
 
   const hasFile = item.files?.vectorUrl;
   const previewUrl = item.files?.vectorPreviewUrl;
-  const isEps = Boolean(hasFile?.toLowerCase().includes('.eps'));
-  const isPdf = Boolean(hasFile?.toLowerCase().includes('.pdf'));
+  const vectorFileKind =
+    hasFile && typeof hasFile === 'string' ? storageFileKindFromUrl(hasFile) : null;
+  const isEps = vectorFileKind === 'eps';
+  const isPdf = vectorFileKind === 'pdf';
+  const isAi = vectorFileKind === 'ai';
   const epsSinPreview = Boolean(isEps && hasFile && !previewUrl);
-  const archivoVectorSinMiniatura =
-    epsSinPreview || Boolean(isPdf && hasFile);
+  const archivoVectorSinMiniatura = epsSinPreview || isPdf || isAi;
   const displayUrl = archivoVectorSinMiniatura
     ? undefined
-    : previewUrl || (!isEps && !isPdf ? hasFile : undefined);
+    : previewUrl || (!isEps && !isPdf && !isAi ? hasFile : undefined);
 
   const handleDownloadVector = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -47,22 +50,21 @@ export function CellVector({ item }: CellVectorProps) {
   };
 
   if (!showPreviews) {
-    if (archivoVectorSinMiniatura && hasFile) {
-      return (
-        <div className="flex h-full w-full items-center justify-center">
-          <button
-            type="button"
-            title={isPdf ? 'PDF — clic para descargar' : 'EPS — clic para descargar'}
-            onClick={(e) => void handleDownloadVector(e)}
-            className="relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40"
-          >
-            <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
-            <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
-          </button>
-        </div>
-      );
-    }
-    return null;
+    if (!hasFile) return null;
+    const kindLabel = vectorFileKind ? storageFileKindLabel(vectorFileKind) : 'Archivo';
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <button
+          type="button"
+          title={`${kindLabel} cargado — clic para descargar`}
+          onClick={(e) => void handleDownloadVector(e)}
+          className="relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40"
+        >
+          <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
+          <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -77,7 +79,13 @@ export function CellVector({ item }: CellVectorProps) {
           <ContextMenuTrigger asChild>
             <button
               type="button"
-              title={isPdf ? 'PDF sin miniatura — clic para descargar' : 'EPS sin vista previa — clic para descargar'}
+              title={
+                isPdf
+                  ? 'PDF sin miniatura — clic para descargar'
+                  : isAi
+                    ? 'AI — clic para descargar'
+                    : 'EPS sin vista previa — clic para descargar'
+              }
               onClick={(e) => void handleDownloadVector(e)}
               className="relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40"
             >

@@ -1,4 +1,5 @@
 import { Upload, Loader2, Download, Trash2, FileType2 } from 'lucide-react';
+import { storageFileKindFromUrl, storageFileKindLabel } from '@/lib/utils/storageFileKind';
 import { Order } from '@/lib/types/index';
 import { useOrdersStore } from '@/lib/state/orders.store';
 import { useState, useRef } from 'react';
@@ -33,16 +34,18 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
 
   const hasFile = item.files?.vectorUrl;
   const previewUrl = item.files?.vectorPreviewUrl;
-  const isEps = Boolean(hasFile && hasFile.toLowerCase().includes('.eps'));
-  const isPdf = Boolean(hasFile && hasFile.toLowerCase().includes('.pdf'));
+  const vectorFileKind =
+    hasFile && typeof hasFile === 'string' ? storageFileKindFromUrl(hasFile) : null;
+  const isEps = vectorFileKind === 'eps';
+  const isPdf = vectorFileKind === 'pdf';
+  const isAi = vectorFileKind === 'ai';
   const epsSinPreview = isEps && hasFile && !previewUrl;
-  const archivoVectorSinMiniatura =
-    epsSinPreview || Boolean(isPdf && hasFile);
+  const archivoVectorSinMiniatura = epsSinPreview || isPdf || isAi;
   const displayUrl = archivoVectorSinMiniatura
     ? undefined
     : isEps && previewUrl
       ? previewUrl
-      : !isPdf
+      : !isPdf && !isAi
         ? hasFile
         : undefined;
   
@@ -239,6 +242,7 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   };
 
   if (!showPreviews) {
+    const kindLabel = vectorFileKind ? storageFileKindLabel(vectorFileKind) : 'Archivo';
     return (
       <>
         <input
@@ -248,22 +252,7 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
           onChange={handleFileSelect}
           className="hidden"
         />
-        {archivoVectorSinMiniatura ? (
-          <button
-            type="button"
-            title={
-              isPdf ? 'PDF — clic para descargar' : 'EPS sin vista previa — clic para descargar'
-            }
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleDownload(e);
-            }}
-            className="relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40"
-          >
-            <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
-            <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
-          </button>
-        ) : (
+        {!hasFile ? (
           <div
             onClick={handleClick}
             className={`flex h-10 w-10 cursor-pointer items-center justify-center rounded border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 transition-colors ${uploading ? 'cursor-not-allowed opacity-50' : ''}`}
@@ -274,6 +263,40 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
               <Upload className="h-4 w-4 text-muted-foreground" />
             )}
           </div>
+        ) : (
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <button
+                type="button"
+                title={`${kindLabel} cargado — clic para reemplazar; derecho para más opciones`}
+                onClick={handleClick}
+                onContextMenu={(e) => e.stopPropagation()}
+                className={`relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 ${uploading ? 'opacity-50' : ''}`}
+              >
+                {uploading ? (
+                  <Loader2 className="size-4 animate-spin text-violet-700 dark:text-violet-300" />
+                ) : (
+                  <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
+                )}
+                <Download className="pointer-events-none absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
+              </button>
+            </ContextMenuTrigger>
+            <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+              <ContextMenuItem onClick={handleClick}>
+                <Upload className="mr-2 h-4 w-4" />
+                Reemplazar archivo
+              </ContextMenuItem>
+              <ContextMenuItem onClick={(e) => void handleDownload(e)}>
+                <Download className="mr-2 h-4 w-4" />
+                Descargar archivo
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar archivo
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         )}
       </>
     );
@@ -320,7 +343,9 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
               title={
                 isPdf
                   ? 'PDF — clic para otro archivo; derecho para descargar'
-                  : 'EPS — clic para otro archivo; derecho para descargar'
+                  : isAi
+                    ? 'AI — clic para otro archivo; derecho para descargar'
+                    : 'EPS — clic para otro archivo; derecho para descargar'
               }
               onClick={handleClick}
               onContextMenu={(e) => e.stopPropagation()}
