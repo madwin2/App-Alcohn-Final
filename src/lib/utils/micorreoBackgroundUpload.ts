@@ -15,16 +15,28 @@ type BuildCsvResult =
 
 type ActivityListener = () => void;
 
-const runningOrderIds = new Set<string>();
+type QueueItem = {
+  orderId: string;
+  onComplete?: () => void;
+};
+
+const queuedOrderIds = new Set<string>();
+const uploadQueue: QueueItem[] = [];
 const activityListeners = new Set<ActivityListener>();
+let queueProcessorActive = false;
 
 function notifyActivity() {
   activityListeners.forEach((listener) => listener());
 }
 
 export function isMicorreoUploadRunning(orderId?: string): boolean {
-  if (orderId) return runningOrderIds.has(orderId);
-  return runningOrderIds.size > 0;
+  if (orderId) return queuedOrderIds.has(orderId);
+  return queuedOrderIds.size > 0;
+}
+
+/** Órdenes en cola o subiendo ahora (no incluye la que está ejecutando el fetch si ya salió del set). */
+export function getMicorreoUploadQueueSize(): number {
+  return queuedOrderIds.size;
 }
 
 export function subscribeMicorreoUploadActivity(listener: ActivityListener): () => void {
@@ -132,7 +144,7 @@ function mapDbStampToStampType(tipo: string | null): StampType | undefined {
   }
 }
 
-async function runMicorreoUpload(orderId: string, onComplete?: () => void): Promise<void> {
+async function runMicorreoUpload(orderId: string): Promise<void> {
   try {
     await persistUploadResult(orderId, 'HACER_ETIQUETA', null);
 
@@ -158,21 +170,40 @@ async function runMicorreoUpload(orderId: string, onComplete?: () => void): Prom
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error inesperado al subir a MiCorreo.';
     await persistUploadResult(orderId, 'HACER_ETIQUETA', message);
-  } finally {
-    onComplete?.();
   }
 }
 
-/** Dispara la subida a MiCorreo sin bloquear la UI (sigue aunque cambies de pantalla en la misma pestaña). */
+async function processUploadQueue(): Promise<void> {
+  if (queueProcessorActive) return;
+  queueProcessorActive = true;
+
+  try {
+    while (uploadQueue.length > 0) {
+      const item = uploadQueue.shift();
+      if (!item) break;
+
+      try {
+        await runMicorreoUpload(item.orderId);
+      } finally {
+        queuedOrderIds.delete(item.orderId);
+        notifyActivity();
+        item.onComplete?.();
+      }
+    }
+  } finally {
+    queueProcessorActive = false;
+    if (uploadQueue.length > 0) {
+      void processUploadQueue();
+    }
+  }
+}
+
+/** Encola la subida a MiCorreo (una a la vez por pestaña, con pausa entre jobs). */
 export function triggerMicorreoUploadForOrder(orderId: string, onComplete?: () => void): void {
-  if (runningOrderIds.has(orderId)) return;
+  if (queuedOrderIds.has(orderId)) return;
 
-  runningOrderIds.add(orderId);
+  queuedOrderIds.add(orderId);
+  uploadQueue.push({ orderId, onComplete });
   notifyActivity();
-
-  void runMicorreoUpload(orderId, () => {
-    runningOrderIds.delete(orderId);
-    notifyActivity();
-    onComplete?.();
-  });
+  void processUploadQueue();
 }

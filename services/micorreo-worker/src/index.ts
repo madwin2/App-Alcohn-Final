@@ -1,7 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { envFileExists, loadConfig } from './config.js';
-import { shutdownWorker, runUploadJob } from './upload-service.js';
+import { enqueueUploadJob } from './job-queue.js';
+import { shutdownWorker } from './upload-service.js';
 
 const uploadBodySchema = z.object({
   orderId: z.string().min(1).max(64).optional(),
@@ -63,7 +64,7 @@ async function handleUpload(req: IncomingMessage, res: ServerResponse): Promise<
     return;
   }
 
-  const result = await runUploadJob(parsed);
+  const result = await enqueueUploadJob(parsed);
   sendJson(res, result.httpStatus, result);
 }
 

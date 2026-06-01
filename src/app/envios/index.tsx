@@ -29,6 +29,7 @@ import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { downloadCorreoCsv } from '@/lib/utils/micorreoUpload';
 import {
+  getMicorreoUploadQueueSize,
   isMicorreoUploadRunning,
   subscribeMicorreoUploadActivity,
   triggerMicorreoUploadForOrder,
@@ -166,6 +167,7 @@ export default function EnviosPage() {
   const { toast } = useToast();
   const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
   const [micorreoUploadBusy, setMicorreoUploadBusy] = useState(false);
+  const [micorreoQueueSize, setMicorreoQueueSize] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [shippingTypeDraft, setShippingTypeDraft] = useState<'DOMICILIO' | 'SUCURSAL'>('DOMICILIO');
   const [rawShippingText, setRawShippingText] = useState('');
@@ -219,10 +221,12 @@ export default function EnviosPage() {
   }, [toast]);
 
   useEffect(() => {
-    setMicorreoUploadBusy(isMicorreoUploadRunning());
-    return subscribeMicorreoUploadActivity(() => {
+    const syncMicorreoActivity = () => {
       setMicorreoUploadBusy(isMicorreoUploadRunning());
-    });
+      setMicorreoQueueSize(getMicorreoUploadQueueSize());
+    };
+    syncMicorreoActivity();
+    return subscribeMicorreoUploadActivity(syncMicorreoActivity);
   }, []);
 
   useEffect(() => {
@@ -887,12 +891,16 @@ export default function EnviosPage() {
       await fetchOrders();
       const orderIdForUpload = selectedOrder.id;
       closeShippingDialog();
-      toast({
-        title: 'Datos de envío guardados',
-        description: 'MiCorreo: subiendo la etiqueta en segundo plano. Podés seguir usando la app.',
-      });
+      const queueBefore = getMicorreoUploadQueueSize();
       triggerMicorreoUploadForOrder(orderIdForUpload, () => {
         void fetchOrders();
+      });
+      toast({
+        title: 'Datos de envío guardados',
+        description:
+          queueBefore > 0
+            ? `MiCorreo: en cola (${queueBefore} antes). Se sube de a una con pausa entre cargas.`
+            : 'MiCorreo: subiendo la etiqueta en segundo plano. Podés seguir usando la app.',
       });
     } catch (saveError) {
       toast({
@@ -1269,7 +1277,9 @@ export default function EnviosPage() {
             {micorreoUploadBusy ? (
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Subiendo a MiCorreo…
+                {micorreoQueueSize > 1
+                  ? `MiCorreo: cola (${micorreoQueueSize} pendientes)…`
+                  : 'Subiendo a MiCorreo…'}
               </span>
             ) : null}
           </div>
