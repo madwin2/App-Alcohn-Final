@@ -27,7 +27,7 @@ export function ImagePreviewLightbox({ src, alt = 'Vista previa', onClose }: Ima
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-white p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -36,7 +36,7 @@ export function ImagePreviewLightbox({ src, alt = 'Vista previa', onClose }: Ima
       <button
         type="button"
         onClick={onClose}
-        className="absolute top-4 right-4 rounded-full p-2 text-white/90 hover:bg-white/10 hover:text-white"
+        className="absolute top-4 right-4 rounded-full p-2 text-foreground/80 hover:bg-muted hover:text-foreground"
         aria-label="Cerrar"
       >
         <X className="size-6" />
