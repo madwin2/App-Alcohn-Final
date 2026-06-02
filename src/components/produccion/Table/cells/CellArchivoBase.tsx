@@ -1,5 +1,9 @@
-import { Upload, FileType2, FileImage } from 'lucide-react';
-import { storageFileKindFromUrl, storageFileKindLabel } from '@/lib/utils/storageFileKind';
+import { Upload, FileType2 } from 'lucide-react';
+import {
+  isNonThumbnailStorageKind,
+  storageFileKindFromUrl,
+  storageFileKindLabel,
+} from '@/lib/utils/storageFileKind';
 import { ProductionItem } from '@/lib/types/index';
 import { useProductionStore } from '@/lib/state/production.store';
 import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
@@ -16,7 +20,8 @@ export function CellArchivoBase({ item }: CellArchivoBaseProps) {
   const hasFile = item.files?.baseUrl;
   const baseFileKind =
     hasFile && typeof hasFile === 'string' ? storageFileKindFromUrl(hasFile) : null;
-  const isPdfUrl = baseFileKind === 'pdf';
+  const showFileIcon =
+    baseFileKind !== null && isNonThumbnailStorageKind(baseFileKind);
 
   if (!showPreviews) {
     return null; // No mostrar nada cuando las previsualizaciones están deshabilitadas
@@ -29,7 +34,7 @@ export function CellArchivoBase({ item }: CellArchivoBaseProps) {
           <div className="flex items-center justify-center w-10 h-10 border-2 border-dashed border-muted-foreground/25 rounded">
             <Upload className="h-4 w-4 text-muted-foreground" />
           </div>
-        ) : isPdfUrl || baseFileKind === 'image' ? (
+        ) : showFileIcon ? (
           <div
             className="flex h-10 w-10 flex-col items-center justify-center rounded border border-blue-500/50 bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200"
             title={
@@ -38,11 +43,7 @@ export function CellArchivoBase({ item }: CellArchivoBaseProps) {
                 : 'Archivo cargado'
             }
           >
-            {baseFileKind === 'image' ? (
-              <FileImage className="h-6 w-6" aria-hidden />
-            ) : (
-              <FileType2 className="h-6 w-6" aria-hidden />
-            )}
+            <FileType2 className="h-6 w-6" aria-hidden />
           </div>
         ) : (
           <button
