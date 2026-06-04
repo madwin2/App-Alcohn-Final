@@ -27,8 +27,28 @@ export const dataUrlToFile = async (dataUrl: string, fileName: string): Promise<
   return new File([blob], fileName, { type: blob.type || 'image/png' });
 };
 
-export async function fetchUrlAsFile(url: string, fileName: string): Promise<File> {
-  const response = await fetch(url);
+/** Evita CDN/navegador sirviendo un PNG viejo tras sobrescribir el mismo path en Storage. */
+export function storageUrlWithCacheBust(url: string, version?: number | string): string {
+  if (!url?.trim()) return url;
+  const v = String(version ?? Date.now());
+  try {
+    const u = new URL(url);
+    u.searchParams.set('v', v);
+    return u.toString();
+  } catch {
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}v=${encodeURIComponent(v)}`;
+  }
+}
+
+export async function fetchUrlAsFile(
+  url: string,
+  fileName: string,
+  options?: { cacheBust?: number | string },
+): Promise<File> {
+  const fetchUrl =
+    options?.cacheBust != null ? storageUrlWithCacheBust(url, options.cacheBust) : url;
+  const response = await fetch(fetchUrl, { cache: 'no-store' });
   if (!response.ok) throw new Error('No se pudo descargar el archivo guardado');
   const blob = await response.blob();
   return new File([blob], fileName, { type: blob.type || 'image/png' });

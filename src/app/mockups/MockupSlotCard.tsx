@@ -47,6 +47,7 @@ import {
   fetchUrlAsFile,
   fileToDataUrl,
   getFileExtension,
+  storageUrlWithCacheBust,
   leerAlternativasMedidasLocal,
   leerSeleccionMedidasEnvioLocal,
   persistAlternativasMedidasLocal,
@@ -160,6 +161,8 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   ref,
 ) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /** Último PNG optimizado en esta sesión (evita caché HTTP al re-subir el mismo path). */
+  const latestOptimizedFileRef = useRef<{ solicitudId: string; file: File } | null>(null);
   const { toast } = useToast();
 
   const [uiStep, setUiStep] = useState<UiStep>(1);
@@ -615,7 +618,9 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const optimizedPath = `mockups/solicitudes/${id}/optimizado.png`;
       const optimizedUrl = await uploadFile('foto', optimizedFile, optimizedPath);
-      const m = await measureLogoForStoredAsset(optimizedFile, optimizedUrl, finalSlug);
+      latestOptimizedFileRef.current = { solicitudId: id, file: optimizedFile };
+      const optimizedUrlStored = storageUrlWithCacheBust(optimizedUrl, 1);
+      const m = await measureLogoForStoredAsset(optimizedFile, optimizedUrlStored, finalSlug);
       setLogoMetrics(m);
       const parsedAncho = parseAnchoDisenoCm(anchoDisenoCm.trim());
       const medidasAlts =
@@ -628,7 +633,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const { data: updated, error: upErr } = await updateMockupSolicitud(id, {
         validacion: validationToRecord(validationResult),
-        imagen_optimizada_url: optimizedUrl,
+        imagen_optimizada_url: optimizedUrlStored,
         imagen_optimizada_path: optimizedPath,
         estado: 'pendiente_aprobacion',
         intentos_optimizacion: 1,
@@ -764,8 +769,10 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const optimizedPath = `mockups/solicitudes/${id}/optimizado.png`;
       const optimizedUrl = await uploadFile('foto', simplifiedFile, optimizedPath);
+      latestOptimizedFileRef.current = { solicitudId: id, file: simplifiedFile };
+      const optimizedUrlStored = storageUrlWithCacheBust(optimizedUrl, 1);
       const slugForMedidas = sanitizeDesignName(sampleName.trim() || provisionalSlug);
-      const m = await measureLogoForStoredAsset(simplifiedFile, optimizedUrl, slugForMedidas);
+      const m = await measureLogoForStoredAsset(simplifiedFile, optimizedUrlStored, slugForMedidas);
       setLogoMetrics(m);
       const parsedAncho = parseAnchoDisenoCm(anchoDisenoCm.trim());
       const medidasAlts =
@@ -778,7 +785,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
 
       const { data: updated, error: upErr } = await updateMockupSolicitud(id, {
         validacion: validationToRecord(validationResult),
-        imagen_optimizada_url: optimizedUrl,
+        imagen_optimizada_url: optimizedUrlStored,
         imagen_optimizada_path: optimizedPath,
         estado: 'pendiente_aprobacion',
         intentos_optimizacion: 1,
@@ -861,8 +868,10 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       const optimizedUrl = await uploadFile('foto', optimizedFile, optimizedPath);
 
       const nextIntentos = (activeRow.intentos_optimizacion ?? 0) + 1;
+      latestOptimizedFileRef.current = { solicitudId: activeRow.id, file: optimizedFile };
+      const optimizedUrlStored = storageUrlWithCacheBust(optimizedUrl, nextIntentos);
 
-      const m = await measureLogoForStoredAsset(optimizedFile, optimizedUrl, slug);
+      const m = await measureLogoForStoredAsset(optimizedFile, optimizedUrlStored, slug);
       setLogoMetrics(m);
       const parsedAncho = parseAnchoDisenoCm(anchoDisenoCm.trim());
       const medidasAlts =
@@ -878,7 +887,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       );
 
       const { data: updated, error } = await updateMockupSolicitud(activeRow.id, {
-        imagen_optimizada_url: optimizedUrl,
+        imagen_optimizada_url: optimizedUrlStored,
         imagen_optimizada_path: optimizedPath,
         intentos_optimizacion: nextIntentos,
         estado: 'pendiente_aprobacion',
@@ -938,10 +947,15 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     try {
       await updateMockupSolicitud(activeRow.id, { estado: 'procesando', mensaje_error: null });
 
-      const optimizedFile = await fetchUrlAsFile(
-        activeRow.imagen_optimizada_url,
-        `optimizado_${activeRow.nombre_slug}.png`,
-      );
+      const cachedOptimized = latestOptimizedFileRef.current;
+      const optimizedFile =
+        cachedOptimized?.solicitudId === activeRow.id
+          ? cachedOptimized.file
+          : await fetchUrlAsFile(
+              activeRow.imagen_optimizada_url,
+              `optimizado_${activeRow.nombre_slug}.png`,
+              { cacheBust: activeRow.intentos_optimizacion ?? Date.now() },
+            );
 
       const targets = resolveMockupMaterials(activeRow.material as MockupMaterialChoice);
       const patch: Parameters<typeof updateMockupSolicitud>[1] = {};
@@ -1038,6 +1052,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   ]);
 
   const resetNuevaMuestra = useCallback(() => {
+    latestOptimizedFileRef.current = null;
     clearMockupSlotDraft(slotIndex);
     revokeBlobUrl(sourcePreview);
     revokeBlobUrl(optimizedPreview);
