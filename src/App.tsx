@@ -10,6 +10,7 @@ import GastosPage from './app/gastos/index'
 import MockupsPage from './app/mockups/index'
 import PreciosPage from './app/precios/index'
 import InnovacionPage from './app/innovacion/index'
+import ComercialPage from './app/comercial/index'
 import LoginPage from './app/login/index'
 import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
@@ -36,6 +37,7 @@ function App() {
             <Route path="/gastos" element={<GastosPage />} />
             <Route path="/mockups" element={<MockupsPage />} />
             <Route path="/precios" element={<PreciosPage />} />
+            <Route path="/comercial" element={<ComercialPage />} />
             <Route path="/innovacion" element={<InnovacionPage />} />
           </Route>
           <Route path="/admin/registros" element={<Navigate to="/pedidos" replace />} />

@@ -567,6 +567,72 @@ export interface Database {
           orden: number;
         }>;
       };
+      comercial_exclusiones: {
+        Row: {
+          id: string;
+          entity_type: 'cliente' | 'mockup' | 'orden';
+          entity_id: string;
+          motivo: string | null;
+          excluido_por: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          entity_type: 'cliente' | 'mockup' | 'orden';
+          entity_id: string;
+          motivo?: string | null;
+          excluido_por?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['comercial_exclusiones']['Insert']>;
+      };
+      web_analytics_events: {
+        Row: {
+          id: string;
+          created_at: string | null;
+          /** Esquema web actual (tienda Alcohn). */
+          event_name: string | null;
+          page_path: string | null;
+          page_url: string | null;
+          referrer: string | null;
+          utm_source: string | null;
+          utm_medium: string | null;
+          utm_campaign: string | null;
+          utm_content: string | null;
+          utm_term: string | null;
+          visitor_id: string | null;
+          session_id: string | null;
+          anonymous_id: string | null;
+          ip: string | null;
+          user_agent: string | null;
+          metadata: Record<string, unknown> | null;
+          /** Alias legacy (docs antiguos). */
+          event_type?: string | null;
+          page_title?: string | null;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string | null;
+          event_name?: string | null;
+          page_path?: string | null;
+          page_url?: string | null;
+          referrer?: string | null;
+          utm_source?: string | null;
+          utm_medium?: string | null;
+          utm_campaign?: string | null;
+          utm_content?: string | null;
+          utm_term?: string | null;
+          visitor_id?: string | null;
+          session_id?: string | null;
+          anonymous_id?: string | null;
+          ip?: string | null;
+          user_agent?: string | null;
+          metadata?: Record<string, unknown> | null;
+          event_type?: string | null;
+          page_title?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['web_analytics_events']['Insert']>;
+      };
     };
   };
 }
