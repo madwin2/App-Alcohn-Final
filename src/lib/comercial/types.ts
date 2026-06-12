@@ -51,6 +51,10 @@ export type PaymentStatusBreakdown = {
   color: string;
 };
 
+import type { ContactoComercialEstado } from '@/lib/comercial/contacto';
+
+export type { ContactoComercialEstado };
+
 export type MockupSinCompraRow = {
   mockupId: string;
   createdAt: string;
@@ -67,6 +71,9 @@ export type MockupSinCompraRow = {
   checkoutIniciado: boolean;
   clienteId: string | null;
   prioridad: PotencialPrioridad;
+  contactoComercialEstado: ContactoComercialEstado;
+  contactoComercialEligibleAt: string | null;
+  contactoComercialEnviadoAt: string | null;
 };
 
 export type OrdenSeguimientoRow = {

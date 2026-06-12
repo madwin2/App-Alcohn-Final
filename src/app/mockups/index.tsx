@@ -13,11 +13,11 @@ import {
 } from '@/components/ui/context-menu';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/supabase/client';
-import { downloadFile } from '@/lib/supabase/services/storage.service';
 import { cn } from '@/lib/utils/cn';
+import { downloadMockupAsset, resolveMockupStorageRef } from '@/lib/utils/mockupStorage';
 import { listMockupSolicitudes, type MockupSolicitudRow } from '@/lib/supabase/services/mockupSolicitudes.service';
 import { MockupSlotCard, type MockupSlotHandle } from './MockupSlotCard';
+import { MockupStorageImage } from './MockupStorageImage';
 import {
   MOCKUP_STRIP_SHEET_MS,
   StripCardAtmosphere,
@@ -45,18 +45,14 @@ function readInitialSlotCount(): number {
   return 1;
 }
 
-function thumbUrl(item: MockupSolicitudRow): string | null {
-  return (
-    item.mockup_cuero_url ||
-    item.mockup_madera_url ||
-    item.imagen_optimizada_url ||
-    item.archivo_base_url ||
-    null
-  );
-}
+type MockupThumbKind = 'mockup_cuero' | 'mockup_madera' | 'optimized' | 'base';
 
-function primaryHref(item: MockupSolicitudRow): string | null {
-  return item.mockup_cuero_url || item.mockup_madera_url || item.imagen_optimizada_url || item.archivo_base_url || null;
+function thumbKind(item: MockupSolicitudRow): MockupThumbKind | null {
+  if (resolveMockupStorageRef(item, 'mockup_cuero')) return 'mockup_cuero';
+  if (resolveMockupStorageRef(item, 'mockup_madera')) return 'mockup_madera';
+  if (resolveMockupStorageRef(item, 'optimized')) return 'optimized';
+  if (resolveMockupStorageRef(item, 'base')) return 'base';
+  return null;
 }
 
 function optimizedDownloadFilename(item: MockupSolicitudRow): string {
@@ -67,42 +63,34 @@ function optimizedDownloadFilename(item: MockupSolicitudRow): string {
 }
 
 function hasOptimizedAsset(item: MockupSolicitudRow): boolean {
-  return Boolean(item.imagen_optimizada_path?.trim() || item.imagen_optimizada_url?.trim());
+  return Boolean(resolveMockupStorageRef(item, 'optimized'));
+}
+
+function hasBaseAsset(item: MockupSolicitudRow): boolean {
+  return Boolean(resolveMockupStorageRef(item, 'base'));
+}
+
+function baseDownloadFilename(item: MockupSolicitudRow): string {
+  const slug = (item.nombre_slug || item.nombre_muestra || `muestra-${item.id.slice(0, 8)}`)
+    .trim()
+    .replace(/[^\w.-]+/g, '_');
+  const ext = item.archivo_base_path?.split('.').pop()?.toLowerCase() || 'png';
+  return `${slug}_original.${ext}`;
 }
 
 async function downloadOptimizedMockupFile(item: MockupSolicitudRow): Promise<void> {
-  const filename = optimizedDownloadFilename(item);
-  const storagePath = item.imagen_optimizada_path?.trim();
+  await downloadMockupAsset(item, 'optimized', optimizedDownloadFilename(item));
+}
 
-  if (storagePath) {
-    const { data, error } = await supabase.storage.from('foto').download(storagePath);
-    if (error) throw error;
-    if (!data) throw new Error('No se encontró el archivo optimizado en storage');
-
-    const blobUrl = window.URL.createObjectURL(data);
-    try {
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } finally {
-      window.URL.revokeObjectURL(blobUrl);
-    }
-    return;
-  }
-
-  const url = item.imagen_optimizada_url?.trim();
-  if (!url) throw new Error('Sin archivo optimizado');
-  await downloadFile(url, filename);
+async function downloadBaseMockupFile(item: MockupSolicitudRow): Promise<void> {
+  await downloadMockupAsset(item, 'base', baseDownloadFilename(item));
 }
 
 function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
   const { toast } = useToast();
-  const thumb = thumbUrl(item);
-  const href = primaryHref(item);
+  const thumb = thumbKind(item);
   const canDownloadOptimized = hasOptimizedAsset(item);
+  const canDownloadBase = hasBaseAsset(item);
   const name = item.nombre_muestra || item.nombre_slug || 'Sin nombre';
   const phone = item.whatsapp?.trim() || null;
   const dateStr = new Date(item.created_at).toLocaleString('es-AR', {
@@ -111,10 +99,6 @@ function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
     hour: '2-digit',
     minute: '2-digit',
   });
-
-  const openPreview = () => {
-    if (href) window.open(href, '_blank', 'noopener,noreferrer');
-  };
 
   const handleDownloadOptimized = async () => {
     if (!canDownloadOptimized) {
@@ -140,15 +124,38 @@ function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
     }
   };
 
+  const handleDownloadBase = async () => {
+    if (!canDownloadBase) {
+      toast({
+        title: 'Sin archivo base',
+        description: 'Esta muestra no tiene logo original guardado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      await downloadBaseMockupFile(item);
+      toast({
+        title: 'Descarga iniciada',
+        description: 'Se está descargando el archivo base.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error al descargar',
+        description: error instanceof Error ? error.message : 'No se pudo descargar el archivo base',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const shell = (
     <div className="relative w-full min-w-0 max-w-full aspect-[4/3] overflow-hidden rounded-3xl bg-muted/25 shadow-[0_14px_44px_-14px_rgba(0,0,0,0.55)]">
       {thumb ? (
-        <img
-          src={thumb}
+        <MockupStorageImage
+          row={item}
+          kind={thumb}
           alt=""
           className="relative z-0 block h-full w-full object-contain object-center transition-transform duration-300 ease-out group-hover:[transform:scale(1,1.03)]"
-          loading="lazy"
-          decoding="async"
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-muted/45 text-[10px] text-muted-foreground">
@@ -169,35 +176,22 @@ function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          role={href ? 'button' : undefined}
-          tabIndex={href ? 0 : undefined}
-          title={
-            href
-              ? 'Clic izquierdo: abrir mockup · clic derecho: descargar optimizado'
-              : canDownloadOptimized
-                ? 'Clic derecho: descargar optimizado'
-                : undefined
-          }
-          onClick={(e) => {
-            if (e.button !== 0) return;
-            openPreview();
-          }}
-          onKeyDown={(e) => {
-            if (!href) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              openPreview();
-            }
-          }}
+          title="Clic derecho: descargar archivos"
           className={cn(
             'group block w-full min-w-0 max-w-full rounded-3xl outline-none [-webkit-tap-highlight-color:transparent] ring-offset-0 focus-visible:ring-2 focus-visible:ring-white/35 focus-visible:ring-offset-0',
-            href && 'cursor-pointer',
           )}
         >
           {shell}
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="z-[200]">
+        <ContextMenuItem
+          disabled={!canDownloadBase}
+          onSelect={() => void handleDownloadBase()}
+        >
+          <Download className="mr-2 h-4 w-4" aria-hidden />
+          Descargar archivo base
+        </ContextMenuItem>
         <ContextMenuItem
           disabled={!canDownloadOptimized}
           onSelect={() => void handleDownloadOptimized()}

@@ -14,7 +14,9 @@
     "import:ventas:dry": "node scripts/import-ventas-csv.mjs --dry-run",
     "import:clientes-viejos": "node scripts/import-clientes-viejos-csv.mjs",
     "import:clientes-viejos:dry": "node scripts/import-clientes-viejos-csv.mjs --dry-run",
-    "import:clientes-viejos:insecure-win": "set IMPORT_SUPABASE_INSECURE_TLS=1&& node scripts/import-clientes-viejos-csv.mjs"
+    "import:clientes-viejos:insecure-win": "set IMPORT_SUPABASE_INSECURE_TLS=1&& node scripts/import-clientes-viejos-csv.mjs",
+    "update:clientes-contacto": "node scripts/update-clientes-contacto-csv.mjs",
+    "update:clientes-contacto:dry": "node scripts/update-clientes-contacto-csv.mjs --dry-run"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -47,6 +49,7 @@
     "react-router-dom": "^6.20.1",
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7",
+    "unicornstudio-react": "^2.1.9",
     "zod": "^3.22.4",
     "zustand": "^4.4.7"
   },

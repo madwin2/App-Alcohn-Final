@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ExternalLink, MessageCircle, Search } from 'lucide-react';
+import { ExternalLink, Loader2, MessageCircle, Search, Send } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import type {
   MockupSinCompraRow,
   OrdenSeguimientoRow,
 } from '@/lib/comercial/types';
+import { contactoComercialEstadoLabel } from '@/lib/comercial/contacto';
 import {
   ETAPA_LABELS,
   MATERIAL_LABELS,
@@ -33,19 +34,51 @@ function EtapaBadge({ etapa }: { etapa: ClienteWebRow['etapa'] }) {
   return <Badge variant="outline">{ETAPA_LABELS[etapa]}</Badge>;
 }
 
+function ContactoComercialBadge({ estado }: { estado: MockupSinCompraRow['contactoComercialEstado'] }) {
+  const variant =
+    estado === 'enviado' ? 'default' : estado === 'programado' ? 'secondary' : 'outline';
+  return (
+    <Badge variant={variant} className="whitespace-nowrap font-normal">
+      {contactoComercialEstadoLabel(estado)}
+    </Badge>
+  );
+}
+
 function ActionButtons({
   telefono,
   url,
   onExclude,
+  onSendContacto,
+  sendingContacto,
+  canSendContacto,
 }: {
   telefono: string | null | undefined;
   url?: string | null;
   onExclude?: () => void;
+  onSendContacto?: () => void;
+  sendingContacto?: boolean;
+  canSendContacto?: boolean;
 }) {
   const wa = whatsAppUrl(telefono);
   return (
     <div className="flex items-center justify-end gap-1">
       {onExclude ? <ExcludeButton onClick={onExclude} /> : null}
+      {canSendContacto && onSendContacto ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          title="Enviar mensaje comercial por WhatsApp"
+          disabled={sendingContacto}
+          onClick={onSendContacto}
+        >
+          {sendingContacto ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Send className="size-4 text-primary" />
+          )}
+        </Button>
+      ) : null}
       {wa ? (
         <Button variant="ghost" size="icon" className="size-8" asChild>
           <a href={wa} target="_blank" rel="noopener noreferrer" title="WhatsApp">
@@ -95,10 +128,14 @@ export function MockupsSinCompraTable({
   rows,
   onOpenCliente,
   onExclude,
+  onSendContacto,
+  sendingContactoId,
 }: {
   rows: MockupSinCompraRow[];
   onOpenCliente?: (clienteId: string, meta?: { nombre?: string; telefono?: string | null }) => void;
   onExclude?: (mockupId: string, label: string) => void;
+  onSendContacto?: (row: MockupSinCompraRow) => void;
+  sendingContactoId?: string | null;
 }) {
   const [query, setQuery] = useState('');
   const filtered = useMemo(() => {
@@ -116,7 +153,7 @@ export function MockupsSinCompraTable({
   return (
     <SectionTable
       title="Muestras sin compra"
-      description="Mockups listos o en revisión sin orden vinculada — candidatos a remarketing."
+      description="Mockups listos sin compra. El bot envía el saludo comercial ~10 min después de generar la muestra (si no compró). Podés forzar el envío con el ícono de avión."
       count={filtered.length}
     >
       <div className="border-b px-4 py-3">
@@ -140,13 +177,14 @@ export function MockupsSinCompraTable({
             <th className="px-4 py-3">Cotización</th>
             <th className="px-4 py-3">Días</th>
             <th className="px-4 py-3">Prioridad</th>
+            <th className="px-4 py-3">Contacto</th>
             <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
         </thead>
         <tbody>
           {filtered.length === 0 ? (
             <tr>
-              <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+              <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
                 No hay mockups sin compra en este filtro.
               </td>
             </tr>
@@ -185,10 +223,30 @@ export function MockupsSinCompraTable({
                   <PrioridadBadge prioridad={row.prioridad} />
                 </td>
                 <td className="px-4 py-3">
+                  <div className="flex flex-col gap-1">
+                    <ContactoComercialBadge estado={row.contactoComercialEstado} />
+                    {row.contactoComercialEstado === 'programado' && row.contactoComercialEligibleAt ? (
+                      <span className="text-xs text-muted-foreground">
+                        ~{formatShortDate(row.contactoComercialEligibleAt)}
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
                   <ActionButtons
                     telefono={row.telefono ?? row.whatsapp}
                     url={row.mockupCueroUrl || row.mockupMaderaUrl}
                     onExclude={onExclude ? () => onExclude(row.mockupId, row.nombre) : undefined}
+                    onSendContacto={
+                      onSendContacto && row.contactoComercialEstado !== 'enviado'
+                        ? () => onSendContacto(row)
+                        : undefined
+                    }
+                    sendingContacto={sendingContactoId === row.mockupId}
+                    canSendContacto={
+                      row.contactoComercialEstado !== 'enviado' &&
+                      Boolean((row.telefono ?? row.whatsapp)?.trim())
+                    }
                   />
                 </td>
               </tr>

@@ -15,6 +15,7 @@ import type {
   OrdenSeguimientoRow,
   PaymentStatusBreakdown,
 } from '@/lib/comercial/types';
+import { resolveContactoComercialEstado } from '@/lib/comercial/contacto';
 import {
   bucketByDay,
   buildKpis,
@@ -416,6 +417,7 @@ async function fetchMockupsSinCompraAll(origen: ComercialOrigenFilter) {
       mockup_cuero_url: string | null;
       mockup_madera_url: string | null;
       medidas_cotizacion_json: Record<string, unknown>[] | null;
+      metadata_web?: Record<string, unknown> | null;
       cliente_id: string | null;
       nombre: string;
       apellido: string;
@@ -453,6 +455,7 @@ async function fetchMockupsSinCompraAll(origen: ComercialOrigenFilter) {
     mockup_cuero_url: m.mockup_cuero_url,
     mockup_madera_url: m.mockup_madera_url,
     medidas_cotizacion_json: m.medidas_cotizacion_json,
+    metadata_web: m.metadata_web ?? null,
     cliente_id: m.cliente_id ?? null,
     nombre: m.clientes?.nombre ?? '',
     apellido: m.clientes?.apellido ?? '',
@@ -472,6 +475,7 @@ function mapMockupSinCompra(
     mockup_cuero_url: string | null;
     mockup_madera_url: string | null;
     medidas_cotizacion_json: Record<string, unknown>[] | null;
+    metadata_web?: Record<string, unknown> | null;
     cliente_id: string | null;
     nombre: string;
     apellido: string;
@@ -481,6 +485,18 @@ function mapMockupSinCompra(
   checkoutIniciado = false,
 ): MockupSinCompraRow {
   const now = new Date();
+  const meta = row.metadata_web ?? null;
+  const eligibleRaw = meta?.contacto_comercial_eligible_at;
+  const enviadoRaw = meta?.contacto_comercial_enviado_at;
+  const eligibleAt =
+    typeof eligibleRaw === 'string'
+      ? eligibleRaw
+      : eligibleRaw != null
+        ? String(eligibleRaw)
+        : null;
+  const enviadoAt =
+    typeof enviadoRaw === 'string' ? enviadoRaw : enviadoRaw != null ? String(enviadoRaw) : null;
+
   return {
     mockupId: row.mockup_id,
     createdAt: row.created_at,
@@ -497,6 +513,9 @@ function mapMockupSinCompra(
     checkoutIniciado,
     clienteId: row.cliente_id,
     prioridad: resolvePrioridad({ checkoutIniciado, mockupListo: true }),
+    contactoComercialEstado: resolveContactoComercialEstado(meta),
+    contactoComercialEligibleAt: eligibleAt,
+    contactoComercialEnviadoAt: enviadoAt,
   };
 }
 

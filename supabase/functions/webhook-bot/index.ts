@@ -163,6 +163,10 @@ Deno.serve(async (req: Request) => {
         mockup_madera_url: Boolean(body?.datos?.mockup_madera_url),
         medidas_cotizacion: nMed,
       });
+    } else if (tipoAct === "generador_muestras_contacto") {
+      console.log("generador_muestras_contacto → saludo comercial generador web", {
+        solicitud_mockup_id: body?.datos?.solicitud_mockup_id,
+      });
     }
 
     // Validar campos mínimos

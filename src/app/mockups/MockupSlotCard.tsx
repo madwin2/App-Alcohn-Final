@@ -43,6 +43,11 @@ import {
   validateLogoForMockup,
 } from '@/lib/utils/mockupPipeline';
 import {
+  fetchMockupAssetAsFile,
+  resolveMockupAssetDisplayUrl,
+  resolveMockupStorageRef,
+} from '@/lib/utils/mockupStorage';
+import {
   dataUrlToFile,
   fetchUrlAsFile,
   fileToDataUrl,
@@ -257,11 +262,47 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
         }
         const step = mapEstadoToUiStep(row);
         setUiStep(step);
-        if (row.archivo_base_url) setSourcePreview(row.archivo_base_url);
-        if (row.imagen_optimizada_url) setOptimizedPreview(row.imagen_optimizada_url);
+        if (resolveMockupStorageRef(row, 'base')) {
+          try {
+            const baseUrl = await resolveMockupAssetDisplayUrl(row, 'base');
+            if (!cancelled && baseUrl) setSourcePreview(baseUrl);
+          } catch {
+            /* ignore */
+          }
+        } else if (row.archivo_base_url) {
+          setSourcePreview(row.archivo_base_url);
+        }
+        if (resolveMockupStorageRef(row, 'optimized')) {
+          try {
+            const optUrl = await resolveMockupAssetDisplayUrl(row, 'optimized');
+            if (!cancelled && optUrl) setOptimizedPreview(optUrl);
+          } catch {
+            /* ignore */
+          }
+        } else if (row.imagen_optimizada_url) {
+          setOptimizedPreview(row.imagen_optimizada_url);
+        }
         if (step === 3) {
-          if (row.mockup_cuero_url) setMockupCueroPreview(row.mockup_cuero_url);
-          if (row.mockup_madera_url) setMockupMaderaPreview(row.mockup_madera_url);
+          if (resolveMockupStorageRef(row, 'mockup_cuero')) {
+            try {
+              const cueroUrl = await resolveMockupAssetDisplayUrl(row, 'mockup_cuero');
+              if (!cancelled && cueroUrl) setMockupCueroPreview(cueroUrl);
+            } catch {
+              /* ignore */
+            }
+          } else if (row.mockup_cuero_url) {
+            setMockupCueroPreview(row.mockup_cuero_url);
+          }
+          if (resolveMockupStorageRef(row, 'mockup_madera')) {
+            try {
+              const maderaUrl = await resolveMockupAssetDisplayUrl(row, 'mockup_madera');
+              if (!cancelled && maderaUrl) setMockupMaderaPreview(maderaUrl);
+            } catch {
+              /* ignore */
+            }
+          } else if (row.mockup_madera_url) {
+            setMockupMaderaPreview(row.mockup_madera_url);
+          }
         } else {
           setMockupCueroPreview(null);
           setMockupMaderaPreview(null);
@@ -842,10 +883,16 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
     if (!activeRow?.id || !activeRow.archivo_base_url) return;
     setIsRedoing(true);
     try {
-      const baseFile = await fetchUrlAsFile(
-        activeRow.archivo_base_url,
-        `original_${activeRow.nombre_slug}.${getFileExtension(activeRow.archivo_base_path || '', 'png')}`,
-      );
+      const baseFile = resolveMockupStorageRef(activeRow, 'base')
+        ? await fetchMockupAssetAsFile(
+            activeRow,
+            'base',
+            `original_${activeRow.nombre_slug}.${getFileExtension(activeRow.archivo_base_path || '', 'png')}`,
+          )
+        : await fetchUrlAsFile(
+            activeRow.archivo_base_url,
+            `original_${activeRow.nombre_slug}.${getFileExtension(activeRow.archivo_base_path || '', 'png')}`,
+          );
       const slug = activeRow.nombre_slug;
       const rehacerSimplificar = Boolean(activeRow.preparado_con_simplificar_ia);
       let optimizedFile: File;
@@ -951,11 +998,17 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
       const optimizedFile =
         cachedOptimized?.solicitudId === activeRow.id
           ? cachedOptimized.file
-          : await fetchUrlAsFile(
-              activeRow.imagen_optimizada_url,
-              `optimizado_${activeRow.nombre_slug}.png`,
-              { cacheBust: activeRow.intentos_optimizacion ?? Date.now() },
-            );
+          : resolveMockupStorageRef(activeRow, 'optimized')
+            ? await fetchMockupAssetAsFile(
+                activeRow,
+                'optimized',
+                `optimizado_${activeRow.nombre_slug}.png`,
+              )
+            : await fetchUrlAsFile(
+                activeRow.imagen_optimizada_url,
+                `optimizado_${activeRow.nombre_slug}.png`,
+                { cacheBust: activeRow.intentos_optimizacion ?? Date.now() },
+              );
 
       const targets = resolveMockupMaterials(activeRow.material as MockupMaterialChoice);
       const patch: Parameters<typeof updateMockupSolicitud>[1] = {};
@@ -1077,7 +1130,7 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   }, [mockupCueroPreview, mockupMaderaPreview, optimizedPreview, slotIndex, sourcePreview]);
 
   const originalDisplaySrc = useMemo(
-    () => activeRow?.archivo_base_url || sourcePreview || '',
+    () => sourcePreview || activeRow?.archivo_base_url || '',
     [activeRow?.archivo_base_url, sourcePreview],
   );
 

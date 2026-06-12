@@ -46,6 +46,8 @@ import {
   pctChange,
   presetRange,
 } from '@/lib/comercial/utils';
+import type { MockupSinCompraRow } from '@/lib/comercial/types';
+import { sendComercialContactoWhatsApp } from '@/lib/supabase/services/comercialContacto.service';
 import { fetchComercialDashboard, excludeFromComercialWeb } from '@/lib/supabase/services/comercialWeb.service';
 import type { ComercialEntityType } from '@/lib/comercial/exclusions';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -115,6 +117,7 @@ export default function ComercialPage() {
     id: string;
     label: string;
   } | null>(null);
+  const [sendingContactoId, setSendingContactoId] = useState<string | null>(null);
 
   const load = useCallback(
     async (silent = false) => {
@@ -157,6 +160,42 @@ export default function ComercialPage() {
   const openExclude = (type: ComercialEntityType, id: string, label: string) => {
     setExcludeTarget({ type, id, label });
     setExcludeOpen(true);
+  };
+
+  const handleSendContacto = async (row: MockupSinCompraRow) => {
+    const tel = (row.telefono ?? row.whatsapp ?? '').trim();
+    if (!tel) {
+      toast({
+        title: 'Sin WhatsApp',
+        description: 'Este cliente no tiene número para enviar el mensaje.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSendingContactoId(row.mockupId);
+    try {
+      const result = await sendComercialContactoWhatsApp({
+        mockupId: row.mockupId,
+        whatsapp: tel,
+        nombre: row.nombre,
+      });
+      if (!result.ok) {
+        toast({
+          title: 'No se pudo enviar el mensaje',
+          description: result.error ?? 'Error desconocido',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: 'Mensaje enviado',
+        description: `Se envió el contacto comercial a ${row.nombre}.`,
+      });
+      await load(true);
+    } finally {
+      setSendingContactoId(null);
+    }
   };
 
   const handleConfirmExclude = async () => {
@@ -340,6 +379,8 @@ export default function ComercialPage() {
                   rows={data.mockupsSinCompra}
                   onOpenCliente={openCliente}
                   onExclude={(id, label) => openExclude('mockup', id, label)}
+                  onSendContacto={handleSendContacto}
+                  sendingContactoId={sendingContactoId}
                 />
                 <OrdenesSeguimientoTable
                   rows={data.ordenesSeguimiento}
