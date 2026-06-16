@@ -22,6 +22,7 @@ import {
   whatsAppUrl,
 } from '@/lib/comercial/utils';
 import { ExcludeButton } from '@/components/comercial/ComercialExcludeDialog';
+import { ConfirmPagoButton } from '@/components/comercial/ComercialConfirmPagoDialog';
 import { useMemo, useState } from 'react';
 
 function PrioridadBadge({ prioridad }: { prioridad: 'caliente' | 'tibio' | 'frio' }) {
@@ -51,6 +52,8 @@ function ActionButtons({
   onSendContacto,
   sendingContacto,
   canSendContacto,
+  onConfirmPago,
+  confirmingPago,
 }: {
   telefono: string | null | undefined;
   url?: string | null;
@@ -58,10 +61,15 @@ function ActionButtons({
   onSendContacto?: () => void;
   sendingContacto?: boolean;
   canSendContacto?: boolean;
+  onConfirmPago?: () => void;
+  confirmingPago?: boolean;
 }) {
   const wa = whatsAppUrl(telefono);
   return (
     <div className="flex items-center justify-end gap-1">
+      {onConfirmPago ? (
+        <ConfirmPagoButton onClick={onConfirmPago} loading={confirmingPago} />
+      ) : null}
       {onExclude ? <ExcludeButton onClick={onExclude} /> : null}
       {canSendContacto && onSendContacto ? (
         <Button
@@ -262,15 +270,19 @@ export function OrdenesSeguimientoTable({
   rows,
   onOpenCliente,
   onExclude,
+  onConfirmPago,
+  confirmingOrdenId,
 }: {
   rows: OrdenSeguimientoRow[];
   onOpenCliente?: (clienteId: string, meta?: { nombre?: string; telefono?: string | null }) => void;
   onExclude?: (ordenId: string, label: string) => void;
+  onConfirmPago?: (row: OrdenSeguimientoRow) => void;
+  confirmingOrdenId?: string | null;
 }) {
   return (
     <SectionTable
       title="Pagos pendientes"
-      description="Checkouts confirmados sin pago cerrado — reintentar tarjeta o pedir comprobante."
+      description="Checkouts confirmados sin pago cerrado — validá el comprobante y confirmá para crear el pedido."
       count={rows.length}
     >
       <table className="w-full min-w-[920px] text-sm">
@@ -328,6 +340,8 @@ export function OrdenesSeguimientoTable({
                   <ActionButtons
                     telefono={row.telefono}
                     url={row.comprobanteUrl}
+                    onConfirmPago={onConfirmPago ? () => onConfirmPago(row) : undefined}
+                    confirmingPago={confirmingOrdenId === row.ordenId}
                     onExclude={onExclude ? () => onExclude(row.ordenId, row.nombre) : undefined}
                   />
                 </td>

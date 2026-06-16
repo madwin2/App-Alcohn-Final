@@ -23,6 +23,7 @@ import {
   TrafficPanel,
 } from '@/components/comercial/ComercialTables';
 import { ClienteDetailDialog } from '@/components/comercial/ClienteDetailDialog';
+import { ComercialConfirmPagoDialog } from '@/components/comercial/ComercialConfirmPagoDialog';
 import { ComercialExcludeDialog } from '@/components/comercial/ComercialExcludeDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
-import type { ComercialDashboardData, ComercialOrigenFilter } from '@/lib/comercial/types';
+import type { ComercialDashboardData, ComercialOrigenFilter, OrdenSeguimientoRow } from '@/lib/comercial/types';
 import {
   conversionRate,
   exportPotencialesCsv,
@@ -49,6 +50,7 @@ import {
 import type { MockupSinCompraRow } from '@/lib/comercial/types';
 import { sendComercialContactoWhatsApp } from '@/lib/supabase/services/comercialContacto.service';
 import { fetchComercialDashboard, excludeFromComercialWeb } from '@/lib/supabase/services/comercialWeb.service';
+import { confirmWebOrderPayment } from '@/lib/supabase/services/webOrderPayment.service';
 import type { ComercialEntityType } from '@/lib/comercial/exclusions';
 import { useAuth } from '@/lib/hooks/useAuth';
 
@@ -118,6 +120,9 @@ export default function ComercialPage() {
     label: string;
   } | null>(null);
   const [sendingContactoId, setSendingContactoId] = useState<string | null>(null);
+  const [confirmPagoOpen, setConfirmPagoOpen] = useState(false);
+  const [confirmPagoRow, setConfirmPagoRow] = useState<OrdenSeguimientoRow | null>(null);
+  const [confirmingOrdenId, setConfirmingOrdenId] = useState<string | null>(null);
 
   const load = useCallback(
     async (silent = false) => {
@@ -219,6 +224,38 @@ export default function ComercialPage() {
         variant: 'destructive',
       });
       throw err;
+    }
+  };
+
+  const openConfirmPago = (row: OrdenSeguimientoRow) => {
+    setConfirmPagoRow(row);
+    setConfirmPagoOpen(true);
+  };
+
+  const handleConfirmPago = async () => {
+    if (!confirmPagoRow) return;
+    setConfirmingOrdenId(confirmPagoRow.ordenId);
+    try {
+      await confirmWebOrderPayment({
+        ordenId: confirmPagoRow.ordenId,
+        validatedBy: user?.id ?? null,
+      });
+      toast({
+        title: 'Pago confirmado',
+        description: `${confirmPagoRow.nombre} ya es un pedido válido en Pedidos y Producción.`,
+      });
+      setConfirmPagoOpen(false);
+      setConfirmPagoRow(null);
+      await load(true);
+    } catch (err: unknown) {
+      toast({
+        title: 'No se pudo confirmar el pago',
+        description: err instanceof Error ? err.message : 'Error desconocido',
+        variant: 'destructive',
+      });
+      throw err;
+    } finally {
+      setConfirmingOrdenId(null);
     }
   };
 
@@ -386,6 +423,8 @@ export default function ComercialPage() {
                   rows={data.ordenesSeguimiento}
                   onOpenCliente={openCliente}
                   onExclude={(id, label) => openExclude('orden', id, label)}
+                  onConfirmPago={openConfirmPago}
+                  confirmingOrdenId={confirmingOrdenId}
                 />
                 <ContactosSinMuestraTable
                   rows={data.contactosSinMuestra}
@@ -471,6 +510,15 @@ export default function ComercialPage() {
         entityType={excludeTarget?.type ?? null}
         entityLabel={excludeTarget?.label}
         onConfirm={handleConfirmExclude}
+      />
+      <ComercialConfirmPagoDialog
+        open={confirmPagoOpen}
+        onOpenChange={(open) => {
+          setConfirmPagoOpen(open);
+          if (!open) setConfirmPagoRow(null);
+        }}
+        row={confirmPagoRow}
+        onConfirm={handleConfirmPago}
       />
     </AppMain>
   );

@@ -46,6 +46,7 @@ import {
   normalizeAnalyticsRow,
   type NormalizedAnalyticsRow,
 } from '@/lib/comercial/analyticsNormalize';
+import { estimateWebOrdenTotal } from '@/lib/comercial/webCart';
 import type { Database } from '../types';
 
 type MockupRow = Database['public']['Tables']['mockup_solicitudes']['Row'];
@@ -359,6 +360,48 @@ async function fetchOrdenesWeb(fromIso: string, toIso: string) {
   return (data ?? []) as OrdenWithCliente[];
 }
 
+async function enrichOrdenesSeguimientoView(
+  rows: Array<{
+    orden_id: string;
+    created_at: string;
+    estado_pago_web: string;
+    metodo_pago: string | null;
+    valor_total: number | null;
+    senia_total: number | null;
+    pago_error_mensaje: string | null;
+    comprobante_subido_at: string | null;
+    comprobante_url: string | null;
+    web_checkout_ref: string | null;
+    cliente_id: string;
+    nombre: string;
+    apellido: string;
+    telefono: string;
+    mail: string | null;
+  }>,
+) {
+  if (!rows.length) return rows;
+
+  const ids = rows.map((r) => r.orden_id);
+  const { data, error } = await supabase
+    .from('ordenes')
+    .select('id, notas_web, carrito_json')
+    .in('id', ids);
+
+  if (error) throw new Error(error.message);
+
+  const byId = new Map(
+    ((data ?? []) as Array<{ id: string; notas_web: Record<string, unknown> | null; carrito_json: unknown }>).map(
+      (row) => [row.id, row],
+    ),
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    notas_web: byId.get(row.orden_id)?.notas_web ?? null,
+    carrito_json: byId.get(row.orden_id)?.carrito_json ?? null,
+  }));
+}
+
 async function fetchOrdenesSeguimientoAll() {
   const { data, error } = await supabase
     .from('v_web_ordenes_seguimiento_pago')
@@ -379,23 +422,25 @@ async function fetchOrdenesSeguimientoAll() {
     return (fallback ?? []) as OrdenWithCliente[];
   }
 
-  return (data ?? []) as Array<{
-    orden_id: string;
-    created_at: string;
-    estado_pago_web: string;
-    metodo_pago: string | null;
-    valor_total: number | null;
-    senia_total: number | null;
-    pago_error_mensaje: string | null;
-    comprobante_subido_at: string | null;
-    comprobante_url: string | null;
-    web_checkout_ref: string | null;
-    cliente_id: string;
-    nombre: string;
-    apellido: string;
-    telefono: string;
-    mail: string | null;
-  }>;
+  return enrichOrdenesSeguimientoView(
+    (data ?? []) as Array<{
+      orden_id: string;
+      created_at: string;
+      estado_pago_web: string;
+      metodo_pago: string | null;
+      valor_total: number | null;
+      senia_total: number | null;
+      pago_error_mensaje: string | null;
+      comprobante_subido_at: string | null;
+      comprobante_url: string | null;
+      web_checkout_ref: string | null;
+      cliente_id: string;
+      nombre: string;
+      apellido: string;
+      telefono: string;
+      mail: string | null;
+    }>,
+  );
 }
 
 async function fetchMockupsSinCompraAll(origen: ComercialOrigenFilter) {
@@ -519,6 +564,16 @@ function mapMockupSinCompra(
   };
 }
 
+function resolveValorTotalDisplay(
+  valorTotal: number | null | undefined,
+  notasWeb: Record<string, unknown> | null | undefined,
+  metodoPago: string | null | undefined,
+  carritoJson: unknown,
+): number | null {
+  if (valorTotal != null && valorTotal > 0) return valorTotal;
+  return estimateWebOrdenTotal({ notasWeb, carritoJson, metodoPago });
+}
+
 function mapOrdenSeguimiento(row: OrdenWithCliente): OrdenSeguimientoRow {
   const now = new Date();
   const createdAt = row.created_at ?? new Date().toISOString();
@@ -527,7 +582,12 @@ function mapOrdenSeguimiento(row: OrdenWithCliente): OrdenSeguimientoRow {
     createdAt,
     estadoPagoWeb: row.estado_pago_web ?? 'pendiente',
     metodoPago: row.metodo_pago ?? null,
-    valorTotal: row.valor_total,
+    valorTotal: resolveValorTotalDisplay(
+      row.valor_total,
+      row.notas_web as Record<string, unknown> | null,
+      row.metodo_pago ?? null,
+      row.carrito_json,
+    ),
     seniaTotal: row.senia_total,
     pagoErrorMensaje: row.pago_error_mensaje ?? null,
     comprobanteSubido: Boolean(row.comprobante_subido_at || row.comprobante_url),
@@ -553,6 +613,8 @@ function mapOrdenSeguimientoView(row: {
   comprobante_subido_at: string | null;
   comprobante_url: string | null;
   web_checkout_ref: string | null;
+  notas_web?: Record<string, unknown> | null;
+  carrito_json?: unknown;
   cliente_id: string;
   nombre: string;
   apellido: string;
@@ -565,7 +627,12 @@ function mapOrdenSeguimientoView(row: {
     createdAt: row.created_at,
     estadoPagoWeb: row.estado_pago_web,
     metodoPago: row.metodo_pago,
-    valorTotal: row.valor_total,
+    valorTotal: resolveValorTotalDisplay(
+      row.valor_total,
+      row.notas_web,
+      row.metodo_pago,
+      row.carrito_json,
+    ),
     seniaTotal: row.senia_total,
     pagoErrorMensaje: row.pago_error_mensaje,
     comprobanteSubido: Boolean(row.comprobante_subido_at || row.comprobante_url),
