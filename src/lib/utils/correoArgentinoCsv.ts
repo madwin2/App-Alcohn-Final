@@ -1,6 +1,5 @@
 import { canonicalizeProvince, normalizeLocality, normalizePhoneDigits } from './shippingNormalization';
 import {
-  buscarSucursal,
   buscarSucursalSmart,
   getSucursalesPadronPreferSupabase,
   obtenerCodigoProvincia,
@@ -164,15 +163,12 @@ export const createCorreoCsvRow = async (
       }
     }
   } else {
-    const dePadron = buscarSucursal(locality, input.provincia, SUC);
+    // Domicilio: la provincia viene del formulario/BD. No inferirla del padrón de sucursales:
+    // localidades como «San Martín» existen en varias provincias y el fallback solo-por-localidad
+    // puede devolver Mendoza (M) en vez de Buenos Aires (B).
     const provCanon = canonicalizeProvince(input.provincia);
-    const provFuente = dePadron
-      ? dePadron.provincia
-      : provCanon || (input.provincia || '').trim();
+    const provFuente = provCanon || (input.provincia || '').trim();
     letraProvincia = obtenerCodigoProvincia(provFuente);
-    if (!letraProvincia && provCanon) {
-      letraProvincia = obtenerCodigoProvincia(provCanon);
-    }
   }
 
   if (!letraProvincia) {

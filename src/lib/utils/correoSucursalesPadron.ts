@@ -177,9 +177,12 @@ export function buscarSucursal(
       return s;
     }
   }
-  for (const s of sucursales) {
-    if (normalizarNombreCorreo(s.localidad) === localidadNorm) {
-      return s;
+  // Solo sin provincia conocida: evita cruzar «San Martín» (BA) con homónimos en otras provincias.
+  if (!provinciaNorm) {
+    for (const s of sucursales) {
+      if (normalizarNombreCorreo(s.localidad) === localidadNorm) {
+        return s;
+      }
     }
   }
   return null;
