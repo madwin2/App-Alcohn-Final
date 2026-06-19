@@ -20,6 +20,11 @@ import { runMigrations } from '../migrations';
 import { getSixMonthsCutoffDate } from '../../utils/orderLifecycle';
 import { isVectorAutoEnabled, vectorizationStateAfterBaseUpload } from '../../config/vectorAuto';
 import { enqueueVectorization } from '../../utils/vectorizeWorker';
+import {
+  normalizeEmailCliente,
+  normalizePhoneDigitsCliente,
+  phoneSearchVariants,
+} from '../../utils/phoneNormalization';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -430,16 +435,22 @@ export const getOrderById = async (orderId: string): Promise<Order | null> => {
   }
 };
 
-// Buscar cliente por teléfono
+// Buscar cliente por teléfono (tolera +54, 549, 9… según cómo lo guardó la web o la app)
 export const findCustomerByPhone = async (phone: string): Promise<Customer | null> => {
   try {
+    const variants = phoneSearchVariants(phone);
+    if (!variants.length) return null;
+
+    const orFilter = variants.map((v) => `telefono.eq.${v}`).join(',');
     const { data, error } = await supabase
       .from('clientes')
       .select('*')
-      .eq('telefono', phone)
-      .single();
+      .or(orFilter)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
+    if (error) throw error;
     if (!data) return null;
 
     return mapClienteToCustomer(data);
@@ -447,6 +458,38 @@ export const findCustomerByPhone = async (phone: string): Promise<Customer | nul
     console.error('Error finding customer:', error);
     throw error;
   }
+};
+
+// Buscar cliente por email (p. ej. contacto del generador de muestras web)
+export const findCustomerByEmail = async (email: string): Promise<Customer | null> => {
+  try {
+    const normalized = normalizeEmailCliente(email);
+    if (!normalized) return null;
+
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .ilike('mail', normalized)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return mapClienteToCustomer(data);
+  } catch (error) {
+    console.error('Error finding customer by email:', error);
+    throw error;
+  }
+};
+
+/** Busca cliente existente por teléfono y, si no hay match, por email. */
+export const findCustomer = async (phone: string, email?: string): Promise<Customer | null> => {
+  const byPhone = await findCustomerByPhone(phone);
+  if (byPhone) return byPhone;
+  if (email?.trim()) return findCustomerByEmail(email);
+  return null;
 };
 
 // Crear cliente
@@ -470,19 +513,20 @@ export const createCustomer = async (customer: Customer): Promise<Customer> => {
 // Crear orden completa (cliente, orden, sellos)
 export const createOrder = async (formData: NewOrderFormData): Promise<Order> => {
   try {
-    // 1. Buscar o crear cliente
+    // 1. Buscar o crear cliente (reutiliza contacto web del generador de muestras)
     let cliente: Customer;
-    const existingCliente = await findCustomerByPhone(formData.customer.phoneE164);
-    
+    const phoneNormalized = normalizePhoneDigitsCliente(formData.customer.phoneE164) || formData.customer.phoneE164;
+    const emailNormalized = normalizeEmailCliente(formData.customer.email) ?? undefined;
+    const existingCliente = await findCustomer(phoneNormalized, emailNormalized);
+
     if (existingCliente) {
       cliente = existingCliente;
-      // Actualizar datos del cliente si es necesario
       const customerForMapping: Customer = {
         id: cliente.id,
         firstName: formData.customer.firstName,
         lastName: formData.customer.lastName,
-        phoneE164: formData.customer.phoneE164,
-        email: formData.customer.email,
+        phoneE164: phoneNormalized,
+        email: emailNormalized ?? cliente.email,
       };
       const clienteData = mapCustomerToCliente(customerForMapping);
       await supabase
@@ -491,11 +535,11 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
         .eq('id', cliente.id);
     } else {
       cliente = await createCustomer({
-        id: '', // Se generará en la BD
+        id: '',
         firstName: formData.customer.firstName,
         lastName: formData.customer.lastName,
-        phoneE164: formData.customer.phoneE164,
-        email: formData.customer.email,
+        phoneE164: phoneNormalized,
+        email: emailNormalized,
         dni: undefined,
       });
     }

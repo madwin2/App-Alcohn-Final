@@ -11,7 +11,8 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { NewOrderFormData, FabricationState, ShippingCarrier, ShippingServiceDest, ShippingOption, StampType, ItemType, SoldadorPower, AbecedarioCase } from '@/lib/types/index';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, X } from 'lucide-react';
-import { findCustomerByPhone } from '@/lib/supabase/services/orders.service';
+import { findCustomer } from '@/lib/supabase/services/orders.service';
+import { normalizePhoneDigitsCliente } from '@/lib/utils/phoneNormalization';
 import { fetchPreciosResolverInputForCotizacion } from '@/lib/supabase/services/preciosPro.service';
 import type { PreciosResolverInput } from '@/lib/precios/resolverPrecioSello';
 import { cotizarSelloRectangularCm, mmPedidoAcm, parseMedidaMmAString } from '@/lib/precios/cotizacionMedida';
@@ -199,6 +200,7 @@ export function NewOrderStepForm({
   const [activeSlot, setActiveSlot] = useState<number | 'new'>('new');
   const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
   const phoneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const emailTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasAutoFilledRef = useRef(false);
   const [measureInput, setMeasureInput] = useState<string>('');
   const [preciosCotizacion, setPreciosCotizacion] = useState<PreciosResolverInput | null>(null);
@@ -235,45 +237,53 @@ export function NewOrderStepForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset al volver del paso 2
   }, [currentStep, initialData.customer, initialData.skipConfirmationWebhook]);
 
-  // Observar cambios en el teléfono para autocompletar
+  // Observar cambios en teléfono o email para autocompletar datos del cliente
   const watchedPhone = customerForm.watch('customer.phoneE164');
+  const watchedEmail = customerForm.watch('customer.email');
 
-  useEffect(() => {
-    // Limpiar timeout anterior
-    if (phoneTimeoutRef.current) {
-      clearTimeout(phoneTimeoutRef.current);
-    }
+  const applyCustomerAutocomplete = useCallback(
+    (customer: Awaited<ReturnType<typeof findCustomer>>) => {
+      if (!customer) return false;
 
-    // Si el teléfono está vacío o muy corto, no buscar
-    if (!watchedPhone || watchedPhone.length < 8) {
-      return;
-    }
-
-    // Esperar 500ms después de que el usuario deje de escribir
-    phoneTimeoutRef.current = setTimeout(async () => {
-      // Solo autocompletar si los campos están vacíos o si el usuario no ha modificado manualmente
       const currentFirstName = customerForm.getValues('customer.firstName');
       const currentLastName = customerForm.getValues('customer.lastName');
-      
-      // Si ya hay datos, no autocompletar (el usuario ya ingresó datos)
-      if (currentFirstName || currentLastName) {
-        return;
-      }
+      const currentEmail = customerForm.getValues('customer.email');
+      const currentPhone = customerForm.getValues('customer.phoneE164');
 
+      let filled = false;
+      if (!currentFirstName && customer.firstName) {
+        customerForm.setValue('customer.firstName', customer.firstName);
+        filled = true;
+      }
+      if (!currentLastName && customer.lastName) {
+        customerForm.setValue('customer.lastName', customer.lastName);
+        filled = true;
+      }
+      if (!currentEmail && customer.email) {
+        customerForm.setValue('customer.email', customer.email);
+        filled = true;
+      }
+      if (!currentPhone && customer.phoneE164) {
+        const phone = normalizePhoneDigitsCliente(customer.phoneE164) || customer.phoneE164;
+        customerForm.setValue('customer.phoneE164', phone);
+        filled = true;
+      }
+      if (filled) hasAutoFilledRef.current = true;
+      return filled;
+    },
+    [customerForm],
+  );
+
+  useEffect(() => {
+    if (phoneTimeoutRef.current) clearTimeout(phoneTimeoutRef.current);
+
+    if (!watchedPhone || watchedPhone.length < 8) return;
+
+    phoneTimeoutRef.current = setTimeout(async () => {
       try {
         setIsLoadingCustomer(true);
-        const customer = await findCustomerByPhone(watchedPhone);
-        
-        if (customer) {
-          // Autocompletar los campos
-          customerForm.setValue('customer.firstName', customer.firstName);
-          customerForm.setValue('customer.lastName', customer.lastName);
-          if (customer.email) {
-            customerForm.setValue('customer.email', customer.email);
-          }
-          // El canal se mantiene en el valor por defecto o se puede mapear si hay un campo en Customer
-          hasAutoFilledRef.current = true;
-        }
+        const customer = await findCustomer(watchedPhone, watchedEmail);
+        applyCustomerAutocomplete(customer);
       } catch (error) {
         console.error('Error buscando cliente:', error);
       } finally {
@@ -282,11 +292,32 @@ export function NewOrderStepForm({
     }, 500);
 
     return () => {
-      if (phoneTimeoutRef.current) {
-        clearTimeout(phoneTimeoutRef.current);
-      }
+      if (phoneTimeoutRef.current) clearTimeout(phoneTimeoutRef.current);
     };
-  }, [watchedPhone, customerForm]);
+  }, [watchedPhone, watchedEmail, applyCustomerAutocomplete]);
+
+  useEffect(() => {
+    if (emailTimeoutRef.current) clearTimeout(emailTimeoutRef.current);
+
+    const email = (watchedEmail || '').trim();
+    if (!email || !email.includes('@')) return;
+
+    emailTimeoutRef.current = setTimeout(async () => {
+      try {
+        setIsLoadingCustomer(true);
+        const customer = await findCustomer(watchedPhone || '', email);
+        applyCustomerAutocomplete(customer);
+      } catch (error) {
+        console.error('Error buscando cliente por email:', error);
+      } finally {
+        setIsLoadingCustomer(false);
+      }
+    }, 500);
+
+    return () => {
+      if (emailTimeoutRef.current) clearTimeout(emailTimeoutRef.current);
+    };
+  }, [watchedEmail, watchedPhone, customerForm, applyCustomerAutocomplete]);
 
   // Formulario para el paso 2 (Pedido)
   const orderForm = useForm<OrderFormData>({
