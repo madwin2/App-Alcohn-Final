@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Download, Upload } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Order } from '@/lib/types/index';
+import { supabase } from '@/lib/supabase/client';
 import {
   normalizePersonName,
   parseTrackingPdf,
@@ -43,6 +44,17 @@ interface NameParts {
 }
 
 const DESIGN_LABEL_MAX_LENGTH = 64;
+
+const getOrderMatchName = (
+  order: Order,
+  shippingNamesByOrderId: Map<string, { firstName: string; lastName: string }>
+) => {
+  const shipping = shippingNamesByOrderId.get(order.id);
+  if (shipping) {
+    return `${shipping.firstName} ${shipping.lastName}`.trim();
+  }
+  return `${order.customer.firstName} ${order.customer.lastName}`.trim();
+};
 
 const getOrderDesignLabel = (order: Order) => {
   const designNames = order.items
@@ -89,6 +101,60 @@ export function UploadTrackingDialog({
   const [manualAssignments, setManualAssignments] = useState<Record<string, string>>({});
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isEnriching, setIsEnriching] = useState(false);
+  const [shippingNamesByOrderId, setShippingNamesByOrderId] = useState<
+    Map<string, { firstName: string; lastName: string }>
+  >(new Map());
+  const [isLoadingShippingNames, setIsLoadingShippingNames] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setShippingNamesByOrderId(new Map());
+      return;
+    }
+
+    const addressIds = [...new Set(orders.map((order) => order.direccionId).filter(Boolean))] as string[];
+    if (!addressIds.length) {
+      setShippingNamesByOrderId(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingShippingNames(true);
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('direcciones')
+          .select('id,nombre,apellido')
+          .in('id', addressIds);
+
+        if (error) throw error;
+
+        const addressById = new Map((data ?? []).map((address) => [address.id, address]));
+        const nextMap = new Map<string, { firstName: string; lastName: string }>();
+
+        for (const order of orders) {
+          if (!order.direccionId) continue;
+          const address = addressById.get(order.direccionId);
+          if (!address) continue;
+          nextMap.set(order.id, {
+            firstName: address.nombre?.trim() || order.customer.firstName,
+            lastName: address.apellido?.trim() || order.customer.lastName,
+          });
+        }
+
+        if (!cancelled) setShippingNamesByOrderId(nextMap);
+      } catch {
+        if (!cancelled) setShippingNamesByOrderId(new Map());
+      } finally {
+        if (!cancelled) setIsLoadingShippingNames(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, orders]);
 
   const candidateOrders = useMemo(
     () =>
@@ -134,11 +200,12 @@ export function UploadTrackingDialog({
     const orderNameParts = new Map<string, NameParts>();
 
     for (const order of orders) {
-      const key = normalizePersonName(`${order.customer.firstName} ${order.customer.lastName}`);
+      const matchName = getOrderMatchName(order, shippingNamesByOrderId);
+      const key = normalizePersonName(matchName);
       const existing = byName.get(key) || [];
       existing.push(order);
       byName.set(key, existing);
-      orderNameParts.set(order.id, toNameParts(`${order.customer.firstName} ${order.customer.lastName}`));
+      orderNameParts.set(order.id, toNameParts(matchName));
     }
 
     const matches: TrackingMatch[] = [];
@@ -242,7 +309,7 @@ export function UploadTrackingDialog({
       unmatched: unmatchedRows,
       alreadyAssigned: alreadyAssignedRows,
     };
-  }, [orders, entries]);
+  }, [orders, entries, shippingNamesByOrderId]);
 
   const entryKey = (entry: TrackingPdfEntry) =>
     `${entry.pageNumber}::${entry.fullName}::${entry.trackingNumber}`;
@@ -441,7 +508,8 @@ export function UploadTrackingDialog({
           <DialogTitle>Subir seguimientos</DialogTitle>
           <p className="text-sm text-muted-foreground">
             Cargá el PDF de etiquetas. Se tomará el número después de TN y se hará match por
-            nombre y apellido con pedidos pendientes de despacho. Podés generar una copia con
+            nombre y apellido de envío (o del cliente si no hay datos de envío cargados) con
+            pedidos pendientes de despacho. Podés generar una copia con
             miniaturas de los diseños y accesorios (p. ej. mango de golpe) en la franja inferior
             de cada etiqueta.
           </p>
@@ -481,14 +549,22 @@ export function UploadTrackingDialog({
             <div className="rounded border p-3 space-y-2">
               <p className="text-sm font-medium">Se van a actualizar</p>
               <div className="max-h-48 overflow-auto space-y-1 text-xs">
-                {exactMatches.map((match) => (
-                  <div key={`${match.order.id}-${match.trackingNumber}`} className="flex justify-between gap-2">
-                    <span>
-                      {match.order.customer.firstName} {match.order.customer.lastName}
-                    </span>
-                    <span className="font-mono">{match.trackingNumber}</span>
-                  </div>
-                ))}
+                {exactMatches.map((match) => {
+                  const matchName = getOrderMatchName(match.order, shippingNamesByOrderId);
+                  const customerName =
+                    `${match.order.customer.firstName} ${match.order.customer.lastName}`.trim();
+                  return (
+                    <div key={`${match.order.id}-${match.trackingNumber}`} className="flex justify-between gap-2">
+                      <span>
+                        {matchName}
+                        {shippingNamesByOrderId.has(match.order.id) && matchName !== customerName && (
+                          <span className="text-muted-foreground"> (cliente: {customerName})</span>
+                        )}
+                      </span>
+                      <span className="font-mono">{match.trackingNumber}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -552,17 +628,20 @@ export function UploadTrackingDialog({
           {alreadyAssigned.length > 0 && (
             <div className="rounded border p-3 space-y-1 text-xs">
               <p className="text-sm font-medium">Ya asignado (pedido con seguimiento existente)</p>
-              {alreadyAssigned.slice(0, 10).map((row, idx) => (
-                <div key={`${row.order.id}-${row.incomingTrackingNumber}-${idx}`} className="space-y-0.5">
-                  <div>
-                    {row.order.customer.firstName} {row.order.customer.lastName} ({row.sourceName})
+              {alreadyAssigned.slice(0, 10).map((row, idx) => {
+                const matchName = getOrderMatchName(row.order, shippingNamesByOrderId);
+                return (
+                  <div key={`${row.order.id}-${row.incomingTrackingNumber}-${idx}`} className="space-y-0.5">
+                    <div>
+                      {matchName} ({row.sourceName})
+                    </div>
+                    <div className="text-muted-foreground">
+                      Nuevo: <span className="font-mono">{row.incomingTrackingNumber}</span> | Actual:{' '}
+                      <span className="font-mono">{row.existingTrackingNumber}</span>
+                    </div>
                   </div>
-                  <div className="text-muted-foreground">
-                    Nuevo: <span className="font-mono">{row.incomingTrackingNumber}</span> | Actual:{' '}
-                    <span className="font-mono">{row.existingTrackingNumber}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {alreadyAssigned.length > 10 && <div>...y {alreadyAssigned.length - 10} más</div>}
             </div>
           )}
@@ -578,8 +657,11 @@ export function UploadTrackingDialog({
               <Download className="h-4 w-4" />
               {isEnriching ? 'Generando...' : 'Descargar PDF con previews'}
             </Button>
-            <Button onClick={applyMatches} disabled={isApplying || isParsing || isEnriching}>
-              {isApplying ? 'Aplicando...' : 'Aplicar seguimientos'}
+            <Button
+              onClick={applyMatches}
+              disabled={isApplying || isParsing || isEnriching || isLoadingShippingNames}
+            >
+              {isApplying ? 'Aplicando...' : isLoadingShippingNames ? 'Cargando datos de envío...' : 'Aplicar seguimientos'}
             </Button>
           </div>
         </div>
