@@ -232,6 +232,27 @@ export interface Database {
           note: string | null;
         }>;
       };
+      bronce_consumo: {
+        Row: {
+          id: string;
+          sello_id: string;
+          tipo_planchuela_ref: 12 | 19 | 25 | 38 | 63;
+          largo_cm: number;
+          costo_pesos: number | null;
+          consumed_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          sello_id: string;
+          tipo_planchuela_ref: 12 | 19 | 25 | 38 | 63;
+          largo_cm: number;
+          costo_pesos?: number | null;
+          consumed_at?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['bronce_consumo']['Insert']>;
+      };
       economia_movimientos_reales: {
         Row: {
           id: string;

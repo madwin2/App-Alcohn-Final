@@ -4,7 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getApprovedUsers } from '@/lib/supabase/services/auth.service';
+import {
+  formatMesAnio,
+  getBronceConsumoMes,
+  type BronceConsumoMesResumen,
+} from '@/lib/supabase/services/bronceConsumo.service';
 import {
   getPendingShipmentStockDemand,
   getStockAssignments,
@@ -15,8 +21,20 @@ import {
   syncStockReplenishTasksForCurrentUser,
 } from '@/lib/supabase/services/stock.service';
 
+function formatCm(value: number): string {
+  return value.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function formatPesos(value: number): string {
+  return value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+}
+
 export default function StockPage() {
   const { toast } = useToast();
+  const now = new Date();
+  const [mesAnio, setMesAnio] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const [bronceMes, setBronceMes] = useState<BronceConsumoMesResumen | null>(null);
+  const [bronceLoading, setBronceLoading] = useState(true);
   const [items, setItems] = useState<StockItem[]>([]);
   const [pendingDemandByKey, setPendingDemandByKey] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
@@ -66,6 +84,43 @@ export default function StockPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadBronce = async () => {
+      setBronceLoading(true);
+      try {
+        const resumen = await getBronceConsumoMes(mesAnio.year, mesAnio.month);
+        if (!cancelled) setBronceMes(resumen);
+      } catch (error) {
+        if (!cancelled) {
+          toast({
+            title: 'Error cargando consumo de bronce',
+            description: error instanceof Error ? error.message : 'No se pudo cargar el resumen.',
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        if (!cancelled) setBronceLoading(false);
+      }
+    };
+    loadBronce();
+    return () => {
+      cancelled = true;
+    };
+  }, [mesAnio.year, mesAnio.month, toast]);
+
+  const shiftMes = (delta: number) => {
+    setMesAnio((prev) => {
+      const d = new Date(prev.year, prev.month - 1 + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() + 1 };
+    });
+  };
+
+  const mesLabel = useMemo(
+    () => formatMesAnio(mesAnio.year, mesAnio.month),
+    [mesAnio.year, mesAnio.month],
+  );
 
   const handleSaveStock = async (item: StockItem) => {
     try {
@@ -117,6 +172,70 @@ export default function StockPage() {
         </div>
 
         <div className="p-6 space-y-4">
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium">Consumo de bronce</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Se registra al marcar un sello como Hecho (largo + 0,8 cm de corte). Rehacer cuenta de nuevo.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button type="button" size="icon" variant="outline" onClick={() => shiftMes(-1)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm font-medium min-w-[10rem] text-center">{mesLabel}</span>
+                <Button type="button" size="icon" variant="outline" onClick={() => shiftMes(1)}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b bg-muted/30">
+                  <tr className="text-left">
+                    <th className="px-4 py-3">Planchuela</th>
+                    <th className="px-4 py-3">Cm usados</th>
+                    <th className="px-4 py-3">Costo material</th>
+                    <th className="px-4 py-3">Sellos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bronceLoading ? (
+                    <tr>
+                      <td className="px-4 py-6 text-muted-foreground" colSpan={4}>
+                        Cargando consumo...
+                      </td>
+                    </tr>
+                  ) : !bronceMes?.rows.length ? (
+                    <tr>
+                      <td className="px-4 py-6 text-muted-foreground" colSpan={4}>
+                        Sin consumo registrado en {mesLabel.toLowerCase()}.
+                      </td>
+                    </tr>
+                  ) : (
+                    <>
+                      {bronceMes.rows.map((row) => (
+                        <tr key={row.tipoRef} className="border-b last:border-b-0">
+                          <td className="px-4 py-3">{row.label}</td>
+                          <td className="px-4 py-3 tabular-nums">{formatCm(row.totalCm)} cm</td>
+                          <td className="px-4 py-3 tabular-nums">{formatPesos(row.totalPesos)}</td>
+                          <td className="px-4 py-3 tabular-nums text-muted-foreground">{row.sellosCount}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-muted/20 font-medium">
+                        <td className="px-4 py-3">Total</td>
+                        <td className="px-4 py-3 tabular-nums">{formatCm(bronceMes.totalCm)} cm</td>
+                        <td className="px-4 py-3 tabular-nums">{formatPesos(bronceMes.totalPesos)}</td>
+                        <td className="px-4 py-3 tabular-nums text-muted-foreground">{bronceMes.totalSellos}</td>
+                      </tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div className="rounded-xl border bg-card p-4">
             <p className="text-sm font-medium">Resumen rápido</p>
             <p className="text-sm text-muted-foreground mt-1">
