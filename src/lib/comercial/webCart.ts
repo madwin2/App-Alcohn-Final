@@ -29,22 +29,33 @@ export function resolveWebCartItemPrice(
   item: WebCartItem,
   metodoPago: string | null | undefined,
 ): number {
-  const linkPrice =
+  const transferenciaExplicita =
+    typeof item.precio_transferencia_ars === 'number' && Number.isFinite(item.precio_transferencia_ars)
+      ? item.precio_transferencia_ars
+      : null;
+
+  const linkExplicito =
     typeof item.precio_link_ars === 'number' && Number.isFinite(item.precio_link_ars)
       ? item.precio_link_ars
-      : typeof item.price === 'number' && Number.isFinite(item.price)
-        ? item.price
-        : 0;
+      : null;
+
+  const priceFallback =
+    typeof item.price === 'number' && Number.isFinite(item.price) ? item.price : null;
 
   if (metodoPago === 'Transferencia') {
-    if (typeof item.precio_transferencia_ars === 'number' && Number.isFinite(item.precio_transferencia_ars)) {
-      return item.precio_transferencia_ars;
-    }
-    if (linkPrice > 0) return linkPriceToTransferencia(linkPrice);
+    if (transferenciaExplicita != null) return transferenciaExplicita;
+    if (linkExplicito != null) return linkPriceToTransferencia(linkExplicito);
+    // En checkout por transferencia la web suele guardar `price` ya como precio transferencia.
+    if (priceFallback != null && priceFallback > 0) return priceFallback;
     return 0;
   }
 
-  return linkPrice;
+  if (linkExplicito != null) return linkExplicito;
+  if (priceFallback != null && priceFallback > 0) return priceFallback;
+  if (transferenciaExplicita != null) {
+    return Math.round(transferenciaExplicita * WEB_PRECIO_LINK_MARKUP);
+  }
+  return 0;
 }
 
 function asCartItems(raw: unknown): WebCartItem[] {
@@ -83,9 +94,12 @@ export function estimateWebOrdenTotal(params: {
   notasWeb?: Record<string, unknown> | null;
   carritoJson?: unknown;
   metodoPago?: string | null;
+  /** En transferencia el envío se cobra aparte; en comercial mostramos solo sellos. */
+  includeEnvio?: boolean;
 }): number | null {
   const items = asCartItems(params.carritoJson);
   const envio = readEnvioCosto(params.notasWeb);
+  const addEnvio = params.includeEnvio !== false && params.metodoPago !== 'Transferencia';
 
   if (items.length > 0) {
     let subtotal = 0;
@@ -95,18 +109,20 @@ export function estimateWebOrdenTotal(params: {
       if (unitPrice <= 0) return null;
       subtotal += unitPrice * qty;
     }
-    return subtotal + envio;
+    return subtotal + (addEnvio ? envio : 0);
   }
 
   if (!params.notasWeb || typeof params.notasWeb !== 'object') return null;
+  const rawSubtotalTransferencia = params.notasWeb.subtotal_carrito_transferencia;
   const rawSubtotal = params.notasWeb.subtotal_carrito;
-  let sub =
-    typeof rawSubtotal === 'number' && Number.isFinite(rawSubtotal) ? rawSubtotal : 0;
-  if (sub <= 0 && envio <= 0) return null;
-  if (params.metodoPago === 'Transferencia' && sub > 0) {
-    sub = linkPriceToTransferencia(sub);
+  let sub = 0;
+  if (typeof rawSubtotalTransferencia === 'number' && Number.isFinite(rawSubtotalTransferencia)) {
+    sub = rawSubtotalTransferencia;
+  } else if (typeof rawSubtotal === 'number' && Number.isFinite(rawSubtotal)) {
+    sub = rawSubtotal;
   }
-  return sub + envio;
+  if (sub <= 0 && (!addEnvio || envio <= 0)) return null;
+  return sub + (addEnvio ? envio : 0);
 }
 
 /** @deprecated Usar estimateWebOrdenTotal */
