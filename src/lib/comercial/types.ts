@@ -82,6 +82,8 @@ export type OrdenSeguimientoRow = {
   estadoPagoWeb: string;
   metodoPago: string | null;
   valorTotal: number | null;
+  /** Seña sugerida según checkout web (p. ej. $20.000). */
+  seniaEsperada: number;
   seniaTotal: number | null;
   pagoErrorMensaje: string | null;
   comprobanteSubido: boolean;

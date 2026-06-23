@@ -232,13 +232,14 @@ export default function ComercialPage() {
     setConfirmPagoOpen(true);
   };
 
-  const handleConfirmPago = async () => {
+  const handleConfirmPago = async (seniaMonto: number) => {
     if (!confirmPagoRow) return;
     setConfirmingOrdenId(confirmPagoRow.ordenId);
     try {
       await confirmWebOrderPayment({
         ordenId: confirmPagoRow.ordenId,
         validatedBy: user?.id ?? null,
+        seniaMonto,
       });
       toast({
         title: 'Pago confirmado',

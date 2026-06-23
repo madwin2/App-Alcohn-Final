@@ -46,7 +46,7 @@ import {
   normalizeAnalyticsRow,
   type NormalizedAnalyticsRow,
 } from '@/lib/comercial/analyticsNormalize';
-import { estimateWebOrdenTotal } from '@/lib/comercial/webCart';
+import { estimateWebOrdenTotal, resolveWebOrderSenia } from '@/lib/comercial/webCart';
 import type { Database } from '../types';
 
 type MockupRow = Database['public']['Tables']['mockup_solicitudes']['Row'];
@@ -570,8 +570,10 @@ function resolveValorTotalDisplay(
   metodoPago: string | null | undefined,
   carritoJson: unknown,
 ): number | null {
+  const estimated = estimateWebOrdenTotal({ notasWeb, carritoJson, metodoPago });
+  if (estimated != null && estimated > 0) return estimated;
   if (valorTotal != null && valorTotal > 0) return valorTotal;
-  return estimateWebOrdenTotal({ notasWeb, carritoJson, metodoPago });
+  return null;
 }
 
 function mapOrdenSeguimiento(row: OrdenWithCliente): OrdenSeguimientoRow {
@@ -588,6 +590,7 @@ function mapOrdenSeguimiento(row: OrdenWithCliente): OrdenSeguimientoRow {
       row.metodo_pago ?? null,
       row.carrito_json,
     ),
+    seniaEsperada: resolveWebOrderSenia(row.notas_web as Record<string, unknown> | null),
     seniaTotal: row.senia_total,
     pagoErrorMensaje: row.pago_error_mensaje ?? null,
     comprobanteSubido: Boolean(row.comprobante_subido_at || row.comprobante_url),
@@ -633,6 +636,7 @@ function mapOrdenSeguimientoView(row: {
       row.metodo_pago,
       row.carrito_json,
     ),
+    seniaEsperada: resolveWebOrderSenia(row.notas_web),
     seniaTotal: row.senia_total,
     pagoErrorMensaje: row.pago_error_mensaje,
     comprobanteSubido: Boolean(row.comprobante_subido_at || row.comprobante_url),

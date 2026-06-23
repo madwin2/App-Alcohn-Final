@@ -19,7 +19,7 @@ export type WebCartItem = {
 /** Mismo markup que la web: precio_link = redondear(precio_transferencia × 1.15) */
 export const WEB_PRECIO_LINK_MARKUP = 1.15;
 
-const DEFAULT_WEB_SENIA = 20_000;
+export const DEFAULT_WEB_SENIA = 20_000;
 
 export function linkPriceToTransferencia(linkPrice: number): number {
   return Math.round(linkPrice / WEB_PRECIO_LINK_MARKUP);
@@ -116,7 +116,7 @@ export function estimateOrdenTotalFromNotas(
   return estimateWebOrdenTotal({ notasWeb, metodoPago: null });
 }
 
-function resolveOrderSenia(notasWeb: Record<string, unknown> | null | undefined): number {
+export function resolveWebOrderSenia(notasWeb: Record<string, unknown> | null | undefined): number {
   if (notasWeb && typeof notasWeb === 'object') {
     for (const key of ['senia_monto', 'monto_senia', 'senia_esperada'] as const) {
       const raw = notasWeb[key];
@@ -153,6 +153,8 @@ export function buildSellosFromWebCheckout(params: {
   metodoPago?: string | null;
   mockup?: MockupRow | null;
   mockupSolicitudId?: string | null;
+  /** Monto de seña confirmado manualmente al validar transferencia. */
+  seniaMonto?: number | null;
 }): SelloInsert[] {
   const items = asCartItems(params.carritoJson);
   if (items.length === 0) {
@@ -172,7 +174,11 @@ export function buildSellosFromWebCheckout(params: {
   }
 
   const valores = expanded.map((e) => e.unitPrice);
-  const senias = allocateSeniaAcrossItems(valores, resolveOrderSenia(params.notasWeb));
+  const totalSenia =
+    typeof params.seniaMonto === 'number' && Number.isFinite(params.seniaMonto) && params.seniaMonto >= 0
+      ? params.seniaMonto
+      : resolveWebOrderSenia(params.notasWeb);
+  const senias = allocateSeniaAcrossItems(valores, totalSenia);
   const mockupId = params.mockupSolicitudId ?? params.mockup?.id ?? null;
   const parsedFromMockup = Array.isArray(params.mockup?.medidas_cotizacion_json)
     ? (params.mockup!.medidas_cotizacion_json[0] as Record<string, unknown> | undefined)

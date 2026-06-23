@@ -1,5 +1,5 @@
 import { Loader2, CheckCircle2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -9,6 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type { OrdenSeguimientoRow } from '@/lib/comercial/types';
 import { formatArs } from '@/lib/comercial/utils';
 
@@ -16,7 +18,7 @@ interface ComercialConfirmPagoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   row: OrdenSeguimientoRow | null;
-  onConfirm: () => Promise<void>;
+  onConfirm: (seniaMonto: number) => Promise<void>;
 }
 
 export function ComercialConfirmPagoDialog({
@@ -26,11 +28,23 @@ export function ComercialConfirmPagoDialog({
   onConfirm,
 }: ComercialConfirmPagoDialogProps) {
   const [loading, setLoading] = useState(false);
+  const [seniaMonto, setSeniaMonto] = useState('');
+
+  useEffect(() => {
+    if (!open || !row) return;
+    setSeniaMonto(String(row.seniaEsperada));
+  }, [open, row]);
+
+  const parsedSenia = Number.parseInt(seniaMonto.replace(/\D/g, ''), 10);
+  const seniaValid = Number.isFinite(parsedSenia) && parsedSenia >= 0;
+  const seniaExceedsTotal =
+    seniaValid && row?.valorTotal != null && parsedSenia > row.valorTotal;
 
   const handleConfirm = async () => {
+    if (!seniaValid || seniaExceedsTotal) return;
     setLoading(true);
     try {
-      await onConfirm();
+      await onConfirm(parsedSenia);
       onOpenChange(false);
     } finally {
       setLoading(false);
@@ -46,7 +60,7 @@ export function ComercialConfirmPagoDialog({
         <DialogHeader>
           <DialogTitle>Confirmar pago</DialogTitle>
           <DialogDescription asChild>
-            <div className="space-y-2 text-sm text-muted-foreground">
+            <div className="space-y-3 text-sm text-muted-foreground">
               {row ? (
                 <>
                   <p>
@@ -56,9 +70,34 @@ export function ComercialConfirmPagoDialog({
                   </p>
                   <ul className="list-inside list-disc space-y-1">
                     <li>Método: {row.metodoPago ?? '—'}</li>
-                    <li>Total estimado: {formatArs(row.valorTotal)}</li>
+                    <li>Total del pedido: {formatArs(row.valorTotal)}</li>
                     <li>Comprobante: {row.comprobanteSubido ? 'Subido' : 'No subido'}</li>
                   </ul>
+                  <div className="space-y-2 pt-1">
+                    <Label htmlFor="senia-monto">Monto de la seña recibida</Label>
+                    <Input
+                      id="senia-monto"
+                      type="text"
+                      inputMode="numeric"
+                      value={seniaMonto}
+                      onChange={(e) => setSeniaMonto(e.target.value)}
+                      placeholder="Ej. 20000"
+                      disabled={loading}
+                    />
+                    <p className="text-xs">
+                      Sugerido por la web: {formatArs(row.seniaEsperada)}. Ajustalo si transfirieron
+                      otro monto.
+                    </p>
+                    {seniaMonto !== '' && !seniaValid ? (
+                      <p className="text-xs text-destructive">Ingresá un monto válido (0 o más).</p>
+                    ) : null}
+                    {seniaExceedsTotal ? (
+                      <p className="text-xs text-destructive">
+                        La seña no puede superar el total del pedido (
+                        {formatArs(row.valorTotal)}).
+                      </p>
+                    ) : null}
+                  </div>
                   {needsComprobanteWarning ? (
                     <p className="text-destructive">
                       No hay comprobante cargado. Confirmá solo si verificaste el pago por otro
@@ -76,7 +115,10 @@ export function ComercialConfirmPagoDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancelar
           </Button>
-          <Button onClick={() => void handleConfirm()} disabled={loading || !row}>
+          <Button
+            onClick={() => void handleConfirm()}
+            disabled={loading || !row || !seniaValid || seniaExceedsTotal}
+          >
             {loading ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (

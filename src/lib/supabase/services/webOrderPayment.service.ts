@@ -13,12 +13,14 @@ export type ConfirmWebOrderPaymentParams = {
   ordenId: string;
   validatedBy?: string | null;
   skipWebhook?: boolean;
+  /** Monto de seña recibido (transferencia). Si no se indica, se usa el del checkout o $20.000. */
+  seniaMonto?: number | null;
 };
 
 export async function confirmWebOrderPayment(
   params: ConfirmWebOrderPaymentParams,
 ): Promise<Order> {
-  const { ordenId, validatedBy, skipWebhook } = params;
+  const { ordenId, validatedBy, skipWebhook, seniaMonto } = params;
 
   const { data: orden, error: ordenError } = await supabase
     .from('ordenes')
@@ -80,6 +82,7 @@ export async function confirmWebOrderPayment(
     metodoPago: orden.metodo_pago ?? null,
     mockup,
     mockupSolicitudId: mockupId,
+    seniaMonto,
   });
 
   const { error: insertError } = await supabase.from('sellos').insert(sellosPayload);
