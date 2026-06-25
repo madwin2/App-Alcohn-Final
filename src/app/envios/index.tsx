@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AppMain } from '@/components/layout/AppMain';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { Input } from '@/components/ui/input';
@@ -1120,6 +1119,106 @@ export default function EnviosPage() {
     }
   };
 
+  const renderShippingTypeCell = (order: Order) => {
+    const isSucursal = order.shipping.service === 'SUCURSAL';
+    const isDomicilio = order.shipping.service === 'DOMICILIO';
+    const shippingState = order.items[0]?.shippingState;
+    const shippingChipVisual = getShippingChipVisual(shippingState || 'SIN_ENVIO');
+    const uploadInProgress = isMicorreoUploadRunning(order.id);
+    const labelError = order.shippingLabelError?.trim();
+
+    return (
+      <div className="flex min-w-[100px] flex-col gap-1.5">
+        <div className="inline-flex w-fit rounded-md border p-0.5">
+          <Button
+            size="sm"
+            variant={isDomicilio ? 'default' : 'ghost'}
+            className="h-6 px-2 text-[11px] leading-none"
+            onClick={() => handleToggleShippingType(order, 'DOMICILIO')}
+          >
+            Dom.
+          </Button>
+          <Button
+            size="sm"
+            variant={isSucursal ? 'default' : 'ghost'}
+            className="h-6 px-2 text-[11px] leading-none"
+            onClick={() => handleToggleShippingType(order, 'SUCURSAL')}
+          >
+            Suc.
+          </Button>
+        </div>
+        <div className="flex items-center gap-1">
+          <Select
+            value={shippingState || 'SIN_ENVIO'}
+            onValueChange={(value) => handleShippingStateChange(order, value as ShippingState)}
+          >
+            <SelectTrigger className="h-auto w-auto min-w-0 border-none bg-transparent p-0 shadow-none hover:bg-transparent focus:ring-0 focus:ring-offset-0">
+              <SelectValue>
+                <span
+                  className={`inline-flex shrink-0 items-center justify-center rounded-full border px-2 py-0.5 text-[10px] leading-tight ${shippingChipVisual.textClass}`}
+                  style={{
+                    backgroundImage: shippingChipVisual.backgroundImage,
+                    backgroundColor: shippingChipVisual.backgroundColor,
+                    boxShadow: shippingChipVisual.boxShadow,
+                    borderColor: shippingChipVisual.borderColor,
+                    backdropFilter: 'saturate(140%) blur(3px)',
+                    color: shippingChipVisual.textColor,
+                    minWidth: shippingChipVisual.width,
+                  }}
+                >
+                  {getShippingLabel(shippingState || 'SIN_ENVIO')}
+                </span>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {shippingStateOptions.map((stateOption) => {
+                const optionVisual = getShippingChipVisual(stateOption);
+                return (
+                  <SelectItem key={stateOption} value={stateOption} className="text-xs">
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs ${optionVisual.textClass}`}
+                      style={{
+                        backgroundImage: optionVisual.backgroundImage,
+                        backgroundColor: optionVisual.backgroundColor,
+                        boxShadow: optionVisual.boxShadow,
+                        borderColor: optionVisual.borderColor,
+                        backdropFilter: 'saturate(140%) blur(3px)',
+                        color: optionVisual.textColor,
+                        minWidth: optionVisual.width,
+                      }}
+                    >
+                      {getShippingLabel(stateOption)}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          {uploadInProgress ? (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-orange-500" aria-label="Subiendo a MiCorreo" />
+          ) : null}
+          {shippingState === 'ERROR_ETIQUETA' ? (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    className="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-red-500/45 bg-red-500/15 text-red-600 dark:text-red-400"
+                    aria-label="Ver error de etiqueta"
+                  >
+                    <AlertCircle className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap">
+                  {labelError || 'Error al subir la etiqueta. Editá los datos y confirmá de nuevo.'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
   const renderOrderRow = (
     order: Order,
     opts?: { showCsvLine?: boolean; showWhatsapp?: boolean; showShippingDetails?: boolean },
@@ -1130,10 +1229,6 @@ export default function EnviosPage() {
     const isSucursal = order.shipping.service === 'SUCURSAL';
     const isDomicilio = order.shipping.service === 'DOMICILIO';
     const hasShippingTypeSelected = isSucursal || isDomicilio;
-    const shippingState = order.items[0]?.shippingState;
-    const shippingChipVisual = getShippingChipVisual(shippingState || 'SIN_ENVIO');
-    const uploadInProgress = isMicorreoUploadRunning(order.id);
-    const labelError = order.shippingLabelError?.trim();
 
     const csvLine = opts?.showCsvLine ? csvLineNumberByOrderId.get(order.id) : undefined;
     const phoneDigitsCopiar = normalizePhoneDigits(order.customer.phoneE164 || '');
@@ -1141,12 +1236,16 @@ export default function EnviosPage() {
     const destRecipientName = shippingAddress
       ? `${shippingAddress.nombre || ''} ${shippingAddress.apellido || ''}`.trim()
       : '';
+    const destAddressLabel = formatShippingDestination(order, shippingAddress);
     const isDuplicateDestName =
       Boolean(destRecipientName) &&
       duplicateDestRecipientNames.has(
         normalizeDestRecipientName(shippingAddress?.nombre || '', shippingAddress?.apellido || ''),
       );
     const designLabel = item ? getOrderItemDisplayName(item) : 'Sin diseño';
+    const loadedAtRaw = order.shippingDataLoadedAt ?? shippingAddress?.created_at ?? null;
+    const isDense = Boolean(opts?.showShippingDetails);
+    const cell = isDense ? 'px-2 py-2 align-middle' : 'px-4 py-3 align-middle';
 
     return (
       <ContextMenu key={order.id}>
@@ -1157,16 +1256,31 @@ export default function EnviosPage() {
         }`}
       >
         {opts?.showCsvLine ? (
-          <td className="px-3 py-3 text-center tabular-nums text-muted-foreground">
+          <td className={`${cell} text-center tabular-nums text-muted-foreground w-10`}>
             {csvLine !== undefined ? csvLine : '—'}
           </td>
         ) : null}
-        <td className="px-4 py-3">{formatDate(order.orderDate)}</td>
-        <td className="px-4 py-3 font-medium">
+        <td className={`${cell} whitespace-nowrap text-muted-foreground`}>{formatDate(order.orderDate)}</td>
+        <td className={`${cell} font-medium max-w-[7.5rem] truncate`} title={`${order.customer.firstName} ${order.customer.lastName}`.trim()}>
           {`${order.customer.firstName} ${order.customer.lastName}`.trim()}
         </td>
+        {opts?.showShippingDetails ? (
+          <>
+            <td className={`${cell} max-w-[7.5rem] truncate`} title={destRecipientName || undefined}>
+              {destRecipientName || '—'}
+            </td>
+            <td className={`${cell} min-w-[9rem] max-w-[11rem]`}>
+              <span
+                className="line-clamp-2 text-xs text-muted-foreground leading-snug"
+                title={destAddressLabel !== '—' ? destAddressLabel : undefined}
+              >
+                {destAddressLabel}
+              </span>
+            </td>
+          </>
+        ) : null}
         {opts?.showWhatsapp ? (
-          <td className="px-2 py-3 text-center align-middle">
+          <td className={`${cell} text-center w-12`}>
             <button
               type="button"
               title={phoneDigitsCopiar ? 'Copiar número al portapapeles' : 'Sin teléfono en la orden'}
@@ -1189,155 +1303,66 @@ export default function EnviosPage() {
                   },
                 );
               }}
-              className={`inline-flex size-9 items-center justify-center rounded-full border transition-colors ${
+              className={`inline-flex size-8 items-center justify-center rounded-full border transition-colors ${
                 phoneDigitsCopiar
                   ? 'border-green-600/35 bg-green-500/15 text-green-700 hover:bg-green-500/25 dark:border-green-400/35 dark:text-green-400'
                   : 'cursor-not-allowed border-muted text-muted-foreground opacity-40'
               }`}
             >
-              <WhatsappLogo className="size-5" />
+              <WhatsappLogo className="size-4" />
             </button>
           </td>
         ) : null}
-        <td className="px-4 py-3">{order.items.length}</td>
-        <td className="px-4 py-3">{designLabel}</td>
-        <td className="px-4 py-3">
+        <td className={`${cell} text-center tabular-nums w-10`}>{order.items.length}</td>
+        <td className={`${cell} max-w-[6.5rem] truncate`} title={designLabel}>
+          {designLabel}
+        </td>
+        <td className={`${cell} w-14`}>
           {availablePreview ? (
             <img
               src={availablePreview}
               alt="Preview archivo"
-              className="h-12 w-12 rounded-md object-contain border bg-white p-1 cursor-zoom-in"
+              className="h-10 w-10 rounded-md object-contain border bg-white p-0.5 cursor-zoom-in"
               onClick={() => setPreviewImageUrl(availablePreview)}
             />
           ) : (
-            <Badge variant="secondary">Sin preview</Badge>
+            <span className="text-[10px] text-muted-foreground">—</span>
           )}
         </td>
-        <td className="px-4 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={isDomicilio ? 'default' : 'outline'}
-                onClick={() => handleToggleShippingType(order, 'DOMICILIO')}
-              >
-                Domicilio
-              </Button>
-              <Button
-                size="sm"
-                variant={isSucursal ? 'default' : 'outline'}
-                onClick={() => handleToggleShippingType(order, 'SUCURSAL')}
-              >
-                Sucursal
-              </Button>
-            </div>
-            <Select
-              value={shippingState || 'SIN_ENVIO'}
-              onValueChange={(value) => handleShippingStateChange(order, value as ShippingState)}
-            >
-              <SelectTrigger className="h-auto w-auto min-w-[132px] border-none bg-transparent p-0 shadow-none hover:bg-transparent focus:ring-0 focus:ring-offset-0">
-                <SelectValue>
-                  <span
-                    className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${shippingChipVisual.textClass}`}
-                    style={{
-                      backgroundImage: shippingChipVisual.backgroundImage,
-                      backgroundColor: shippingChipVisual.backgroundColor,
-                      boxShadow: shippingChipVisual.boxShadow,
-                      borderColor: shippingChipVisual.borderColor,
-                      backdropFilter: 'saturate(140%) blur(3px)',
-                      color: shippingChipVisual.textColor,
-                      minWidth: shippingChipVisual.width,
-                    }}
-                  >
-                    {getShippingLabel(shippingState || 'SIN_ENVIO')}
-                  </span>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {shippingStateOptions.map((stateOption) => {
-                  const optionVisual = getShippingChipVisual(stateOption);
-                  return (
-                    <SelectItem key={stateOption} value={stateOption} className="text-xs">
-                      <span
-                        className={`inline-flex items-center rounded-full border px-3 py-1 text-xs ${optionVisual.textClass}`}
-                        style={{
-                          backgroundImage: optionVisual.backgroundImage,
-                          backgroundColor: optionVisual.backgroundColor,
-                          boxShadow: optionVisual.boxShadow,
-                          borderColor: optionVisual.borderColor,
-                          backdropFilter: 'saturate(140%) blur(3px)',
-                          color: optionVisual.textColor,
-                          minWidth: optionVisual.width,
-                        }}
-                      >
-                        {getShippingLabel(stateOption)}
-                      </span>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-            {uploadInProgress ? (
-              <Loader2
-                className="h-4 w-4 shrink-0 animate-spin text-orange-500"
-                aria-label="Subiendo a MiCorreo"
-              />
-            ) : null}
-            {shippingState === 'ERROR_ETIQUETA' ? (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className="inline-flex h-5 w-5 shrink-0 cursor-help items-center justify-center rounded-full border border-red-500/45 bg-red-500/15 text-red-600 dark:text-red-400"
-                      aria-label="Ver error de etiqueta"
-                    >
-                      <AlertCircle className="h-3.5 w-3.5" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap">
-                    {labelError || 'Error al subir la etiqueta. Editá los datos y confirmá de nuevo.'}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ) : null}
-          </div>
-        </td>
+        <td className={cell}>{renderShippingTypeCell(order)}</td>
         {opts?.showShippingDetails ? (
           <>
-            <td className="px-4 py-3 text-muted-foreground">
+            <td
+              className={`${cell} max-w-[5.5rem] truncate text-xs text-muted-foreground`}
+              title={order.shippingDataLoadedBy?.name || undefined}
+            >
               {order.shippingDataLoadedBy?.name || '—'}
             </td>
-            <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-              {order.shippingDataLoadedAt
-                ? formatDateTime(order.shippingDataLoadedAt)
-                : shippingAddress?.created_at
-                  ? formatDateTime(shippingAddress.created_at)
-                  : '—'}
+            <td
+              className={`${cell} whitespace-nowrap text-xs text-muted-foreground`}
+              title={loadedAtRaw ? formatDateTime(loadedAtRaw) : undefined}
+            >
+              {loadedAtRaw ? formatDate(loadedAtRaw) : '—'}
             </td>
-            <td className="px-4 py-3">
+            <td className={`${cell} text-center text-xs`}>
               {order.shippingDataEdited ? (
-                <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400">
-                  Sí
-                </Badge>
+                <span className="text-amber-600 dark:text-amber-400">Sí</span>
               ) : (
                 <span className="text-muted-foreground">No</span>
               )}
             </td>
-            <td className="px-4 py-3 font-medium">{destRecipientName || '—'}</td>
-            <td className="px-4 py-3 max-w-[220px] truncate" title={formatShippingDestination(order, shippingAddress)}>
-              {formatShippingDestination(order, shippingAddress)}
-            </td>
           </>
         ) : null}
-        <td className="px-4 py-3">
+        <td className={`${cell} w-24`}>
           <Button
             size="sm"
             variant="secondary"
+            className={isDense ? 'h-7 px-2 text-xs' : undefined}
             onClick={() => openShippingDialog(order)}
             disabled={!hasShippingTypeSelected}
             title={!hasShippingTypeSelected ? 'Seleccioná Domicilio o Sucursal primero' : undefined}
           >
-            {order.direccionId ? 'Editar datos' : 'Cargar datos'}
+            {order.direccionId ? 'Editar' : 'Cargar'}
           </Button>
         </td>
       </tr>
@@ -1356,43 +1381,59 @@ export default function EnviosPage() {
     );
   };
 
-  const tableClass = 'w-full text-sm';
+  const getTableClass = (showShippingDetails?: boolean) =>
+    showShippingDetails ? 'w-full min-w-[1080px] text-sm' : 'w-full text-sm';
 
   const tableHead = (
     showCsvLine: boolean,
     opts?: { showWhatsapp?: boolean; showShippingDetails?: boolean },
-  ) => (
-    <thead className="sticky top-0 bg-background z-10 border-b">
-      <tr className="text-left text-muted-foreground">
+  ) => {
+    const isDense = Boolean(opts?.showShippingDetails);
+    const head = isDense ? 'px-2 py-2 font-medium whitespace-nowrap' : 'px-4 py-3 font-medium whitespace-nowrap';
+
+    return (
+    <thead className="sticky top-0 z-10 border-b bg-card">
+      <tr className="text-left text-xs text-muted-foreground">
         {showCsvLine ? (
-          <th className="px-3 py-3 font-medium w-14 text-center" title="Número de fila en el CSV (la 1 es el encabezado)">
+          <th className={`${head} w-10 text-center`} title="Número de fila en el CSV (la 1 es el encabezado)">
             CSV
           </th>
         ) : null}
-        <th className="px-4 py-3 font-medium">Fecha</th>
-        <th className="px-4 py-3 font-medium">Cliente</th>
+        <th className={head}>Fecha</th>
+        <th className={head}>Cliente</th>
+        {opts?.showShippingDetails ? (
+          <>
+            <th className={head}>Destinatario</th>
+            <th className={head}>Dir / Suc</th>
+          </>
+        ) : null}
         {opts?.showWhatsapp ? (
-          <th className="px-2 py-3 font-medium text-center w-14" title="Copiar número de WhatsApp">
+          <th className={`${head} w-12 text-center`} title="Copiar número de WhatsApp">
             WA
           </th>
         ) : null}
-        <th className="px-4 py-3 font-medium">Items</th>
-        <th className="px-4 py-3 font-medium">Diseño</th>
-        <th className="px-4 py-3 font-medium">Archivo</th>
-        <th className="px-4 py-3 font-medium">Tipo envío</th>
+        <th className={`${head} w-10 text-center`}>It.</th>
+        <th className={head}>Diseño</th>
+        <th className={`${head} w-14`}>Arch.</th>
+        <th className={head}>Envío</th>
         {opts?.showShippingDetails ? (
           <>
-            <th className="px-4 py-3 font-medium">Cargado por</th>
-            <th className="px-4 py-3 font-medium">Fecha carga</th>
-            <th className="px-4 py-3 font-medium">Editado</th>
-            <th className="px-4 py-3 font-medium">Destinatario</th>
-            <th className="px-4 py-3 font-medium">Dir / Suc</th>
+            <th className={head} title="Quién cargó los datos">
+              Por
+            </th>
+            <th className={head} title="Fecha de carga">
+              Carga
+            </th>
+            <th className={`${head} w-10 text-center`} title="Datos editados">
+              Ed.
+            </th>
           </>
         ) : null}
-        <th className="px-4 py-3 font-medium">Acciones</th>
+        <th className={`${head} w-24`} />
       </tr>
     </thead>
-  );
+    );
+  };
 
   return (
     <AppMain className="flex flex-col">
@@ -1464,7 +1505,7 @@ export default function EnviosPage() {
                 <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
                   {isConDatosExpanded ? (
                     <div className="overflow-auto max-h-[min(50vh,420px)]">
-                      <table className={tableClass}>
+                      <table className={getTableClass(true)}>
                         {tableHead(true, { showShippingDetails: true })}
                         <tbody>
                           {ordersConDatosEnvio.map((o) =>
@@ -1499,7 +1540,7 @@ export default function EnviosPage() {
                 <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
                   {isPendientesExpanded ? (
                     <div className="overflow-auto max-h-[min(50vh,420px)]">
-                      <table className={tableClass}>
+                      <table className={getTableClass(false)}>
                         {tableHead(false, { showWhatsapp: true })}
         <tbody>{ordersPendientesDatos.map((o) => renderOrderRow(o, { showWhatsapp: true }))}</tbody>
                       </table>
