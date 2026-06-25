@@ -239,10 +239,7 @@ async function runMicorreoUpload(orderId: string, userId?: string | null): Promi
     });
 
     const paymentStatus = uploadResult.details?.paymentStatus;
-    const nextState =
-      uploadResult.status === 'ok' && paymentStatus !== 'paid'
-        ? 'HACER_ETIQUETA'
-        : shippingStateFromMicorreoUpload(uploadResult.status);
+    const nextState = shippingStateFromMicorreoUpload(uploadResult.status);
     const errorMessage =
       uploadResult.status === 'ok'
         ? null

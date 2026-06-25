@@ -359,6 +359,89 @@ async function clickFirstVisible(page: Page, selectors: string[]): Promise<boole
   return false;
 }
 
+async function clickFirstVisibleLocator(
+  locators: Array<ReturnType<Page['locator']>>,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const locator of locators) {
+      const target = locator.first();
+      if (!(await target.isVisible().catch(() => false))) continue;
+      if (await target.isDisabled().catch(() => false)) continue;
+      await target.scrollIntoViewIfNeeded().catch(() => undefined);
+      await target.click({ force: true });
+      await target.page().waitForLoadState('networkidle').catch(() => undefined);
+      await target.page().waitForTimeout(1000);
+      return true;
+    }
+    await locators[0]?.page().waitForTimeout(600);
+  }
+  return false;
+}
+
+async function waitForPaymentScreen(page: Page, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const body = await page.locator('body').innerText().catch(() => '');
+    if (/realiz[aá].*pago|seleccion[aá].*medio de pago|saldo disponible|tarjeta de cr[eé]dito|mercado pago/i.test(body)) {
+      return true;
+    }
+    await page.waitForTimeout(700);
+  }
+  return false;
+}
+
+async function selectBalancePayment(page: Page): Promise<boolean> {
+  const labelOption = page.getByLabel(/saldo/i).first();
+  if (await labelOption.isVisible().catch(() => false)) {
+    await labelOption.check({ force: true }).catch(async () => {
+      await labelOption.click({ force: true });
+    });
+    await page.waitForTimeout(500);
+    return true;
+  }
+
+  const clickedText = await clickFirstVisibleLocator(
+    [
+      page.getByText(/^Saldo$/i),
+      page.getByText(/Saldo disponible/i),
+      page.locator('label:has-text("Saldo")'),
+    ],
+    3000,
+  );
+  if (clickedText) return true;
+
+  return page.evaluate<boolean>(`(() => {
+    const labels = [...document.querySelectorAll('label')];
+    const saldoLabel = labels.find((label) => /saldo/i.test(label.textContent || ''));
+    if (saldoLabel) {
+      const forId = saldoLabel.getAttribute('for');
+      const input = forId ? document.getElementById(forId) : saldoLabel.querySelector('input');
+      if (input && 'checked' in input) {
+        input.checked = true;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        saldoLabel.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return true;
+      }
+      saldoLabel.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      return true;
+    }
+
+    const radios = [...document.querySelectorAll('input[type="radio"]')];
+    const saldoRadio = radios.find((radio) => /saldo/i.test(radio.value || radio.id || radio.name || ''));
+    if (saldoRadio) {
+      saldoRadio.checked = true;
+      saldoRadio.dispatchEvent(new Event('input', { bubbles: true }));
+      saldoRadio.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+
+    return false;
+  })()`);
+}
+
 /**
  * Intenta pagar el envío con saldo disponible.
  *
@@ -375,58 +458,65 @@ export async function payWithAvailableBalance(
     return { status: 'payment_error', message: 'Saldo disponible insuficiente en MiCorreo.' };
   }
 
-  const paySelectors = [
-    'button:has-text("Pagar")',
-    'button:has-text("Abonar")',
-    'a:has-text("Pagar")',
-    'a:has-text("Abonar")',
-    'button.btn-correo-primary:has-text("Pagar")',
-    'button.btn-correo-primary:has-text("Abonar")',
-    'input[type="button"][value*="Pagar" i]',
-    'input[type="submit"][value*="Pagar" i]',
-    ...config.selectors.payWithBalance,
-  ];
-
-  const clickedPay = await clickFirstVisible(page, paySelectors);
+  const clickedPay = await clickFirstVisibleLocator(
+    [
+      page.getByRole('button', { name: /^Pagar$/i }),
+      page.getByRole('link', { name: /^Pagar$/i }),
+      page.locator('button:has-text("Pagar")'),
+      page.locator('a:has-text("Pagar")'),
+      page.locator('[role="button"]:has-text("Pagar")'),
+      page.locator('.btn:has-text("Pagar"), .btn-correo-primary:has-text("Pagar")'),
+      page.locator('input[type="button"][value*="Pagar" i]'),
+      page.locator('input[type="submit"][value*="Pagar" i]'),
+      page.getByText(/^Pagar$/i),
+      ...config.selectors.payWithBalance.map((selector) => page.locator(selector)),
+    ],
+    Math.min(config.timeoutMs, 45_000),
+  );
   if (!clickedPay) {
     return {
       status: 'payment_error',
       message: 'Etiqueta generada, pero no se encontró el botón para pagar con saldo disponible.',
     };
   }
-  await page
-    .getByText(/realiz[aá].*pago|seleccion[aá].*medio de pago|saldo disponible/i)
-    .first()
-    .waitFor({ state: 'visible', timeout: Math.min(config.timeoutMs, 30_000) })
-    .catch(() => undefined);
 
-  const balanceSelectors = [
-    'label:has-text("Saldo disponible")',
-    'label:has-text("Saldo")',
-    'button:has-text("Saldo disponible")',
-    'button:has-text("Saldo")',
-    'input[type="radio"][value*="saldo" i]',
-    'input[type="checkbox"][value*="saldo" i]',
-    ...config.selectors.balancePayment,
-  ];
-
-  for (const selector of balanceSelectors) {
-    const option = page.locator(selector).first();
-    if (!(await option.isVisible().catch(() => false))) continue;
-    await option.click({ force: true }).catch(() => undefined);
-    await page.waitForTimeout(500);
-    break;
+  const onPaymentScreen = await waitForPaymentScreen(page, Math.min(config.timeoutMs, 45_000));
+  if (!onPaymentScreen) {
+    const body = await page.locator('body').innerText().catch(() => '');
+    return {
+      status: 'payment_error',
+      message: body.slice(0, 500) || 'Se hizo click en Pagar, pero no apareció la pantalla de pago.',
+    };
   }
 
-  const confirmSelectors = [
-    'button:has-text("Confirmar")',
-    'button:has-text("Aceptar")',
-    'button:has-text("Pagar")',
-    'button:has-text("Finalizar")',
-    '.modal.show button.btn-correo-primary',
-    ...config.selectors.confirmPayment,
-  ];
-  await clickFirstVisible(page, confirmSelectors);
+  const selectedBalance = await selectBalancePayment(page);
+  if (!selectedBalance) {
+    return {
+      status: 'payment_error',
+      message: 'No se pudo seleccionar el medio de pago Saldo.',
+    };
+  }
+  await page.waitForTimeout(800);
+
+  const clickedConfirm = await clickFirstVisibleLocator(
+    [
+      page.getByRole('button', { name: /^Pagar$/i }),
+      page.getByRole('button', { name: /Confirmar/i }),
+      page.getByRole('button', { name: /Finalizar/i }),
+      page.locator('button:has-text("Pagar")'),
+      page.locator('button:has-text("Confirmar")'),
+      page.locator('button:has-text("Finalizar")'),
+      page.locator('.modal.show button.btn-correo-primary'),
+      ...config.selectors.confirmPayment.map((selector) => page.locator(selector)),
+    ],
+    Math.min(config.timeoutMs, 30_000),
+  );
+  if (!clickedConfirm) {
+    return {
+      status: 'payment_error',
+      message: 'Se seleccionó Saldo, pero no se encontró el botón final para confirmar el pago.',
+    };
+  }
 
   const successTimeout = Math.min(config.timeoutMs, 45_000);
   await page.waitForTimeout(2500);
