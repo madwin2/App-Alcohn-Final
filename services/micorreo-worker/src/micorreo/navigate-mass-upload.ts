@@ -314,30 +314,34 @@ export async function saveAfterSuccessfulImport(
     page.getByRole('button', { name: /^Guardar$/i }),
   ];
 
-  for (const locator of guardarCandidates) {
-    const btn = locator.first();
-    if (!(await btn.isVisible().catch(() => false))) continue;
-    if (await btn.isDisabled().catch(() => false)) continue;
-    const text = (await btn.innerText().catch(() => '')).toLowerCase();
-    if (text.includes('medida')) continue;
+  const deadline = Date.now() + Math.min(config.timeoutMs, 30_000);
+  while (Date.now() < deadline) {
+    for (const locator of guardarCandidates) {
+      const btn = locator.first();
+      if (!(await btn.isVisible().catch(() => false))) continue;
+      if (await btn.isDisabled().catch(() => false)) continue;
+      const text = (await btn.innerText().catch(() => '')).toLowerCase();
+      if (text.includes('medida')) continue;
 
-    await btn.scrollIntoViewIfNeeded();
-    await btn.click();
-    await page.waitForTimeout(800);
-    await dismissConfirmModals(page);
-
-    const modalGuardar = page.locator('.modal.show button.btn-correo-primary:has-text("Guardar")');
-    if (await modalGuardar.first().isVisible().catch(() => false)) {
-      console.log('[micorreo] → confirmar modal Guardar');
-      await modalGuardar.first().click();
+      await btn.scrollIntoViewIfNeeded();
+      await btn.click({ force: true });
       await page.waitForTimeout(1000);
-    }
+      await dismissConfirmModals(page);
 
-    await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => undefined);
-    return;
+      const modalGuardar = page.locator('.modal.show button.btn-correo-primary:has-text("Guardar")');
+      if (await modalGuardar.first().isVisible().catch(() => false)) {
+        console.log('[micorreo] → confirmar modal Guardar');
+        await modalGuardar.first().click({ force: true });
+        await page.waitForTimeout(1200);
+      }
+
+      await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => undefined);
+      return;
+    }
+    await page.waitForTimeout(800);
   }
 
-  console.warn('[micorreo] no se encontró botón Guardar visible tras importación exitosa');
+  console.warn('[micorreo] no se encontró botón Guardar habilitado tras importación exitosa');
 }
 
 export type PayWithBalanceResult =
@@ -378,6 +382,25 @@ async function clickFirstVisibleLocator(
     await locators[0]?.page().waitForTimeout(600);
   }
   return false;
+}
+
+async function clickElementByExactText(page: Page, text: string): Promise<boolean> {
+  return page.evaluate<boolean>(`((wantedText) => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+    const wanted = normalize(wantedText);
+    const elements = [...document.querySelectorAll('button, a, [role="button"], input, div, span')];
+    const match = elements.find((el) => {
+      if (el instanceof HTMLInputElement) return normalize(el.value) === wanted;
+      return normalize(el.textContent) === wanted;
+    });
+    if (!match) return false;
+
+    const clickable = match.closest('button, a, [role="button"]') || match.closest('[onclick]') || match;
+    clickable.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    clickable.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+    clickable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return true;
+  })(${JSON.stringify(text)})`);
 }
 
 async function waitForPaymentScreen(page: Page, timeoutMs: number): Promise<boolean> {
@@ -480,7 +503,16 @@ export async function payWithAvailableBalance(
     };
   }
 
-  const onPaymentScreen = await waitForPaymentScreen(page, Math.min(config.timeoutMs, 45_000));
+  let onPaymentScreen = await waitForPaymentScreen(page, Math.min(config.timeoutMs, 30_000));
+  if (!onPaymentScreen) {
+    console.warn('[micorreo] click normal en Pagar no abrió pago; probando fallback por texto');
+    const clickedFallback = await clickElementByExactText(page, 'Pagar');
+    if (clickedFallback) {
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await page.waitForTimeout(1500);
+      onPaymentScreen = await waitForPaymentScreen(page, Math.min(config.timeoutMs, 30_000));
+    }
+  }
   if (!onPaymentScreen) {
     const body = await page.locator('body').innerText().catch(() => '');
     return {
