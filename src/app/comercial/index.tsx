@@ -20,6 +20,7 @@ import {
   ContactosSinMuestraTable,
   MockupsSinCompraTable,
   OrdenesSeguimientoTable,
+  SeguimientosClientesPanel,
   TrafficPanel,
 } from '@/components/comercial/ComercialTables';
 import { ClienteDetailDialog } from '@/components/comercial/ClienteDetailDialog';
@@ -49,6 +50,7 @@ import {
 } from '@/lib/comercial/utils';
 import type { MockupSinCompraRow } from '@/lib/comercial/types';
 import { sendComercialContactoWhatsApp } from '@/lib/supabase/services/comercialContacto.service';
+import { enviarLoteSeguimientosClientes } from '@/lib/supabase/services/comercialSeguimientos.service';
 import { fetchComercialDashboard, excludeFromComercialWeb } from '@/lib/supabase/services/comercialWeb.service';
 import { confirmWebOrderPayment } from '@/lib/supabase/services/webOrderPayment.service';
 import type { ComercialEntityType } from '@/lib/comercial/exclusions';
@@ -123,6 +125,7 @@ export default function ComercialPage() {
   const [confirmPagoOpen, setConfirmPagoOpen] = useState(false);
   const [confirmPagoRow, setConfirmPagoRow] = useState<OrdenSeguimientoRow | null>(null);
   const [confirmingOrdenId, setConfirmingOrdenId] = useState<string | null>(null);
+  const [sendingSeguimientos, setSendingSeguimientos] = useState(false);
 
   const load = useCallback(
     async (silent = false) => {
@@ -257,6 +260,29 @@ export default function ComercialPage() {
       throw err;
     } finally {
       setConfirmingOrdenId(null);
+    }
+  };
+
+  const handleEnviarLoteSeguimientos = async () => {
+    setSendingSeguimientos(true);
+    try {
+      const enviados = await enviarLoteSeguimientosClientes(10);
+      toast({
+        title: enviados > 0 ? 'Seguimientos enviados' : 'Sin clientes elegibles',
+        description:
+          enviados > 0
+            ? `Se envió el seguimiento a ${enviados} cliente${enviados === 1 ? '' : 's'}.`
+            : 'No había clientes elegibles para este lote.',
+      });
+      await load(true);
+    } catch (err: unknown) {
+      toast({
+        title: 'No se pudo enviar el lote',
+        description: err instanceof Error ? err.message : 'Error desconocido',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingSeguimientos(false);
     }
   };
 
@@ -408,6 +434,7 @@ export default function ComercialPage() {
               <TabsList className="flex h-auto flex-wrap gap-1">
                 <TabsTrigger value="potenciales">Potenciales</TabsTrigger>
                 <TabsTrigger value="resumen">Resumen</TabsTrigger>
+                <TabsTrigger value="seguimientos">Seguimientos</TabsTrigger>
                 <TabsTrigger value="trafico">Tráfico</TabsTrigger>
                 <TabsTrigger value="clientes">Clientes</TabsTrigger>
               </TabsList>
@@ -474,6 +501,14 @@ export default function ComercialPage() {
                     />
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="seguimientos" className="mt-4">
+                <SeguimientosClientesPanel
+                  data={data.seguimientosClientes}
+                  onRunBatch={handleEnviarLoteSeguimientos}
+                  runningBatch={sendingSeguimientos}
+                />
               </TabsContent>
 
               <TabsContent value="trafico" className="mt-4">

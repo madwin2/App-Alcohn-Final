@@ -128,6 +128,35 @@ export type ClienteWebRow = {
   valorTotalCompras: number;
 };
 
+export type ClienteSeguimientoResumen = {
+  elegiblesCount: number;
+  enviadosHoy: number;
+  enviadosUltimos7Dias: number;
+  enviadosUltimos30Dias: number;
+  ultimoEnvioAt: string | null;
+};
+
+export type ClienteSeguimientoRow = {
+  id: string;
+  clienteId: string;
+  ordenId: string;
+  nombre: string;
+  telefono: string;
+  email: string | null;
+  estado: 'enviado' | 'error';
+  enviadoAt: string;
+  enviadoPor: string;
+  valorTotal: number | null;
+  ordenFecha: string | null;
+};
+
+export type ClienteSeguimientoData = {
+  available: boolean;
+  unavailableReason?: string;
+  resumen: ClienteSeguimientoResumen;
+  historial: ClienteSeguimientoRow[];
+};
+
 export type TimelineEventKind =
   | 'contacto'
   | 'mockup'
@@ -181,6 +210,7 @@ export type ComercialDashboardData = {
   ordenesSeguimiento: OrdenSeguimientoRow[];
   contactosSinMuestra: ContactoSinMuestraRow[];
   clientesWeb: ClienteWebRow[];
+  seguimientosClientes: ClienteSeguimientoData;
   analytics: AnalyticsSummary;
   fetchedAt: string;
 };

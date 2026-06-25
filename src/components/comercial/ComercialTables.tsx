@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ExternalLink, Loader2, MessageCircle, Search, Send } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Loader2, MessageCircle, Search, Send } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import type {
   AnalyticsSummary,
   ClienteWebRow,
+  ClienteSeguimientoData,
   ContactoSinMuestraRow,
   MockupSinCompraRow,
   OrdenSeguimientoRow,
@@ -23,7 +24,9 @@ import {
 } from '@/lib/comercial/utils';
 import { ExcludeButton } from '@/components/comercial/ComercialExcludeDialog';
 import { ConfirmPagoButton } from '@/components/comercial/ComercialConfirmPagoDialog';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+
+const POTENCIALES_PAGE_SIZE = 10;
 
 function PrioridadBadge({ prioridad }: { prioridad: 'caliente' | 'tibio' | 'frio' }) {
   const variant =
@@ -132,6 +135,57 @@ function SectionTable({
   );
 }
 
+function PaginationFooter({
+  page,
+  totalPages,
+  totalItems,
+  firstVisible,
+  lastVisible,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  firstVisible: number;
+  lastVisible: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalItems <= POTENCIALES_PAGE_SIZE) return null;
+
+  return (
+    <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+      <span>
+        Mostrando {firstVisible}-{lastVisible} de {totalItems}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          disabled={page === 1}
+        >
+          <ChevronLeft className="mr-1 size-4" />
+          Anterior
+        </Button>
+        <span className="min-w-20 text-center text-xs">
+          Página {page} de {totalPages}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+          disabled={page === totalPages}
+        >
+          Siguiente
+          <ChevronRight className="ml-1 size-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function MockupsSinCompraTable({
   rows,
   onOpenCliente,
@@ -146,6 +200,7 @@ export function MockupsSinCompraTable({
   sendingContactoId?: string | null;
 }) {
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
@@ -157,6 +212,21 @@ export function MockupsSinCompraTable({
         r.material.includes(q),
     );
   }, [rows, query]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / POTENCIALES_PAGE_SIZE));
+  const visibleRows = useMemo(() => {
+    const start = (page - 1) * POTENCIALES_PAGE_SIZE;
+    return filtered.slice(start, start + POTENCIALES_PAGE_SIZE);
+  }, [filtered, page]);
+  const firstVisible = filtered.length === 0 ? 0 : (page - 1) * POTENCIALES_PAGE_SIZE + 1;
+  const lastVisible = Math.min(page * POTENCIALES_PAGE_SIZE, filtered.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, rows]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   return (
     <SectionTable
@@ -197,7 +267,7 @@ export function MockupsSinCompraTable({
               </td>
             </tr>
           ) : (
-            filtered.map((row) => (
+            visibleRows.map((row) => (
               <tr key={row.mockupId} className="border-b last:border-0 hover:bg-muted/20">
                 <td className="px-4 py-3 whitespace-nowrap">{formatShortDate(row.createdAt)}</td>
                 <td className="px-4 py-3">
@@ -262,6 +332,14 @@ export function MockupsSinCompraTable({
           )}
         </tbody>
       </table>
+      <PaginationFooter
+        page={page}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        firstVisible={firstVisible}
+        lastVisible={lastVisible}
+        onPageChange={setPage}
+      />
     </SectionTable>
   );
 }
@@ -279,6 +357,23 @@ export function OrdenesSeguimientoTable({
   onConfirmPago?: (row: OrdenSeguimientoRow) => void;
   confirmingOrdenId?: string | null;
 }) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(rows.length / POTENCIALES_PAGE_SIZE));
+  const visibleRows = useMemo(() => {
+    const start = (page - 1) * POTENCIALES_PAGE_SIZE;
+    return rows.slice(start, start + POTENCIALES_PAGE_SIZE);
+  }, [rows, page]);
+  const firstVisible = rows.length === 0 ? 0 : (page - 1) * POTENCIALES_PAGE_SIZE + 1;
+  const lastVisible = Math.min(page * POTENCIALES_PAGE_SIZE, rows.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [rows]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   return (
     <SectionTable
       title="Pagos pendientes"
@@ -306,7 +401,7 @@ export function OrdenesSeguimientoTable({
               </td>
             </tr>
           ) : (
-            rows.map((row) => (
+            visibleRows.map((row) => (
               <tr key={row.ordenId} className="border-b last:border-0 hover:bg-muted/20">
                 <td className="px-4 py-3 whitespace-nowrap">{formatShortDate(row.createdAt)}</td>
                 <td className="px-4 py-3">
@@ -350,6 +445,14 @@ export function OrdenesSeguimientoTable({
           )}
         </tbody>
       </table>
+      <PaginationFooter
+        page={page}
+        totalPages={totalPages}
+        totalItems={rows.length}
+        firstVisible={firstVisible}
+        lastVisible={lastVisible}
+        onPageChange={setPage}
+      />
     </SectionTable>
   );
 }
@@ -363,6 +466,23 @@ export function ContactosSinMuestraTable({
   onOpenCliente?: (clienteId: string, meta?: { nombre?: string; telefono?: string | null }) => void;
   onExclude?: (clienteId: string, label: string) => void;
 }) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(rows.length / POTENCIALES_PAGE_SIZE));
+  const visibleRows = useMemo(() => {
+    const start = (page - 1) * POTENCIALES_PAGE_SIZE;
+    return rows.slice(start, start + POTENCIALES_PAGE_SIZE);
+  }, [rows, page]);
+  const firstVisible = rows.length === 0 ? 0 : (page - 1) * POTENCIALES_PAGE_SIZE + 1;
+  const lastVisible = Math.min(page * POTENCIALES_PAGE_SIZE, rows.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [rows]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   return (
     <SectionTable
       title="Contacto sin muestra"
@@ -387,7 +507,7 @@ export function ContactosSinMuestraTable({
               </td>
             </tr>
           ) : (
-            rows.map((row) => (
+            visibleRows.map((row) => (
               <tr key={row.clienteId} className="border-b last:border-0 hover:bg-muted/20">
                 <td className="px-4 py-3">{formatShortDate(row.createdAt)}</td>
                 <td className="px-4 py-3">
@@ -418,6 +538,14 @@ export function ContactosSinMuestraTable({
           )}
         </tbody>
       </table>
+      <PaginationFooter
+        page={page}
+        totalPages={totalPages}
+        totalItems={rows.length}
+        firstVisible={firstVisible}
+        lastVisible={lastVisible}
+        onPageChange={setPage}
+      />
     </SectionTable>
   );
 }
@@ -516,6 +644,159 @@ export function ClientesWebTable({
         </tbody>
       </table>
     </SectionTable>
+  );
+}
+
+export function SeguimientosClientesPanel({
+  data,
+  onRunBatch,
+  runningBatch,
+}: {
+  data: ClienteSeguimientoData;
+  onRunBatch?: () => void;
+  runningBatch?: boolean;
+}) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(data.historial.length / POTENCIALES_PAGE_SIZE));
+  const visibleRows = useMemo(() => {
+    const start = (page - 1) * POTENCIALES_PAGE_SIZE;
+    return data.historial.slice(start, start + POTENCIALES_PAGE_SIZE);
+  }, [data.historial, page]);
+  const firstVisible = data.historial.length === 0 ? 0 : (page - 1) * POTENCIALES_PAGE_SIZE + 1;
+  const lastVisible = Math.min(page * POTENCIALES_PAGE_SIZE, data.historial.length);
+
+  useEffect(() => {
+    setPage(1);
+  }, [data.historial]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  if (!data.available) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Seguimientos de Clientes</CardTitle>
+          <CardDescription>
+            {data.unavailableReason ?? 'La sección todavía no está activa en Supabase.'}
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Elegibles restantes</CardDescription>
+            <CardTitle className="text-2xl">{data.resumen.elegiblesCount.toLocaleString('es-AR')}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Enviados hoy</CardDescription>
+            <CardTitle className="text-2xl">{data.resumen.enviadosHoy.toLocaleString('es-AR')}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Últimos 7 días</CardDescription>
+            <CardTitle className="text-2xl">
+              {data.resumen.enviadosUltimos7Dias.toLocaleString('es-AR')}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Últimos 30 días</CardDescription>
+            <CardTitle className="text-2xl">
+              {data.resumen.enviadosUltimos30Dias.toLocaleString('es-AR')}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Próximo automático</CardDescription>
+            <CardTitle className="text-base">Lun-vie 12:26</CardTitle>
+            <CardDescription>Hora Argentina</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+
+      <SectionTable
+        title="Historial de seguimientos"
+        description="Se envían 10 clientes aleatorios por día hábil. El criterio vive en Supabase; acá solo vemos el historial reciente."
+        count={data.historial.length}
+      >
+        <div className="flex flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Último envío:{' '}
+            {data.resumen.ultimoEnvioAt ? formatShortDate(data.resumen.ultimoEnvioAt) : 'sin envíos todavía'}
+          </p>
+          {onRunBatch ? (
+            <Button type="button" variant="outline" size="sm" onClick={onRunBatch} disabled={runningBatch}>
+              {runningBatch ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
+              Enviar lote ahora
+            </Button>
+          ) : null}
+        </div>
+        <table className="w-full min-w-[820px] text-sm">
+          <thead>
+            <tr className="border-b bg-muted/30 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="px-4 py-3">Fecha envío</th>
+              <th className="px-4 py-3">Cliente</th>
+              <th className="px-4 py-3">Pedido</th>
+              <th className="px-4 py-3">Total</th>
+              <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3">Origen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.historial.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                  Todavía no hay seguimientos enviados.
+                </td>
+              </tr>
+            ) : (
+              visibleRows.map((row) => (
+                <tr key={row.id} className="border-b last:border-0 hover:bg-muted/20">
+                  <td className="px-4 py-3 whitespace-nowrap">{formatShortDate(row.enviadoAt)}</td>
+                  <td className="px-4 py-3">
+                    <span className="font-medium">{row.nombre}</span>
+                    <p className="text-xs text-muted-foreground">{row.telefono}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="font-mono text-xs">{row.ordenId.slice(0, 8)}</span>
+                    <p className="text-xs text-muted-foreground">
+                      {row.ordenFecha ? formatShortDate(row.ordenFecha) : '—'}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">{formatArs(row.valorTotal)}</td>
+                  <td className="px-4 py-3">
+                    <Badge variant={row.estado === 'error' ? 'destructive' : 'default'}>
+                      {row.estado === 'error' ? 'Error' : 'Enviado'}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 capitalize">{row.enviadoPor}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        <PaginationFooter
+          page={page}
+          totalPages={totalPages}
+          totalItems={data.historial.length}
+          firstVisible={firstVisible}
+          lastVisible={lastVisible}
+          onPageChange={setPage}
+        />
+      </SectionTable>
+    </div>
   );
 }
 

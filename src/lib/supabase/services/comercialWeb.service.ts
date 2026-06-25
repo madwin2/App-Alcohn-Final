@@ -47,6 +47,7 @@ import {
   type NormalizedAnalyticsRow,
 } from '@/lib/comercial/analyticsNormalize';
 import { estimateWebOrdenTotal, resolveWebOrderSenia } from '@/lib/comercial/webCart';
+import { fetchComercialSeguimientosClientes } from '@/lib/supabase/services/comercialSeguimientos.service';
 import type { Database } from '../types';
 
 type MockupRow = Database['public']['Tables']['mockup_solicitudes']['Row'];
@@ -873,6 +874,7 @@ export async function fetchComercialDashboard(
     ordenesPrev,
     mockupsSinCompraRaw,
     ordenesSeguimientoRaw,
+    seguimientosClientes,
     allMockups,
     allClientes,
     allOrdenesWeb,
@@ -887,6 +889,7 @@ export async function fetchComercialDashboard(
     fetchOrdenesWeb(isoRangeBounds(prev).fromIso, isoRangeBounds(prev).toIso),
     fetchMockupsSinCompraAll(origen),
     fetchOrdenesSeguimientoAll(),
+    fetchComercialSeguimientosClientes(),
     fetchAllMockupsForClientes(origen),
     fetchAllWebClientes(),
     supabase
@@ -1005,6 +1008,7 @@ export async function fetchComercialDashboard(
     ordenesSeguimiento,
     contactosSinMuestra,
     clientesWeb,
+    seguimientosClientes,
     analytics,
     fetchedAt: new Date().toISOString(),
   };
