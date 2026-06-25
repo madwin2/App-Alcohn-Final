@@ -26,6 +26,7 @@ import { useAuth } from '@/lib/hooks/useAuth';
 import { formatDate, formatDateTime, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
 import { Order, ShippingState } from '@/lib/types';
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
+import { getUserInitials, getUserProfileImage } from '@/lib/utils/userImages';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { downloadCorreoCsv } from '@/lib/utils/micorreoUpload';
@@ -1119,103 +1120,138 @@ export default function EnviosPage() {
     }
   };
 
-  const renderShippingTypeCell = (order: Order) => {
+  const renderDomSucCell = (order: Order) => {
     const isSucursal = order.shipping.service === 'SUCURSAL';
     const isDomicilio = order.shipping.service === 'DOMICILIO';
+
+    return (
+      <div className="flex gap-1 whitespace-nowrap">
+        <Button
+          size="sm"
+          variant={isDomicilio ? 'default' : 'outline'}
+          className="h-8 px-2.5 text-xs"
+          onClick={() => handleToggleShippingType(order, 'DOMICILIO')}
+        >
+          Dom.
+        </Button>
+        <Button
+          size="sm"
+          variant={isSucursal ? 'default' : 'outline'}
+          className="h-8 px-2.5 text-xs"
+          onClick={() => handleToggleShippingType(order, 'SUCURSAL')}
+        >
+          Suc.
+        </Button>
+      </div>
+    );
+  };
+
+  const renderEtiquetaCell = (order: Order) => {
     const shippingState = order.items[0]?.shippingState;
     const shippingChipVisual = getShippingChipVisual(shippingState || 'SIN_ENVIO');
     const uploadInProgress = isMicorreoUploadRunning(order.id);
     const labelError = order.shippingLabelError?.trim();
 
     return (
-      <div className="flex min-w-[100px] flex-col gap-1.5">
-        <div className="inline-flex w-fit rounded-md border p-0.5">
-          <Button
-            size="sm"
-            variant={isDomicilio ? 'default' : 'ghost'}
-            className="h-6 px-2 text-[11px] leading-none"
-            onClick={() => handleToggleShippingType(order, 'DOMICILIO')}
-          >
-            Dom.
-          </Button>
-          <Button
-            size="sm"
-            variant={isSucursal ? 'default' : 'ghost'}
-            className="h-6 px-2 text-[11px] leading-none"
-            onClick={() => handleToggleShippingType(order, 'SUCURSAL')}
-          >
-            Suc.
-          </Button>
-        </div>
-        <div className="flex items-center gap-1">
-          <Select
-            value={shippingState || 'SIN_ENVIO'}
-            onValueChange={(value) => handleShippingStateChange(order, value as ShippingState)}
-          >
-            <SelectTrigger className="h-auto w-auto min-w-0 border-none bg-transparent p-0 shadow-none hover:bg-transparent focus:ring-0 focus:ring-offset-0">
-              <SelectValue>
-                <span
-                  className={`inline-flex shrink-0 items-center justify-center rounded-full border px-2 py-0.5 text-[10px] leading-tight ${shippingChipVisual.textClass}`}
-                  style={{
-                    backgroundImage: shippingChipVisual.backgroundImage,
-                    backgroundColor: shippingChipVisual.backgroundColor,
-                    boxShadow: shippingChipVisual.boxShadow,
-                    borderColor: shippingChipVisual.borderColor,
-                    backdropFilter: 'saturate(140%) blur(3px)',
-                    color: shippingChipVisual.textColor,
-                    minWidth: shippingChipVisual.width,
-                  }}
-                >
-                  {getShippingLabel(shippingState || 'SIN_ENVIO')}
-                </span>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {shippingStateOptions.map((stateOption) => {
-                const optionVisual = getShippingChipVisual(stateOption);
-                return (
-                  <SelectItem key={stateOption} value={stateOption} className="text-xs">
-                    <span
-                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs ${optionVisual.textClass}`}
-                      style={{
-                        backgroundImage: optionVisual.backgroundImage,
-                        backgroundColor: optionVisual.backgroundColor,
-                        boxShadow: optionVisual.boxShadow,
-                        borderColor: optionVisual.borderColor,
-                        backdropFilter: 'saturate(140%) blur(3px)',
-                        color: optionVisual.textColor,
-                        minWidth: optionVisual.width,
-                      }}
-                    >
-                      {getShippingLabel(stateOption)}
-                    </span>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-          {uploadInProgress ? (
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-orange-500" aria-label="Subiendo a MiCorreo" />
-          ) : null}
-          {shippingState === 'ERROR_ETIQUETA' ? (
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
+      <div className="flex items-center gap-1.5">
+        <Select
+          value={shippingState || 'SIN_ENVIO'}
+          onValueChange={(value) => handleShippingStateChange(order, value as ShippingState)}
+        >
+          <SelectTrigger className="h-auto w-auto min-w-[120px] border-none bg-transparent p-0 shadow-none hover:bg-transparent focus:ring-0 focus:ring-offset-0">
+            <SelectValue>
+              <span
+                className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${shippingChipVisual.textClass}`}
+                style={{
+                  backgroundImage: shippingChipVisual.backgroundImage,
+                  backgroundColor: shippingChipVisual.backgroundColor,
+                  boxShadow: shippingChipVisual.boxShadow,
+                  borderColor: shippingChipVisual.borderColor,
+                  backdropFilter: 'saturate(140%) blur(3px)',
+                  color: shippingChipVisual.textColor,
+                  minWidth: shippingChipVisual.width,
+                }}
+              >
+                {getShippingLabel(shippingState || 'SIN_ENVIO')}
+              </span>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {shippingStateOptions.map((stateOption) => {
+              const optionVisual = getShippingChipVisual(stateOption);
+              return (
+                <SelectItem key={stateOption} value={stateOption} className="text-xs">
                   <span
-                    className="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-red-500/45 bg-red-500/15 text-red-600 dark:text-red-400"
-                    aria-label="Ver error de etiqueta"
+                    className={`inline-flex items-center rounded-full border px-3 py-1 text-xs ${optionVisual.textClass}`}
+                    style={{
+                      backgroundImage: optionVisual.backgroundImage,
+                      backgroundColor: optionVisual.backgroundColor,
+                      boxShadow: optionVisual.boxShadow,
+                      borderColor: optionVisual.borderColor,
+                      backdropFilter: 'saturate(140%) blur(3px)',
+                      color: optionVisual.textColor,
+                      minWidth: optionVisual.width,
+                    }}
                   >
-                    <AlertCircle className="h-3 w-3" />
+                    {getShippingLabel(stateOption)}
                   </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap">
-                  {labelError || 'Error al subir la etiqueta. Editá los datos y confirmá de nuevo.'}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : null}
-        </div>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        {uploadInProgress ? (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-orange-500" aria-label="Subiendo a MiCorreo" />
+        ) : null}
+        {shippingState === 'ERROR_ETIQUETA' ? (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex h-5 w-5 shrink-0 cursor-help items-center justify-center rounded-full border border-red-500/45 bg-red-500/15 text-red-600 dark:text-red-400"
+                  aria-label="Ver error de etiqueta"
+                >
+                  <AlertCircle className="h-3.5 w-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap">
+                {labelError || 'Error al subir la etiqueta. Editá los datos y confirmá de nuevo.'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : null}
       </div>
+    );
+  };
+
+  const renderLoadedByCell = (order: Order) => {
+    const loadedBy = order.shippingDataLoadedBy;
+    if (!loadedBy) return <span className="text-muted-foreground">—</span>;
+
+    const profileImage = getUserProfileImage(loadedBy.name);
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {profileImage ? (
+              <img
+                src={profileImage}
+                alt={loadedBy.name}
+                title={loadedBy.name}
+                className="h-9 w-9 rounded-full border border-border object-cover"
+              />
+            ) : (
+              <span
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-muted text-[11px] font-semibold text-muted-foreground"
+                title={loadedBy.name}
+              >
+                {getUserInitials(loadedBy.name) || '?'}
+              </span>
+            )}
+          </TooltipTrigger>
+          <TooltipContent side="top">{loadedBy.name}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   };
 
@@ -1245,7 +1281,7 @@ export default function EnviosPage() {
     const designLabel = item ? getOrderItemDisplayName(item) : 'Sin diseño';
     const loadedAtRaw = order.shippingDataLoadedAt ?? shippingAddress?.created_at ?? null;
     const isDense = Boolean(opts?.showShippingDetails);
-    const cell = isDense ? 'px-2 py-2 align-middle' : 'px-4 py-3 align-middle';
+    const cell = isDense ? 'px-3 py-3 align-middle' : 'px-4 py-3 align-middle';
 
     return (
       <ContextMenu key={order.id}>
@@ -1313,38 +1349,34 @@ export default function EnviosPage() {
             </button>
           </td>
         ) : null}
-        <td className={`${cell} text-center tabular-nums w-10`}>{order.items.length}</td>
-        <td className={`${cell} max-w-[6.5rem] truncate`} title={designLabel}>
+        <td className={`${cell} text-center tabular-nums`}>{order.items.length}</td>
+        <td className={`${cell} max-w-[8rem] truncate`} title={designLabel}>
           {designLabel}
         </td>
-        <td className={`${cell} w-14`}>
+        <td className={`${cell} w-[4.5rem]`}>
           {availablePreview ? (
             <img
               src={availablePreview}
               alt="Preview archivo"
-              className="h-10 w-10 rounded-md object-contain border bg-white p-0.5 cursor-zoom-in"
+              className="h-12 w-12 rounded-md object-contain border bg-white p-1 cursor-zoom-in"
               onClick={() => setPreviewImageUrl(availablePreview)}
             />
           ) : (
-            <span className="text-[10px] text-muted-foreground">—</span>
+            <span className="text-xs text-muted-foreground">—</span>
           )}
         </td>
-        <td className={cell}>{renderShippingTypeCell(order)}</td>
+        <td className={cell}>{renderDomSucCell(order)}</td>
+        <td className={cell}>{renderEtiquetaCell(order)}</td>
         {opts?.showShippingDetails ? (
           <>
+            <td className={`${cell} w-12 text-center`}>{renderLoadedByCell(order)}</td>
             <td
-              className={`${cell} max-w-[5.5rem] truncate text-xs text-muted-foreground`}
-              title={order.shippingDataLoadedBy?.name || undefined}
-            >
-              {order.shippingDataLoadedBy?.name || '—'}
-            </td>
-            <td
-              className={`${cell} whitespace-nowrap text-xs text-muted-foreground`}
+              className={`${cell} whitespace-nowrap text-sm text-muted-foreground`}
               title={loadedAtRaw ? formatDateTime(loadedAtRaw) : undefined}
             >
               {loadedAtRaw ? formatDate(loadedAtRaw) : '—'}
             </td>
-            <td className={`${cell} text-center text-xs`}>
+            <td className={`${cell} text-center text-sm`}>
               {order.shippingDataEdited ? (
                 <span className="text-amber-600 dark:text-amber-400">Sí</span>
               ) : (
@@ -1353,16 +1385,15 @@ export default function EnviosPage() {
             </td>
           </>
         ) : null}
-        <td className={`${cell} w-24`}>
+        <td className={`${cell}`}>
           <Button
             size="sm"
             variant="secondary"
-            className={isDense ? 'h-7 px-2 text-xs' : undefined}
             onClick={() => openShippingDialog(order)}
             disabled={!hasShippingTypeSelected}
             title={!hasShippingTypeSelected ? 'Seleccioná Domicilio o Sucursal primero' : undefined}
           >
-            {order.direccionId ? 'Editar' : 'Cargar'}
+            {order.direccionId ? 'Editar datos' : 'Cargar datos'}
           </Button>
         </td>
       </tr>
@@ -1382,18 +1413,18 @@ export default function EnviosPage() {
   };
 
   const getTableClass = (showShippingDetails?: boolean) =>
-    showShippingDetails ? 'w-full min-w-[1080px] text-sm' : 'w-full text-sm';
+    showShippingDetails ? 'w-full min-w-[1200px] text-sm' : 'w-full text-sm';
 
   const tableHead = (
     showCsvLine: boolean,
     opts?: { showWhatsapp?: boolean; showShippingDetails?: boolean },
   ) => {
     const isDense = Boolean(opts?.showShippingDetails);
-    const head = isDense ? 'px-2 py-2 font-medium whitespace-nowrap' : 'px-4 py-3 font-medium whitespace-nowrap';
+    const head = isDense ? 'px-3 py-3 font-medium whitespace-nowrap' : 'px-4 py-3 font-medium whitespace-nowrap';
 
     return (
     <thead className="sticky top-0 z-10 border-b bg-card">
-      <tr className="text-left text-xs text-muted-foreground">
+      <tr className="text-left text-sm text-muted-foreground">
         {showCsvLine ? (
           <th className={`${head} w-10 text-center`} title="Número de fila en el CSV (la 1 es el encabezado)">
             CSV
@@ -1412,24 +1443,25 @@ export default function EnviosPage() {
             WA
           </th>
         ) : null}
-        <th className={`${head} w-10 text-center`}>It.</th>
+        <th className={`${head} text-center`}>Items</th>
         <th className={head}>Diseño</th>
-        <th className={`${head} w-14`}>Arch.</th>
-        <th className={head}>Envío</th>
+        <th className={`${head} w-[4.5rem]`}>Archivo</th>
+        <th className={head}>Dom / Suc</th>
+        <th className={head}>Etiqueta</th>
         {opts?.showShippingDetails ? (
           <>
-            <th className={head} title="Quién cargó los datos">
-              Por
+            <th className={`${head} w-12 text-center`} title="Quién cargó los datos">
+              Subido
             </th>
             <th className={head} title="Fecha de carga">
               Carga
             </th>
-            <th className={`${head} w-10 text-center`} title="Datos editados">
-              Ed.
+            <th className={`${head} text-center`} title="Datos editados">
+              Editado
             </th>
           </>
         ) : null}
-        <th className={`${head} w-24`} />
+        <th className={head}>Acciones</th>
       </tr>
     </thead>
     );
