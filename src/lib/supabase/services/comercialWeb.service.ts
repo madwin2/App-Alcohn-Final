@@ -71,6 +71,55 @@ function inRange(iso: string | null | undefined, fromIso: string, toIso: string)
   return iso >= fromIso && iso <= toIso;
 }
 
+function isValidIsoDate(iso: string | null | undefined): iso is string {
+  if (!iso) return false;
+  return !Number.isNaN(new Date(iso).getTime());
+}
+
+function normalizePhone(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  let digits = value.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  if (digits.length === 10 && !digits.startsWith('54')) digits = `549${digits}`;
+  if (digits.length === 11 && digits.startsWith('9')) digits = `54${digits}`;
+  return digits || null;
+}
+
+function getContactoComercialEnviadoAt(mockup: MockupRow | MockupWithCliente): string | null {
+  const raw = mockup.metadata_web?.contacto_comercial_enviado_at;
+  return typeof raw === 'string' && isValidIsoDate(raw) ? raw : null;
+}
+
+function ordenMatchesContactedMockup(orden: OrdenWithCliente, mockup: MockupRow | MockupWithCliente): boolean {
+  if (orden.mockup_solicitud_id && orden.mockup_solicitud_id === mockup.id) return true;
+  if (mockup.orden_id && mockup.orden_id === orden.id) return true;
+  if (orden.cliente_id && mockup.cliente_id && orden.cliente_id === mockup.cliente_id) return true;
+
+  const ordenPhone = normalizePhone(orden.clientes?.telefono);
+  const mockupPhone = normalizePhone(mockup.whatsapp);
+  return Boolean(ordenPhone && mockupPhone && ordenPhone === mockupPhone);
+}
+
+function isVentaDerivadaDeWeb(orden: OrdenWithCliente, mockups: Array<MockupRow | MockupWithCliente>): boolean {
+  if (orden.estado_pago_web !== 'pagado') return false;
+
+  const pagoAt = orden.pago_confirmado_at ?? orden.created_at;
+  if (!isValidIsoDate(pagoAt)) return false;
+
+  const pagoTime = new Date(pagoAt).getTime();
+
+  return mockups.some((mockup) => {
+    if (mockup.origen !== 'web') return false;
+
+    const contactoAt = getContactoComercialEnviadoAt(mockup);
+    if (!contactoAt) return false;
+    if (new Date(contactoAt).getTime() > pagoTime) return false;
+
+    return ordenMatchesContactedMockup(orden, mockup);
+  });
+}
+
 function fullName(c: { nombre?: string | null; apellido?: string | null } | null | undefined): string {
   if (!c) return 'Sin nombre';
   return [c.nombre, c.apellido].filter(Boolean).join(' ').trim() || 'Sin nombre';
@@ -658,6 +707,7 @@ function computeCounts(
   clientes: ClienteRow[],
   ordenes: OrdenWithCliente[],
   analyticsRows: NormalizedAnalyticsRow[],
+  mockupsForAttribution: Array<MockupRow | MockupWithCliente> = mockups,
 ) {
   const { fromIso, toIso } = isoRangeBounds(range);
 
@@ -669,6 +719,12 @@ function computeCounts(
   const ventas = ordenes.filter(
     (o) => o.estado_pago_web === 'pagado' && inRange(o.pago_confirmado_at ?? o.created_at, fromIso, toIso),
   ).length;
+  const ventasDerivadas = ordenes.filter(
+    (o) =>
+      o.estado_pago_web === 'pagado' &&
+      inRange(o.pago_confirmado_at ?? o.created_at, fromIso, toIso) &&
+      isVentaDerivadaDeWeb(o, mockupsForAttribution),
+  ).length;
 
   return {
     visitantes: analyticsAgg.uniqueVisitors,
@@ -677,6 +733,7 @@ function computeCounts(
     muestras: mockups.length,
     checkouts: Math.max(checkoutsFromMockups, checkoutsFromOrders),
     ventas,
+    ventasDerivadas,
   };
 }
 
@@ -966,6 +1023,7 @@ export async function fetchComercialDashboard(
     clientesRangeFiltered,
     ordenesRangeFiltered,
     analyticsCurrent.rows,
+    allMockupsFiltered,
   );
   const previousCounts = computeCounts(
     prev,
@@ -973,6 +1031,7 @@ export async function fetchComercialDashboard(
     clientesPrevFiltered,
     ordenesPrevFiltered,
     analyticsPrevious.rows,
+    allMockupsFiltered,
   );
 
   const kpis = buildKpis({ current: currentCounts, previous: previousCounts });

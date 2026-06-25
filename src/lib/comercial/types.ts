@@ -11,7 +11,8 @@ export type ComercialKpiKey =
   | 'contactos'
   | 'muestras'
   | 'checkouts'
-  | 'ventas';
+  | 'ventas'
+  | 'ventasDerivadas';
 
 export type ComercialKpi = {
   key: ComercialKpiKey;
