@@ -23,8 +23,10 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { useOrders } from '@/lib/hooks/useOrders';
-import { formatDate, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
+import { useAuth } from '@/lib/hooks/useAuth';
+import { formatDate, formatDateTime, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
 import { Order, ShippingState } from '@/lib/types';
+import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 import { supabase } from '@/lib/supabase/client';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { downloadCorreoCsv } from '@/lib/utils/micorreoUpload';
@@ -80,6 +82,35 @@ const isEligibleForShipping = (order: Order): boolean => {
 const getRepresentativeItem = (order: Order) => {
   if (!order.items.length) return null;
   return order.items.find((item) => item.files?.baseUrl || item.files?.vectorPreviewUrl) || order.items[0];
+};
+
+type ShippingAddressRow = {
+  id: string;
+  nombre: string;
+  apellido: string;
+  domicilio: string;
+  localidad: string;
+  provincia: string;
+  codigo_sucursal_micorreo?: string | null;
+  created_at?: string | null;
+};
+
+const normalizeDestRecipientName = (nombre: string, apellido: string): string =>
+  stripAccents(`${nombre} ${apellido}`.trim().toLowerCase().replace(/\s+/g, ' '));
+
+const formatShippingDestination = (
+  order: Order,
+  address: ShippingAddressRow | undefined,
+): string => {
+  if (!address) return '—';
+  const isSucursal = order.shipping.service === 'SUCURSAL';
+  if (isSucursal) {
+    const branch = address.domicilio?.trim();
+    const locality = address.localidad?.trim();
+    return branch || locality || '—';
+  }
+  const parts = [address.domicilio, address.localidad, address.provincia].map((p) => p?.trim()).filter(Boolean);
+  return parts.join(', ') || '—';
 };
 
 const isSaleReadyForShippingData = (order: Order): boolean => {
@@ -164,6 +195,7 @@ const normalizeShippingFormData = (data: ShippingFormData): ShippingFormData => 
 
 export default function EnviosPage() {
   const { orders, loading, error, updateOrder, fetchOrders } = useOrders();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
   const [micorreoUploadBusy, setMicorreoUploadBusy] = useState(false);
@@ -348,6 +380,47 @@ export default function EnviosPage() {
     () => eligibleOrders.filter((order) => !order.direccionId && isSaleReadyForShippingData(order)),
     [eligibleOrders],
   );
+
+  const [shippingAddressById, setShippingAddressById] = useState<Map<string, ShippingAddressRow>>(new Map());
+
+  useEffect(() => {
+    const addressIds = [...new Set(ordersConDatosEnvio.map((order) => order.direccionId).filter(Boolean))] as string[];
+    if (!addressIds.length) {
+      setShippingAddressById(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const { data, error: addressError } = await supabase
+        .from('direcciones')
+        .select('id,nombre,apellido,domicilio,localidad,provincia,codigo_sucursal_micorreo,created_at')
+        .in('id', addressIds);
+      if (cancelled) return;
+      if (addressError) {
+        console.error('Cargar direcciones para tabla de envíos:', addressError);
+        return;
+      }
+      setShippingAddressById(new Map((data ?? []).map((row) => [row.id, row as ShippingAddressRow])));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ordersConDatosEnvio]);
+
+  const duplicateDestRecipientNames = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const order of ordersConDatosEnvio) {
+      if (!order.direccionId) continue;
+      const address = shippingAddressById.get(order.direccionId);
+      if (!address) continue;
+      const key = normalizeDestRecipientName(address.nombre || '', address.apellido || '');
+      if (!key) continue;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([key]) => key));
+  }, [ordersConDatosEnvio, shippingAddressById]);
 
   /** Índice de fila tal como sale en el CSV (fila 1 = encabezado → primera orden es 2). */
   const csvLineNumberByOrderId = useMemo(() => {
@@ -855,13 +928,23 @@ export default function EnviosPage() {
       if (addressError) throw addressError;
 
       const shippingTypeDb = shippingTypeDraft === 'SUCURSAL' ? 'Sucursal' : 'Domicilio';
+      const isEditingExistingShippingData = Boolean(selectedOrder.direccionId);
+
+      const orderUpdate: Record<string, unknown> = {
+        direccion_id: addressRow.id,
+        tipo_envio: shippingTypeDb,
+      };
+      if (isEditingExistingShippingData) {
+        orderUpdate.envio_datos_editado = true;
+      } else if (user?.id) {
+        orderUpdate.envio_datos_cargado_por = user.id;
+        orderUpdate.envio_datos_cargado_at = new Date().toISOString();
+        orderUpdate.envio_datos_editado = false;
+      }
 
       const { error: orderError } = await supabase
         .from('ordenes')
-        .update({
-          direccion_id: addressRow.id,
-          tipo_envio: shippingTypeDb,
-        })
+        .update(orderUpdate)
         .eq('id', selectedOrder.id);
 
       if (orderError) throw orderError;
@@ -923,7 +1006,15 @@ export default function EnviosPage() {
       return;
     }
     try {
-      const { error } = await supabase.from('ordenes').update({ direccion_id: null }).eq('id', order.id);
+      const { error } = await supabase
+        .from('ordenes')
+        .update({
+          direccion_id: null,
+          envio_datos_cargado_por: null,
+          envio_datos_cargado_at: null,
+          envio_datos_editado: false,
+        })
+        .eq('id', order.id);
       if (error) throw error;
       await fetchOrders();
       toast({ title: 'Datos de envío quitados', description: 'La orden ya no tiene dirección vinculada.' });
@@ -1031,7 +1122,7 @@ export default function EnviosPage() {
 
   const renderOrderRow = (
     order: Order,
-    opts?: { showCsvLine?: boolean; showWhatsapp?: boolean },
+    opts?: { showCsvLine?: boolean; showWhatsapp?: boolean; showShippingDetails?: boolean },
   ) => {
     const item = getRepresentativeItem(order);
     const availablePreview =
@@ -1046,11 +1137,25 @@ export default function EnviosPage() {
 
     const csvLine = opts?.showCsvLine ? csvLineNumberByOrderId.get(order.id) : undefined;
     const phoneDigitsCopiar = normalizePhoneDigits(order.customer.phoneE164 || '');
+    const shippingAddress = order.direccionId ? shippingAddressById.get(order.direccionId) : undefined;
+    const destRecipientName = shippingAddress
+      ? `${shippingAddress.nombre || ''} ${shippingAddress.apellido || ''}`.trim()
+      : '';
+    const isDuplicateDestName =
+      Boolean(destRecipientName) &&
+      duplicateDestRecipientNames.has(
+        normalizeDestRecipientName(shippingAddress?.nombre || '', shippingAddress?.apellido || ''),
+      );
+    const designLabel = item ? getOrderItemDisplayName(item) : 'Sin diseño';
 
     return (
       <ContextMenu key={order.id}>
         <ContextMenuTrigger asChild>
-      <tr className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+      <tr
+        className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors ${
+          isDuplicateDestName ? 'bg-amber-500/15 hover:bg-amber-500/20' : ''
+        }`}
+      >
         {opts?.showCsvLine ? (
           <td className="px-3 py-3 text-center tabular-nums text-muted-foreground">
             {csvLine !== undefined ? csvLine : '—'}
@@ -1095,7 +1200,7 @@ export default function EnviosPage() {
           </td>
         ) : null}
         <td className="px-4 py-3">{order.items.length}</td>
-        <td className="px-4 py-3">{item?.designName || 'Sin diseño'}</td>
+        <td className="px-4 py-3">{designLabel}</td>
         <td className="px-4 py-3">
           {availablePreview ? (
             <img
@@ -1197,6 +1302,33 @@ export default function EnviosPage() {
             ) : null}
           </div>
         </td>
+        {opts?.showShippingDetails ? (
+          <>
+            <td className="px-4 py-3 text-muted-foreground">
+              {order.shippingDataLoadedBy?.name || '—'}
+            </td>
+            <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+              {order.shippingDataLoadedAt
+                ? formatDateTime(order.shippingDataLoadedAt)
+                : shippingAddress?.created_at
+                  ? formatDateTime(shippingAddress.created_at)
+                  : '—'}
+            </td>
+            <td className="px-4 py-3">
+              {order.shippingDataEdited ? (
+                <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400">
+                  Sí
+                </Badge>
+              ) : (
+                <span className="text-muted-foreground">No</span>
+              )}
+            </td>
+            <td className="px-4 py-3 font-medium">{destRecipientName || '—'}</td>
+            <td className="px-4 py-3 max-w-[220px] truncate" title={formatShippingDestination(order, shippingAddress)}>
+              {formatShippingDestination(order, shippingAddress)}
+            </td>
+          </>
+        ) : null}
         <td className="px-4 py-3">
           <Button
             size="sm"
@@ -1228,7 +1360,7 @@ export default function EnviosPage() {
 
   const tableHead = (
     showCsvLine: boolean,
-    opts?: { showWhatsapp?: boolean },
+    opts?: { showWhatsapp?: boolean; showShippingDetails?: boolean },
   ) => (
     <thead className="sticky top-0 bg-background z-10 border-b">
       <tr className="text-left text-muted-foreground">
@@ -1248,6 +1380,15 @@ export default function EnviosPage() {
         <th className="px-4 py-3 font-medium">Diseño</th>
         <th className="px-4 py-3 font-medium">Archivo</th>
         <th className="px-4 py-3 font-medium">Tipo envío</th>
+        {opts?.showShippingDetails ? (
+          <>
+            <th className="px-4 py-3 font-medium">Cargado por</th>
+            <th className="px-4 py-3 font-medium">Fecha carga</th>
+            <th className="px-4 py-3 font-medium">Editado</th>
+            <th className="px-4 py-3 font-medium">Destinatario</th>
+            <th className="px-4 py-3 font-medium">Dir / Suc</th>
+          </>
+        ) : null}
         <th className="px-4 py-3 font-medium">Acciones</th>
       </tr>
     </thead>
@@ -1324,8 +1465,12 @@ export default function EnviosPage() {
                   {isConDatosExpanded ? (
                     <div className="overflow-auto max-h-[min(50vh,420px)]">
                       <table className={tableClass}>
-                        {tableHead(true)}
-                        <tbody>{ordersConDatosEnvio.map((o) => renderOrderRow(o, { showCsvLine: true }))}</tbody>
+                        {tableHead(true, { showShippingDetails: true })}
+                        <tbody>
+                          {ordersConDatosEnvio.map((o) =>
+                            renderOrderRow(o, { showCsvLine: true, showShippingDetails: true }),
+                          )}
+                        </tbody>
                       </table>
                     </div>
                   ) : null}

@@ -63,6 +63,9 @@ export interface Database {
             | null;
           error_etiqueta_mensaje?: string | null;
           taken_by: string | null;
+          envio_datos_cargado_por?: string | null;
+          envio_datos_cargado_at?: string | null;
+          envio_datos_editado?: boolean | null;
           /** Pedidos de la web Alcohn (ver migración 001_web_alcohn_integration.sql). */
           origen?: 'Web' | 'App' | null;
           metodo_pago?: 'Openpay' | 'Transferencia' | null;

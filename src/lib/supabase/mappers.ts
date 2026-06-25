@@ -262,7 +262,8 @@ export const mapOrdenToOrder = (
   cliente: ClienteRow,
   sellos: SelloRow[],
   tareas: any[] = [],
-  takenBy: { id: string; name: string } | null = null
+  takenBy: { id: string; name: string } | null = null,
+  shippingDataLoadedBy: { id: string; name: string } | null = null,
 ): Order => {
   // Primero mapear sellos a items básicos
   const baseItems = sellos.map(sello => mapSelloToOrderItem(sello, cliente));
@@ -298,6 +299,9 @@ export const mapOrdenToOrder = (
   return {
     id: orden.id,
     direccionId: orden.direccion_id ?? null,
+    shippingDataLoadedBy: shippingDataLoadedBy ?? null,
+    shippingDataLoadedAt: (orden as { envio_datos_cargado_at?: string | null }).envio_datos_cargado_at ?? null,
+    shippingDataEdited: (orden as { envio_datos_editado?: boolean | null }).envio_datos_editado === true,
     shippingLabelError: (orden as { error_etiqueta_mensaje?: string | null }).error_etiqueta_mensaje ?? null,
     customer: mapClienteToCustomer(cliente),
     orderDate: orden.fecha || new Date().toISOString().split('T')[0],

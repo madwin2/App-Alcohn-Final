@@ -244,14 +244,18 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
   }
 
   const takenByUserIds = [...new Set(ordenes.map((o) => (o as any).taken_by).filter(Boolean))];
+  const shippingLoadedByUserIds = [
+    ...new Set(ordenes.map((o) => (o as any).envio_datos_cargado_por).filter(Boolean)),
+  ];
+  const allUserIds = [...new Set([...takenByUserIds, ...shippingLoadedByUserIds])];
   const usersMap = new Map<string, { id: string; name: string }>();
 
-  if (takenByUserIds.length > 0) {
+  if (allUserIds.length > 0) {
     try {
       const { data: usuarios, error: usuariosError } = await supabase
         .from('solicitudes_registro')
         .select('user_id, nombre, apellido, email')
-        .in('user_id', takenByUserIds)
+        .in('user_id', allUserIds)
         .eq('estado', 'APROBADO');
 
       if (!usuariosError && usuarios) {
@@ -289,7 +293,12 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
     const takenByUserId = (orden as any).taken_by;
     const takenBy =
       takenByUserId && usersMap.has(takenByUserId) ? usersMap.get(takenByUserId)! : null;
-    return mapOrdenToOrder(orden, cliente, sellosDeOrden, tareasDeOrden, takenBy);
+    const shippingLoadedByUserId = (orden as any).envio_datos_cargado_por;
+    const shippingDataLoadedBy =
+      shippingLoadedByUserId && usersMap.has(shippingLoadedByUserId)
+        ? usersMap.get(shippingLoadedByUserId)!
+        : null;
+    return mapOrdenToOrder(orden, cliente, sellosDeOrden, tareasDeOrden, takenBy, shippingDataLoadedBy);
   });
 };
 
