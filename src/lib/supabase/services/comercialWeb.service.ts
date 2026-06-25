@@ -72,48 +72,60 @@ function inRange(iso: string | null | undefined, fromIso: string, toIso: string)
   return iso >= fromIso && iso <= toIso;
 }
 
-function isValidIsoDate(iso: string | null | undefined): iso is string {
-  if (!iso) return false;
-  return !Number.isNaN(new Date(iso).getTime());
-}
-
 function normalizePhone(value: string | null | undefined): string | null {
   if (!value?.trim()) return null;
   return normalizePhoneDigitsCliente(value) || null;
 }
 
-function getContactoComercialEnviadoAt(mockup: MockupRow | MockupWithCliente): string | null {
-  const raw = mockup.metadata_web?.contacto_comercial_enviado_at;
-  return typeof raw === 'string' && isValidIsoDate(raw) ? raw : null;
+type WebLeadKeys = {
+  clienteIds: Set<string>;
+  phones: Set<string>;
+};
+
+function buildWebLeadKeys(
+  mockups: Array<MockupRow | MockupWithCliente>,
+  clientesWeb: ClienteRow[],
+): WebLeadKeys {
+  const clienteIds = new Set<string>();
+  const phones = new Set<string>();
+
+  for (const cliente of clientesWeb) {
+    clienteIds.add(cliente.id);
+    const phone = normalizePhone(cliente.telefono);
+    if (phone) phones.add(phone);
+  }
+
+  for (const mockup of mockups) {
+    if (mockup.origen !== 'web') continue;
+    if (mockup.cliente_id) clienteIds.add(mockup.cliente_id);
+    const phone = normalizePhone(mockup.whatsapp);
+    if (phone) phones.add(phone);
+  }
+
+  return { clienteIds, phones };
 }
 
-function ordenMatchesContactedMockup(orden: OrdenWithCliente, mockup: MockupRow | MockupWithCliente): boolean {
-  if (orden.mockup_solicitud_id && orden.mockup_solicitud_id === mockup.id) return true;
-  if (mockup.orden_id && mockup.orden_id === orden.id) return true;
-  if (orden.cliente_id && mockup.cliente_id && orden.cliente_id === mockup.cliente_id) return true;
-
-  const ordenPhone = normalizePhone(orden.clientes?.telefono);
-  const mockupPhone = normalizePhone(mockup.whatsapp);
-  return Boolean(ordenPhone && mockupPhone && ordenPhone === mockupPhone);
+function ordenMatchesWebLead(orden: OrdenWithCliente, webLeads: WebLeadKeys): boolean {
+  if (orden.cliente_id && webLeads.clienteIds.has(orden.cliente_id)) return true;
+  const phone = normalizePhone(orden.clientes?.telefono);
+  return Boolean(phone && webLeads.phones.has(phone));
 }
 
-function isVentaDerivadaDeWeb(orden: OrdenWithCliente, mockups: Array<MockupRow | MockupWithCliente>): boolean {
-  if (orden.estado_pago_web !== 'pagado') return false;
+function isVentaWebDirecta(orden: OrdenWithCliente): boolean {
+  return orden.origen === 'Web' && orden.estado_pago_web === 'pagado';
+}
 
-  const pagoAt = orden.pago_confirmado_at ?? orden.created_at;
-  if (!isValidIsoDate(pagoAt)) return false;
+function ordenVentaAt(orden: OrdenWithCliente): string | null {
+  if (orden.origen === 'Web') {
+    if (orden.estado_pago_web !== 'pagado') return null;
+    return orden.pago_confirmado_at ?? orden.created_at;
+  }
+  return orden.created_at;
+}
 
-  const pagoTime = new Date(pagoAt).getTime();
-
-  return mockups.some((mockup) => {
-    if (mockup.origen !== 'web') return false;
-
-    const contactoAt = getContactoComercialEnviadoAt(mockup);
-    if (!contactoAt) return false;
-    if (new Date(contactoAt).getTime() > pagoTime) return false;
-
-    return ordenMatchesContactedMockup(orden, mockup);
-  });
+function isVentaDerivadaDeWeb(orden: OrdenWithCliente, webLeads: WebLeadKeys): boolean {
+  if (isVentaWebDirecta(orden)) return false;
+  return ordenMatchesWebLead(orden, webLeads);
 }
 
 function fullName(c: { nombre?: string | null; apellido?: string | null } | null | undefined): string {
@@ -400,6 +412,17 @@ async function fetchOrdenesWeb(fromIso: string, toIso: string) {
     .lte('created_at', toIso)
     .order('created_at', { ascending: false })
     .limit(3000);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as OrdenWithCliente[];
+}
+
+async function fetchAllOrdenesWithCliente() {
+  const { data, error } = await supabase
+    .from('ordenes')
+    .select('*, clientes(id, nombre, apellido, telefono, mail, medio_contacto, created_at)')
+    .order('created_at', { ascending: false })
+    .limit(10000);
 
   if (error) throw new Error(error.message);
   return (data ?? []) as OrdenWithCliente[];
@@ -702,8 +725,8 @@ function computeCounts(
   clientes: ClienteRow[],
   ordenes: OrdenWithCliente[],
   analyticsRows: NormalizedAnalyticsRow[],
-  mockupsForAttribution: Array<MockupRow | MockupWithCliente> = mockups,
-  ordenesForSales: OrdenWithCliente[] = ordenes,
+  webLeads: WebLeadKeys,
+  allOrdenes: OrdenWithCliente[],
 ) {
   const { fromIso, toIso } = isoRangeBounds(range);
 
@@ -712,15 +735,18 @@ function computeCounts(
     inRange(m.checkout_iniciado_at, fromIso, toIso),
   ).length;
   const checkoutsFromOrders = ordenes.filter((o) => inRange(o.created_at, fromIso, toIso)).length;
-  const ventas = ordenesForSales.filter(
-    (o) => o.estado_pago_web === 'pagado' && inRange(o.pago_confirmado_at ?? o.created_at, fromIso, toIso),
-  ).length;
-  const ventasDerivadas = ordenesForSales.filter(
-    (o) =>
-      o.estado_pago_web === 'pagado' &&
-      inRange(o.pago_confirmado_at ?? o.created_at, fromIso, toIso) &&
-      isVentaDerivadaDeWeb(o, mockupsForAttribution),
-  ).length;
+  const ventas = allOrdenes.filter((o) => {
+    const ventaAt = ordenVentaAt(o);
+    return isVentaWebDirecta(o) && ventaAt != null && inRange(ventaAt, fromIso, toIso);
+  }).length;
+  const ventasDerivadas = allOrdenes.filter((o) => {
+    const ventaAt = ordenVentaAt(o);
+    return (
+      ventaAt != null &&
+      inRange(ventaAt, fromIso, toIso) &&
+      isVentaDerivadaDeWeb(o, webLeads)
+    );
+  }).length;
 
   return {
     visitantes: analyticsAgg.uniqueVisitors,
@@ -845,7 +871,7 @@ function buildClientesWeb(
 
     const mockups = mockupsByCliente.get(clienteId) ?? [];
     const ordenes = ordenesByCliente.get(clienteId) ?? [];
-    const ordenesPagadas = ordenes.filter((o) => o.estado_pago_web === 'pagado');
+    const ordenesPagadas = ordenes.filter((o) => ordenVentaAt(o) != null);
     const tieneCheckoutPendiente = ordenes.some((o) =>
       PAGO_PENDIENTE.includes(o.estado_pago_web as (typeof PAGO_PENDIENTE)[number]),
     );
@@ -931,6 +957,7 @@ export async function fetchComercialDashboard(
     allMockups,
     allClientes,
     allOrdenesWeb,
+    allOrdenes,
   ] = await Promise.all([
     fetchAnalyticsRows(fromIso, toIso, origen),
     fetchAnalyticsRows(isoRangeBounds(prev).fromIso, isoRangeBounds(prev).toIso, origen),
@@ -955,6 +982,7 @@ export async function fetchComercialDashboard(
         if (error) throw new Error(error.message);
         return (data ?? []) as OrdenWithCliente[];
       }),
+    fetchAllOrdenesWithCliente(),
   ]);
 
   const mockupsRangeFiltered = filterMockups(mockupsRange, exclusions);
@@ -966,6 +994,8 @@ export async function fetchComercialDashboard(
   const allMockupsFiltered = filterMockups(allMockups, exclusions);
   const allClientesFiltered = filterClientes(allClientes, exclusions);
   const allOrdenesWebFiltered = filterOrdenes(allOrdenesWeb, exclusions);
+  const allOrdenesFiltered = filterOrdenes(allOrdenes, exclusions);
+  const webLeads = buildWebLeadKeys(allMockupsFiltered, allClientesFiltered);
 
   const mockupsSinCompraRawFiltered = mockupsSinCompraRaw.filter(
     (r) => !exclusions.mockups.has(r.mockup_id),
@@ -1003,7 +1033,7 @@ export async function fetchComercialDashboard(
   }
 
   const ordenesByCliente = new Map<string, OrdenWithCliente[]>();
-  for (const o of allOrdenesWebFiltered) {
+  for (const o of allOrdenesFiltered) {
     if (exclusions.clientes.has(o.cliente_id)) continue;
     const list = ordenesByCliente.get(o.cliente_id) ?? [];
     list.push(o);
@@ -1019,8 +1049,8 @@ export async function fetchComercialDashboard(
     clientesRangeFiltered,
     ordenesRangeFiltered,
     analyticsCurrent.rows,
-    allMockupsFiltered,
-    allOrdenesWebFiltered,
+    webLeads,
+    allOrdenesFiltered,
   );
   const previousCounts = computeCounts(
     prev,
@@ -1028,8 +1058,8 @@ export async function fetchComercialDashboard(
     clientesPrevFiltered,
     ordenesPrevFiltered,
     analyticsPrevious.rows,
-    allMockupsFiltered,
-    allOrdenesWebFiltered,
+    webLeads,
+    allOrdenesFiltered,
   );
 
   const kpis = buildKpis({ current: currentCounts, previous: previousCounts });

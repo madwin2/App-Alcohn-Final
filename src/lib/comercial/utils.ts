@@ -234,7 +234,7 @@ export function buildKpis(input: {
     { key: 'muestras', label: 'Muestras solicitadas', stepLabel: 'desde contactos' },
     { key: 'checkouts', label: 'Checkouts iniciados', stepLabel: 'desde muestras' },
     { key: 'ventas', label: 'Ventas web', stepLabel: 'desde checkouts' },
-    { key: 'ventasDerivadas', label: 'Ventas derivadas de web', stepLabel: 'desde ventas web' },
+    { key: 'ventasDerivadas', label: 'Ventas derivadas de web', stepLabel: 'fuera del checkout web' },
   ];
   const prevKeys: ComercialKpi['key'][] = [
     'visitantes',
