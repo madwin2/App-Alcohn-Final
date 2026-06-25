@@ -48,6 +48,7 @@ import {
 } from '@/lib/comercial/analyticsNormalize';
 import { estimateWebOrdenTotal, resolveWebOrderSenia } from '@/lib/comercial/webCart';
 import { fetchComercialSeguimientosClientes } from '@/lib/supabase/services/comercialSeguimientos.service';
+import { normalizePhoneDigitsCliente } from '@/lib/utils/phoneNormalization';
 import type { Database } from '../types';
 
 type MockupRow = Database['public']['Tables']['mockup_solicitudes']['Row'];
@@ -78,12 +79,7 @@ function isValidIsoDate(iso: string | null | undefined): iso is string {
 
 function normalizePhone(value: string | null | undefined): string | null {
   if (!value?.trim()) return null;
-  let digits = value.replace(/\D/g, '');
-  if (digits.startsWith('00')) digits = digits.slice(2);
-  if (digits.startsWith('0')) digits = digits.slice(1);
-  if (digits.length === 10 && !digits.startsWith('54')) digits = `549${digits}`;
-  if (digits.length === 11 && digits.startsWith('9')) digits = `54${digits}`;
-  return digits || null;
+  return normalizePhoneDigitsCliente(value) || null;
 }
 
 function getContactoComercialEnviadoAt(mockup: MockupRow | MockupWithCliente): string | null {
@@ -358,7 +354,6 @@ async function fetchAllMockupsForClientes(origen: ComercialOrigenFilter) {
     .select(
       'id, cliente_id, created_at, estado, orden_id, checkout_iniciado_at, checkout_completado_at, origen, material, whatsapp, email, mockup_cuero_url, mockup_madera_url, medidas_cotizacion_json, nombre_muestra, nombre_slug, metadata_web',
     )
-    .not('cliente_id', 'is', null)
     .order('created_at', { ascending: false })
     .limit(5000);
 
@@ -708,6 +703,7 @@ function computeCounts(
   ordenes: OrdenWithCliente[],
   analyticsRows: NormalizedAnalyticsRow[],
   mockupsForAttribution: Array<MockupRow | MockupWithCliente> = mockups,
+  ordenesForSales: OrdenWithCliente[] = ordenes,
 ) {
   const { fromIso, toIso } = isoRangeBounds(range);
 
@@ -716,10 +712,10 @@ function computeCounts(
     inRange(m.checkout_iniciado_at, fromIso, toIso),
   ).length;
   const checkoutsFromOrders = ordenes.filter((o) => inRange(o.created_at, fromIso, toIso)).length;
-  const ventas = ordenes.filter(
+  const ventas = ordenesForSales.filter(
     (o) => o.estado_pago_web === 'pagado' && inRange(o.pago_confirmado_at ?? o.created_at, fromIso, toIso),
   ).length;
-  const ventasDerivadas = ordenes.filter(
+  const ventasDerivadas = ordenesForSales.filter(
     (o) =>
       o.estado_pago_web === 'pagado' &&
       inRange(o.pago_confirmado_at ?? o.created_at, fromIso, toIso) &&
@@ -1024,6 +1020,7 @@ export async function fetchComercialDashboard(
     ordenesRangeFiltered,
     analyticsCurrent.rows,
     allMockupsFiltered,
+    allOrdenesWebFiltered,
   );
   const previousCounts = computeCounts(
     prev,
@@ -1032,6 +1029,7 @@ export async function fetchComercialDashboard(
     ordenesPrevFiltered,
     analyticsPrevious.rows,
     allMockupsFiltered,
+    allOrdenesWebFiltered,
   );
 
   const kpis = buildKpis({ current: currentCounts, previous: previousCounts });
