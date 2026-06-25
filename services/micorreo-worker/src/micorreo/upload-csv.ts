@@ -7,18 +7,27 @@ import {
   saveArtifacts,
 } from './browser-helpers.js';
 import { loginMicorreo } from './login-micorreo.js';
-import { navigateToMassUpload, waitForCsvFileInput, confirmCsvUpload, saveAfterSuccessfulImport } from './navigate-mass-upload.js';
+import {
+  navigateToMassUpload,
+  waitForCsvFileInput,
+  confirmCsvUpload,
+  saveAfterSuccessfulImport,
+  payWithAvailableBalance,
+  type PayWithBalanceResult,
+} from './navigate-mass-upload.js';
 
 export type UploadCsvInput = {
   csvContent: string;
   filename: string;
   orderId?: string;
+  payAfterUpload?: boolean;
 };
 
 export type UploadCsvOutput = {
   portalText: string;
   artifactDir?: string;
   rowCount: number;
+  payment?: PayWithBalanceResult;
 };
 
 let browserSingleton: Browser | null = null;
@@ -47,6 +56,7 @@ async function uploadFileOnPage(
   page: Page,
   config: WorkerConfig['micorreo'],
   csvPath: string,
+  payAfterUpload: boolean,
 ): Promise<string> {
   console.log('[micorreo] → enviosMasivos');
   await navigateToMassUpload(page, config);
@@ -61,6 +71,14 @@ async function uploadFileOnPage(
   await confirmCsvUpload(page, config);
 
   await saveAfterSuccessfulImport(page, config);
+
+  if (payAfterUpload) {
+    console.log('[micorreo] → pagando con saldo disponible');
+    const payment = await payWithAvailableBalance(page, config);
+    const feedback = await readPortalFeedback(page, config.timeoutMs);
+    console.log(`[micorreo] ← pago: ${payment.status} ${payment.message.slice(0, 120)}…`);
+    return `${feedback}\n\n[PAGO] ${payment.status}: ${payment.message}`;
+  }
 
   await page.waitForTimeout(1000);
   const feedback = await readPortalFeedback(page, config.timeoutMs);
@@ -91,10 +109,17 @@ export async function uploadCsvToMicorreo(
 
   try {
     await login(page, config);
-    const portalText = await uploadFileOnPage(page, config, csvPath);
+    const portalText = await uploadFileOnPage(page, config, csvPath, input.payAfterUpload === true);
+    const paymentLine = portalText.match(/\[PAGO\]\s*(paid|payment_error|not_attempted):\s*([\s\S]*)$/i);
     return {
       portalText,
       rowCount: input.csvContent.split(/\r?\n/).filter((l) => l.trim()).length - 1,
+      payment: paymentLine
+        ? {
+            status: paymentLine[1] as PayWithBalanceResult['status'],
+            message: paymentLine[2]?.trim() || '',
+          } as PayWithBalanceResult
+        : undefined,
     };
   } catch (error) {
     const artifactDir = await saveArtifacts(page, artifactsDir, input.orderId || 'upload_error');

@@ -76,6 +76,28 @@ export function classifyPortalMessage(rawText: string): UploadStatus {
   return 'system_error';
 }
 
+export function classifyPortalErrorCode(rawText: string): string | undefined {
+  const text = rawText.trim();
+  if (!text) return undefined;
+
+  if (
+    /c[oó]digo postal.*localidad|localidad.*c[oó]digo postal|codpostal.*localidad|cp\b.*localidad/i.test(
+      text,
+    )
+  ) {
+    return 'cp_localidad_invalido';
+  }
+  if (/sucursal/i.test(text)) return 'sucursal_invalida';
+  if (/provincia/i.test(text)) return 'provincia_invalida';
+  if (/tel[eé]fono|celular|c[oó]digo de area/i.test(text)) return 'telefono_invalido';
+  if (/email|correo electr[oó]nico/i.test(text)) return 'email_invalido';
+  if (/calle|altura|domicilio|direcci[oó]n/i.test(text)) return 'direccion_invalida';
+  if (/saldo|pago|pagar|abonar/i.test(text)) return 'pago_rechazado';
+  if (/timeout|servicio no disponible|mantenimiento|503|502|500/i.test(text)) return 'micorreo_no_disponible';
+
+  return undefined;
+}
+
 export function httpStatusForUploadStatus(status: UploadStatus): number {
   switch (status) {
     case 'ok':

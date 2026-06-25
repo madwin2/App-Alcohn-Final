@@ -10,6 +10,9 @@ export type MicorreoUploadResult = {
   details?: {
     portalText?: string;
     rowCount?: number;
+    errorCode?: string;
+    paymentStatus?: 'not_attempted' | 'paid' | 'payment_error';
+    paymentMessage?: string;
   };
 };
 
@@ -39,6 +42,7 @@ export async function uploadCorreoCsvToWorker(input: {
   csvContent: string;
   orderId?: string;
   filename?: string;
+  payAfterUpload?: boolean;
 }): Promise<MicorreoUploadResult> {
   const response = await fetch('/api/micorreo-upload', {
     method: 'POST',

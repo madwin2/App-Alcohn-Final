@@ -68,6 +68,12 @@ export interface Database {
           envio_datos_editado?: boolean | null;
           micorreo_subiendo_at?: string | null;
           micorreo_subiendo_por?: string | null;
+          etiqueta_estado?: 'pendiente' | 'generando' | 'generada' | 'pagando' | 'pagada' | 'error' | null;
+          etiqueta_error_codigo?: string | null;
+          etiqueta_error_mensaje?: string | null;
+          etiqueta_generada_at?: string | null;
+          etiqueta_pagada_at?: string | null;
+          etiqueta_actualizada_at?: string | null;
           /** Pedidos de la web Alcohn (ver migración 001_web_alcohn_integration.sql). */
           origen?: 'Web' | 'App' | null;
           metodo_pago?: 'Openpay' | 'Transferencia' | null;

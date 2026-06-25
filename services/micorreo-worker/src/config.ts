@@ -17,7 +17,7 @@ function parseList(value: string | undefined, fallback: string[]): string[] {
 }
 
 function parseSelectorList(value: string | undefined, fallback: string): string[] {
-  return parseList(value, fallback.split(',').map((s) => s.trim()));
+  return parseList(value, fallback.split(',').map((s) => s.trim()).filter(Boolean));
 }
 
 export function loadConfig() {
@@ -54,6 +54,9 @@ export function loadConfig() {
           process.env.MICORREO_SELECTOR_SUBMIT_UPLOAD,
           'button:has-text("Cargar"), button:has-text("Importar"), button:has-text("Procesar"), button:has-text("Subir"), button:has-text("Enviar")',
         ),
+        payWithBalance: parseSelectorList(process.env.MICORREO_SELECTOR_PAY_WITH_BALANCE, ''),
+        balancePayment: parseSelectorList(process.env.MICORREO_SELECTOR_BALANCE_PAYMENT, ''),
+        confirmPayment: parseSelectorList(process.env.MICORREO_SELECTOR_CONFIRM_PAYMENT, ''),
       },
       navLinks: parseList(process.env.MICORREO_NAV_LINKS, [
         'Envío masivo',

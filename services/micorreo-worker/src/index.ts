@@ -8,6 +8,7 @@ const uploadBodySchema = z.object({
   orderId: z.string().min(1).max(64).optional(),
   csvContent: z.string().min(1),
   filename: z.string().min(1).max(200).optional(),
+  payAfterUpload: z.boolean().optional(),
 });
 
 function readJsonBody(req: IncomingMessage): Promise<unknown> {

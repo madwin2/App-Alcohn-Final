@@ -339,3 +339,107 @@ export async function saveAfterSuccessfulImport(
 
   console.warn('[micorreo] no se encontró botón Guardar visible tras importación exitosa');
 }
+
+export type PayWithBalanceResult =
+  | { status: 'paid'; message: string }
+  | { status: 'payment_error'; message: string }
+  | { status: 'not_attempted'; message: string };
+
+async function clickFirstVisible(page: Page, selectors: string[]): Promise<boolean> {
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    if (!(await locator.isVisible().catch(() => false))) continue;
+    if (await locator.isDisabled().catch(() => false)) continue;
+    await locator.scrollIntoViewIfNeeded();
+    await locator.click();
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await page.waitForTimeout(1000);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Intenta pagar el envío con saldo disponible.
+ *
+ * MiCorreo cambia textos/selectores seguido; por eso se usan selectores y textos amplios.
+ * Si no encuentra una ruta clara para pagar, devuelve `payment_error` para que la app
+ * no marque la etiqueta como lista/pagada por error.
+ */
+export async function payWithAvailableBalance(
+  page: Page,
+  config: WorkerConfig['micorreo'],
+): Promise<PayWithBalanceResult> {
+  const beforeText = await page.locator('body').innerText().catch(() => '');
+  if (/saldo insuficiente|no posee saldo|sin saldo|saldo disponible insuficiente/i.test(beforeText)) {
+    return { status: 'payment_error', message: 'Saldo disponible insuficiente en MiCorreo.' };
+  }
+
+  const paySelectors = [
+    'button:has-text("Pagar")',
+    'button:has-text("Abonar")',
+    'a:has-text("Pagar")',
+    'a:has-text("Abonar")',
+    'button.btn-correo-primary:has-text("Pagar")',
+    'button.btn-correo-primary:has-text("Abonar")',
+    'input[type="button"][value*="Pagar" i]',
+    'input[type="submit"][value*="Pagar" i]',
+    ...config.selectors.payWithBalance,
+  ];
+
+  const clickedPay = await clickFirstVisible(page, paySelectors);
+  if (!clickedPay) {
+    return {
+      status: 'payment_error',
+      message: 'Etiqueta generada, pero no se encontró el botón para pagar con saldo disponible.',
+    };
+  }
+
+  const balanceSelectors = [
+    'label:has-text("Saldo disponible")',
+    'label:has-text("Saldo")',
+    'button:has-text("Saldo disponible")',
+    'button:has-text("Saldo")',
+    'input[type="radio"][value*="saldo" i]',
+    'input[type="checkbox"][value*="saldo" i]',
+    ...config.selectors.balancePayment,
+  ];
+
+  for (const selector of balanceSelectors) {
+    const option = page.locator(selector).first();
+    if (!(await option.isVisible().catch(() => false))) continue;
+    await option.click({ force: true }).catch(() => undefined);
+    await page.waitForTimeout(500);
+    break;
+  }
+
+  const confirmSelectors = [
+    'button:has-text("Confirmar")',
+    'button:has-text("Aceptar")',
+    'button:has-text("Pagar")',
+    'button:has-text("Finalizar")',
+    '.modal.show button.btn-correo-primary',
+    ...config.selectors.confirmPayment,
+  ];
+  await clickFirstVisible(page, confirmSelectors);
+
+  const successTimeout = Math.min(config.timeoutMs, 45_000);
+  await page.waitForTimeout(2500);
+  const afterText = await page.locator('body').innerText({ timeout: successTimeout }).catch(() => '');
+
+  if (/saldo insuficiente|no posee saldo|sin saldo|rechazad|no se pudo.*pago/i.test(afterText)) {
+    return {
+      status: 'payment_error',
+      message: afterText.slice(0, 500) || 'No se pudo pagar con saldo disponible.',
+    };
+  }
+
+  if (/pago.*(realiz[oó]|exitoso|confirmado)|abonad|pagad|operaci[oó]n exitosa/i.test(afterText)) {
+    return { status: 'paid', message: 'Etiqueta pagada con saldo disponible.' };
+  }
+
+  return {
+    status: 'payment_error',
+    message: afterText.slice(0, 500) || 'No se pudo confirmar si el pago con saldo fue exitoso.',
+  };
+}

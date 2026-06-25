@@ -91,6 +91,12 @@ export interface Order {
   shippingDataEdited?: boolean;
   /** Subida a MiCorreo en curso (desde `ordenes.micorreo_subiendo_at`) */
   micorreoUploadingAt?: string | null;
+  /** Estado interno del flujo de etiqueta MiCorreo */
+  labelState?: LabelState | null;
+  labelErrorCode?: string | null;
+  labelErrorMessage?: string | null;
+  labelGeneratedAt?: string | null;
+  labelPaidAt?: string | null;
   /** Último mensaje de error al subir etiqueta a MiCorreo (desde `ordenes.error_etiqueta_mensaje`) */
   shippingLabelError?: string | null;
   shipping: {
@@ -103,6 +109,8 @@ export interface Order {
   tasks?: Task[];
   progressStep?: ProgressStep;
 }
+
+export type LabelState = 'pendiente' | 'generando' | 'generada' | 'pagando' | 'pagada' | 'error';
 
 export interface OrderItem {
   id: string;

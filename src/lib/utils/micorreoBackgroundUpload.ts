@@ -7,7 +7,7 @@ import {
   shippingStateFromMicorreoUpload,
   uploadCorreoCsvToWorker,
 } from '@/lib/utils/micorreoUpload';
-import type { ItemType, StampType } from '@/lib/types';
+import type { ItemType, LabelState, StampType } from '@/lib/types';
 
 type BuildCsvResult =
   | { ok: true; csvContent: string; filename: string }
@@ -68,6 +68,47 @@ async function persistMicorreoUploading(
 
   if (error) {
     console.error('No se pudo actualizar estado de subida MiCorreo:', error);
+  }
+}
+
+function classifyLabelErrorCode(message: string | null | undefined): string | null {
+  const text = (message || '').trim();
+  if (!text) return null;
+  if (/c[oó]digo postal.*localidad|localidad.*c[oó]digo postal|codpostal.*localidad|cp\b.*localidad/i.test(text)) {
+    return 'cp_localidad_invalido';
+  }
+  if (/sucursal/i.test(text)) return 'sucursal_invalida';
+  if (/provincia/i.test(text)) return 'provincia_invalida';
+  if (/tel[eé]fono|celular|c[oó]digo de area/i.test(text)) return 'telefono_invalido';
+  if (/email|correo electr[oó]nico/i.test(text)) return 'email_invalido';
+  if (/saldo|pago|pagar|abonar/i.test(text)) return 'pago_rechazado';
+  return null;
+}
+
+async function persistLabelState(
+  orderId: string,
+  labelState: LabelState,
+  options?: {
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    generatedAt?: string | null;
+    paidAt?: string | null;
+  },
+): Promise<void> {
+  const now = new Date().toISOString();
+  const update: Record<string, unknown> = {
+    etiqueta_estado: labelState,
+    etiqueta_error_codigo: options?.errorCode ?? null,
+    etiqueta_error_mensaje: options?.errorMessage ?? null,
+    etiqueta_actualizada_at: now,
+  };
+
+  if (options?.generatedAt !== undefined) update.etiqueta_generada_at = options.generatedAt;
+  if (options?.paidAt !== undefined) update.etiqueta_pagada_at = options.paidAt;
+
+  const { error } = await supabase.from('ordenes').update(update).eq('id', orderId);
+  if (error) {
+    console.error('No se pudo persistir estado de etiqueta MiCorreo:', error);
   }
 }
 
@@ -174,10 +215,18 @@ function mapDbStampToStampType(tipo: string | null): StampType | undefined {
 async function runMicorreoUpload(orderId: string, userId?: string | null): Promise<void> {
   try {
     await persistMicorreoUploading(orderId, true, userId);
+    await persistLabelState(orderId, 'generando', {
+      generatedAt: null,
+      paidAt: null,
+    });
     await persistUploadResult(orderId, 'HACER_ETIQUETA', null);
 
     const built = await buildCorreoCsvForOrder(orderId);
     if (!built.ok) {
+      await persistLabelState(orderId, 'error', {
+        errorCode: classifyLabelErrorCode(built.reason) || 'validacion_csv',
+        errorMessage: built.reason,
+      });
       await persistUploadResult(orderId, 'ERROR_ETIQUETA', built.reason);
       return;
     }
@@ -186,17 +235,44 @@ async function runMicorreoUpload(orderId: string, userId?: string | null): Promi
       csvContent: built.csvContent,
       orderId,
       filename: built.filename,
+      payAfterUpload: true,
     });
 
-    const nextState = shippingStateFromMicorreoUpload(uploadResult.status);
+    const paymentStatus = uploadResult.details?.paymentStatus;
+    const nextState =
+      uploadResult.status === 'ok' && paymentStatus !== 'paid'
+        ? 'HACER_ETIQUETA'
+        : shippingStateFromMicorreoUpload(uploadResult.status);
     const errorMessage =
       uploadResult.status === 'ok'
         ? null
         : uploadResult.message || 'Error desconocido al subir a MiCorreo.';
 
+    if (uploadResult.status === 'ok' && paymentStatus === 'paid') {
+      const now = new Date().toISOString();
+      await persistLabelState(orderId, 'pagada', {
+        generatedAt: now,
+        paidAt: now,
+      });
+    } else if (uploadResult.status === 'ok') {
+      await persistLabelState(orderId, 'generada', {
+        generatedAt: new Date().toISOString(),
+        errorMessage: paymentStatus === 'not_attempted' ? 'Etiqueta generada; pago no intentado.' : null,
+      });
+    } else {
+      await persistLabelState(orderId, 'error', {
+        errorCode: uploadResult.details?.errorCode || classifyLabelErrorCode(errorMessage) || null,
+        errorMessage,
+      });
+    }
+
     await persistUploadResult(orderId, nextState, errorMessage);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error inesperado al subir a MiCorreo.';
+    await persistLabelState(orderId, 'error', {
+      errorCode: classifyLabelErrorCode(message) || 'error_sistema',
+      errorMessage: message,
+    });
     await persistUploadResult(orderId, 'HACER_ETIQUETA', message);
   } finally {
     await persistMicorreoUploading(orderId, false, null);

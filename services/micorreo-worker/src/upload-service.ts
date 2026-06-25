@@ -1,4 +1,5 @@
 import {
+  classifyPortalErrorCode,
   classifyPortalMessage,
   countCsvDataRows,
   httpStatusForUploadStatus,
@@ -33,20 +34,33 @@ export async function runUploadJob(body: UploadRequestBody): Promise<UploadResul
       orderId: body.orderId,
     });
 
-    const status = classifyPortalMessage(upload.portalText);
-    const httpStatus = httpStatusForUploadStatus(status);
+    const portalTextForUpload = upload.portalText.replace(/\n\n\[PAGO\][\s\S]*$/i, '');
+    const status = classifyPortalMessage(portalTextForUpload);
+    const paymentStatus = upload.payment?.status ?? (body.payAfterUpload ? 'not_attempted' : undefined);
+    const paymentMessage = upload.payment?.message;
+    const effectiveStatus =
+      status === 'ok' && paymentStatus === 'payment_error' ? 'data_error' : status;
+    const httpStatus = httpStatusForUploadStatus(effectiveStatus);
 
     return {
-      status,
+      status: effectiveStatus,
       message:
-        status === 'ok'
-          ? 'CSV aceptado por MiCorreo'
-          : upload.portalText.slice(0, 500) || 'Respuesta del portal sin mensaje claro',
+        effectiveStatus === 'ok'
+          ? paymentStatus === 'paid'
+            ? 'CSV aceptado por MiCorreo y etiqueta pagada con saldo disponible'
+            : 'CSV aceptado por MiCorreo'
+          : paymentMessage || portalTextForUpload.slice(0, 500) || 'Respuesta del portal sin mensaje claro',
       orderId: body.orderId,
       httpStatus,
       details: {
         portalText: upload.portalText.slice(0, 4000),
         rowCount: countCsvDataRows(body.csvContent),
+        errorCode:
+          effectiveStatus === 'ok'
+            ? undefined
+            : classifyPortalErrorCode(paymentMessage || upload.portalText),
+        paymentStatus,
+        paymentMessage,
       },
     };
   } catch (error) {

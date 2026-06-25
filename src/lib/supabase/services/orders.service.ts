@@ -416,28 +416,37 @@ export const getOrderById = async (orderId: string): Promise<Order | null> => {
     if (tareasError) throw tareasError;
 
     const cliente = orden.clientes as unknown as ClienteRow;
-    // Obtener información del usuario si existe taken_by
+    // Obtener información de usuarios vinculados a la orden.
     let takenBy: { id: string; name: string } | null = null;
-    if ((orden as any).taken_by) {
+    let shippingDataLoadedBy: { id: string; name: string } | null = null;
+    const userIds = [
+      (orden as any).taken_by,
+      (orden as any).envio_datos_cargado_por,
+    ].filter(Boolean);
+    const usersMap = new Map<string, { id: string; name: string }>();
+    if (userIds.length > 0) {
       try {
-        const { data: usuario } = await supabase
+        const { data: usuarios } = await supabase
           .from('solicitudes_registro')
           .select('user_id, nombre, apellido, email')
-          .eq('user_id', (orden as any).taken_by)
-          .eq('estado', 'APROBADO')
-          .single();
+          .in('user_id', [...new Set(userIds)])
+          .eq('estado', 'APROBADO');
 
-        if (usuario) {
-          const name = usuario.nombre && usuario.apellido 
-            ? `${usuario.nombre} ${usuario.apellido}` 
+        (usuarios ?? []).forEach((usuario) => {
+          const name = usuario.nombre && usuario.apellido
+            ? `${usuario.nombre} ${usuario.apellido}`
             : usuario.nombre || usuario.apellido || usuario.email || 'Usuario';
-          takenBy = { id: usuario.user_id, name };
-        }
+          usersMap.set(usuario.user_id, { id: usuario.user_id, name });
+        });
+        const takenByUserId = (orden as any).taken_by;
+        const shippingLoadedByUserId = (orden as any).envio_datos_cargado_por;
+        takenBy = takenByUserId ? usersMap.get(takenByUserId) ?? null : null;
+        shippingDataLoadedBy = shippingLoadedByUserId ? usersMap.get(shippingLoadedByUserId) ?? null : null;
       } catch (error) {
         console.warn('Error fetching user information:', error);
       }
     }
-    return mapOrdenToOrder(orden, cliente, sellos || [], tareas || [], takenBy);
+    return mapOrdenToOrder(orden, cliente, sellos || [], tareas || [], takenBy, shippingDataLoadedBy);
   } catch (error) {
     console.error('Error fetching order:', error);
     throw error;

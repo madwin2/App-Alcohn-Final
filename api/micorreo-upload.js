@@ -36,6 +36,7 @@ export default async function handler(req, res) {
 
   const orderId = safeTrim(req.body?.orderId) || undefined;
   const filename = safeTrim(req.body?.filename) || undefined;
+  const payAfterUpload = req.body?.payAfterUpload !== false;
 
   try {
     const response = await fetch(`${baseUrl}/upload`, {
@@ -44,7 +45,7 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ csvContent, orderId, filename }),
+      body: JSON.stringify({ csvContent, orderId, filename, payAfterUpload }),
     });
 
     const raw = await response.text();

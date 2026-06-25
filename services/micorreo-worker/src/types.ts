@@ -9,6 +9,9 @@ export type UploadResult = {
     portalText?: string;
     artifactDir?: string;
     rowCount?: number;
+    errorCode?: string;
+    paymentStatus?: 'not_attempted' | 'paid' | 'payment_error';
+    paymentMessage?: string;
   };
 };
 
@@ -16,4 +19,5 @@ export type UploadRequestBody = {
   orderId?: string;
   csvContent: string;
   filename?: string;
+  payAfterUpload?: boolean;
 };

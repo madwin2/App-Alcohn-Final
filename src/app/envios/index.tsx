@@ -113,6 +113,24 @@ const formatShippingDestination = (
   return parts.join(', ') || '—';
 };
 
+const labelStateLabel: Record<NonNullable<Order['labelState']>, string> = {
+  pendiente: 'Pendiente',
+  generando: 'Generando',
+  generada: 'Generada',
+  pagando: 'Pagando',
+  pagada: 'Pagada',
+  error: 'Error',
+};
+
+const labelStateClass: Record<NonNullable<Order['labelState']>, string> = {
+  pendiente: 'border-muted bg-muted/40 text-muted-foreground',
+  generando: 'border-blue-500/40 bg-blue-500/15 text-blue-700 dark:text-blue-300',
+  generada: 'border-sky-500/40 bg-sky-500/15 text-sky-700 dark:text-sky-300',
+  pagando: 'border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-300',
+  pagada: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  error: 'border-red-500/45 bg-red-500/15 text-red-700 dark:text-red-300',
+};
+
 const isSaleReadyForShippingData = (order: Order): boolean => {
   if (!order.items.length) return false;
   return order.items.every(
@@ -1152,6 +1170,21 @@ export default function EnviosPage() {
     const shippingChipVisual = getShippingChipVisual(shippingState || 'SIN_ENVIO');
     const uploadInProgress = isOrderMicorreoUploading(order.id, order.micorreoUploadingAt);
     const labelError = order.shippingLabelError?.trim();
+    const labelState = order.labelState;
+    const labelText = labelState ? labelStateLabel[labelState] : getShippingLabel(shippingState || 'SIN_ENVIO');
+    const labelClass = labelState ? labelStateClass[labelState] : shippingChipVisual.textClass;
+    const labelStyle = labelState
+      ? undefined
+      : {
+          backgroundImage: shippingChipVisual.backgroundImage,
+          backgroundColor: shippingChipVisual.backgroundColor,
+          boxShadow: shippingChipVisual.boxShadow,
+          borderColor: shippingChipVisual.borderColor,
+          backdropFilter: 'saturate(140%) blur(3px)',
+          color: shippingChipVisual.textColor,
+          minWidth: shippingChipVisual.width,
+        };
+    const etiquetaError = order.labelErrorMessage || labelError;
 
     return (
       <div className="flex items-center gap-1.5">
@@ -1162,18 +1195,10 @@ export default function EnviosPage() {
           <SelectTrigger className="h-auto w-auto min-w-[120px] border-none bg-transparent p-0 shadow-none hover:bg-transparent focus:ring-0 focus:ring-offset-0">
             <SelectValue>
               <span
-                className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${shippingChipVisual.textClass}`}
-                style={{
-                  backgroundImage: shippingChipVisual.backgroundImage,
-                  backgroundColor: shippingChipVisual.backgroundColor,
-                  boxShadow: shippingChipVisual.boxShadow,
-                  borderColor: shippingChipVisual.borderColor,
-                  backdropFilter: 'saturate(140%) blur(3px)',
-                  color: shippingChipVisual.textColor,
-                  minWidth: shippingChipVisual.width,
-                }}
+                className={`inline-flex shrink-0 items-center justify-center rounded-full border px-3 py-1 text-xs ${labelClass}`}
+                style={labelStyle}
               >
-                {getShippingLabel(shippingState || 'SIN_ENVIO')}
+                {labelText}
               </span>
             </SelectValue>
           </SelectTrigger>
@@ -1201,10 +1226,10 @@ export default function EnviosPage() {
             })}
           </SelectContent>
         </Select>
-        {uploadInProgress ? (
+        {uploadInProgress || order.labelState === 'generando' || order.labelState === 'pagando' ? (
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-orange-500" aria-label="Subiendo a MiCorreo" />
         ) : null}
-        {shippingState === 'ERROR_ETIQUETA' ? (
+        {shippingState === 'ERROR_ETIQUETA' || order.labelState === 'error' ? (
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1216,7 +1241,7 @@ export default function EnviosPage() {
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap">
-                {labelError || 'Error al subir la etiqueta. Editá los datos y confirmá de nuevo.'}
+                {etiquetaError || 'Error al subir/pagar la etiqueta. Editá los datos y confirmá de nuevo.'}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
