@@ -32,6 +32,7 @@ export async function runUploadJob(body: UploadRequestBody): Promise<UploadResul
       csvContent: body.csvContent,
       filename,
       orderId: body.orderId,
+      payAfterUpload: body.payAfterUpload === true,
     });
 
     const portalTextForUpload = upload.portalText.replace(/\n\n\[PAGO\][\s\S]*$/i, '');

@@ -394,6 +394,11 @@ export async function payWithAvailableBalance(
       message: 'Etiqueta generada, pero no se encontró el botón para pagar con saldo disponible.',
     };
   }
+  await page
+    .getByText(/realiz[aá].*pago|seleccion[aá].*medio de pago|saldo disponible/i)
+    .first()
+    .waitFor({ state: 'visible', timeout: Math.min(config.timeoutMs, 30_000) })
+    .catch(() => undefined);
 
   const balanceSelectors = [
     'label:has-text("Saldo disponible")',
