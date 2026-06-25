@@ -17,6 +17,7 @@ type ActivityListener = () => void;
 
 type QueueItem = {
   orderId: string;
+  userId?: string | null;
   onComplete?: () => void;
 };
 
@@ -34,6 +35,14 @@ export function isMicorreoUploadRunning(orderId?: string): boolean {
   return queuedOrderIds.size > 0;
 }
 
+/** Subida en curso: cola local (esta pestaña) o flag en Supabase (todas las sesiones). */
+export function isOrderMicorreoUploading(
+  orderId: string,
+  micorreoUploadingAt?: string | null,
+): boolean {
+  return isMicorreoUploadRunning(orderId) || Boolean(micorreoUploadingAt);
+}
+
 /** Órdenes en cola o subiendo ahora (no incluye la que está ejecutando el fetch si ya salió del set). */
 export function getMicorreoUploadQueueSize(): number {
   return queuedOrderIds.size;
@@ -42,6 +51,24 @@ export function getMicorreoUploadQueueSize(): number {
 export function subscribeMicorreoUploadActivity(listener: ActivityListener): () => void {
   activityListeners.add(listener);
   return () => activityListeners.delete(listener);
+}
+
+async function persistMicorreoUploading(
+  orderId: string,
+  uploading: boolean,
+  userId?: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('ordenes')
+    .update({
+      micorreo_subiendo_at: uploading ? new Date().toISOString() : null,
+      micorreo_subiendo_por: uploading ? userId ?? null : null,
+    } as Record<string, unknown>)
+    .eq('id', orderId);
+
+  if (error) {
+    console.error('No se pudo actualizar estado de subida MiCorreo:', error);
+  }
 }
 
 async function persistUploadResult(
@@ -144,8 +171,9 @@ function mapDbStampToStampType(tipo: string | null): StampType | undefined {
   }
 }
 
-async function runMicorreoUpload(orderId: string): Promise<void> {
+async function runMicorreoUpload(orderId: string, userId?: string | null): Promise<void> {
   try {
+    await persistMicorreoUploading(orderId, true, userId);
     await persistUploadResult(orderId, 'HACER_ETIQUETA', null);
 
     const built = await buildCorreoCsvForOrder(orderId);
@@ -170,6 +198,8 @@ async function runMicorreoUpload(orderId: string): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error inesperado al subir a MiCorreo.';
     await persistUploadResult(orderId, 'HACER_ETIQUETA', message);
+  } finally {
+    await persistMicorreoUploading(orderId, false, null);
   }
 }
 
@@ -183,7 +213,7 @@ async function processUploadQueue(): Promise<void> {
       if (!item) break;
 
       try {
-        await runMicorreoUpload(item.orderId);
+        await runMicorreoUpload(item.orderId, item.userId);
       } finally {
         queuedOrderIds.delete(item.orderId);
         notifyActivity();
@@ -199,11 +229,15 @@ async function processUploadQueue(): Promise<void> {
 }
 
 /** Encola la subida a MiCorreo (una a la vez por pestaña, con pausa entre jobs). */
-export function triggerMicorreoUploadForOrder(orderId: string, onComplete?: () => void): void {
+export function triggerMicorreoUploadForOrder(
+  orderId: string,
+  onComplete?: () => void,
+  userId?: string | null,
+): void {
   if (queuedOrderIds.has(orderId)) return;
 
   queuedOrderIds.add(orderId);
-  uploadQueue.push({ orderId, onComplete });
+  uploadQueue.push({ orderId, userId, onComplete });
   notifyActivity();
   void processUploadQueue();
 }

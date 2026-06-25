@@ -302,6 +302,7 @@ export const mapOrdenToOrder = (
     shippingDataLoadedBy: shippingDataLoadedBy ?? null,
     shippingDataLoadedAt: (orden as { envio_datos_cargado_at?: string | null }).envio_datos_cargado_at ?? null,
     shippingDataEdited: (orden as { envio_datos_editado?: boolean | null }).envio_datos_editado === true,
+    micorreoUploadingAt: (orden as { micorreo_subiendo_at?: string | null }).micorreo_subiendo_at ?? null,
     shippingLabelError: (orden as { error_etiqueta_mensaje?: string | null }).error_etiqueta_mensaje ?? null,
     customer: mapClienteToCustomer(cliente),
     orderDate: orden.fecha || new Date().toISOString().split('T')[0],

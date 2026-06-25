@@ -32,7 +32,7 @@ import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { downloadCorreoCsv } from '@/lib/utils/micorreoUpload';
 import {
   getMicorreoUploadQueueSize,
-  isMicorreoUploadRunning,
+  isOrderMicorreoUploading,
   subscribeMicorreoUploadActivity,
   triggerMicorreoUploadForOrder,
 } from '@/lib/utils/micorreoBackgroundUpload';
@@ -198,8 +198,7 @@ export default function EnviosPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
-  const [micorreoUploadBusy, setMicorreoUploadBusy] = useState(false);
-  const [micorreoQueueSize, setMicorreoQueueSize] = useState(0);
+  const [localMicorreoQueueSize, setLocalMicorreoQueueSize] = useState(0);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [shippingTypeDraft, setShippingTypeDraft] = useState<'DOMICILIO' | 'SUCURSAL'>('DOMICILIO');
   const [rawShippingText, setRawShippingText] = useState('');
@@ -254,20 +253,22 @@ export default function EnviosPage() {
 
   useEffect(() => {
     const syncMicorreoActivity = () => {
-      setMicorreoUploadBusy(isMicorreoUploadRunning());
-      setMicorreoQueueSize(getMicorreoUploadQueueSize());
+      setLocalMicorreoQueueSize(getMicorreoUploadQueueSize());
     };
     syncMicorreoActivity();
     return subscribeMicorreoUploadActivity(syncMicorreoActivity);
   }, []);
 
-  useEffect(() => {
-    if (!micorreoUploadBusy) return;
-    const intervalId = window.setInterval(() => {
-      void fetchOrders();
-    }, 4000);
-    return () => window.clearInterval(intervalId);
-  }, [micorreoUploadBusy, fetchOrders]);
+  const eligibleOrders = useMemo(() => {
+    return orders.filter(isEligibleForShipping);
+  }, [orders]);
+
+  const micorreoServerUploadingCount = useMemo(
+    () => eligibleOrders.filter((order) => order.micorreoUploadingAt).length,
+    [eligibleOrders],
+  );
+  const micorreoUploadBusy = micorreoServerUploadingCount > 0 || localMicorreoQueueSize > 0;
+  const micorreoQueueSize = Math.max(micorreoServerUploadingCount, localMicorreoQueueSize);
 
   const provinceSelectOptions = useMemo(
     () => catalogProvinceOptions(addressCatalogRows).map(stripAccents),
@@ -359,10 +360,6 @@ export default function EnviosPage() {
     // Solo re-snap cuando cambia el padrón o el tipo; no en cada tecla del formulario.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addressCatalogRows, shippingTypeDraft, selectedOrder?.id]);
-
-  const eligibleOrders = useMemo(() => {
-    return orders.filter(isEligibleForShipping);
-  }, [orders]);
 
   /** CSV manual de respaldo: solo órdenes en Hacer Etiqueta (fallo de sistema / carga manual en MiCorreo). */
   const csvOrders = useMemo(() => {
@@ -971,13 +968,17 @@ export default function EnviosPage() {
         });
       }
 
-      await fetchOrders();
+      await fetchOrders({ silent: true });
       const orderIdForUpload = selectedOrder.id;
       closeShippingDialog();
       const queueBefore = getMicorreoUploadQueueSize();
-      triggerMicorreoUploadForOrder(orderIdForUpload, () => {
-        void fetchOrders();
-      });
+      triggerMicorreoUploadForOrder(
+        orderIdForUpload,
+        () => {
+          void fetchOrders({ silent: true });
+        },
+        user?.id,
+      );
       toast({
         title: 'Datos de envío guardados',
         description:
@@ -1149,7 +1150,7 @@ export default function EnviosPage() {
   const renderEtiquetaCell = (order: Order) => {
     const shippingState = order.items[0]?.shippingState;
     const shippingChipVisual = getShippingChipVisual(shippingState || 'SIN_ENVIO');
-    const uploadInProgress = isMicorreoUploadRunning(order.id);
+    const uploadInProgress = isOrderMicorreoUploading(order.id, order.micorreoUploadingAt);
     const labelError = order.shippingLabelError?.trim();
 
     return (

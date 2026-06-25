@@ -89,6 +89,8 @@ export interface Order {
   shippingDataLoadedAt?: string | null;
   /** Si los datos de envío fueron editados después de la carga inicial */
   shippingDataEdited?: boolean;
+  /** Subida a MiCorreo en curso (desde `ordenes.micorreo_subiendo_at`) */
+  micorreoUploadingAt?: string | null;
   /** Último mensaje de error al subir etiqueta a MiCorreo (desde `ordenes.error_etiqueta_mensaje`) */
   shippingLabelError?: string | null;
   shipping: {
