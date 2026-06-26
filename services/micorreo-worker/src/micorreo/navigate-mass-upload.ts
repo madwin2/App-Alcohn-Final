@@ -417,29 +417,46 @@ async function pageShowsSaveSuccess(page: Page): Promise<boolean> {
 }
 
 async function isPagarButtonEnabled(page: Page): Promise<boolean> {
-  const pagarBtn = page.locator('#pagar').first();
-  if (!(await pagarBtn.isVisible().catch(() => false))) return false;
-  return !(await pagarBtn.isDisabled().catch(() => true));
+  return page.evaluate<boolean>(`(() => {
+    const btn = document.querySelector('#pagar');
+    if (!btn || !(btn instanceof HTMLButtonElement)) return false;
+    const style = window.getComputedStyle(btn);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    const rect = btn.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return false;
+    return !btn.disabled;
+  })()`);
 }
 
-/** Listo para pagar = envío guardado y botón Pagar habilitado. */
-export async function isMassUploadReadyToPay(page: Page): Promise<boolean> {
-  return await isPagarButtonEnabled(page);
+async function isSaveComplete(page: Page): Promise<boolean> {
+  return pageShowsSaveSuccess(page);
 }
 
-async function waitForMassUploadReadyToPay(
-  page: Page,
-  timeoutMs: number,
-): Promise<boolean> {
+async function waitForSaveComplete(page: Page, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await isMassUploadReadyToPay(page)) {
-      await page.waitForTimeout(2000);
-      return await isPagarButtonEnabled(page);
-    }
-    await page.waitForTimeout(400);
+    if (await isSaveComplete(page)) return true;
+    await page.waitForTimeout(500);
   }
   return false;
+}
+
+/** Tras Guardar, MiCorreo tarda ~2s en habilitar #pagar. */
+async function waitForPagarButtonReady(page: Page, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await isPagarButtonEnabled(page)) {
+      await page.waitForTimeout(2500);
+      if (await isPagarButtonEnabled(page)) return true;
+    }
+    await page.waitForTimeout(500);
+  }
+  return false;
+}
+
+/** Listo para pagar = botón Pagar habilitado en el resumen. */
+export async function isMassUploadReadyToPay(page: Page): Promise<boolean> {
+  return isPagarButtonEnabled(page);
 }
 
 async function clickElementByExactButtonText(page: Page, text: string): Promise<boolean> {
@@ -553,7 +570,7 @@ export async function saveAfterSuccessfulImport(
 
   console.log('[micorreo] → importación OK, clic en Guardar');
 
-  if (await isMassUploadReadyToPay(page)) {
+  if (await isSaveComplete(page)) {
     return {
       importSuccess: true,
       saveSuccess: true,
@@ -563,7 +580,7 @@ export async function saveAfterSuccessfulImport(
 
   const deadline = Date.now() + Math.min(config.timeoutMs, 40_000);
   while (Date.now() < deadline) {
-    if (await isMassUploadReadyToPay(page)) {
+    if (await isSaveComplete(page)) {
       await dismissSuccessModal(page);
       return {
         importSuccess: true,
@@ -574,8 +591,7 @@ export async function saveAfterSuccessfulImport(
 
     if (await isGuardarEnvioModalVisible(page)) {
       await confirmGuardarEnvioModal(page, config);
-      const ready = await waitForMassUploadReadyToPay(page, 12_000);
-      if (ready) {
+      if (await waitForSaveComplete(page, 15_000)) {
         await dismissSuccessModal(page);
         return {
           importSuccess: true,
@@ -588,8 +604,7 @@ export async function saveAfterSuccessfulImport(
     const clicked = await clickMainGuardarButton(page);
     if (clicked) {
       await confirmGuardarEnvioModal(page, config);
-      const ready = await waitForMassUploadReadyToPay(page, 12_000);
-      if (ready) {
+      if (await waitForSaveComplete(page, 15_000)) {
         await dismissSuccessModal(page);
         return {
           importSuccess: true,
@@ -688,7 +703,8 @@ async function waitForPaymentScreen(page: Page, timeoutMs: number): Promise<bool
 }
 
 async function clickMassUploadPagar(page: Page, config: WorkerConfig['micorreo']): Promise<boolean> {
-  const ready = await waitForMassUploadReadyToPay(page, Math.min(config.timeoutMs, 25_000));
+  console.log('[micorreo] → esperando botón Pagar habilitado');
+  const ready = await waitForPagarButtonReady(page, Math.min(config.timeoutMs, 35_000));
   if (!ready) {
     console.warn('[micorreo] #pagar no quedó habilitado tras Guardar');
     return false;
@@ -697,23 +713,24 @@ async function clickMassUploadPagar(page: Page, config: WorkerConfig['micorreo']
   console.log('[micorreo] → abrir checkout (#pagar / formPago)');
   const triggered = await page.evaluate<boolean>(`(() => {
     const btn = document.querySelector('#pagar');
-    if (btn && btn.disabled) return false;
+    if (!(btn instanceof HTMLButtonElement) || btn.disabled) return false;
+    btn.scrollIntoView({ block: 'center', inline: 'center' });
     if (typeof formPago === 'function') {
       formPago();
       return true;
     }
-    if (btn instanceof HTMLElement) {
-      btn.click();
-      return true;
-    }
-    return false;
+    btn.click();
+    return true;
   })()`);
 
   if (!triggered) {
     const pagarBtn = page.locator('#pagar').first();
-    if (!(await isPagarButtonEnabled(page))) return false;
     await pagarBtn.scrollIntoViewIfNeeded().catch(() => undefined);
-    await pagarBtn.click();
+    if (await isPagarButtonEnabled(page)) {
+      await pagarBtn.click();
+    } else {
+      return false;
+    }
   }
 
   const navigated = await page
@@ -812,6 +829,9 @@ async function clickCheckoutConfirmPagar(page: Page, config: WorkerConfig['micor
   })()`);
 }
 
+export const LABEL_SAVED_PAYMENT_PENDING_MSG =
+  'Etiqueta guardada en MiCorreo. Falta pagarla con saldo.';
+
 /**
  * Intenta pagar el envío con saldo disponible.
  *
@@ -830,12 +850,12 @@ export async function payWithAvailableBalance(
 
   const clickedPay = await clickMassUploadPagar(page, config);
   if (!clickedPay) {
-    const pagarDisabled = await page.locator('#pagar').first().isDisabled().catch(() => true);
+    const saved = await pageShowsSaveSuccess(page);
     return {
       status: 'payment_error',
-      message: pagarDisabled
-        ? 'El envío no quedó guardado en MiCorreo (botón Pagar deshabilitado).'
-        : 'No se pudo abrir la pantalla de pago en MiCorreo.',
+      message: saved
+        ? LABEL_SAVED_PAYMENT_PENDING_MSG
+        : 'No se pudo habilitar el botón Pagar en MiCorreo.',
     };
   }
 

@@ -40,6 +40,27 @@ const SAVE_SUCCESS_PATTERNS = [
   /se guard[oó]/i,
 ];
 
+export const LABEL_SAVED_PAYMENT_PENDING_MSG =
+  'Etiqueta guardada en MiCorreo. Falta pagarla con saldo.';
+
+function normalizePaymentMessage(input: UploadPipelineResult): string | undefined {
+  const raw = input.paymentMessage?.trim();
+  if (!raw) return raw;
+  const saveSuccess =
+    input.saveSuccess ||
+    SAVE_SUCCESS_PATTERNS.some((re) => re.test(input.portalText.trim())) ||
+    input.paymentStatus === 'paid' ||
+    input.paymentStatus === 'payment_error';
+  if (
+    saveSuccess &&
+    input.paymentStatus === 'payment_error' &&
+    /no qued[oó] guardado|bot[oó]n pagar deshabilitado/i.test(raw)
+  ) {
+    return LABEL_SAVED_PAYMENT_PENDING_MSG;
+  }
+  return raw;
+}
+
 const SYSTEM_ERROR_PATTERNS = [
   /servicio no disponible/i,
   /mantenimiento/i,
@@ -134,9 +155,9 @@ export function determineUploadStatus(input: UploadPipelineResult): {
   }
 
   const paymentNote =
-    input.paymentMessage ||
+    normalizePaymentMessage(input) ||
     (input.payAfterUpload
-      ? 'CSV aceptado por MiCorreo. La etiqueta está lista; falta pagar con saldo.'
+      ? LABEL_SAVED_PAYMENT_PENDING_MSG
       : 'CSV aceptado y envío guardado en MiCorreo.');
 
   const paymentPending =

@@ -111,6 +111,7 @@ async function uploadFileOnPage(
   }
 
   if (payAfterUpload) {
+    await page.waitForTimeout(2500);
     console.log('[micorreo] → pagando con saldo disponible');
     const payment = await payWithAvailableBalance(page, config);
     const feedback = await readPortalFeedback(page, config.timeoutMs);
