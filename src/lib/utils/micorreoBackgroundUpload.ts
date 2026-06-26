@@ -239,22 +239,28 @@ async function runMicorreoUpload(orderId: string, userId?: string | null): Promi
     });
 
     const paymentStatus = uploadResult.details?.paymentStatus;
-    const nextState = shippingStateFromMicorreoUpload(uploadResult.status);
+    const saveConfirmed = uploadResult.details?.saveConfirmed === true;
+    const nextState = shippingStateFromMicorreoUpload(uploadResult.status, {
+      saveConfirmed,
+      paymentStatus,
+    });
     const errorMessage =
-      uploadResult.status === 'ok'
-        ? null
+      uploadResult.status === 'ok' && saveConfirmed
+        ? paymentStatus === 'payment_error'
+          ? uploadResult.details?.paymentMessage || uploadResult.message
+          : null
         : uploadResult.message || 'Error desconocido al subir a MiCorreo.';
 
-    if (uploadResult.status === 'ok' && paymentStatus === 'paid') {
+    if (uploadResult.status === 'ok' && saveConfirmed && paymentStatus === 'paid') {
       const now = new Date().toISOString();
       await persistLabelState(orderId, 'pagada', {
         generatedAt: now,
         paidAt: now,
       });
-    } else if (uploadResult.status === 'ok') {
+    } else if (uploadResult.status === 'ok' && saveConfirmed) {
       await persistLabelState(orderId, 'generada', {
         generatedAt: new Date().toISOString(),
-        errorMessage: paymentStatus === 'not_attempted' ? 'Etiqueta generada; pago no intentado.' : null,
+        errorMessage: paymentStatus === 'payment_error' ? errorMessage : null,
       });
     } else {
       await persistLabelState(orderId, 'error', {

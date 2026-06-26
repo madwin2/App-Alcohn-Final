@@ -289,59 +289,180 @@ export async function confirmCsvUpload(page: Page, config: WorkerConfig['micorre
   }
 }
 
-/** Tras «La importación se realizó con éxito», confirmar con Guardar. */
+export type SaveAfterImportResult = {
+  importSuccess: boolean;
+  saveSuccess: boolean;
+  message: string;
+};
+
+async function pageHasImportSuccess(page: Page): Promise<boolean> {
+  const body = await page.locator('body').innerText().catch(() => '');
+  return /importaci[oó]n se realiz[oó] con [ée]xito|importaci[oó]n exitosa/i.test(body);
+}
+
+async function pageHasImportErrors(page: Page): Promise<boolean> {
+  const body = await page.locator('body').innerText().catch(() => '');
+  return /archivo contiene errores|error en el archivo|contiene errores/i.test(body);
+}
+
+async function waitForImportOutcome(
+  page: Page,
+  config: WorkerConfig['micorreo'],
+): Promise<'success' | 'error' | 'timeout'> {
+  const deadline = Date.now() + Math.min(config.timeoutMs, 60_000);
+  while (Date.now() < deadline) {
+    if (await pageHasImportSuccess(page)) return 'success';
+    if (await pageHasImportErrors(page)) return 'error';
+    await page.waitForTimeout(800);
+  }
+  return 'timeout';
+}
+
+async function isGuardarEnvioModalVisible(page: Page): Promise<boolean> {
+  const modal = page.locator('#guardarEnvio');
+  if (!(await modal.isVisible().catch(() => false))) return false;
+  return modal.evaluate<boolean>(`(el) => el.classList.contains('show')`);
+}
+
+async function clickVisibleGuardarOutsideConfirmModals(page: Page): Promise<boolean> {
+  const buttons = page.locator('button:visible');
+  const count = await buttons.count();
+  for (let i = 0; i < count; i += 1) {
+    const btn = buttons.nth(i);
+    const text = (await btn.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    if (!/^Guardar$/i.test(text)) continue;
+    if (text.toLowerCase().includes('medida')) continue;
+    if (await btn.isDisabled().catch(() => false)) continue;
+
+    const insideConfirmModal = await btn.evaluate<boolean>(`((el) => {
+      return Boolean(
+        el.closest('#guardarEnvio, #guardarCambios, #guardarInfo, #exampleModal'),
+      );
+    })()`);
+    if (insideConfirmModal) continue;
+
+    await btn.scrollIntoViewIfNeeded().catch(() => undefined);
+    await btn.click({ force: true });
+    await page.waitForTimeout(900);
+    return true;
+  }
+  return false;
+}
+
+async function confirmGuardarEnvioModal(page: Page, config: WorkerConfig['micorreo']): Promise<boolean> {
+  const deadline = Date.now() + Math.min(config.timeoutMs, 20_000);
+  while (Date.now() < deadline) {
+    if (await isGuardarEnvioModalVisible(page)) {
+      const confirmCandidates = [
+        page.locator('#guardarEnvio.show button.btn-ne-s:has-text("Guardar")'),
+        page.locator('#guardarEnvio.modal.show button.btn-ne-s:has-text("Guardar")'),
+        page.locator('#guardarEnvio button.btn-ne-s:has-text("Guardar")'),
+        page.locator('#guardarEnvio.show button:has-text("Guardar")'),
+      ];
+
+      for (const locator of confirmCandidates) {
+        const btn = locator.first();
+        if (!(await btn.isVisible().catch(() => false))) continue;
+        if (await btn.isDisabled().catch(() => false)) continue;
+        console.log('[micorreo] → confirmar modal Guardar envío');
+        await btn.click({ force: true });
+        await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => undefined);
+        await page.waitForTimeout(1500);
+        return true;
+      }
+    }
+    await page.waitForTimeout(500);
+  }
+  return false;
+}
+
+async function waitForSaveConfirmation(
+  page: Page,
+  config: WorkerConfig['micorreo'],
+): Promise<boolean> {
+  const deadline = Date.now() + Math.min(config.timeoutMs, 30_000);
+  while (Date.now() < deadline) {
+    const body = await page.locator('body').innerText().catch(() => '');
+    if (/guardado exitosamente|env[ií]o.*guardad|se guard[oó]/i.test(body)) {
+      return true;
+    }
+
+    const guardarInfo = page.locator('#guardarInfo.show, #guardarInfo.modal.show');
+    if (await guardarInfo.first().isVisible().catch(() => false)) {
+      return true;
+    }
+
+    const pagarBtn = page.locator('#pagar');
+    if (await pagarBtn.isVisible().catch(() => false) && !(await pagarBtn.isDisabled().catch(() => true))) {
+      return true;
+    }
+
+    const idEnvios = await page.locator('#id_envios').inputValue().catch(() => '');
+    if (idEnvios.trim()) return true;
+
+    await page.waitForTimeout(700);
+  }
+  return false;
+}
+
+/** Tras «La importación se realizó con éxito», confirmar con Guardar y verificar guardado real. */
 export async function saveAfterSuccessfulImport(
   page: Page,
   config: WorkerConfig['micorreo'],
-): Promise<void> {
-  const successTimeout = Math.min(config.timeoutMs, 45_000);
-  const successMsg = page.getByText(/importaci[oó]n se realiz[oó] con [ée]xito/i).first();
-  try {
-    await successMsg.waitFor({ state: 'visible', timeout: successTimeout });
-  } catch {
+): Promise<SaveAfterImportResult> {
+  const importOutcome = await waitForImportOutcome(page, config);
+  if (importOutcome === 'error') {
     const body = await page.locator('body').innerText().catch(() => '');
-    if (!/importaci[oó]n se realiz[oó] con [ée]xito/i.test(body)) {
-      return;
-    }
+    return {
+      importSuccess: false,
+      saveSuccess: false,
+      message: body.slice(0, 500) || 'MiCorreo rechazó el CSV.',
+    };
+  }
+  if (importOutcome !== 'success') {
+    return {
+      importSuccess: false,
+      saveSuccess: false,
+      message: 'No apareció confirmación de importación exitosa en MiCorreo.',
+    };
   }
 
   console.log('[micorreo] → importación OK, clic en Guardar');
 
-  const guardarCandidates = [
-    page.locator('#guardarEnvio button:has-text("Guardar")'),
-    page.locator('.modal.show button:has-text("Guardar")'),
-    page.locator('button.btn-correo-primary:has-text("Guardar")'),
-    page.getByRole('button', { name: /^Guardar$/i }),
-  ];
-
-  const deadline = Date.now() + Math.min(config.timeoutMs, 30_000);
+  const deadline = Date.now() + Math.min(config.timeoutMs, 35_000);
+  let openedConfirmModal = false;
   while (Date.now() < deadline) {
-    for (const locator of guardarCandidates) {
-      const btn = locator.first();
-      if (!(await btn.isVisible().catch(() => false))) continue;
-      if (await btn.isDisabled().catch(() => false)) continue;
-      const text = (await btn.innerText().catch(() => '')).toLowerCase();
-      if (text.includes('medida')) continue;
-
-      await btn.scrollIntoViewIfNeeded();
-      await btn.click({ force: true });
-      await page.waitForTimeout(1000);
-      await dismissConfirmModals(page);
-
-      const modalGuardar = page.locator('.modal.show button.btn-correo-primary:has-text("Guardar")');
-      if (await modalGuardar.first().isVisible().catch(() => false)) {
-        console.log('[micorreo] → confirmar modal Guardar');
-        await modalGuardar.first().click({ force: true });
-        await page.waitForTimeout(1200);
-      }
-
-      await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => undefined);
-      return;
+    if (await waitForSaveConfirmation(page, config)) {
+      return {
+        importSuccess: true,
+        saveSuccess: true,
+        message: 'Envío guardado en MiCorreo.',
+      };
     }
-    await page.waitForTimeout(800);
+
+    if (await isGuardarEnvioModalVisible(page)) {
+      openedConfirmModal = await confirmGuardarEnvioModal(page, config);
+      if (openedConfirmModal) continue;
+    }
+
+    const clicked = await clickVisibleGuardarOutsideConfirmModals(page);
+    if (clicked) {
+      await confirmGuardarEnvioModal(page, config);
+      continue;
+    }
+
+    await page.waitForTimeout(700);
   }
 
-  console.warn('[micorreo] no se encontró botón Guardar habilitado tras importación exitosa');
+  const body = await page.locator('body').innerText().catch(() => '');
+  console.warn('[micorreo] importación OK pero no se confirmó guardado en MiCorreo');
+  return {
+    importSuccess: true,
+    saveSuccess: false,
+    message:
+      body.slice(0, 500) ||
+      'La importación fue exitosa, pero no se pudo guardar el envío en MiCorreo.',
+  };
 }
 
 export type PayWithBalanceResult =
@@ -481,25 +602,42 @@ export async function payWithAvailableBalance(
     return { status: 'payment_error', message: 'Saldo disponible insuficiente en MiCorreo.' };
   }
 
-  const clickedPay = await clickFirstVisibleLocator(
-    [
-      page.getByRole('button', { name: /^Pagar$/i }),
-      page.getByRole('link', { name: /^Pagar$/i }),
-      page.locator('button:has-text("Pagar")'),
-      page.locator('a:has-text("Pagar")'),
-      page.locator('[role="button"]:has-text("Pagar")'),
-      page.locator('.btn:has-text("Pagar"), .btn-correo-primary:has-text("Pagar")'),
-      page.locator('input[type="button"][value*="Pagar" i]'),
-      page.locator('input[type="submit"][value*="Pagar" i]'),
-      page.getByText(/^Pagar$/i),
-      ...config.selectors.payWithBalance.map((selector) => page.locator(selector)),
-    ],
-    Math.min(config.timeoutMs, 45_000),
-  );
+  const pagarBtn = page.locator('#pagar').first();
+  const pagarVisible = await pagarBtn.isVisible().catch(() => false);
+  const pagarDisabled = pagarVisible ? await pagarBtn.isDisabled().catch(() => true) : true;
+
+  let clickedPay = false;
+  if (pagarVisible && !pagarDisabled) {
+    await pagarBtn.scrollIntoViewIfNeeded().catch(() => undefined);
+    await pagarBtn.click({ force: true });
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await page.waitForTimeout(1200);
+    clickedPay = true;
+  } else {
+    clickedPay = await clickFirstVisibleLocator(
+      [
+        page.getByRole('button', { name: /^Pagar$/i }),
+        page.getByRole('link', { name: /^Pagar$/i }),
+        page.locator('button:has-text("Pagar")'),
+        page.locator('a:has-text("Pagar")'),
+        page.locator('[role="button"]:has-text("Pagar")'),
+        page.locator('.btn:has-text("Pagar"), .btn-correo-primary:has-text("Pagar")'),
+        page.locator('input[type="button"][value*="Pagar" i]'),
+        page.locator('input[type="submit"][value*="Pagar" i]'),
+        page.getByText(/^Pagar$/i),
+        ...config.selectors.payWithBalance.map((selector) => page.locator(selector)),
+      ],
+      Math.min(config.timeoutMs, 45_000),
+    );
+  }
+
   if (!clickedPay) {
+    const reason = pagarVisible && pagarDisabled
+      ? 'El envío no quedó guardado en MiCorreo (botón Pagar deshabilitado).'
+      : 'No se encontró el botón para pagar con saldo disponible.';
     return {
       status: 'payment_error',
-      message: 'Etiqueta generada, pero no se encontró el botón para pagar con saldo disponible.',
+      message: reason,
     };
   }
 

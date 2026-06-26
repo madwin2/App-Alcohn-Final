@@ -24,15 +24,19 @@ const DATA_ERROR_PATTERNS = [
 ];
 
 const SUCCESS_PATTERNS = [
-  /carga exitosa/i,
-  /importaci[oó]n exitosa/i,
   /importaci[oó]n se realiz[oó] con [ée]xito/i,
-  /realiz[oó] con [ée]xito/i,
-  /procesado correctamente/i,
-  /se procesaron/i,
-  /env[ií]os cargados/i,
-  /archivo cargado/i,
-  /operaci[oó]n exitosa/i,
+  /guardado exitosamente/i,
+];
+
+const IMPORT_SUCCESS_PATTERNS = [
+  /importaci[oó]n se realiz[oó] con [ée]xito/i,
+  /importaci[oó]n exitosa/i,
+];
+
+const SAVE_SUCCESS_PATTERNS = [
+  /guardado exitosamente/i,
+  /env[ií]o.*guardad/i,
+  /se guard[oó]/i,
 ];
 
 const SYSTEM_ERROR_PATTERNS = [
@@ -48,10 +52,6 @@ export function classifyPortalMessage(rawText: string): UploadStatus {
   const text = rawText.trim();
   if (!text) return 'system_error';
 
-  if (SUCCESS_PATTERNS.some((re) => re.test(text))) {
-    return 'ok';
-  }
-
   if (DATA_ERROR_PATTERNS.some((re) => re.test(text))) {
     return 'data_error';
   }
@@ -60,20 +60,93 @@ export function classifyPortalMessage(rawText: string): UploadStatus {
     return 'system_error';
   }
 
-  // Heurística: mensajes cortos sin palabra "error" suelen ser OK del portal.
-  if (/^ok$/i.test(text) || /correctamente/i.test(text)) {
+  if (SUCCESS_PATTERNS.some((re) => re.test(text))) {
     return 'ok';
   }
 
-  if (/error|fall[oó]|no se pudo|no pudimos/i.test(text) && !/realiz[oó] con [ée]xito/i.test(text)) {
+  if (/error|fall[oó]|no se pudo|no pudimos/i.test(text)) {
     return 'data_error';
   }
 
-  if (/[ée]xito/i.test(text)) {
-    return 'ok';
+  return 'system_error';
+}
+
+export type UploadPipelineResult = {
+  importSuccess: boolean;
+  saveSuccess: boolean;
+  payAfterUpload: boolean;
+  paymentStatus?: 'not_attempted' | 'paid' | 'payment_error';
+  portalText: string;
+  saveMessage?: string;
+  paymentMessage?: string;
+};
+
+/** Éxito real = CSV importado + envío guardado en MiCorreo (+ pago si se pidió). */
+export function determineUploadStatus(input: UploadPipelineResult): {
+  status: UploadStatus;
+  message: string;
+  saveConfirmed: boolean;
+} {
+  const portalText = input.portalText.trim();
+  const importSuccess =
+    input.importSuccess || IMPORT_SUCCESS_PATTERNS.some((re) => re.test(portalText));
+  const saveSuccess =
+    input.saveSuccess ||
+    SAVE_SUCCESS_PATTERNS.some((re) => re.test(portalText)) ||
+    /\[GUARDAR\]\s*ok/i.test(portalText);
+
+  if (!importSuccess) {
+    return {
+      status: 'data_error',
+      message:
+        input.saveMessage ||
+        portalText.slice(0, 500) ||
+        'MiCorreo no confirmó la importación del CSV.',
+      saveConfirmed: false,
+    };
   }
 
-  return 'system_error';
+  if (!saveSuccess) {
+    return {
+      status: 'data_error',
+      message:
+        input.saveMessage ||
+        'La importación fue exitosa, pero el envío no quedó guardado en MiCorreo.',
+      saveConfirmed: false,
+    };
+  }
+
+  if (input.payAfterUpload) {
+    if (input.paymentStatus === 'paid') {
+      return {
+        status: 'ok',
+        message: 'CSV aceptado, envío guardado y etiqueta pagada con saldo disponible.',
+        saveConfirmed: true,
+      };
+    }
+
+    if (input.paymentStatus === 'payment_error') {
+      return {
+        status: 'ok',
+        message:
+          input.paymentMessage ||
+          'Envío guardado en MiCorreo, pero no se pudo pagar con saldo disponible.',
+        saveConfirmed: true,
+      };
+    }
+
+    return {
+      status: 'data_error',
+      message: input.paymentMessage || 'El envío se guardó, pero el pago automático no se completó.',
+      saveConfirmed: true,
+    };
+  }
+
+  return {
+    status: 'ok',
+    message: 'CSV aceptado y envío guardado en MiCorreo.',
+    saveConfirmed: true,
+  };
 }
 
 export function classifyPortalErrorCode(rawText: string): string | undefined {

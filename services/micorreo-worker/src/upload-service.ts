@@ -1,6 +1,6 @@
 import {
   classifyPortalErrorCode,
-  classifyPortalMessage,
+  determineUploadStatus,
   countCsvDataRows,
   httpStatusForUploadStatus,
   validateCsvStructure,
@@ -35,22 +35,23 @@ export async function runUploadJob(body: UploadRequestBody): Promise<UploadResul
       payAfterUpload: body.payAfterUpload === true,
     });
 
-    const portalTextForUpload = upload.portalText.replace(/\n\n\[PAGO\][\s\S]*$/i, '');
-    const status = classifyPortalMessage(portalTextForUpload);
     const paymentStatus = upload.payment?.status ?? (body.payAfterUpload ? 'not_attempted' : undefined);
     const paymentMessage = upload.payment?.message;
-    const effectiveStatus =
-      status === 'ok' && paymentStatus === 'payment_error' ? 'data_error' : status;
+    const resolved = determineUploadStatus({
+      importSuccess: upload.importSuccess,
+      saveSuccess: upload.saveSuccess,
+      payAfterUpload: body.payAfterUpload === true,
+      paymentStatus,
+      portalText: upload.portalText,
+      saveMessage: upload.saveMessage,
+      paymentMessage,
+    });
+    const effectiveStatus = resolved.status;
     const httpStatus = httpStatusForUploadStatus(effectiveStatus);
 
     return {
       status: effectiveStatus,
-      message:
-        effectiveStatus === 'ok'
-          ? paymentStatus === 'paid'
-            ? 'CSV aceptado por MiCorreo y etiqueta pagada con saldo disponible'
-            : 'CSV aceptado por MiCorreo'
-          : paymentMessage || portalTextForUpload.slice(0, 500) || 'Respuesta del portal sin mensaje claro',
+      message: resolved.message,
       orderId: body.orderId,
       httpStatus,
       details: {
@@ -58,10 +59,15 @@ export async function runUploadJob(body: UploadRequestBody): Promise<UploadResul
         rowCount: countCsvDataRows(body.csvContent),
         errorCode:
           effectiveStatus === 'ok'
-            ? undefined
+            ? paymentStatus === 'payment_error'
+              ? 'pago_rechazado'
+              : undefined
             : classifyPortalErrorCode(paymentMessage || upload.portalText),
         paymentStatus,
         paymentMessage,
+        saveConfirmed: resolved.saveConfirmed,
+        importSuccess: upload.importSuccess,
+        saveSuccess: upload.saveSuccess,
       },
     };
   } catch (error) {

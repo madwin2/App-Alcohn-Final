@@ -14,6 +14,7 @@ import {
   saveAfterSuccessfulImport,
   payWithAvailableBalance,
   type PayWithBalanceResult,
+  type SaveAfterImportResult,
 } from './navigate-mass-upload.js';
 
 export type UploadCsvInput = {
@@ -28,6 +29,9 @@ export type UploadCsvOutput = {
   artifactDir?: string;
   rowCount: number;
   payment?: PayWithBalanceResult;
+  importSuccess: boolean;
+  saveSuccess: boolean;
+  saveMessage?: string;
 };
 
 let browserSingleton: Browser | null = null;
@@ -57,7 +61,7 @@ async function uploadFileOnPage(
   config: WorkerConfig['micorreo'],
   csvPath: string,
   payAfterUpload: boolean,
-): Promise<string> {
+): Promise<{ portalText: string; importSuccess: boolean; saveSuccess: boolean; saveMessage: string; payment?: PayWithBalanceResult }> {
   console.log('[micorreo] → enviosMasivos');
   await navigateToMassUpload(page, config);
 
@@ -70,20 +74,54 @@ async function uploadFileOnPage(
 
   await confirmCsvUpload(page, config);
 
-  await saveAfterSuccessfulImport(page, config);
+  const saveResult: SaveAfterImportResult = await saveAfterSuccessfulImport(page, config);
+  console.log(
+    `[micorreo] ← guardar: import=${saveResult.importSuccess} save=${saveResult.saveSuccess} ${saveResult.message.slice(0, 120)}`,
+  );
+
+  if (!saveResult.importSuccess) {
+    const feedback = await readPortalFeedback(page, config.timeoutMs);
+    return {
+      portalText: feedback || saveResult.message,
+      importSuccess: false,
+      saveSuccess: false,
+      saveMessage: saveResult.message,
+    };
+  }
+
+  if (!saveResult.saveSuccess) {
+    const feedback = await readPortalFeedback(page, config.timeoutMs);
+    return {
+      portalText: `${feedback}\n\n[GUARDAR] failed: ${saveResult.message}`,
+      importSuccess: true,
+      saveSuccess: false,
+      saveMessage: saveResult.message,
+    };
+  }
 
   if (payAfterUpload) {
     console.log('[micorreo] → pagando con saldo disponible');
     const payment = await payWithAvailableBalance(page, config);
     const feedback = await readPortalFeedback(page, config.timeoutMs);
     console.log(`[micorreo] ← pago: ${payment.status} ${payment.message.slice(0, 120)}…`);
-    return `${feedback}\n\n[PAGO] ${payment.status}: ${payment.message}`;
+    return {
+      portalText: `${feedback}\n\n[PAGO] ${payment.status}: ${payment.message}`,
+      importSuccess: true,
+      saveSuccess: true,
+      saveMessage: saveResult.message,
+      payment,
+    };
   }
 
   await page.waitForTimeout(1000);
   const feedback = await readPortalFeedback(page, config.timeoutMs);
   console.log(`[micorreo] ← respuesta portal: ${feedback.slice(0, 120)}…`);
-  return feedback;
+  return {
+    portalText: feedback,
+    importSuccess: true,
+    saveSuccess: true,
+    saveMessage: saveResult.message,
+  };
 }
 
 export async function uploadCsvToMicorreo(
@@ -109,17 +147,14 @@ export async function uploadCsvToMicorreo(
 
   try {
     await login(page, config);
-    const portalText = await uploadFileOnPage(page, config, csvPath, input.payAfterUpload === true);
-    const paymentLine = portalText.match(/\[PAGO\]\s*(paid|payment_error|not_attempted):\s*([\s\S]*)$/i);
+    const upload = await uploadFileOnPage(page, config, csvPath, input.payAfterUpload === true);
     return {
-      portalText,
+      portalText: upload.portalText,
       rowCount: input.csvContent.split(/\r?\n/).filter((l) => l.trim()).length - 1,
-      payment: paymentLine
-        ? {
-            status: paymentLine[1] as PayWithBalanceResult['status'],
-            message: paymentLine[2]?.trim() || '',
-          } as PayWithBalanceResult
-        : undefined,
+      importSuccess: upload.importSuccess,
+      saveSuccess: upload.saveSuccess,
+      saveMessage: upload.saveMessage,
+      payment: upload.payment,
     };
   } catch (error) {
     const artifactDir = await saveArtifacts(page, artifactsDir, input.orderId || 'upload_error');

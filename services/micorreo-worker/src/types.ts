@@ -12,6 +12,9 @@ export type UploadResult = {
     errorCode?: string;
     paymentStatus?: 'not_attempted' | 'paid' | 'payment_error';
     paymentMessage?: string;
+    saveConfirmed?: boolean;
+    importSuccess?: boolean;
+    saveSuccess?: boolean;
   };
 };
 
