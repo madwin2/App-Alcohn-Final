@@ -321,7 +321,11 @@ async function waitForImportOutcome(
 async function isGuardarEnvioModalVisible(page: Page): Promise<boolean> {
   const modal = page.locator('#guardarEnvio');
   if (!(await modal.isVisible().catch(() => false))) return false;
-  return modal.evaluate<boolean>(`(el) => el.classList.contains('show')`);
+  try {
+    return await modal.evaluate<boolean>(`(el) => Boolean(el && el.classList.contains('show'))`);
+  } catch {
+    return false;
+  }
 }
 
 async function pageShowsSaveSuccess(page: Page): Promise<boolean> {
@@ -386,11 +390,14 @@ async function clickMainGuardarButton(page: Page): Promise<boolean> {
       if (!(await btn.isVisible().catch(() => false))) continue;
       if (await btn.isDisabled().catch(() => false)) continue;
 
-      const insideModal = await btn.evaluate<boolean>(`((el) => {
-        return Boolean(
-          el.closest('#guardarEnvio, #guardarCambios, #guardarInfo, #exampleModal'),
+      let insideModal = false;
+      try {
+        insideModal = await btn.evaluate<boolean>(
+          `(el) => Boolean(el && el.closest('#guardarEnvio, #guardarCambios, #guardarInfo, #exampleModal'))`,
         );
-      })()`);
+      } catch {
+        insideModal = false;
+      }
       if (insideModal) continue;
 
       const text = (await btn.innerText().catch(() => '')).toLowerCase();
@@ -410,7 +417,7 @@ async function clickMainGuardarButton(page: Page): Promise<boolean> {
 async function confirmGuardarEnvioModal(page: Page, config: WorkerConfig['micorreo']): Promise<boolean> {
   const modal = page.locator('#guardarEnvio');
   if (!(await modal.isVisible().catch(() => false))) return false;
-  const isOpen = await modal.evaluate<boolean>(`(el) => el.classList.contains('show')`);
+  const isOpen = await modal.evaluate<boolean>(`(el) => Boolean(el && el.classList.contains('show'))`).catch(() => false);
   if (!isOpen) return false;
 
   const confirmCandidates = [
