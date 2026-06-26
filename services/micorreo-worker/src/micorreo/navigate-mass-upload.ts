@@ -692,15 +692,39 @@ async function waitForPaymentScreen(page: Page, timeoutMs: number): Promise<bool
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const url = page.url();
-    if (/checkout/i.test(url)) return true;
+    if (/checkout|misEnviosMasivosCheckout/i.test(url)) return true;
 
     const body = await page.locator('body').innerText().catch(() => '');
     if (/realiz[aá].*pago|seleccion[aá].*medio de pago|saldo disponible|tarjeta de cr[eé]dito|mercado pago/i.test(body)) {
       return true;
     }
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(1000);
   }
   return false;
+}
+
+async function waitForMicorreoPagarProcessing(page: Page, timeoutMs: number): Promise<boolean> {
+  console.log('[micorreo] → MiCorreo procesando envío (SweetAlert / enviosMasivosPost)…');
+  const postDone = await page
+    .waitForResponse(
+      (resp) => /enviosMasivosPost/i.test(resp.url()) && resp.status() < 500,
+      { timeout: timeoutMs },
+    )
+    .then((resp) => resp.ok())
+    .catch(() => false);
+
+  if (!postDone) {
+    console.warn('[micorreo] no hubo respuesta OK de enviosMasivosPost');
+  }
+
+  const navigated = await page
+    .waitForURL(/checkout|misEnviosMasivosCheckout/i, { timeout: timeoutMs })
+    .then(() => true)
+    .catch(() => false);
+
+  if (navigated) return true;
+
+  return waitForPaymentScreen(page, Math.min(timeoutMs, 45_000));
 }
 
 async function clickMassUploadPagar(page: Page, config: WorkerConfig['micorreo']): Promise<boolean> {
@@ -711,42 +735,68 @@ async function clickMassUploadPagar(page: Page, config: WorkerConfig['micorreo']
     return false;
   }
 
-  console.log('[micorreo] → abrir checkout (#pagar / formPago)');
-  const triggered = await page.evaluate<boolean>(`(() => {
-    const btn = document.querySelector('#pagar');
-    if (!(btn instanceof HTMLButtonElement) || btn.disabled) return false;
-    btn.scrollIntoView({ block: 'center', inline: 'center' });
-    if (typeof formPago === 'function') {
-      formPago();
-      return true;
-    }
-    btn.click();
-    return true;
+  const hasEnvioId = await page.evaluate<boolean>(`(() => {
+    const input = document.querySelector('#id_envios');
+    return input instanceof HTMLInputElement && input.value.trim().length > 0;
   })()`);
-
-  if (!triggered) {
-    const pagarBtn = page.locator('#pagar').first();
-    await pagarBtn.scrollIntoViewIfNeeded().catch(() => undefined);
-    if (await isPagarButtonEnabled(page)) {
-      await pagarBtn.click();
-    } else {
-      return false;
-    }
+  if (!hasEnvioId) {
+    console.warn('[micorreo] #id_envios vacío — el envío no quedó guardado en el formulario');
+    return false;
   }
 
-  const navigated = await page
-    .waitForURL(/checkout/i, { timeout: Math.min(config.timeoutMs, 35_000) })
-    .then(() => true)
-    .catch(() => false);
+  const paymentTimeout = Math.max(config.timeoutMs, 120_000);
+  console.log('[micorreo] → click Pagar (handlePagarBtn → enviosMasivosPost → checkout)');
 
-  if (navigated) return true;
+  const pagarBtn = page.locator('#pagar').first();
+  await pagarBtn.scrollIntoViewIfNeeded().catch(() => undefined);
 
-  await page.waitForLoadState('networkidle').catch(() => undefined);
-  await page.waitForTimeout(1500);
-  return waitForPaymentScreen(page, Math.min(config.timeoutMs, 15_000));
+  const processingPromise = waitForMicorreoPagarProcessing(page, paymentTimeout);
+
+  const clicked = await pagarBtn.click({ timeout: 10_000 }).then(() => true).catch(async () => {
+    return page.evaluate<boolean>(`(() => {
+      if (typeof handlePagarBtn === 'function') {
+        handlePagarBtn();
+        return true;
+      }
+      const btn = document.querySelector('#pagar');
+      if (btn instanceof HTMLButtonElement && !btn.disabled) {
+        btn.click();
+        return true;
+      }
+      return false;
+    })()`);
+  });
+
+  if (!clicked) {
+    console.warn('[micorreo] no se pudo hacer click en #pagar');
+    return false;
+  }
+
+  return processingPromise;
 }
 
 async function selectBalancePayment(page: Page): Promise<boolean> {
+  const radioSaldo = page.locator('#radioSaldo').first();
+  try {
+    await radioSaldo.waitFor({ state: 'visible', timeout: 15_000 });
+  } catch {
+    // fallback abajo
+  }
+
+  if (await radioSaldo.isVisible().catch(() => false)) {
+    await radioSaldo.click({ force: true }).catch(() => undefined);
+    await page.evaluate<boolean>(`(() => {
+      const radio = document.querySelector('#radioSaldo');
+      if (!(radio instanceof HTMLInputElement)) return false;
+      radio.checked = true;
+      radio.dispatchEvent(new Event('input', { bubbles: true }));
+      radio.dispatchEvent(new Event('change', { bubbles: true }));
+      return radio.checked;
+    })()`);
+    await page.waitForTimeout(1000);
+    if (await radioSaldo.isChecked().catch(() => false)) return true;
+  }
+
   const saldoRadio = page.getByRole('radio', { name: /^Saldo$/i }).first();
   if (await saldoRadio.isVisible().catch(() => false)) {
     await saldoRadio.check({ force: true }).catch(async () => {
@@ -805,6 +855,35 @@ async function selectBalancePayment(page: Page): Promise<boolean> {
 }
 
 async function clickCheckoutConfirmPagar(page: Page, config: WorkerConfig['micorreo']): Promise<boolean> {
+  const btnPagar = page.locator('#btnPagar').first();
+  if (await btnPagar.isVisible().catch(() => false)) {
+    await btnPagar.scrollIntoViewIfNeeded().catch(() => undefined);
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      if (!(await btnPagar.isDisabled().catch(() => true))) break;
+      await page.waitForTimeout(400);
+    }
+    if (!(await btnPagar.isDisabled().catch(() => true))) {
+      await btnPagar.click({ force: true });
+      await page.waitForTimeout(500);
+      return true;
+    }
+  }
+
+  const triggered = await page.evaluate<boolean>(`(() => {
+    if (typeof enviarForm === 'function') {
+      enviarForm();
+      return true;
+    }
+    const btn = document.querySelector('#btnPagar');
+    if (btn instanceof HTMLButtonElement && !btn.disabled) {
+      btn.click();
+      return true;
+    }
+    return false;
+  })()`);
+  if (triggered) return true;
+
   const clicked = await clickFirstVisibleLocator(
     [
       page.locator('button.btn-ne-s:has-text("Pagar")'),
@@ -900,10 +979,14 @@ export async function payWithAvailableBalance(
   }
 
   if (
-    /pago.*(realiz[oó]|exitoso|confirmado)|abonad|pagad|operaci[oó]n exitosa|gracias por tu compra/i.test(
+    /pago.*(realiz[oó]|exitoso|confirmado|procesado)|abonad|pagad|operaci[oó]n exitosa|gracias por tu compra|confirmaci[oó]n de pago/i.test(
       afterText,
     )
   ) {
+    return { status: 'paid', message: 'Etiqueta pagada con saldo disponible.' };
+  }
+
+  if (/genial.*pago|tu pago fue procesado/i.test(afterText)) {
     return { status: 'paid', message: 'Etiqueta pagada con saldo disponible.' };
   }
 

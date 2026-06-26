@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
     "upload:test": "tsx src/scripts/cli-upload.ts",
+    "upload:watch": "powershell -ExecutionPolicy Bypass -File scripts/upload-watch.ps1",
     "upload:test:errors": "tsx src/scripts/cli-upload-errors.ts",
     "codegen": "playwright codegen https://www.correoargentino.com.ar/MiCorreo/public/",
     "playwright:install": "playwright install chromium",

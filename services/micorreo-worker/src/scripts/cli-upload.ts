@@ -16,7 +16,7 @@ async function main(): Promise<void> {
       : positionalPath || path.join(workerRoot, 'fixtures', 'sample-sucursal.csv');
 
   if (!filePath) {
-    console.error('Uso: npm run upload:test -- --file ruta/al/archivo.csv');
+    console.error('Uso: npm run upload:test -- --file ruta/al/archivo.csv [--pay] [--order-id UUID]');
     process.exit(1);
   }
 
@@ -25,14 +25,23 @@ async function main(): Promise<void> {
   const orderId = args.includes('--order-id')
     ? args[args.indexOf('--order-id') + 1]
     : undefined;
+  const payAfterUpload = args.includes('--pay') || args.includes('--pagar');
 
   console.log(`[cli] Subiendo ${absolutePath} ...`);
-  console.log('[cli] MICORREO_HEADLESS=false recomendado la primera vez para ver el navegador');
+  if (process.env.MICORREO_HEADLESS !== 'false') {
+    console.log('[cli] Tip: usá npm run upload:watch para ver el navegador en tiempo real');
+  } else {
+    console.log('[cli] Navegador visible (MICORREO_HEADLESS=false)');
+  }
+  if (payAfterUpload) {
+    console.log('[cli] Flujo completo: importar → Guardar → Pagar con saldo');
+  }
 
   const result = await runUploadJob({
     csvContent,
     filename: path.basename(absolutePath),
     orderId,
+    payAfterUpload,
   });
 
   console.log(JSON.stringify(result, null, 2));
