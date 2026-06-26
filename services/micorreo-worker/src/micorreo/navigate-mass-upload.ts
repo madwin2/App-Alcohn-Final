@@ -337,40 +337,49 @@ async function isPagarButtonEnabled(page: Page): Promise<boolean> {
   return !(await pagarBtn.isDisabled().catch(() => true));
 }
 
-/** Tras Guardar, MiCorreo tarda ~2s en habilitar #pagar. */
-async function waitForPagarEnabled(
+/** Listo para pagar = mensaje de procesado + botón Pagar habilitado (como hacés manualmente). */
+export async function isMassUploadReadyToPay(page: Page): Promise<boolean> {
+  return (await pageShowsSaveSuccess(page)) && (await isPagarButtonEnabled(page));
+}
+
+async function waitForMassUploadReadyToPay(
   page: Page,
-  config: WorkerConfig['micorreo'],
+  timeoutMs: number,
 ): Promise<boolean> {
-  const deadline = Date.now() + Math.min(config.timeoutMs, 30_000);
-  let sawProcessedMessage = false;
-
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await pageShowsSaveSuccess(page)) {
-      sawProcessedMessage = true;
+    if (await isMassUploadReadyToPay(page)) {
+      await page.waitForTimeout(2000);
+      return await isPagarButtonEnabled(page);
     }
-
-    if (await isPagarButtonEnabled(page)) {
-      if (sawProcessedMessage) {
-        await page.waitForTimeout(2000);
-      }
-      return !(await page.locator('#pagar').first().isDisabled().catch(() => true));
-    }
-
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(400);
   }
-
   return false;
 }
 
+async function clickElementByExactButtonText(page: Page, text: string): Promise<boolean> {
+  return page.evaluate<boolean>(`((wantedText) => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+    const wanted = normalize(wantedText);
+    const buttons = [...document.querySelectorAll('button, a[role="button"], [role="button"]')];
+    const match = buttons.find((el) => normalize(el.textContent) === wanted);
+    if (!match) return false;
+    if (match.disabled) return false;
+    match.scrollIntoView({ block: 'center' });
+    match.click();
+    return true;
+  })(${JSON.stringify(text)})`);
+}
+
 async function clickMainGuardarButton(page: Page): Promise<boolean> {
-  const candidates = [
+  const selectors = [
     page.locator('button.btn-ne-s:visible:has-text("Guardar")'),
     page.locator('button.btn-correo-primary:visible:has-text("Guardar")'),
+    page.locator('[data-bs-target="#guardarEnvio"]:visible'),
     page.getByRole('button', { name: /^Guardar$/i }),
   ];
 
-  for (const locator of candidates) {
+  for (const locator of selectors) {
     const count = await locator.count();
     for (let i = 0; i < count; i += 1) {
       const btn = locator.nth(i);
@@ -387,67 +396,49 @@ async function clickMainGuardarButton(page: Page): Promise<boolean> {
       const text = (await btn.innerText().catch(() => '')).toLowerCase();
       if (text.includes('medida')) continue;
 
+      console.log('[micorreo] → clic Guardar');
       await btn.scrollIntoViewIfNeeded().catch(() => undefined);
-      await btn.click({ force: true });
-      await page.waitForTimeout(900);
+      await btn.click();
+      await page.waitForTimeout(800);
       return true;
     }
   }
 
-  return false;
+  return clickElementByExactButtonText(page, 'Guardar');
 }
 
 async function confirmGuardarEnvioModal(page: Page, config: WorkerConfig['micorreo']): Promise<boolean> {
-  const deadline = Date.now() + Math.min(config.timeoutMs, 20_000);
-  while (Date.now() < deadline) {
-    if (await isGuardarEnvioModalVisible(page)) {
-      const confirmCandidates = [
-        page.locator('#guardarEnvio.show button.btn-ne-s:has-text("Guardar")'),
-        page.locator('#guardarEnvio.modal.show button.btn-ne-s:has-text("Guardar")'),
-        page.locator('#guardarEnvio button.btn-ne-s:has-text("Guardar")'),
-        page.locator('#guardarEnvio.show button:has-text("Guardar")'),
-      ];
+  const modal = page.locator('#guardarEnvio');
+  if (!(await modal.isVisible().catch(() => false))) return false;
+  const isOpen = await modal.evaluate<boolean>(`(el) => el.classList.contains('show')`);
+  if (!isOpen) return false;
 
-      for (const locator of confirmCandidates) {
-        const btn = locator.first();
-        if (!(await btn.isVisible().catch(() => false))) continue;
-        if (await btn.isDisabled().catch(() => false)) continue;
-        console.log('[micorreo] → confirmar modal Guardar envío');
-        await btn.click({ force: true });
-        await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => undefined);
-        await page.waitForTimeout(1500);
-        return true;
-      }
-    }
-    await page.waitForTimeout(500);
-  }
-  return false;
-}
+  const confirmCandidates = [
+    page.locator('#guardarEnvio.show button.btn-ne-s:has-text("Guardar")'),
+    page.locator('#guardarEnvio.modal.show button.btn-ne-s:has-text("Guardar")'),
+    page.locator('#guardarEnvio.show button:has-text("Guardar")'),
+  ];
 
-async function waitForSaveConfirmation(
-  page: Page,
-  config: WorkerConfig['micorreo'],
-): Promise<boolean> {
-  if (await pageShowsSaveSuccess(page) && (await waitForPagarEnabled(page, config))) {
+  for (const locator of confirmCandidates) {
+    const btn = locator.first();
+    if (!(await btn.isVisible().catch(() => false))) continue;
+    if (await btn.isDisabled().catch(() => false)) continue;
+    console.log('[micorreo] → confirmar modal Guardar envío');
+    await btn.click();
+    await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => undefined);
+    await page.waitForTimeout(1200);
     return true;
   }
 
-  const deadline = Date.now() + Math.min(config.timeoutMs, 30_000);
-  while (Date.now() < deadline) {
-    if (await pageShowsSaveSuccess(page) && (await waitForPagarEnabled(page, config))) {
-      return true;
-    }
+  return clickElementByExactButtonText(page, 'Guardar');
+}
 
-    const guardarInfo = page.locator('#guardarInfo.show, #guardarInfo.modal.show');
-    if (await guardarInfo.first().isVisible().catch(() => false)) {
-      await page.keyboard.press('Escape').catch(() => undefined);
-      await page.waitForTimeout(500);
-      if (await waitForPagarEnabled(page, config)) return true;
-    }
-
-    await page.waitForTimeout(500);
+async function dismissSuccessModal(page: Page): Promise<void> {
+  const guardarInfo = page.locator('#guardarInfo.show, #guardarInfo.modal.show');
+  if (await guardarInfo.first().isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape').catch(() => undefined);
+    await page.waitForTimeout(400);
   }
-  return false;
 }
 
 /** Tras «La importación se realizó con éxito», confirmar con Guardar y verificar guardado real. */
@@ -474,10 +465,18 @@ export async function saveAfterSuccessfulImport(
 
   console.log('[micorreo] → importación OK, clic en Guardar');
 
-  const deadline = Date.now() + Math.min(config.timeoutMs, 35_000);
-  let openedConfirmModal = false;
+  if (await isMassUploadReadyToPay(page)) {
+    return {
+      importSuccess: true,
+      saveSuccess: true,
+      message: 'Envío guardado en MiCorreo.',
+    };
+  }
+
+  const deadline = Date.now() + Math.min(config.timeoutMs, 40_000);
   while (Date.now() < deadline) {
-    if (await waitForSaveConfirmation(page, config)) {
+    if (await isMassUploadReadyToPay(page)) {
+      await dismissSuccessModal(page);
       return {
         importSuccess: true,
         saveSuccess: true,
@@ -486,17 +485,33 @@ export async function saveAfterSuccessfulImport(
     }
 
     if (await isGuardarEnvioModalVisible(page)) {
-      openedConfirmModal = await confirmGuardarEnvioModal(page, config);
-      if (openedConfirmModal) continue;
+      await confirmGuardarEnvioModal(page, config);
+      const ready = await waitForMassUploadReadyToPay(page, 12_000);
+      if (ready) {
+        await dismissSuccessModal(page);
+        return {
+          importSuccess: true,
+          saveSuccess: true,
+          message: 'Envío guardado en MiCorreo.',
+        };
+      }
     }
 
     const clicked = await clickMainGuardarButton(page);
     if (clicked) {
       await confirmGuardarEnvioModal(page, config);
-      continue;
+      const ready = await waitForMassUploadReadyToPay(page, 12_000);
+      if (ready) {
+        await dismissSuccessModal(page);
+        return {
+          importSuccess: true,
+          saveSuccess: true,
+          message: 'Envío guardado en MiCorreo.',
+        };
+      }
     }
 
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(600);
   }
 
   const body = await page.locator('body').innerText().catch(() => '');
@@ -585,29 +600,38 @@ async function waitForPaymentScreen(page: Page, timeoutMs: number): Promise<bool
 }
 
 async function clickMassUploadPagar(page: Page, config: WorkerConfig['micorreo']): Promise<boolean> {
-  const ready = await waitForPagarEnabled(page, config);
+  const ready = await waitForMassUploadReadyToPay(page, Math.min(config.timeoutMs, 25_000));
   if (!ready) {
     console.warn('[micorreo] #pagar no quedó habilitado tras Guardar');
     return false;
   }
 
-  const pagarBtn = page.locator('#pagar').first();
-  console.log('[micorreo] → clic en #pagar (envíos masivos)');
-  await pagarBtn.scrollIntoViewIfNeeded().catch(() => undefined);
-  await pagarBtn.click({ force: true });
+  console.log('[micorreo] → abrir checkout (#pagar / formPago)');
+  const triggered = await page.evaluate<boolean>(`(() => {
+    const btn = document.querySelector('#pagar');
+    if (btn && btn.disabled) return false;
+    if (typeof formPago === 'function') {
+      formPago();
+      return true;
+    }
+    if (btn instanceof HTMLElement) {
+      btn.click();
+      return true;
+    }
+    return false;
+  })()`);
+
+  if (!triggered) {
+    const pagarBtn = page.locator('#pagar').first();
+    if (!(await isPagarButtonEnabled(page))) return false;
+    await pagarBtn.scrollIntoViewIfNeeded().catch(() => undefined);
+    await pagarBtn.click();
+  }
 
   const navigated = await page
-    .waitForURL(/checkout/i, { timeout: Math.min(config.timeoutMs, 30_000) })
+    .waitForURL(/checkout/i, { timeout: Math.min(config.timeoutMs, 35_000) })
     .then(() => true)
-    .catch(async () => {
-      await page.evaluate(`(() => {
-        if (typeof formPago === 'function') formPago();
-      })()`);
-      return page
-        .waitForURL(/checkout/i, { timeout: Math.min(config.timeoutMs, 20_000) })
-        .then(() => true)
-        .catch(() => false);
-    });
+    .catch(() => false);
 
   if (navigated) return true;
 
@@ -675,17 +699,29 @@ async function selectBalancePayment(page: Page): Promise<boolean> {
 }
 
 async function clickCheckoutConfirmPagar(page: Page, config: WorkerConfig['micorreo']): Promise<boolean> {
-  return clickFirstVisibleLocator(
+  const clicked = await clickFirstVisibleLocator(
     [
-      page.locator('form button.btn-correo-primary:has-text("Pagar")'),
+      page.locator('button.btn-ne-s:has-text("Pagar")'),
       page.locator('button.btn-correo-primary:has-text("Pagar")'),
+      page.locator('form button:has-text("Pagar")'),
       page.getByRole('button', { name: /^Pagar$/i }),
-      page.locator('button:has-text("Pagar")'),
       page.locator('input[type="submit"][value*="Pagar" i]'),
       ...config.selectors.confirmPayment.map((selector) => page.locator(selector)),
     ],
     Math.min(config.timeoutMs, 30_000),
   );
+  if (clicked) return true;
+
+  return page.evaluate<boolean>(`(() => {
+    const buttons = [...document.querySelectorAll('button, input[type="submit"]')];
+    const payBtn = buttons.find((el) => {
+      const text = (el.textContent || el.value || '').trim().toLowerCase();
+      return text === 'pagar' && !el.disabled;
+    });
+    if (!payBtn) return false;
+    payBtn.click();
+    return true;
+  })()`);
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   confirmCsvUpload,
   saveAfterSuccessfulImport,
   payWithAvailableBalance,
+  isMassUploadReadyToPay,
   type PayWithBalanceResult,
   type SaveAfterImportResult,
 } from './navigate-mass-upload.js';
@@ -61,6 +62,7 @@ async function uploadFileOnPage(
   config: WorkerConfig['micorreo'],
   csvPath: string,
   payAfterUpload: boolean,
+  artifactsDir: string,
 ): Promise<{ portalText: string; importSuccess: boolean; saveSuccess: boolean; saveMessage: string; payment?: PayWithBalanceResult }> {
   console.log('[micorreo] → enviosMasivos');
   await navigateToMassUpload(page, config);
@@ -90,13 +92,19 @@ async function uploadFileOnPage(
   }
 
   if (!saveResult.saveSuccess) {
-    const feedback = await readPortalFeedback(page, config.timeoutMs);
-    return {
-      portalText: `${feedback}\n\n[GUARDAR] failed: ${saveResult.message}`,
-      importSuccess: true,
-      saveSuccess: false,
-      saveMessage: saveResult.message,
-    };
+    const readyToPay = await isMassUploadReadyToPay(page);
+    if (!readyToPay) {
+      const feedback = await readPortalFeedback(page, config.timeoutMs);
+      return {
+        portalText: `${feedback}\n\n[GUARDAR] failed: ${saveResult.message}`,
+        importSuccess: true,
+        saveSuccess: false,
+        saveMessage: saveResult.message,
+      };
+    }
+    console.log('[micorreo] guardar no confirmado por texto, pero #pagar habilitado — sigue al pago');
+    saveResult.saveSuccess = true;
+    saveResult.message = 'Envío listo para pagar en MiCorreo.';
   }
 
   if (payAfterUpload) {
@@ -104,6 +112,9 @@ async function uploadFileOnPage(
     const payment = await payWithAvailableBalance(page, config);
     const feedback = await readPortalFeedback(page, config.timeoutMs);
     console.log(`[micorreo] ← pago: ${payment.status} ${payment.message.slice(0, 120)}…`);
+    if (payment.status !== 'paid') {
+      await saveArtifacts(page, artifactsDir, 'payment_failed').catch(() => undefined);
+    }
     return {
       portalText: `${feedback}\n\n[PAGO] ${payment.status}: ${payment.message}`,
       importSuccess: true,
@@ -147,7 +158,13 @@ export async function uploadCsvToMicorreo(
 
   try {
     await login(page, config);
-    const upload = await uploadFileOnPage(page, config, csvPath, input.payAfterUpload === true);
+    const upload = await uploadFileOnPage(
+      page,
+      config,
+      csvPath,
+      input.payAfterUpload === true,
+      artifactsDir,
+    );
     return {
       portalText: upload.portalText,
       rowCount: input.csvContent.split(/\r?\n/).filter((l) => l.trim()).length - 1,
