@@ -50,6 +50,8 @@ export function ClienteDetailDialog({
 }: ClienteDetailDialogProps) {
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<ClienteTimelineEvent[]>([]);
+  const [resolvedNombre, setResolvedNombre] = useState<string | null>(null);
+  const [resolvedTelefono, setResolvedTelefono] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,9 +59,15 @@ export function ClienteDetailDialog({
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setResolvedNombre(null);
+    setResolvedTelefono(null);
     void fetchClienteTimeline(clienteId)
       .then((data) => {
-        if (!cancelled) setEvents(data);
+        if (!cancelled) {
+          setEvents(data.events);
+          setResolvedNombre(data.nombre);
+          setResolvedTelefono(data.telefono);
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Error al cargar timeline');
@@ -72,21 +80,28 @@ export function ClienteDetailDialog({
     };
   }, [open, clienteId]);
 
-  const wa = whatsAppUrl(clienteTelefono);
+  const displayNombre =
+    resolvedNombre && resolvedNombre !== 'Sin nombre' && resolvedNombre !== 'Cliente'
+      ? resolvedNombre
+      : clienteNombre && clienteNombre !== 'Cliente'
+        ? clienteNombre
+        : resolvedNombre ?? clienteNombre ?? 'Detalle del cliente';
+  const displayTelefono = resolvedTelefono ?? clienteTelefono ?? null;
+  const wa = whatsAppUrl(displayTelefono);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{clienteNombre ?? 'Detalle del cliente'}</DialogTitle>
+          <DialogTitle>{displayNombre}</DialogTitle>
           <DialogDescription>
-            Timeline de actividad web: contacto, mockups, checkout y pagos.
+            Actividad web: muestras online, checkout y pagos.
           </DialogDescription>
         </DialogHeader>
 
-        {clienteTelefono ? (
+        {displayTelefono ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>{clienteTelefono}</span>
+            <span>{displayTelefono}</span>
             {wa ? (
               <Button variant="outline" size="sm" asChild>
                 <a href={wa} target="_blank" rel="noopener noreferrer">

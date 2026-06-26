@@ -575,7 +575,7 @@ export function ClientesWebTable({
   return (
     <SectionTable
       title="Directorio de clientes web"
-      description="Personas con contacto web y su etapa actual en el embudo."
+      description="Personas que usaron el generador de muestras online."
       count={filtered.length}
     >
       <div className="border-b px-4 py-3">

@@ -176,6 +176,12 @@ export type ClienteTimelineEvent = {
   url?: string | null;
 };
 
+export type ClienteTimelineResult = {
+  events: ClienteTimelineEvent[];
+  nombre: string;
+  telefono: string | null;
+};
+
 export type AnalyticsEventRow = {
   id: string;
   eventType: string;

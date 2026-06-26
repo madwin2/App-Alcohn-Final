@@ -3,6 +3,7 @@ import type {
   AnalyticsEventRow,
   AnalyticsSummary,
   ClienteTimelineEvent,
+  ClienteTimelineResult,
   ClienteWebRow,
   ComercialDashboardData,
   ComercialDateRange,
@@ -375,6 +376,21 @@ async function fetchAllMockupsForClientes(origen: ComercialOrigenFilter) {
   return (data ?? []) as MockupRow[];
 }
 
+/** Siempre mockups web — el directorio no depende del filtro "Todos/Web/App" del panel. */
+async function fetchAllWebMockupsForDirectorio() {
+  const { data, error } = await supabase
+    .from('mockup_solicitudes')
+    .select(
+      'id, cliente_id, created_at, updated_at, estado, orden_id, checkout_iniciado_at, checkout_completado_at, origen, material, whatsapp, email, mockup_cuero_url, mockup_madera_url, medidas_cotizacion_json, nombre_muestra, nombre_slug, metadata_web',
+    )
+    .eq('origen', 'web')
+    .order('created_at', { ascending: false })
+    .limit(5000);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as MockupRow[];
+}
+
 async function fetchClientesWeb(fromIso: string, toIso: string) {
   const { data, error } = await supabase
     .from('clientes')
@@ -399,6 +415,24 @@ async function fetchAllWebClientes() {
 
   if (error) throw new Error(error.message);
   return (data ?? []) as ClienteRow[];
+}
+
+async function fetchClientesByIds(ids: string[]): Promise<ClienteRow[]> {
+  const unique = [...new Set(ids)].filter(Boolean);
+  if (!unique.length) return [];
+
+  const rows: ClienteRow[] = [];
+  const CHUNK = 200;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const chunk = unique.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('id, nombre, apellido, telefono, mail, medio_contacto, created_at, updated_at')
+      .in('id', chunk);
+    if (error) throw new Error(error.message);
+    rows.push(...((data ?? []) as ClienteRow[]));
+  }
+  return rows;
 }
 
 async function fetchOrdenesWeb(fromIso: string, toIso: string) {
@@ -844,36 +878,130 @@ function buildDailyTrend(
   });
 }
 
+function ordenesRelevantesDirectorioWeb(
+  ordenes: OrdenWithCliente[],
+  webLeads: WebLeadKeys,
+): OrdenWithCliente[] {
+  return ordenes.filter((o) => o.origen === 'Web' || ordenMatchesWebLead(o, webLeads));
+}
+
+/** Solo quienes generaron al menos una muestra online. */
+function collectDirectorioWebClienteIds(mockupsWebByCliente: Map<string, MockupRow[]>): Set<string> {
+  return new Set(mockupsWebByCliente.keys());
+}
+
+function buildMockupsByClienteMap(
+  mockups: MockupRow[],
+  exclusions: ComercialExclusionSets,
+): Map<string, MockupRow[]> {
+  const map = new Map<string, MockupRow[]>();
+  for (const m of mockups) {
+    if (!m.cliente_id || exclusions.clientes.has(m.cliente_id)) continue;
+    const list = map.get(m.cliente_id) ?? [];
+    list.push(m);
+    map.set(m.cliente_id, list);
+  }
+  return map;
+}
+
+function isNombreGenericoCliente(nombre?: string | null, apellido?: string | null): boolean {
+  const full = [nombre, apellido].filter(Boolean).join(' ').trim().toLowerCase();
+  return !full || full === 'cliente';
+}
+
+function resolveClienteForDirectorio(
+  clienteId: string,
+  clientesById: Map<string, ClienteRow>,
+  mockups: MockupRow[],
+  ordenes: OrdenWithCliente[],
+): ClienteRow {
+  const base = clientesById.get(clienteId);
+  const ordenCliente = ordenes.find((o) => o.clientes?.id === clienteId)?.clientes ?? null;
+  const mockup =
+    mockups.find((m) => m.whatsapp?.trim() || m.email?.trim() || m.nombre_muestra?.trim()) ??
+    mockups[0];
+
+  const nombreFromMockup = mockup?.nombre_muestra?.trim() || '';
+  const slugFromMockup = mockup?.nombre_slug?.trim() || '';
+  const telefono =
+    base?.telefono?.trim() ||
+    ordenCliente?.telefono?.trim() ||
+    mockup?.whatsapp?.trim() ||
+    '';
+  const mail = base?.mail || ordenCliente?.mail || mockup?.email?.trim() || null;
+
+  if (base && !isNombreGenericoCliente(base.nombre, base.apellido)) {
+    return {
+      ...base,
+      telefono: telefono || base.telefono,
+      mail: mail ?? base.mail,
+    };
+  }
+
+  if (ordenCliente?.nombre?.trim() || ordenCliente?.apellido?.trim()) {
+    return {
+      ...(base ?? { id: clienteId }),
+      id: clienteId,
+      nombre: ordenCliente.nombre ?? '',
+      apellido: ordenCliente.apellido ?? '',
+      telefono: telefono || ordenCliente.telefono || '',
+      mail: mail ?? ordenCliente.mail,
+      created_at: base?.created_at ?? ordenCliente.created_at ?? null,
+      updated_at: base?.updated_at ?? null,
+    } as ClienteRow;
+  }
+
+  if (nombreFromMockup || slugFromMockup || telefono) {
+    const mockupParts = nombreFromMockup.split(/\s+/).filter(Boolean);
+    return {
+      ...(base ?? { id: clienteId }),
+      id: clienteId,
+      nombre: mockupParts[0] ?? slugFromMockup ?? '',
+      apellido: mockupParts.slice(1).join(' '),
+      telefono,
+      mail,
+      created_at: base?.created_at ?? mockup?.created_at ?? null,
+      updated_at: base?.updated_at ?? null,
+    } as ClienteRow;
+  }
+
+  return (
+    base ??
+    ({
+      id: clienteId,
+      nombre: 'Sin nombre',
+      apellido: '',
+      telefono: '',
+      mail: null,
+      created_at: null,
+      updated_at: null,
+    } as ClienteRow)
+  );
+}
+
 function buildClientesWeb(
-  clientes: ClienteRow[],
+  clientesById: Map<string, ClienteRow>,
+  directorioIds: Set<string>,
   mockupsByCliente: Map<string, MockupRow[]>,
   ordenesByCliente: Map<string, OrdenWithCliente[]>,
+  webLeads: WebLeadKeys,
 ): ClienteWebRow[] {
-  const allIds = new Set<string>();
-  clientes.forEach((c) => allIds.add(c.id));
-  mockupsByCliente.forEach((_, id) => allIds.add(id));
-  ordenesByCliente.forEach((_, id) => allIds.add(id));
-
   const rows: ClienteWebRow[] = [];
 
-  for (const clienteId of allIds) {
-    const cliente =
-      clientes.find((c) => c.id === clienteId) ??
-      ({
-        id: clienteId,
-        nombre: 'Cliente',
-        apellido: '',
-        telefono: '',
-        mail: null,
-        created_at: null,
-        updated_at: null,
-      } as ClienteRow);
-
+  for (const clienteId of directorioIds) {
     const mockups = mockupsByCliente.get(clienteId) ?? [];
-    const ordenes = ordenesByCliente.get(clienteId) ?? [];
-    const ordenesPagadas = ordenes.filter((o) => ordenVentaAt(o) != null);
-    const tieneCheckoutPendiente = ordenes.some((o) =>
-      PAGO_PENDIENTE.includes(o.estado_pago_web as (typeof PAGO_PENDIENTE)[number]),
+    const ordenes = ordenesRelevantesDirectorioWeb(
+      ordenesByCliente.get(clienteId) ?? [],
+      webLeads,
+    );
+    const cliente = resolveClienteForDirectorio(clienteId, clientesById, mockups, ordenes);
+    const ordenesPagadas = ordenes.filter(
+      (o) => isVentaWebDirecta(o) || isVentaDerivadaDeWeb(o, webLeads),
+    );
+    const tieneCheckoutPendiente = ordenes.some(
+      (o) =>
+        o.origen === 'Web' &&
+        PAGO_PENDIENTE.includes(o.estado_pago_web as (typeof PAGO_PENDIENTE)[number]),
     );
     const tieneMockupSinCompra = mockups.some(
       (m) => !m.orden_id && MOCKUP_LISTO.includes(m.estado as (typeof MOCKUP_LISTO)[number]),
@@ -955,6 +1083,7 @@ export async function fetchComercialDashboard(
     ordenesSeguimientoRaw,
     seguimientosClientes,
     allMockups,
+    allMockupsWebDirectorio,
     allClientes,
     allOrdenesWeb,
     allOrdenes,
@@ -971,6 +1100,7 @@ export async function fetchComercialDashboard(
     fetchOrdenesSeguimientoAll(),
     fetchComercialSeguimientosClientes(),
     fetchAllMockupsForClientes(origen),
+    fetchAllWebMockupsForDirectorio(),
     fetchAllWebClientes(),
     supabase
       .from('ordenes')
@@ -1024,13 +1154,11 @@ export async function fetchComercialDashboard(
       return mapOrdenSeguimiento(row as OrdenWithCliente);
     });
 
-  const mockupsByCliente = new Map<string, MockupRow[]>();
-  for (const m of allMockupsFiltered) {
-    if (!m.cliente_id || exclusions.clientes.has(m.cliente_id)) continue;
-    const list = mockupsByCliente.get(m.cliente_id) ?? [];
-    list.push(m);
-    mockupsByCliente.set(m.cliente_id, list);
-  }
+  const mockupsByCliente = buildMockupsByClienteMap(allMockupsFiltered, exclusions);
+  const mockupsWebByCliente = buildMockupsByClienteMap(
+    filterMockups(allMockupsWebDirectorio, exclusions),
+    exclusions,
+  );
 
   const ordenesByCliente = new Map<string, OrdenWithCliente[]>();
   for (const o of allOrdenesFiltered) {
@@ -1041,7 +1169,20 @@ export async function fetchComercialDashboard(
   }
 
   const contactosSinMuestra = buildContactosSinMuestra(clientesRangeFiltered, mockupsByCliente);
-  const clientesWeb = buildClientesWeb(allClientesFiltered, mockupsByCliente, ordenesByCliente);
+
+  const directorioIds = collectDirectorioWebClienteIds(mockupsWebByCliente);
+  const clientesById = new Map<string, ClienteRow>();
+  const missingDirectorioIds = [...directorioIds].filter((id) => !clientesById.has(id));
+  const extraClientes = filterClientes(await fetchClientesByIds(missingDirectorioIds), exclusions);
+  for (const c of extraClientes) clientesById.set(c.id, c);
+
+  const clientesWeb = buildClientesWeb(
+    clientesById,
+    directorioIds,
+    mockupsWebByCliente,
+    ordenesByCliente,
+    webLeads,
+  );
 
   const currentCounts = computeCounts(
     range,
@@ -1101,18 +1242,20 @@ export async function fetchComercialDashboard(
   };
 }
 
-export async function fetchClienteTimeline(clienteId: string): Promise<ClienteTimelineEvent[]> {
+export async function fetchClienteTimeline(clienteId: string): Promise<ClienteTimelineResult> {
   const [clienteRes, mockupsRes, ordenesRes] = await Promise.all([
     supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle(),
     supabase
       .from('mockup_solicitudes')
       .select('*')
       .eq('cliente_id', clienteId)
+      .eq('origen', 'web')
       .order('created_at', { ascending: false }),
     supabase
       .from('ordenes')
       .select('*')
       .eq('cliente_id', clienteId)
+      .eq('origen', 'Web')
       .order('created_at', { ascending: false }),
   ]);
 
@@ -1122,22 +1265,24 @@ export async function fetchClienteTimeline(clienteId: string): Promise<ClienteTi
 
   const events: ClienteTimelineEvent[] = [];
   const cliente = clienteRes.data as ClienteRow | null;
+  const mockups = (mockupsRes.data ?? []) as MockupRow[];
+  const ordenesWeb = (ordenesRes.data ?? []) as OrdenRow[];
 
-  if (cliente?.created_at) {
+  if (cliente?.created_at && cliente.medio_contacto === 'Web') {
     events.push({
       id: `contacto-${cliente.id}`,
       kind: 'contacto',
-      label: 'Dejó datos de contacto',
-      detail: `Medio: ${cliente.medio_contacto ?? '—'}`,
+      label: 'Dejó datos de contacto en la web',
+      detail: 'Medio: Web',
       at: cliente.created_at,
     });
   }
 
-  for (const m of (mockupsRes.data ?? []) as MockupRow[]) {
+  for (const m of mockups) {
     events.push({
       id: `mockup-${m.id}`,
       kind: 'mockup',
-      label: `Muestra: ${m.nombre_muestra || m.nombre_slug}`,
+      label: `Muestra: ${m.nombre_muestra || m.nombre_slug || 'sin nombre'}`,
       detail: `Material: ${m.material} · Estado: ${m.estado}`,
       at: m.created_at,
       url: m.mockup_cuero_url || m.mockup_madera_url || m.archivo_base_url,
@@ -1160,11 +1305,11 @@ export async function fetchClienteTimeline(clienteId: string): Promise<ClienteTi
     }
   }
 
-  for (const o of (ordenesRes.data ?? []) as OrdenRow[]) {
+  for (const o of ordenesWeb) {
     events.push({
       id: `orden-${o.id}`,
       kind: 'orden',
-      label: `Pedido web · ${o.estado_pago_web ?? '—'}`,
+      label: `Pedido web · ${o.estado_pago_web ?? 'sin estado'}`,
       detail: o.valor_total != null ? `Total: $${o.valor_total}` : undefined,
       at: o.created_at ?? new Date().toISOString(),
     });
@@ -1188,5 +1333,17 @@ export async function fetchClienteTimeline(clienteId: string): Promise<ClienteTi
     }
   }
 
-  return sortTimeline(events);
+  const clientesById = new Map(cliente ? [[cliente.id, cliente]] : []);
+  const resolved = resolveClienteForDirectorio(
+    clienteId,
+    clientesById,
+    mockups,
+    ordenesWeb as OrdenWithCliente[],
+  );
+
+  return {
+    events: sortTimeline(events),
+    nombre: fullName(resolved),
+    telefono: resolved.telefono?.trim() || null,
+  };
 }
