@@ -266,27 +266,65 @@ export async function waitForCsvFileInput(
   );
 }
 
-export async function confirmCsvUpload(page: Page, config: WorkerConfig['micorreo']): Promise<void> {
-  const buttons = [
-    'button:has-text("Importar")',
-    'button:has-text("Cargar")',
-    'button:has-text("Procesar")',
-    'button:has-text("Validar")',
-    'button:has-text("Subir")',
-    ...config.selectors.submitUpload,
-  ];
+export async function confirmCsvUpload(page: Page, config: WorkerConfig['micorreo']): Promise<boolean> {
+  const deadline = Date.now() + Math.min(config.timeoutMs, 30_000);
 
-  for (const selector of buttons) {
-    const btn = page.locator(selector).first();
-    if (await btn.isVisible().catch(() => false)) {
+  while (Date.now() < deadline) {
+    if (await pageHasImportSuccess(page)) return true;
+
+    const locators = [
+      page.getByRole('button', { name: /importar/i }),
+      page.getByRole('button', { name: /^cargar$/i }),
+      page.getByRole('button', { name: /procesar/i }),
+      page.getByRole('button', { name: /validar/i }),
+      page.getByRole('button', { name: /subir/i }),
+      page.locator('button:has-text("Importar")'),
+      page.locator('button:has-text("Cargar")'),
+      page.locator('button:has-text("Procesar")'),
+      page.locator('button:has-text("Validar")'),
+      page.locator('button:has-text("Subir")'),
+      page.locator('a:has-text("Importar")'),
+      ...config.selectors.submitUpload.map((selector) => page.locator(selector)),
+    ];
+
+    for (const locator of locators) {
+      const btn = locator.first();
+      if (!(await btn.isVisible().catch(() => false))) continue;
       if (await btn.isDisabled().catch(() => false)) continue;
-      console.log(`[micorreo] → confirmar carga (${selector})`);
+      const label = (await btn.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      if (/medida/i.test(label)) continue;
+      console.log(`[micorreo] → confirmar carga (${label || 'botón importación'})`);
+      await btn.scrollIntoViewIfNeeded().catch(() => undefined);
       await btn.click();
       await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => undefined);
       await page.waitForTimeout(2000);
-      return;
+      return true;
     }
+
+    const clicked = await page.evaluate<boolean>(`(() => {
+      const words = ['importar', 'procesar', 'validar'];
+      const nodes = [...document.querySelectorAll('button, a, input[type="button"], input[type="submit"]')];
+      for (const node of nodes) {
+        const text = ((node.textContent || node.value || '') + '').trim().toLowerCase();
+        if (!words.some((word) => text === word || text.includes(word))) continue;
+        if ('disabled' in node && node.disabled) continue;
+        node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        return true;
+      }
+      return false;
+    })()`);
+    if (clicked) {
+      console.log('[micorreo] → confirmar carga (fallback DOM)');
+      await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => undefined);
+      await page.waitForTimeout(2000);
+      return true;
+    }
+
+    await page.waitForTimeout(600);
   }
+
+  console.warn('[micorreo] no se encontró botón para importar/procesar el CSV');
+  return false;
 }
 
 export type SaveAfterImportResult = {
@@ -296,8 +334,50 @@ export type SaveAfterImportResult = {
 };
 
 async function pageHasImportSuccess(page: Page): Promise<boolean> {
+  const successAlert = page.locator(
+    '.alert-success, .alert.alert-success, [class*="success" i], [role="alert"]',
+  );
+  const alertCount = await successAlert.count();
+  for (let i = 0; i < alertCount; i += 1) {
+    const text = (await successAlert.nth(i).innerText().catch(() => '')).trim();
+    if (/importaci[oó]n|realiz[oó].*con [ée]xito|procesad.*con [ée]xito/i.test(text)) {
+      return true;
+    }
+  }
+
   const body = await page.locator('body').innerText().catch(() => '');
-  return /importaci[oó]n se realiz[oó] con [ée]xito|importaci[oó]n exitosa/i.test(body);
+  return (
+    /importaci[oó]n se realiz[oó] con [ée]xito/i.test(body) ||
+    /la importaci[oó]n se realiz[oó] con [ée]xito/i.test(body) ||
+    /importaci[oó]n exitosa/i.test(body) ||
+    /env[ií]os procesados con [ée]xito/i.test(body)
+  );
+}
+
+async function isGuardarButtonVisible(page: Page): Promise<boolean> {
+  const buttons = page.locator('button:visible');
+  const count = await buttons.count();
+  for (let i = 0; i < count; i += 1) {
+    const btn = buttons.nth(i);
+    const text = (await btn.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    if (!/^Guardar$/i.test(text)) continue;
+    if (text.toLowerCase().includes('medida')) continue;
+    if (await btn.isDisabled().catch(() => false)) continue;
+    let insideModal = false;
+    try {
+      insideModal = await btn.evaluate<boolean>(
+        `(el) => Boolean(el && el.closest('#guardarEnvio, #guardarCambios, #guardarInfo, #exampleModal'))`,
+      );
+    } catch {
+      insideModal = false;
+    }
+    if (!insideModal) return true;
+  }
+  return false;
+}
+
+async function isCsvReadyForGuardar(page: Page): Promise<boolean> {
+  return (await pageHasImportSuccess(page)) || (await isGuardarButtonVisible(page));
 }
 
 async function pageHasImportErrors(page: Page): Promise<boolean> {
@@ -309,9 +389,10 @@ async function waitForImportOutcome(
   page: Page,
   config: WorkerConfig['micorreo'],
 ): Promise<'success' | 'error' | 'timeout'> {
-  const deadline = Date.now() + Math.min(config.timeoutMs, 60_000);
+  const deadline = Date.now() + Math.min(config.timeoutMs, 90_000);
   while (Date.now() < deadline) {
     if (await pageHasImportSuccess(page)) return 'success';
+    if (await isGuardarButtonVisible(page)) return 'success';
     if (await pageHasImportErrors(page)) return 'error';
     await page.waitForTimeout(800);
   }
@@ -341,9 +422,9 @@ async function isPagarButtonEnabled(page: Page): Promise<boolean> {
   return !(await pagarBtn.isDisabled().catch(() => true));
 }
 
-/** Listo para pagar = mensaje de procesado + botón Pagar habilitado (como hacés manualmente). */
+/** Listo para pagar = envío guardado y botón Pagar habilitado. */
 export async function isMassUploadReadyToPay(page: Page): Promise<boolean> {
-  return (await pageShowsSaveSuccess(page)) && (await isPagarButtonEnabled(page));
+  return await isPagarButtonEnabled(page);
 }
 
 async function waitForMassUploadReadyToPay(
@@ -448,7 +529,7 @@ async function dismissSuccessModal(page: Page): Promise<void> {
   }
 }
 
-/** Tras «La importación se realizó con éxito», confirmar con Guardar y verificar guardado real. */
+/** Tras subir el CSV: esperar importación, Guardar, y dejar listo para pagar. */
 export async function saveAfterSuccessfulImport(
   page: Page,
   config: WorkerConfig['micorreo'],
@@ -462,7 +543,7 @@ export async function saveAfterSuccessfulImport(
       message: body.slice(0, 500) || 'MiCorreo rechazó el CSV.',
     };
   }
-  if (importOutcome !== 'success') {
+  if (importOutcome !== 'success' && !(await isCsvReadyForGuardar(page))) {
     return {
       importSuccess: false,
       saveSuccess: false,

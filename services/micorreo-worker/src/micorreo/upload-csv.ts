@@ -72,8 +72,11 @@ async function uploadFileOnPage(
 
   console.log(`[micorreo] → subiendo archivo (${path.basename(csvPath)})`);
   await page.locator(fileSelector).first().setInputFiles(csvPath);
-  await page.waitForTimeout(1500);
+  await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => undefined);
+  await page.waitForTimeout(2500);
 
+  await confirmCsvUpload(page, config);
+  await page.waitForTimeout(2000);
   await confirmCsvUpload(page, config);
 
   const saveResult: SaveAfterImportResult = await saveAfterSuccessfulImport(page, config);
