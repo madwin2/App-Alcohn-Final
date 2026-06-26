@@ -1,3 +1,4 @@
+import { extractMicorreoPortalMessage } from './portal-messages.js';
 import type { UploadStatus } from './types.js';
 
 const DATA_ERROR_PATTERNS = [
@@ -126,8 +127,7 @@ export function determineUploadStatus(input: UploadPipelineResult): {
     return {
       status: 'data_error',
       message:
-        input.saveMessage ||
-        portalText.slice(0, 500) ||
+        extractMicorreoPortalMessage(input.saveMessage || portalText) ||
         'MiCorreo no confirmó la importación del CSV.',
       labelReady: false,
       paymentPending: false,

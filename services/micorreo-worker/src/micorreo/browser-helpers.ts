@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Page } from 'playwright';
+import { extractMicorreoPortalMessage } from '../portal-messages.js';
 
 export async function saveArtifacts(
   page: Page,
@@ -79,7 +80,34 @@ export async function clickFirstMatch(
 }
 
 export async function readPortalFeedback(page: Page, timeoutMs: number): Promise<string> {
+  const domSnippet = await page
+    .evaluate<string>(`(() => {
+      const blocks = [
+        ...document.querySelectorAll(
+          '.alert-danger, .alert.alert-danger, .text-danger, [class*="error" i], [role="alert"]',
+        ),
+      ];
+      for (const el of blocks) {
+        const t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+        if (/archivo contiene errores|\\(Fila \\d+\\)/i.test(t) && t.length >= 20 && t.length <= 2000) {
+          return t;
+        }
+      }
+      const body = document.body?.innerText || '';
+      const idx = body.search(/archivo contiene errores/i);
+      if (idx >= 0) return body.slice(idx, idx + 1200);
+      return '';
+    })()`)
+    .catch(() => '');
+
+  if (domSnippet.trim()) {
+    const extracted = extractMicorreoPortalMessage(domSnippet);
+    if (extracted) return extracted;
+  }
+
   const candidates = [
+    '.alert-danger',
+    '.alert.alert-danger',
     '[role="alert"]',
     '.alert',
     '.error',
@@ -98,12 +126,15 @@ export async function readPortalFeedback(page: Page, timeoutMs: number): Promise
     const count = await locator.count();
     for (let i = 0; i < count; i += 1) {
       const text = (await locator.nth(i).innerText().catch(() => '')).trim();
-      if (text.length >= 8) return text;
+      if (text.length < 8) continue;
+      const extracted = extractMicorreoPortalMessage(text);
+      if (extracted && extracted.length < 600) return extracted;
     }
   }
 
   await page.waitForTimeout(Math.min(timeoutMs, 3000));
-  return (await page.locator('body').innerText({ timeout: 5000 })).trim();
+  const body = (await page.locator('body').innerText({ timeout: 5000 })).trim();
+  return extractMicorreoPortalMessage(body);
 }
 
 export function isLoginError(text: string): boolean {

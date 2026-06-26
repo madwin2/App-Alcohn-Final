@@ -1,5 +1,6 @@
 import type { Page } from 'playwright';
 import type { WorkerConfig } from '../config.js';
+import { extractMicorreoPortalMessage } from '../portal-messages.js';
 
 export const MICORREO_MASS_UPLOAD_URL =
   'https://www.correoargentino.com.ar/MiCorreo/public/enviosMasivos';
@@ -557,7 +558,7 @@ export async function saveAfterSuccessfulImport(
     return {
       importSuccess: false,
       saveSuccess: false,
-      message: body.slice(0, 500) || 'MiCorreo rechazó el CSV.',
+      message: extractMicorreoPortalMessage(body) || 'MiCorreo rechazó el CSV.',
     };
   }
   if (importOutcome !== 'success' && !(await isCsvReadyForGuardar(page))) {
@@ -623,7 +624,7 @@ export async function saveAfterSuccessfulImport(
     importSuccess: true,
     saveSuccess: false,
     message:
-      body.slice(0, 500) ||
+      extractMicorreoPortalMessage(body) ||
       'La importación fue exitosa, pero no se pudo guardar el envío en MiCorreo.',
   };
 }

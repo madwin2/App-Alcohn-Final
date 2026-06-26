@@ -85,9 +85,8 @@ async function uploadFileOnPage(
   );
 
   if (!saveResult.importSuccess) {
-    const feedback = await readPortalFeedback(page, config.timeoutMs);
     return {
-      portalText: feedback || saveResult.message,
+      portalText: saveResult.message,
       importSuccess: false,
       saveSuccess: false,
       saveMessage: saveResult.message,
@@ -97,9 +96,8 @@ async function uploadFileOnPage(
   if (!saveResult.saveSuccess) {
     const readyToPay = await isMassUploadReadyToPay(page);
     if (!readyToPay) {
-      const feedback = await readPortalFeedback(page, config.timeoutMs);
       return {
-        portalText: `${feedback}\n\n[GUARDAR] failed: ${saveResult.message}`,
+        portalText: saveResult.message,
         importSuccess: true,
         saveSuccess: false,
         saveMessage: saveResult.message,
@@ -114,13 +112,12 @@ async function uploadFileOnPage(
     await page.waitForTimeout(2500);
     console.log('[micorreo] → pagando con saldo disponible');
     const payment = await payWithAvailableBalance(page, config);
-    const feedback = await readPortalFeedback(page, config.timeoutMs);
     console.log(`[micorreo] ← pago: ${payment.status} ${payment.message.slice(0, 120)}…`);
     if (payment.status !== 'paid') {
       await saveArtifacts(page, artifactsDir, 'payment_failed').catch(() => undefined);
     }
     return {
-      portalText: `${feedback}\n\n[PAGO] ${payment.status}: ${payment.message}`,
+      portalText: payment.message,
       importSuccess: true,
       saveSuccess: true,
       saveMessage: saveResult.message,
