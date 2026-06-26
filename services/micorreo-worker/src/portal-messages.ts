@@ -21,12 +21,44 @@ const BOILERPLATE_LINE = [
   /^\[GUARDAR\]/i,
 ];
 
+/** Inicio del resumen del envío (ya no es el error del CSV). */
+const SUMMARY_SECTION_LINE = [
+  /^resumen$/i,
+  /^origen$/i,
+  /^destino$/i,
+  /^editar$/i,
+  /^carga de datos$/i,
+  /^nombre y apellido/i,
+  /^raz[oó]n social$/i,
+  /^direcci[oó]n$/i,
+  /^cantidad de env[ií]os$/i,
+  /^tipo de env[ií]o$/i,
+  /^medio de pago$/i,
+  /^peso$/i,
+  /^dimensiones$/i,
+  /^valor declarado$/i,
+];
+
+const CSV_ERROR_HEADER = /el archivo contiene errores/i;
+
 function isBoilerplateLine(line: string): boolean {
   return BOILERPLATE_LINE.some((re) => re.test(line.trim()));
 }
 
+function isSummarySectionLine(line: string): boolean {
+  return SUMMARY_SECTION_LINE.some((re) => re.test(line.trim()));
+}
+
+function isErrorDetailLine(line: string): boolean {
+  if (CSV_ERROR_HEADER.test(line)) return true;
+  if (/\(Fila \d+\)/i.test(line)) return true;
+  return /incorrecto|inv[aá]lid|verifique|ingrese|debe contener|obligatorio|no v[aá]lid|tel[eé]fono|sucursal|provincia|c[oó]digo postal|cp\b|correo electr|email|calle|altura/i.test(
+    line,
+  );
+}
+
 function collectCsvErrorLines(text: string): string[] {
-  const archivoIdx = text.search(/el archivo contiene errores/i);
+  const archivoIdx = text.search(CSV_ERROR_HEADER);
   if (archivoIdx < 0) return [];
 
   const lines = text
@@ -37,12 +69,12 @@ function collectCsvErrorLines(text: string): string[] {
 
   const collected: string[] = [];
   for (const line of lines) {
-    if (collected.length > 0 && isBoilerplateLine(line)) break;
+    if (collected.length > 0 && (isBoilerplateLine(line) || isSummarySectionLine(line))) break;
+    if (collected.length > 0 && !isErrorDetailLine(line)) break;
     collected.push(line);
-    if (collected.length > 12) break;
   }
 
-  return collected.filter((line) => !isBoilerplateLine(line) || /archivo contiene errores/i.test(line));
+  return collected;
 }
 
 /**
@@ -57,12 +89,10 @@ export function extractMicorreoPortalMessage(rawText: string): string {
     return csvLines.join('\n');
   }
 
-  const detalleMatch = text.match(
-    /visualiza el detalle:\s*\n?\s*([^\n]+)/i,
-  );
+  const detalleMatch = text.match(/visualiza el detalle:\s*\n?\s*([^\n]+)/i);
   if (detalleMatch?.[1]) {
     const detail = detalleMatch[1].trim();
-    if (detail.length > 0 && detail.length < 300 && !isBoilerplateLine(detail)) {
+    if (detail.length > 0 && detail.length < 300 && isErrorDetailLine(detail)) {
       return `El archivo contiene errores, a continuación se visualiza el detalle:\n${detail}`;
     }
   }
@@ -70,7 +100,7 @@ export function extractMicorreoPortalMessage(rawText: string): string {
   const filaLines = text
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l && /\(Fila \d+\)/i.test(l) && !isBoilerplateLine(l));
+    .filter((l) => l && /\(Fila \d+\)/i.test(l) && isErrorDetailLine(l));
   if (filaLines.length) {
     return `El archivo contiene errores:\n${filaLines.join('\n')}`;
   }
@@ -94,9 +124,8 @@ export function extractMicorreoPortalMessage(rawText: string): string {
         l.length >= 12 &&
         l.length <= 280 &&
         !isBoilerplateLine(l) &&
-        /error|inv[aá]lid|fila|tel[eé]fono|sucursal|provincia|cp\b|c[oó]digo postal|correo electr|email|obligatorio|rechaz|no se pudo|verifique|ingrese/i.test(
-          l,
-        ),
+        !isSummarySectionLine(l) &&
+        isErrorDetailLine(l),
     );
   if (meaningful.length) return meaningful.join('\n');
 
