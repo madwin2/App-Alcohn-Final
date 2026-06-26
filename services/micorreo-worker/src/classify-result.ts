@@ -34,6 +34,7 @@ const IMPORT_SUCCESS_PATTERNS = [
 ];
 
 const SAVE_SUCCESS_PATTERNS = [
+  /env[ií]os procesados con [ée]xito/i,
   /guardado exitosamente/i,
   /env[ií]o.*guardad/i,
   /se guard[oó]/i,
@@ -81,11 +82,15 @@ export type UploadPipelineResult = {
   paymentMessage?: string;
 };
 
-/** Éxito real = CSV importado + envío guardado en MiCorreo (+ pago si se pidió). */
+/**
+ * Error solo si MiCorreo rechazó el CSV o la automatización no pudo guardar el envío.
+ * Si el CSV fue aceptado y la etiqueta quedó en MiCorreo, es OK aunque el pago falle.
+ */
 export function determineUploadStatus(input: UploadPipelineResult): {
   status: UploadStatus;
   message: string;
-  saveConfirmed: boolean;
+  labelReady: boolean;
+  paymentPending: boolean;
 } {
   const portalText = input.portalText.trim();
   const importSuccess =
@@ -93,7 +98,8 @@ export function determineUploadStatus(input: UploadPipelineResult): {
   const saveSuccess =
     input.saveSuccess ||
     SAVE_SUCCESS_PATTERNS.some((re) => re.test(portalText)) ||
-    /\[GUARDAR\]\s*ok/i.test(portalText);
+    input.paymentStatus === 'paid' ||
+    input.paymentStatus === 'payment_error';
 
   if (!importSuccess) {
     return {
@@ -102,7 +108,8 @@ export function determineUploadStatus(input: UploadPipelineResult): {
         input.saveMessage ||
         portalText.slice(0, 500) ||
         'MiCorreo no confirmó la importación del CSV.',
-      saveConfirmed: false,
+      labelReady: false,
+      paymentPending: false,
     };
   }
 
@@ -112,40 +119,35 @@ export function determineUploadStatus(input: UploadPipelineResult): {
       message:
         input.saveMessage ||
         'La importación fue exitosa, pero el envío no quedó guardado en MiCorreo.',
-      saveConfirmed: false,
+      labelReady: false,
+      paymentPending: false,
     };
   }
 
-  if (input.payAfterUpload) {
-    if (input.paymentStatus === 'paid') {
-      return {
-        status: 'ok',
-        message: 'CSV aceptado, envío guardado y etiqueta pagada con saldo disponible.',
-        saveConfirmed: true,
-      };
-    }
-
-    if (input.paymentStatus === 'payment_error') {
-      return {
-        status: 'ok',
-        message:
-          input.paymentMessage ||
-          'Envío guardado en MiCorreo, pero no se pudo pagar con saldo disponible.',
-        saveConfirmed: true,
-      };
-    }
-
+  if (input.paymentStatus === 'paid') {
     return {
-      status: 'data_error',
-      message: input.paymentMessage || 'El envío se guardó, pero el pago automático no se completó.',
-      saveConfirmed: true,
+      status: 'ok',
+      message: 'CSV aceptado, envío guardado y etiqueta pagada con saldo disponible.',
+      labelReady: true,
+      paymentPending: false,
     };
   }
+
+  const paymentNote =
+    input.paymentMessage ||
+    (input.payAfterUpload
+      ? 'CSV aceptado por MiCorreo. La etiqueta está lista; falta pagar con saldo.'
+      : 'CSV aceptado y envío guardado en MiCorreo.');
+
+  const paymentPending =
+    input.payAfterUpload === true &&
+    (input.paymentStatus === 'payment_error' || input.paymentStatus === 'not_attempted');
 
   return {
     status: 'ok',
-    message: 'CSV aceptado y envío guardado en MiCorreo.',
-    saveConfirmed: true,
+    message: paymentNote,
+    labelReady: true,
+    paymentPending,
   };
 }
 

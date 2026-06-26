@@ -13,22 +13,17 @@ export type MicorreoUploadResult = {
     errorCode?: string;
     paymentStatus?: 'not_attempted' | 'paid' | 'payment_error';
     paymentMessage?: string;
-    saveConfirmed?: boolean;
+    labelReady?: boolean;
+    paymentPending?: boolean;
     importSuccess?: boolean;
     saveSuccess?: boolean;
   };
 };
 
-export function shippingStateFromMicorreoUpload(
-  status: MicorreoUploadStatus,
-  options?: {
-    saveConfirmed?: boolean;
-    paymentStatus?: 'not_attempted' | 'paid' | 'payment_error';
-  },
-): ShippingState {
+export function shippingStateFromMicorreoUpload(status: MicorreoUploadStatus): ShippingState {
   switch (status) {
     case 'ok':
-      return options?.saveConfirmed ? 'ETIQUETA_LISTA' : 'HACER_ETIQUETA';
+      return 'ETIQUETA_LISTA';
     case 'data_error':
       return 'ERROR_ETIQUETA';
     case 'system_error':

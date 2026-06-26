@@ -239,28 +239,27 @@ async function runMicorreoUpload(orderId: string, userId?: string | null): Promi
     });
 
     const paymentStatus = uploadResult.details?.paymentStatus;
-    const saveConfirmed = uploadResult.details?.saveConfirmed === true;
-    const nextState = shippingStateFromMicorreoUpload(uploadResult.status, {
-      saveConfirmed,
-      paymentStatus,
-    });
+    const paymentPending = uploadResult.details?.paymentPending === true;
+    const nextState = shippingStateFromMicorreoUpload(uploadResult.status);
+    const paymentNote =
+      paymentPending
+        ? uploadResult.details?.paymentMessage || uploadResult.message
+        : null;
     const errorMessage =
-      uploadResult.status === 'ok' && saveConfirmed
-        ? paymentStatus === 'payment_error'
-          ? uploadResult.details?.paymentMessage || uploadResult.message
-          : null
+      uploadResult.status === 'ok'
+        ? paymentNote
         : uploadResult.message || 'Error desconocido al subir a MiCorreo.';
 
-    if (uploadResult.status === 'ok' && saveConfirmed && paymentStatus === 'paid') {
+    if (uploadResult.status === 'ok' && paymentStatus === 'paid') {
       const now = new Date().toISOString();
       await persistLabelState(orderId, 'pagada', {
         generatedAt: now,
         paidAt: now,
       });
-    } else if (uploadResult.status === 'ok' && saveConfirmed) {
+    } else if (uploadResult.status === 'ok') {
       await persistLabelState(orderId, 'generada', {
         generatedAt: new Date().toISOString(),
-        errorMessage: paymentStatus === 'payment_error' ? errorMessage : null,
+        errorMessage: paymentPending ? paymentNote : null,
       });
     } else {
       await persistLabelState(orderId, 'error', {
@@ -269,7 +268,11 @@ async function runMicorreoUpload(orderId: string, userId?: string | null): Promi
       });
     }
 
-    await persistUploadResult(orderId, nextState, errorMessage);
+    await persistUploadResult(
+      orderId,
+      nextState,
+      uploadResult.status === 'ok' ? paymentNote : errorMessage,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error inesperado al subir a MiCorreo.';
     await persistLabelState(orderId, 'error', {

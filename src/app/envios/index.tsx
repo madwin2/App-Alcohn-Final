@@ -1245,6 +1245,22 @@ export default function EnviosPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        ) : order.labelState === 'generada' && etiquetaError ? (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex h-5 w-5 shrink-0 cursor-help items-center justify-center rounded-full border border-amber-500/45 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                  aria-label="Etiqueta generada, pago pendiente"
+                >
+                  <AlertCircle className="h-3.5 w-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap">
+                {etiquetaError}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ) : null}
       </div>
     );
