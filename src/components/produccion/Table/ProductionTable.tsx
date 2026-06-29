@@ -376,7 +376,7 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
     if (!item.files?.baseUrl) return;
     try {
       const filename = `${sanitizeDownloadFilename(item.designName)}_archivo_base.jpg`;
-      await downloadBaseFile(item.files.baseUrl, filename);
+      await downloadBaseFile(item.files.baseUrl, filename, item.mockupSolicitudId);
       toast({ title: 'Descarga iniciada', description: 'Archivo base descargándose...' });
     } catch (error) {
       console.error('Error downloading base file:', error);

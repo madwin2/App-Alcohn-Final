@@ -11,6 +11,11 @@ export function storageFileKindFromUrl(url: string): StorageFileKind {
     if (/\.svg(\?|#|$)/i.test(lower)) return 'svg';
     return 'image';
   }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i.test(lower)) {
+    if (/\.pdf(\?|#|$)/i.test(lower)) return 'pdf';
+    if (/\.svg(\?|#|$)/i.test(lower)) return 'svg';
+    return 'image';
+  }
   if (/\.pdf(\?|#|$)/i.test(lower)) return 'pdf';
   if (/\.ai(\?|#|$)/i.test(lower)) return 'ai';
   if (/\.eps(\?|#|$)/i.test(lower)) return 'eps';

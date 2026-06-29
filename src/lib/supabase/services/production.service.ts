@@ -238,6 +238,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         notes: sello.nota || undefined,
         deadline: sello.fecha_limite ? `${sello.fecha_limite}T00:00:00Z` : null,
         takenBy,
+        mockupSolicitudId: (sello as any).mockup_solicitud_id ?? null,
         files: {
           baseUrl: sello.archivo_base || undefined,
           vectorUrl: vectorUrlFromPreview((sello as any).archivo_vector_preview),

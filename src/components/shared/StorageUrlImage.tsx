@@ -8,6 +8,7 @@ type Props = {
   className?: string;
   imgClassName?: string;
   fallbackClassName?: string;
+  mockupSolicitudId?: string | null;
 };
 
 /** Miniatura que resuelve URLs firmadas para buckets privados (logos-web / mockups-web). */
@@ -17,6 +18,7 @@ export function StorageUrlImage({
   className,
   imgClassName,
   fallbackClassName,
+  mockupSolicitudId,
 }: Props) {
   const [src, setSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -28,7 +30,7 @@ export function StorageUrlImage({
 
     void (async () => {
       try {
-        const resolved = await resolveStorageDisplayUrl(url);
+        const resolved = await resolveStorageDisplayUrl(url, mockupSolicitudId);
         if (!cancelled) setSrc(resolved);
       } catch {
         if (!cancelled) {
@@ -40,7 +42,7 @@ export function StorageUrlImage({
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url, mockupSolicitudId]);
 
   if (!src && !failed) {
     return (

@@ -231,6 +231,7 @@ export const mapSelloToOrderItem = (sello: SelloRow, cliente: ClienteRow): Order
     balanceItemCached: sello.restante ? Number(sello.restante) : 0,
     notes: sello.nota || undefined,
     program: (sello as any).programa_nombre || undefined,
+    mockupSolicitudId: (sello as any).mockup_solicitud_id ?? null,
     files: {
       baseUrl: sello.archivo_base || undefined,
       vectorUrl: vectorUrlFromPreview((sello as any).archivo_vector_preview),

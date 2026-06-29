@@ -164,7 +164,7 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
     e.stopPropagation();
     if (!hasFile || typeof hasFile !== 'string') return;
     try {
-      const src = await resolveStorageDisplayUrl(hasFile);
+      const src = await resolveStorageDisplayUrl(hasFile, item.mockupSolicitudId);
       openPreview(src, 'Archivo base');
     } catch {
       openPreview(hasFile, 'Archivo base');
@@ -177,7 +177,7 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
 
     try {
       const filename = `${sanitizeDownloadFilename(item.designName)}_archivo_base.jpg`;
-      await downloadBaseFile(hasFile, filename);
+      await downloadBaseFile(hasFile, filename, item.mockupSolicitudId);
       
       toast({
         title: 'Descarga iniciada',
@@ -308,6 +308,7 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
             <StorageUrlImage
               url={hasFile}
               alt="Base"
+              mockupSolicitudId={item.mockupSolicitudId}
               className="w-full h-full object-cover"
               imgClassName="w-full h-full object-cover"
               fallbackClassName="flex h-full w-full items-center justify-center bg-muted"

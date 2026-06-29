@@ -210,18 +210,22 @@ export const downloadFile = async (url: string, filename: string): Promise<void>
 /**
  * Descarga un archivo base: PDF tal cual; imágenes (PNG, WebP, etc.) como JPG.
  */
-export const downloadBaseFile = async (url: string, filename: string): Promise<void> => {
+export const downloadBaseFile = async (
+  url: string,
+  filename: string,
+  mockupSolicitudId?: string | null,
+): Promise<void> => {
   try {
-    if (isPrivateWebStorageUrl(url)) {
+    if (isPrivateWebStorageUrl(url) || mockupSolicitudId) {
       if (isPdfUrl(url)) {
         const pdfName = /\.pdf$/i.test(filename) ? filename : `${filename.replace(/\.[^.]+$/i, '')}.pdf`;
-        const blob = await downloadPrivateStorageBlob(url);
+        const blob = await downloadPrivateStorageBlob(url, mockupSolicitudId);
         triggerBlobDownload(blob, pdfName);
         return;
       }
 
       const jpgFilename = ensureJpgFilename(filename);
-      const blob = await downloadPrivateStorageBlob(url);
+      const blob = await downloadPrivateStorageBlob(url, mockupSolicitudId);
       if (isJpegSource(url, blob)) {
         triggerBlobDownload(blob, jpgFilename);
         return;

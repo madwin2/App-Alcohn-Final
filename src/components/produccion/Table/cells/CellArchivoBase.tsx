@@ -54,7 +54,7 @@ export function CellArchivoBase({ item }: CellArchivoBaseProps) {
               e.stopPropagation();
               void (async () => {
                 try {
-                  const src = await resolveStorageDisplayUrl(hasFile);
+                  const src = await resolveStorageDisplayUrl(hasFile, item.mockupSolicitudId);
                   openPreview(src, 'Archivo base');
                 } catch {
                   openPreview(hasFile, 'Archivo base');
@@ -66,6 +66,7 @@ export function CellArchivoBase({ item }: CellArchivoBaseProps) {
             <StorageUrlImage
               url={hasFile}
               alt="Base"
+              mockupSolicitudId={item.mockupSolicitudId}
               className="h-full w-full object-cover"
               imgClassName="h-full w-full object-cover"
               fallbackClassName="absolute inset-0 flex items-center justify-center bg-muted"

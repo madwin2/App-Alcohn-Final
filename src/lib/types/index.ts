@@ -140,6 +140,7 @@ export interface OrderItem {
   balanceItemCached: number;
   notes?: string;
   program?: string; // Nombre del programa (programa_nombre en BD)
+  mockupSolicitudId?: string | null;
   files?: {
     baseUrl?: string;
     vectorUrl?: string;
@@ -216,6 +217,7 @@ export interface ProductionItem {
   notes?: string;
   deadline?: string | null; // Fecha límite del sello
   takenBy?: { id: string; name: string } | null; // Usuario que subió el pedido
+  mockupSolicitudId?: string | null;
   itemConfig?: {
     soldadorPower?: SoldadorPower;
     abecedarioTipografia?: string;
