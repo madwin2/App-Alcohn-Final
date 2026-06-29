@@ -137,14 +137,14 @@ export async function resolveBaseFileStorageRef(
   url: string,
   mockupSolicitudId?: string | null,
 ): Promise<StorageRef | null> {
-  const fromUrl = resolveStorageRefFromUrl(url);
-  if (fromUrl) return fromUrl;
-
+  // Pedidos web: archivo_base en sellos suele ser una ruta incorrecta del carrito;
+  // el path real está en mockup_solicitudes.archivo_base_path.
   if (mockupSolicitudId) {
-    return fetchMockupBaseStorageRef(mockupSolicitudId);
+    const fromMockup = await fetchMockupBaseStorageRef(mockupSolicitudId);
+    if (fromMockup) return fromMockup;
   }
 
-  return null;
+  return resolveStorageRefFromUrl(url);
 }
 
 async function createDisplayUrlForRef(ref: StorageRef): Promise<string> {
@@ -190,8 +190,22 @@ export async function downloadPrivateStorageBlob(
     return response.blob();
   }
 
-  const { data, error } = await supabase.storage.from(ref.bucket).download(ref.path);
-  if (error) throw error;
-  if (!data) throw new Error('No se encontró el archivo en storage');
-  return data;
+  try {
+    const { data, error } = await supabase.storage.from(ref.bucket).download(ref.path);
+    if (error) throw error;
+    if (!data) throw new Error('No se encontró el archivo en storage');
+    return data;
+  } catch (storageError) {
+    // Respaldo: URL firmada de Supabase aún vigente en archivo_base
+    const trimmed = url.trim();
+    if (
+      /^https?:\/\//i.test(trimmed) &&
+      SUPABASE_HOST_RE.test(trimmed) &&
+      parseBucketFromStorageUrl(trimmed)
+    ) {
+      const response = await fetch(trimmed);
+      if (response.ok) return response.blob();
+    }
+    throw storageError;
+  }
 }

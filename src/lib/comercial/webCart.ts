@@ -159,7 +159,11 @@ function mockupDesignName(mockup: MockupRow | null): string | null {
 
 function mockupBaseUrl(mockup: MockupRow | null): string | null {
   if (!mockup) return null;
-  return mockup.archivo_base_url || mockup.imagen_optimizada_url || null;
+  // Usar siempre la URL/path del mockup en BD, nunca rutas del carrito web.
+  const url = mockup.archivo_base_url || mockup.imagen_optimizada_url || null;
+  if (url) return url;
+  const path = mockup.archivo_base_path || mockup.imagen_optimizada_path || null;
+  return path?.trim() || null;
 }
 
 export function buildSellosFromWebCheckout(params: {
