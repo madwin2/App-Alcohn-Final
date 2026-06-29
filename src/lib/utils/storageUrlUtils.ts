@@ -92,7 +92,6 @@ function resolveRefFromMockupFields(
   path: string | null | undefined,
   url: string | null | undefined,
   origen: string | null | undefined,
-  optimized = false,
 ): StorageRef | null {
   const storedPath = String(path ?? '').trim();
   const storedUrl = String(url ?? '').trim();
@@ -101,11 +100,7 @@ function resolveRefFromMockupFields(
 
   const bucket =
     (storedUrl ? parseBucketFromStorageUrl(storedUrl) : null) ??
-    (origen === 'web'
-      ? optimized
-        ? 'mockups-web'
-        : 'logos-web'
-      : 'foto');
+    (origen === 'web' ? 'logos-web' : 'foto');
 
   return { bucket, path: resolvedPath };
 }
@@ -122,14 +117,10 @@ async function fetchMockupBaseStorageRef(mockupSolicitudId: string): Promise<Sto
   if (error || !data) return null;
   const row = data as MockupAssetRow;
 
+  // Para pedidos web: el archivo útil en producción es el optimizado (el del mockup).
   return (
-    resolveRefFromMockupFields(row.archivo_base_path, row.archivo_base_url, row.origen) ??
-    resolveRefFromMockupFields(
-      row.imagen_optimizada_path,
-      row.imagen_optimizada_url,
-      row.origen,
-      true,
-    )
+    resolveRefFromMockupFields(row.imagen_optimizada_path, row.imagen_optimizada_url, row.origen) ??
+    resolveRefFromMockupFields(row.archivo_base_path, row.archivo_base_url, row.origen)
   );
 }
 

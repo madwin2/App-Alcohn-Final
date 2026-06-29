@@ -159,10 +159,10 @@ function mockupDesignName(mockup: MockupRow | null): string | null {
 
 function mockupBaseUrl(mockup: MockupRow | null): string | null {
   if (!mockup) return null;
-  // Usar siempre la URL/path del mockup en BD, nunca rutas del carrito web.
-  const url = mockup.archivo_base_url || mockup.imagen_optimizada_url || null;
+  // En pedidos web guardamos el optimizado (el que se usó para el mockup), no el original.
+  const url = mockup.imagen_optimizada_url || mockup.archivo_base_url || null;
   if (url) return url;
-  const path = mockup.archivo_base_path || mockup.imagen_optimizada_path || null;
+  const path = mockup.imagen_optimizada_path || mockup.archivo_base_path || null;
   return path?.trim() || null;
 }
 
