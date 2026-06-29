@@ -17,7 +17,9 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
+import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
 import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
+import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
 
 interface CellBaseProps {
   order: Order;
@@ -158,6 +160,17 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
     }
   };
 
+  const handleOpenPreview = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!hasFile || typeof hasFile !== 'string') return;
+    try {
+      const src = await resolveStorageDisplayUrl(hasFile);
+      openPreview(src, 'Archivo base');
+    } catch {
+      openPreview(hasFile, 'Archivo base');
+    }
+  };
+
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!hasFile) return;
@@ -283,10 +296,7 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
             </button>
           ) : (
           <div 
-            onClick={(e) => {
-              e.stopPropagation();
-              openPreview(hasFile, 'Archivo base');
-            }}
+            onClick={(e) => void handleOpenPreview(e)}
             onContextMenu={(e) => e.stopPropagation()} // Prevenir que se propague al menú del pedido
             className={`w-10 h-10 rounded border overflow-hidden cursor-pointer hover:opacity-80 transition-opacity relative bg-white ${uploading ? 'opacity-50' : ''}`}
           >
@@ -295,22 +305,13 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
                 <Loader2 className="h-4 w-4 animate-spin" />
               </div>
             )}
-            <img
-              src={hasFile}
+            <StorageUrlImage
+              url={hasFile}
               alt="Base"
               className="w-full h-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
-                if (fb) {
-                  fb.classList.remove('hidden');
-                  fb.classList.add('flex');
-                }
-              }}
+              imgClassName="w-full h-full object-cover"
+              fallbackClassName="flex h-full w-full items-center justify-center bg-muted"
             />
-            <div className="hidden h-full w-full items-center justify-center bg-muted">
-              <FileType2 className="h-5 w-5 text-muted-foreground" />
-            </div>
           </div>
           )}
         </ContextMenuTrigger>

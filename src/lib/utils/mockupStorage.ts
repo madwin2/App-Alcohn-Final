@@ -1,13 +1,19 @@
 import { supabase } from '@/lib/supabase/client';
 import type { MockupSolicitudRow } from '@/lib/supabase/services/mockupSolicitudes.service';
 import { downloadFile } from '@/lib/supabase/services/storage.service';
+import {
+  downloadPrivateStorageBlob,
+  parseBucketFromStorageUrl,
+  parsePathFromStorageUrl,
+  resolveStorageDisplayUrl as resolveStorageDisplayUrlFromUrl,
+  type StorageRef,
+} from '@/lib/utils/storageUrlUtils';
 
 export type MockupAssetKind = 'base' | 'optimized' | 'mockup_cuero' | 'mockup_madera';
 
-export type MockupStorageRef = {
-  bucket: string;
-  path: string;
-};
+export type MockupStorageRef = StorageRef;
+
+export { parseBucketFromStorageUrl, parsePathFromStorageUrl };
 
 const PATH_BY_KIND: Record<MockupAssetKind, keyof MockupSolicitudRow> = {
   base: 'archivo_base_path',
@@ -22,17 +28,6 @@ const URL_BY_KIND: Record<MockupAssetKind, keyof MockupSolicitudRow> = {
   mockup_cuero: 'mockup_cuero_url',
   mockup_madera: 'mockup_madera_url',
 };
-
-export function parseBucketFromStorageUrl(url: string): string | null {
-  const match = url.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\//i);
-  return match?.[1] ?? null;
-}
-
-export function parsePathFromStorageUrl(url: string): string | null {
-  const match = url.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/[^/]+\/(.+?)(?:\?|#|$)/i);
-  if (!match?.[1]) return null;
-  return decodeURIComponent(match[1]);
-}
 
 function defaultBucketForKind(row: MockupSolicitudRow, kind: MockupAssetKind): string {
   if (row.origen === 'web') {
@@ -126,6 +121,11 @@ export async function resolveMockupAssetDisplayUrl(
     return supabase.storage.from(ref.bucket).getPublicUrl(ref.path).data.publicUrl;
   }
 
+  const storedUrl = String(row[URL_BY_KIND[kind]] ?? '').trim();
+  if (storedUrl) {
+    return resolveStorageDisplayUrlFromUrl(storedUrl);
+  }
+
   const { data, error } = await supabase.storage.from(ref.bucket).createSignedUrl(ref.path, 3600);
   if (error || !data?.signedUrl) {
     throw error ?? new Error('No se pudo abrir el archivo web');
@@ -146,6 +146,12 @@ export async function fetchMockupAssetAsFile(
     const response = await fetch(publicUrl, { cache: 'no-store' });
     if (!response.ok) throw new Error('No se pudo descargar el archivo guardado');
     const blob = await response.blob();
+    return new File([blob], fileName, { type: blob.type || 'image/png' });
+  }
+
+  const storedUrl = String(row[URL_BY_KIND[kind]] ?? '').trim();
+  if (storedUrl) {
+    const blob = await downloadPrivateStorageBlob(storedUrl);
     return new File([blob], fileName, { type: blob.type || 'image/png' });
   }
 

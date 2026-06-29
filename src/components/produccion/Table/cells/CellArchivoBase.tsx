@@ -7,7 +7,9 @@ import {
 import { ProductionItem } from '@/lib/types/index';
 import { useProductionStore } from '@/lib/state/production.store';
 import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
+import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
 import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
+import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
 
 interface CellArchivoBaseProps {
   item: ProductionItem;
@@ -50,25 +52,24 @@ export function CellArchivoBase({ item }: CellArchivoBaseProps) {
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              openPreview(hasFile, 'Archivo base');
+              void (async () => {
+                try {
+                  const src = await resolveStorageDisplayUrl(hasFile);
+                  openPreview(src, 'Archivo base');
+                } catch {
+                  openPreview(hasFile, 'Archivo base');
+                }
+              })();
             }}
             className="w-10 h-10 rounded border overflow-hidden bg-white relative cursor-pointer hover:opacity-80 transition-opacity"
           >
-            <img
-              src={hasFile}
+            <StorageUrlImage
+              url={hasFile}
               alt="Base"
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
-                if (fb) {
-                  fb.classList.remove('hidden');
-                }
-              }}
+              className="h-full w-full object-cover"
+              imgClassName="h-full w-full object-cover"
+              fallbackClassName="absolute inset-0 flex items-center justify-center bg-muted"
             />
-            <div className="hidden absolute inset-0 flex items-center justify-center bg-muted">
-              <FileType2 className="h-6 w-6 text-muted-foreground" aria-hidden />
-            </div>
           </button>
         )}
       </div>

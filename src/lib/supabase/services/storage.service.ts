@@ -1,4 +1,8 @@
 import { supabase } from '../client';
+import {
+  downloadPrivateStorageBlob,
+  isPrivateWebStorageUrl,
+} from '@/lib/utils/storageUrlUtils';
 
 export type BucketType = 'base' | 'vector' | 'foto';
 
@@ -208,6 +212,29 @@ export const downloadFile = async (url: string, filename: string): Promise<void>
  */
 export const downloadBaseFile = async (url: string, filename: string): Promise<void> => {
   try {
+    if (isPrivateWebStorageUrl(url)) {
+      if (isPdfUrl(url)) {
+        const pdfName = /\.pdf$/i.test(filename) ? filename : `${filename.replace(/\.[^.]+$/i, '')}.pdf`;
+        const blob = await downloadPrivateStorageBlob(url);
+        triggerBlobDownload(blob, pdfName);
+        return;
+      }
+
+      const jpgFilename = ensureJpgFilename(filename);
+      const blob = await downloadPrivateStorageBlob(url);
+      if (isJpegSource(url, blob)) {
+        triggerBlobDownload(blob, jpgFilename);
+        return;
+      }
+
+      try {
+        triggerBlobDownload(await blobToJpeg(blob), jpgFilename);
+      } catch {
+        triggerBlobDownload(blob, jpgFilename);
+      }
+      return;
+    }
+
     if (isPdfUrl(url)) {
       const pdfName = /\.pdf$/i.test(filename) ? filename : `${filename.replace(/\.[^.]+$/i, '')}.pdf`;
       await downloadFile(url, pdfName);

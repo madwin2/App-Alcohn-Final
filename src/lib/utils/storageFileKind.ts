@@ -3,6 +3,14 @@ export type StorageFileKind = 'pdf' | 'ai' | 'eps' | 'svg' | 'image' | 'other';
 /** Infiere el tipo de archivo desde la URL pública de Storage (path o query). */
 export function storageFileKindFromUrl(url: string): StorageFileKind {
   const lower = decodeURIComponent(url).toLowerCase();
+  const webLogoBucket = /\/storage\/v1\/object\/(?:public|sign|authenticated)\/(logos-web|mockups-web)\//i.test(
+    lower,
+  );
+  if (webLogoBucket) {
+    if (/\.pdf(\?|#|$)/i.test(lower)) return 'pdf';
+    if (/\.svg(\?|#|$)/i.test(lower)) return 'svg';
+    return 'image';
+  }
   if (/\.pdf(\?|#|$)/i.test(lower)) return 'pdf';
   if (/\.ai(\?|#|$)/i.test(lower)) return 'ai';
   if (/\.eps(\?|#|$)/i.test(lower)) return 'eps';
