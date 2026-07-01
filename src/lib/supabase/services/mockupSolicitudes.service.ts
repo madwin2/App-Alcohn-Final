@@ -11,6 +11,18 @@ export type MockupSolicitudRow = Database['public']['Tables']['mockup_solicitude
 export type MockupSolicitudInsert = Database['public']['Tables']['mockup_solicitudes']['Insert'];
 export type MockupSolicitudUpdate = Database['public']['Tables']['mockup_solicitudes']['Update'];
 
+export type MockupSolicitudListRow = MockupSolicitudRow & {
+  /** Teléfono del cliente enlazado (fallback si `whatsapp` quedó vacío en el flujo web). */
+  cliente_telefono?: string | null;
+};
+
+export function resolveMockupWhatsapp(row: MockupSolicitudListRow): string | null {
+  const direct = row.whatsapp?.trim();
+  if (direct) return direct;
+  const fromCliente = row.cliente_telefono?.trim();
+  return fromCliente || null;
+}
+
 export async function insertMockupSolicitud(
   row: MockupSolicitudInsert,
 ): Promise<{ data: MockupSolicitudRow | null; error: Error | null }> {
@@ -34,16 +46,26 @@ export async function updateMockupSolicitud(
 }
 
 export async function listMockupSolicitudes(limit = 60): Promise<{
-  data: MockupSolicitudRow[];
+  data: MockupSolicitudListRow[];
   error: Error | null;
 }> {
   const { data, error } = await supabase
     .from('mockup_solicitudes')
-    .select('*')
+    .select('*, clientes(telefono)')
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error) return { data: [], error: new Error(error.message) };
-  return { data: (data ?? []) as MockupSolicitudRow[], error: null };
+  const rows = (data ?? []).map((row) => {
+    const cliente = (row as { clientes?: { telefono?: string | null } | null }).clientes;
+    const { clientes: _c, ...rest } = row as MockupSolicitudRow & {
+      clientes?: { telefono?: string | null } | null;
+    };
+    return {
+      ...rest,
+      cliente_telefono: cliente?.telefono ?? null,
+    } satisfies MockupSolicitudListRow;
+  });
+  return { data: rows, error: null };
 }
 
 export async function fetchMockupSolicitudById(

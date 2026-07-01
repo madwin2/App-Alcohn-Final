@@ -15,7 +15,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils/cn';
 import { downloadMockupAsset, resolveMockupStorageRef } from '@/lib/utils/mockupStorage';
-import { listMockupSolicitudes, type MockupSolicitudRow } from '@/lib/supabase/services/mockupSolicitudes.service';
+import { listMockupSolicitudes, resolveMockupWhatsapp, type MockupSolicitudListRow } from '@/lib/supabase/services/mockupSolicitudes.service';
 import { MockupSlotCard, type MockupSlotHandle } from './MockupSlotCard';
 import { MockupStorageImage } from './MockupStorageImage';
 import {
@@ -86,13 +86,13 @@ async function downloadBaseMockupFile(item: MockupSolicitudRow): Promise<void> {
   await downloadMockupAsset(item, 'base', baseDownloadFilename(item));
 }
 
-function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
+function HistoryItemCell({ item }: { item: MockupSolicitudListRow }) {
   const { toast } = useToast();
   const thumb = thumbKind(item);
   const canDownloadOptimized = hasOptimizedAsset(item);
   const canDownloadBase = hasBaseAsset(item);
   const name = item.nombre_muestra || item.nombre_slug || 'Sin nombre';
-  const phone = item.whatsapp?.trim() || null;
+  const phone = resolveMockupWhatsapp(item);
   const dateStr = new Date(item.created_at).toLocaleString('es-AR', {
     day: '2-digit',
     month: 'short',
@@ -205,7 +205,7 @@ function HistoryItemCell({ item }: { item: MockupSolicitudRow }) {
 }
 
 export default function MockupsPage() {
-  const [history, setHistory] = useState<MockupSolicitudRow[]>([]);
+  const [history, setHistory] = useState<MockupSolicitudListRow[]>([]);
   const [hoveredSlot, setHoveredSlot] = useState<number | null>(null);
   const [slotCount, setSlotCount] = useState(readInitialSlotCount);
 
@@ -289,14 +289,14 @@ export default function MockupsPage() {
     if (!q) return history;
     return history.filter((item) => {
       const name = (item.nombre_muestra || item.nombre_slug || '').toLowerCase();
-      const wa = (item.whatsapp || '').toLowerCase();
+      const wa = (resolveMockupWhatsapp(item) || '').toLowerCase();
       return name.includes(q) || wa.includes(q) || item.id.toLowerCase().includes(q);
     });
   }, [history, historyQuery]);
 
   const historyChunks = useMemo(() => {
     const n = Math.max(slotsPerPage, 1);
-    const out: MockupSolicitudRow[][] = [];
+    const out: MockupSolicitudListRow[][] = [];
     for (let i = 0; i < filteredHistory.length; i += n) {
       out.push(filteredHistory.slice(i, i + n));
     }
