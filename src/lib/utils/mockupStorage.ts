@@ -67,6 +67,18 @@ export function resolveMockupStorageRef(
   return { bucket, path };
 }
 
+/** True si la solicitud tiene al menos un asset mostrable en el historial. */
+export function hasMockupHistoryPreview(
+  row: Parameters<typeof resolveMockupStorageRef>[0],
+): boolean {
+  return (
+    Boolean(resolveMockupStorageRef(row, 'mockup_cuero')) ||
+    Boolean(resolveMockupStorageRef(row, 'mockup_madera')) ||
+    Boolean(resolveMockupStorageRef(row, 'optimized')) ||
+    Boolean(resolveMockupStorageRef(row, 'base'))
+  );
+}
+
 function triggerBlobDownload(blob: Blob, filename: string): void {
   const blobUrl = window.URL.createObjectURL(blob);
   try {

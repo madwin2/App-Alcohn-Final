@@ -14,7 +14,7 @@ import {
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils/cn';
-import { downloadMockupAsset, resolveMockupStorageRef } from '@/lib/utils/mockupStorage';
+import { downloadMockupAsset, hasMockupHistoryPreview, resolveMockupStorageRef } from '@/lib/utils/mockupStorage';
 import { listMockupSolicitudes, resolveMockupWhatsapp, type MockupSolicitudListRow } from '@/lib/supabase/services/mockupSolicitudes.service';
 import { MockupSlotCard, type MockupSlotHandle } from './MockupSlotCard';
 import { MockupStorageImage } from './MockupStorageImage';
@@ -30,6 +30,10 @@ const SLOT_TITLES = ['Creación 1', 'Creación 2', 'Creación 3', 'Creación 4']
 const MAX_MOCKUP_SLOTS = 4;
 
 const WHEEL_COOLDOWN_MS = 750;
+
+/** Traemos más filas y filtramos las vacías para llenar el historial con muestras reales. */
+const HISTORY_FETCH_LIMIT = 500;
+const HISTORY_DISPLAY_LIMIT = 180;
 
 const MOCKUPS_SHEET_TWEEN =
   'transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform';
@@ -47,7 +51,7 @@ function readInitialSlotCount(): number {
 
 type MockupThumbKind = 'mockup_cuero' | 'mockup_madera' | 'optimized' | 'base';
 
-function thumbKind(item: MockupSolicitudRow): MockupThumbKind | null {
+function thumbKind(item: MockupSolicitudListRow): MockupThumbKind | null {
   if (resolveMockupStorageRef(item, 'mockup_cuero')) return 'mockup_cuero';
   if (resolveMockupStorageRef(item, 'mockup_madera')) return 'mockup_madera';
   if (resolveMockupStorageRef(item, 'optimized')) return 'optimized';
@@ -55,22 +59,22 @@ function thumbKind(item: MockupSolicitudRow): MockupThumbKind | null {
   return null;
 }
 
-function optimizedDownloadFilename(item: MockupSolicitudRow): string {
+function optimizedDownloadFilename(item: MockupSolicitudListRow): string {
   const slug = (item.nombre_slug || item.nombre_muestra || `muestra-${item.id.slice(0, 8)}`)
     .trim()
     .replace(/[^\w.-]+/g, '_');
   return `${slug}_optimizado.png`;
 }
 
-function hasOptimizedAsset(item: MockupSolicitudRow): boolean {
+function hasOptimizedAsset(item: MockupSolicitudListRow): boolean {
   return Boolean(resolveMockupStorageRef(item, 'optimized'));
 }
 
-function hasBaseAsset(item: MockupSolicitudRow): boolean {
+function hasBaseAsset(item: MockupSolicitudListRow): boolean {
   return Boolean(resolveMockupStorageRef(item, 'base'));
 }
 
-function baseDownloadFilename(item: MockupSolicitudRow): string {
+function baseDownloadFilename(item: MockupSolicitudListRow): string {
   const slug = (item.nombre_slug || item.nombre_muestra || `muestra-${item.id.slice(0, 8)}`)
     .trim()
     .replace(/[^\w.-]+/g, '_');
@@ -78,11 +82,11 @@ function baseDownloadFilename(item: MockupSolicitudRow): string {
   return `${slug}_original.${ext}`;
 }
 
-async function downloadOptimizedMockupFile(item: MockupSolicitudRow): Promise<void> {
+async function downloadOptimizedMockupFile(item: MockupSolicitudListRow): Promise<void> {
   await downloadMockupAsset(item, 'optimized', optimizedDownloadFilename(item));
 }
 
-async function downloadBaseMockupFile(item: MockupSolicitudRow): Promise<void> {
+async function downloadBaseMockupFile(item: MockupSolicitudListRow): Promise<void> {
   await downloadMockupAsset(item, 'base', baseDownloadFilename(item));
 }
 
@@ -234,12 +238,14 @@ export default function MockupsPage() {
   );
 
   const refreshHistory = useCallback(async () => {
-    const { data, error } = await listMockupSolicitudes(180);
+    const { data, error } = await listMockupSolicitudes(HISTORY_FETCH_LIMIT);
     if (error) {
       console.warn(error);
       return;
     }
-    setHistory(data);
+    setHistory(
+      data.filter(hasMockupHistoryPreview).slice(0, HISTORY_DISPLAY_LIMIT),
+    );
   }, []);
 
   useEffect(() => {
