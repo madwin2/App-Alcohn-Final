@@ -235,7 +235,7 @@ export default function ComercialPage() {
     setConfirmPagoOpen(true);
   };
 
-  const handleConfirmPago = async (seniaMonto: number) => {
+  const handleConfirmPago = async ({ seniaMonto, disenoNombre }: { seniaMonto: number; disenoNombre: string }) => {
     if (!confirmPagoRow) return;
     setConfirmingOrdenId(confirmPagoRow.ordenId);
     try {
@@ -243,6 +243,7 @@ export default function ComercialPage() {
         ordenId: confirmPagoRow.ordenId,
         validatedBy: user?.id ?? null,
         seniaMonto,
+        disenoNombre,
       });
       toast({
         title: 'Pago confirmado',

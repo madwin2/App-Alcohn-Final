@@ -157,6 +157,30 @@ function mockupDesignName(mockup: MockupRow | null): string | null {
   return mockup.nombre_muestra?.trim() || mockup.nombre_slug?.trim() || null;
 }
 
+function isGenericWebCartTitle(title: string | null | undefined): boolean {
+  if (!title?.trim()) return true;
+  const normalized = title.trim().toLowerCase();
+  return normalized === 'sello personalizado' || normalized === 'sello web' || normalized === 'sello';
+}
+
+function resolveWebSelloDesignName(params: {
+  disenoNombre?: string | null;
+  item: WebCartItem;
+  mockup: MockupRow | null;
+}): string {
+  const manual = params.disenoNombre?.trim();
+  if (manual) return manual;
+
+  const title = params.item.title?.trim();
+  if (title && !isGenericWebCartTitle(title)) return title;
+
+  return (
+    mockupDesignName(params.mockup) ||
+    params.item.designSlug?.trim() ||
+    'Sello web'
+  );
+}
+
 function mockupBaseUrl(mockup: MockupRow | null): string | null {
   if (!mockup) return null;
   // En pedidos web guardamos el optimizado (el que se usó para el mockup), no el original.
@@ -175,6 +199,8 @@ export function buildSellosFromWebCheckout(params: {
   mockupSolicitudId?: string | null;
   /** Monto de seña confirmado manualmente al validar transferencia. */
   seniaMonto?: number | null;
+  /** Nombre del diseño en el pedido (p. ej. al confirmar pago en Comercial). */
+  disenoNombre?: string | null;
 }): SelloInsert[] {
   const items = asCartItems(params.carritoJson);
   if (items.length === 0) {
@@ -217,11 +243,11 @@ export function buildSellosFromWebCheckout(params: {
           )
         : null);
 
-    const designName =
-      item.title?.trim() ||
-      mockupDesignName(params.mockup ?? null) ||
-      item.designSlug?.trim() ||
-      'Sello web';
+    const designName = resolveWebSelloDesignName({
+      disenoNombre: params.disenoNombre,
+      item,
+      mockup: params.mockup ?? null,
+    });
 
     return {
       orden_id: params.ordenId,

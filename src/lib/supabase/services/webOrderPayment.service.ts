@@ -15,12 +15,14 @@ export type ConfirmWebOrderPaymentParams = {
   skipWebhook?: boolean;
   /** Monto de seña recibido (transferencia). Si no se indica, se usa el del checkout o $20.000. */
   seniaMonto?: number | null;
+  /** Nombre del diseño para los sellos del pedido. */
+  disenoNombre?: string | null;
 };
 
 export async function confirmWebOrderPayment(
   params: ConfirmWebOrderPaymentParams,
 ): Promise<Order> {
-  const { ordenId, validatedBy, skipWebhook, seniaMonto } = params;
+  const { ordenId, validatedBy, skipWebhook, seniaMonto, disenoNombre } = params;
 
   const { data: orden, error: ordenError } = await supabase
     .from('ordenes')
@@ -83,6 +85,7 @@ export async function confirmWebOrderPayment(
     mockup,
     mockupSolicitudId: mockupId,
     seniaMonto,
+    disenoNombre,
   });
 
   const { error: insertError } = await supabase.from('sellos').insert(sellosPayload);

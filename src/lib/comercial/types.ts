@@ -96,6 +96,10 @@ export type OrdenSeguimientoRow = {
   clienteId: string;
   diasPendiente: number;
   prioridad: PotencialPrioridad;
+  mockupCueroUrl: string | null;
+  mockupMaderaUrl: string | null;
+  /** Nombre sugerido del diseño (muestra web), para prellenar al confirmar pago. */
+  nombreDisenoSugerido: string | null;
 };
 
 export type ContactoSinMuestraRow = {

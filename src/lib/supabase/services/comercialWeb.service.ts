@@ -678,7 +678,82 @@ function resolveValorTotalDisplay(
   return null;
 }
 
-function mapOrdenSeguimiento(row: OrdenWithCliente): OrdenSeguimientoRow {
+type OrdenSeguimientoMockupPreview = {
+  mockupCueroUrl: string | null;
+  mockupMaderaUrl: string | null;
+  nombreDisenoSugerido: string | null;
+};
+
+const EMPTY_MOCKUP_PREVIEW: OrdenSeguimientoMockupPreview = {
+  mockupCueroUrl: null,
+  mockupMaderaUrl: null,
+  nombreDisenoSugerido: null,
+};
+
+function mapMockupPreview(
+  mockup: Pick<
+    MockupRow,
+    'mockup_cuero_url' | 'mockup_madera_url' | 'nombre_muestra' | 'nombre_slug'
+  > | null,
+): OrdenSeguimientoMockupPreview {
+  if (!mockup) return EMPTY_MOCKUP_PREVIEW;
+  return {
+    mockupCueroUrl: mockup.mockup_cuero_url ?? null,
+    mockupMaderaUrl: mockup.mockup_madera_url ?? null,
+    nombreDisenoSugerido: mockup.nombre_muestra?.trim() || mockup.nombre_slug?.trim() || null,
+  };
+}
+
+async function fetchMockupPreviewByOrdenIds(
+  ordenIds: string[],
+): Promise<Map<string, OrdenSeguimientoMockupPreview>> {
+  if (!ordenIds.length) return new Map();
+
+  const { data: ordenes, error: ordenError } = await supabase
+    .from('ordenes')
+    .select('id, mockup_solicitud_id')
+    .in('id', ordenIds);
+
+  if (ordenError) throw new Error(ordenError.message);
+
+  const mockupIds = [
+    ...new Set(
+      (ordenes ?? [])
+        .map((row) => row.mockup_solicitud_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const mockupsById = new Map<
+    string,
+    Pick<MockupRow, 'mockup_cuero_url' | 'mockup_madera_url' | 'nombre_muestra' | 'nombre_slug'>
+  >();
+
+  if (mockupIds.length > 0) {
+    const { data: mockups, error: mockupError } = await supabase
+      .from('mockup_solicitudes')
+      .select('id, mockup_cuero_url, mockup_madera_url, nombre_muestra, nombre_slug')
+      .in('id', mockupIds);
+
+    if (mockupError) throw new Error(mockupError.message);
+
+    for (const mockup of mockups ?? []) {
+      mockupsById.set(mockup.id, mockup);
+    }
+  }
+
+  const result = new Map<string, OrdenSeguimientoMockupPreview>();
+  for (const orden of ordenes ?? []) {
+    const mockup = orden.mockup_solicitud_id ? mockupsById.get(orden.mockup_solicitud_id) ?? null : null;
+    result.set(orden.id, mapMockupPreview(mockup));
+  }
+  return result;
+}
+
+function mapOrdenSeguimiento(
+  row: OrdenWithCliente,
+  mockupPreview: OrdenSeguimientoMockupPreview = EMPTY_MOCKUP_PREVIEW,
+): OrdenSeguimientoRow {
   const now = new Date();
   const createdAt = row.created_at ?? new Date().toISOString();
   return {
@@ -704,10 +779,12 @@ function mapOrdenSeguimiento(row: OrdenWithCliente): OrdenSeguimientoRow {
     clienteId: row.cliente_id,
     diasPendiente: Math.max(0, Math.floor((now.getTime() - new Date(createdAt).getTime()) / 86400000)),
     prioridad: 'caliente',
+    ...mockupPreview,
   };
 }
 
-function mapOrdenSeguimientoView(row: {
+function mapOrdenSeguimientoView(
+  row: {
   orden_id: string;
   created_at: string;
   estado_pago_web: string;
@@ -725,7 +802,9 @@ function mapOrdenSeguimientoView(row: {
   apellido: string;
   telefono: string;
   mail: string | null;
-}): OrdenSeguimientoRow {
+},
+  mockupPreview: OrdenSeguimientoMockupPreview = EMPTY_MOCKUP_PREVIEW,
+): OrdenSeguimientoRow {
   const now = new Date();
   return {
     ordenId: row.orden_id,
@@ -750,6 +829,7 @@ function mapOrdenSeguimientoView(row: {
     clienteId: row.cliente_id,
     diasPendiente: Math.max(0, Math.floor((now.getTime() - new Date(row.created_at).getTime()) / 86400000)),
     prioridad: 'caliente',
+    ...mockupPreview,
   };
 }
 
@@ -1148,11 +1228,19 @@ export async function fetchComercialDashboard(
     .filter((row) => {
       const clienteId = 'cliente_id' in row ? row.cliente_id : (row as OrdenWithCliente).cliente_id;
       return !exclusions.clientes.has(clienteId);
-    })
-    .map((row) => {
-      if ('orden_id' in row) return mapOrdenSeguimientoView(row);
-      return mapOrdenSeguimiento(row as OrdenWithCliente);
     });
+
+  const ordenSeguimientoIds = ordenesSeguimiento.map((row) =>
+    'orden_id' in row ? row.orden_id : (row as OrdenWithCliente).id,
+  );
+  const mockupPreviewByOrdenId = await fetchMockupPreviewByOrdenIds(ordenSeguimientoIds);
+
+  const ordenesSeguimientoMapped = ordenesSeguimiento.map((row) => {
+    const ordenId = 'orden_id' in row ? row.orden_id : (row as OrdenWithCliente).id;
+    const mockupPreview = mockupPreviewByOrdenId.get(ordenId) ?? EMPTY_MOCKUP_PREVIEW;
+    if ('orden_id' in row) return mapOrdenSeguimientoView(row, mockupPreview);
+    return mapOrdenSeguimiento(row as OrdenWithCliente, mockupPreview);
+  });
 
   const mockupsByCliente = buildMockupsByClienteMap(allMockupsFiltered, exclusions);
   const mockupsWebByCliente = buildMockupsByClienteMap(
@@ -1233,7 +1321,7 @@ export async function fetchComercialDashboard(
     materialBreakdown: buildMaterialBreakdown(mockupsRangeFiltered, ordenesRangeFiltered),
     paymentBreakdown: buildPaymentBreakdown(ordenesRangeFiltered),
     mockupsSinCompra,
-    ordenesSeguimiento,
+    ordenesSeguimiento: ordenesSeguimientoMapped,
     contactosSinMuestra,
     clientesWeb,
     seguimientosClientes,

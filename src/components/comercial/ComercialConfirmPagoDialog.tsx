@@ -14,11 +14,16 @@ import { Label } from '@/components/ui/label';
 import type { OrdenSeguimientoRow } from '@/lib/comercial/types';
 import { formatArs } from '@/lib/comercial/utils';
 
+export type ConfirmPagoPayload = {
+  seniaMonto: number;
+  disenoNombre: string;
+};
+
 interface ComercialConfirmPagoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   row: OrdenSeguimientoRow | null;
-  onConfirm: (seniaMonto: number) => Promise<void>;
+  onConfirm: (payload: ConfirmPagoPayload) => Promise<void>;
 }
 
 export function ComercialConfirmPagoDialog({
@@ -29,22 +34,29 @@ export function ComercialConfirmPagoDialog({
 }: ComercialConfirmPagoDialogProps) {
   const [loading, setLoading] = useState(false);
   const [seniaMonto, setSeniaMonto] = useState('');
+  const [disenoNombre, setDisenoNombre] = useState('');
 
   useEffect(() => {
     if (!open || !row) return;
     setSeniaMonto(String(row.seniaEsperada));
+    setDisenoNombre(row.nombreDisenoSugerido ?? '');
   }, [open, row]);
 
   const parsedSenia = Number.parseInt(seniaMonto.replace(/\D/g, ''), 10);
   const seniaValid = Number.isFinite(parsedSenia) && parsedSenia >= 0;
   const seniaExceedsTotal =
     seniaValid && row?.valorTotal != null && parsedSenia > row.valorTotal;
+  const disenoValid = disenoNombre.trim().length > 0;
+  const mockupPreviewUrl = row?.mockupCueroUrl || row?.mockupMaderaUrl || null;
 
   const handleConfirm = async () => {
-    if (!seniaValid || seniaExceedsTotal) return;
+    if (!seniaValid || seniaExceedsTotal || !disenoValid) return;
     setLoading(true);
     try {
-      await onConfirm(parsedSenia);
+      await onConfirm({
+        seniaMonto: parsedSenia,
+        disenoNombre: disenoNombre.trim(),
+      });
       onOpenChange(false);
     } finally {
       setLoading(false);
@@ -68,12 +80,42 @@ export function ComercialConfirmPagoDialog({
                     <span className="font-medium text-foreground">{row.nombre}</span> y crear el
                     pedido en Producción.
                   </p>
+                  {mockupPreviewUrl ? (
+                    <div className="space-y-2">
+                      <Label>Muestra al cliente</Label>
+                      <div className="overflow-hidden rounded-md border bg-muted/20">
+                        <img
+                          src={mockupPreviewUrl}
+                          alt={`Muestra de ${row.nombreDisenoSugerido ?? 'diseño'}`}
+                          className="mx-auto max-h-48 w-full object-contain"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                   <ul className="list-inside list-disc space-y-1">
                     <li>Método: {row.metodoPago ?? '—'}</li>
                     <li>Total del pedido: {formatArs(row.valorTotal)}</li>
                     <li>Comprobante: {row.comprobanteSubido ? 'Subido' : 'No subido'}</li>
                   </ul>
                   <div className="space-y-2 pt-1">
+                    <Label htmlFor="diseno-nombre">Diseño</Label>
+                    <Input
+                      id="diseno-nombre"
+                      type="text"
+                      value={disenoNombre}
+                      onChange={(e) => setDisenoNombre(e.target.value)}
+                      placeholder="Nombre del diseño en el pedido"
+                      disabled={loading}
+                    />
+                    <p className="text-xs">
+                      Así va a figurar en Pedidos y Producción. Si quedó vacío, completalo antes de
+                      confirmar.
+                    </p>
+                    {disenoNombre !== '' && !disenoValid ? (
+                      <p className="text-xs text-destructive">Ingresá un nombre de diseño.</p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="senia-monto">Monto de la seña recibida</Label>
                     <Input
                       id="senia-monto"
@@ -117,7 +159,7 @@ export function ComercialConfirmPagoDialog({
           </Button>
           <Button
             onClick={() => void handleConfirm()}
-            disabled={loading || !row || !seniaValid || seniaExceedsTotal}
+            disabled={loading || !row || !seniaValid || seniaExceedsTotal || !disenoValid}
           >
             {loading ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
