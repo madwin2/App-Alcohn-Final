@@ -65,6 +65,8 @@ import {
 } from '@/lib/utils/shippingNormalization';
 import { ChevronDown, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
+import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
 
 const isEligibleForShipping = (order: Order): boolean => {
   if (!order.items.length) return false;
@@ -1397,12 +1399,34 @@ export default function EnviosPage() {
         </td>
         <td className={`${cell} w-[4.5rem]`}>
           {availablePreview ? (
-            <img
-              src={availablePreview}
-              alt="Preview archivo"
-              className="h-12 w-12 rounded-md object-contain border bg-white p-1 cursor-zoom-in"
-              onClick={() => setPreviewImageUrl(availablePreview)}
-            />
+            <button
+              type="button"
+              title="Ver archivo"
+              className="block h-12 w-12 cursor-zoom-in rounded-md border bg-white p-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                void (async () => {
+                  try {
+                    const src = await resolveStorageDisplayUrl(
+                      availablePreview,
+                      item?.mockupSolicitudId,
+                    );
+                    setPreviewImageUrl(src);
+                  } catch {
+                    setPreviewImageUrl(availablePreview);
+                  }
+                })();
+              }}
+            >
+              <StorageUrlImage
+                url={availablePreview}
+                alt="Preview archivo"
+                mockupSolicitudId={item?.mockupSolicitudId}
+                className="h-full w-full"
+                imgClassName="h-full w-full object-contain"
+                fallbackClassName="flex h-full w-full items-center justify-center bg-muted/40"
+              />
+            </button>
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
           )}
