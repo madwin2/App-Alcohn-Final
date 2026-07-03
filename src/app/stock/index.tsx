@@ -5,11 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { PLANCHUELA_REF_ORDER } from '@/lib/bronce/planchuelaRef';
 import { getApprovedUsers } from '@/lib/supabase/services/auth.service';
 import {
-  formatMesAnio,
-  getBronceConsumoMes,
-  type BronceConsumoMesResumen,
+  currentMonthRange,
+  formatRangoFechas,
+  getBronceConsumo,
+  shiftMonthRange,
+  type BronceConsumoResumen,
 } from '@/lib/supabase/services/bronceConsumo.service';
 import {
   getPendingShipmentStockDemand,
@@ -31,9 +34,8 @@ function formatPesos(value: number): string {
 
 export default function StockPage() {
   const { toast } = useToast();
-  const now = new Date();
-  const [mesAnio, setMesAnio] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
-  const [bronceMes, setBronceMes] = useState<BronceConsumoMesResumen | null>(null);
+  const [rango, setRango] = useState(currentMonthRange);
+  const [bronce, setBronce] = useState<BronceConsumoResumen | null>(null);
   const [bronceLoading, setBronceLoading] = useState(true);
   const [items, setItems] = useState<StockItem[]>([]);
   const [pendingDemandByKey, setPendingDemandByKey] = useState<Record<string, number>>({});
@@ -90,8 +92,8 @@ export default function StockPage() {
     const loadBronce = async () => {
       setBronceLoading(true);
       try {
-        const resumen = await getBronceConsumoMes(mesAnio.year, mesAnio.month);
-        if (!cancelled) setBronceMes(resumen);
+        const resumen = await getBronceConsumo(rango.desde, rango.hasta);
+        if (!cancelled) setBronce(resumen);
       } catch (error) {
         if (!cancelled) {
           toast({
@@ -108,18 +110,20 @@ export default function StockPage() {
     return () => {
       cancelled = true;
     };
-  }, [mesAnio.year, mesAnio.month, toast]);
+  }, [rango.desde, rango.hasta, toast]);
 
   const shiftMes = (delta: number) => {
-    setMesAnio((prev) => {
-      const d = new Date(prev.year, prev.month - 1 + delta, 1);
-      return { year: d.getFullYear(), month: d.getMonth() + 1 };
-    });
+    setRango((prev) => shiftMonthRange(prev.desde, delta));
   };
 
-  const mesLabel = useMemo(
-    () => formatMesAnio(mesAnio.year, mesAnio.month),
-    [mesAnio.year, mesAnio.month],
+  const rangoLabel = useMemo(
+    () => formatRangoFechas(rango.desde, rango.hasta),
+    [rango.desde, rango.hasta],
+  );
+
+  const planchuelasEnPeriodo = useMemo(
+    () => (bronce?.rows.length ? bronce.rows.map((r) => r.tipoRef) : PLANCHUELA_REF_ORDER),
+    [bronce?.rows],
   );
 
   const handleSaveStock = async (item: StockItem) => {
@@ -180,59 +184,155 @@ export default function StockPage() {
                   Se registra al marcar un sello como Hecho (largo + 0,8 cm de corte). Rehacer cuenta de nuevo.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" size="icon" variant="outline" onClick={() => shiftMes(-1)}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span className="text-sm font-medium min-w-[10rem] text-center">{mesLabel}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    Desde
+                    <Input
+                      type="date"
+                      value={rango.desde}
+                      onChange={(e) =>
+                        setRango((prev) => ({ ...prev, desde: e.target.value }))
+                      }
+                      className="h-8 w-[10.5rem] text-sm"
+                    />
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    Hasta
+                    <Input
+                      type="date"
+                      value={rango.hasta}
+                      onChange={(e) =>
+                        setRango((prev) => ({ ...prev, hasta: e.target.value }))
+                      }
+                      className="h-8 w-[10.5rem] text-sm"
+                    />
+                  </label>
+                </div>
                 <Button type="button" size="icon" variant="outline" onClick={() => shiftMes(1)}>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-muted/30">
-                  <tr className="text-left">
-                    <th className="px-4 py-3">Planchuela</th>
-                    <th className="px-4 py-3">Cm usados</th>
-                    <th className="px-4 py-3">Costo material</th>
-                    <th className="px-4 py-3">Sellos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bronceLoading ? (
-                    <tr>
-                      <td className="px-4 py-6 text-muted-foreground" colSpan={4}>
-                        Cargando consumo...
-                      </td>
+
+            <div className="border-b bg-muted/10 px-4 py-2">
+              <p className="text-xs text-muted-foreground">
+                Período: <span className="font-medium text-foreground">{rangoLabel}</span>
+              </p>
+            </div>
+
+            <div className="px-4 py-3 border-b">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                Total del período
+              </p>
+              <div className="overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-muted/30">
+                    <tr className="text-left">
+                      <th className="px-4 py-3">Planchuela</th>
+                      <th className="px-4 py-3">Cm usados</th>
+                      <th className="px-4 py-3">Costo material</th>
+                      <th className="px-4 py-3">Sellos</th>
                     </tr>
-                  ) : !bronceMes?.rows.length ? (
-                    <tr>
-                      <td className="px-4 py-6 text-muted-foreground" colSpan={4}>
-                        Sin consumo registrado en {mesLabel.toLowerCase()}.
-                      </td>
-                    </tr>
-                  ) : (
-                    <>
-                      {bronceMes.rows.map((row) => (
-                        <tr key={row.tipoRef} className="border-b last:border-b-0">
-                          <td className="px-4 py-3">{row.label}</td>
-                          <td className="px-4 py-3 tabular-nums">{formatCm(row.totalCm)} cm</td>
-                          <td className="px-4 py-3 tabular-nums">{formatPesos(row.totalPesos)}</td>
-                          <td className="px-4 py-3 tabular-nums text-muted-foreground">{row.sellosCount}</td>
-                        </tr>
-                      ))}
-                      <tr className="bg-muted/20 font-medium">
-                        <td className="px-4 py-3">Total</td>
-                        <td className="px-4 py-3 tabular-nums">{formatCm(bronceMes.totalCm)} cm</td>
-                        <td className="px-4 py-3 tabular-nums">{formatPesos(bronceMes.totalPesos)}</td>
-                        <td className="px-4 py-3 tabular-nums text-muted-foreground">{bronceMes.totalSellos}</td>
+                  </thead>
+                  <tbody>
+                    {bronceLoading ? (
+                      <tr>
+                        <td className="px-4 py-6 text-muted-foreground" colSpan={4}>
+                          Cargando consumo...
+                        </td>
                       </tr>
-                    </>
-                  )}
-                </tbody>
-              </table>
+                    ) : !bronce?.rows.length ? (
+                      <tr>
+                        <td className="px-4 py-6 text-muted-foreground" colSpan={4}>
+                          Sin consumo registrado en este período.
+                        </td>
+                      </tr>
+                    ) : (
+                      <>
+                        {bronce.rows.map((row) => (
+                          <tr key={row.tipoRef} className="border-b last:border-b-0">
+                            <td className="px-4 py-3">{row.label}</td>
+                            <td className="px-4 py-3 tabular-nums">{formatCm(row.totalCm)} cm</td>
+                            <td className="px-4 py-3 tabular-nums">{formatPesos(row.totalPesos)}</td>
+                            <td className="px-4 py-3 tabular-nums text-muted-foreground">{row.sellosCount}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-muted/20 font-medium">
+                          <td className="px-4 py-3">Total</td>
+                          <td className="px-4 py-3 tabular-nums">{formatCm(bronce.totalCm)} cm</td>
+                          <td className="px-4 py-3 tabular-nums">{formatPesos(bronce.totalPesos)}</td>
+                          <td className="px-4 py-3 tabular-nums text-muted-foreground">{bronce.totalSellos}</td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                Día por día
+              </p>
+              <div className="overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="border-b bg-muted/30">
+                    <tr className="text-left">
+                      <th className="px-4 py-3 whitespace-nowrap">Día</th>
+                      {planchuelasEnPeriodo.map((ref) => (
+                        <th key={ref} className="px-4 py-3 whitespace-nowrap">
+                          {bronce?.rows.find((r) => r.tipoRef === ref)?.label ?? `${ref} mm`}
+                        </th>
+                      ))}
+                      <th className="px-4 py-3">Total cm</th>
+                      <th className="px-4 py-3">Costo</th>
+                      <th className="px-4 py-3">Sellos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bronceLoading ? (
+                      <tr>
+                        <td
+                          className="px-4 py-6 text-muted-foreground"
+                          colSpan={planchuelasEnPeriodo.length + 4}
+                        >
+                          Cargando detalle...
+                        </td>
+                      </tr>
+                    ) : !bronce?.dailyRows.length ? (
+                      <tr>
+                        <td
+                          className="px-4 py-6 text-muted-foreground"
+                          colSpan={planchuelasEnPeriodo.length + 4}
+                        >
+                          Sin consumo por día en este período.
+                        </td>
+                      </tr>
+                    ) : (
+                      bronce.dailyRows.map((day) => (
+                        <tr key={day.date} className="border-b last:border-b-0">
+                          <td className="px-4 py-3 whitespace-nowrap">{day.label}</td>
+                          {planchuelasEnPeriodo.map((ref) => {
+                            const celda = day.porPlanchuela[ref];
+                            return (
+                              <td key={ref} className="px-4 py-3 tabular-nums text-muted-foreground">
+                                {celda.sellos > 0 ? `${formatCm(celda.cm)} cm` : '—'}
+                              </td>
+                            );
+                          })}
+                          <td className="px-4 py-3 tabular-nums">{formatCm(day.totalCm)} cm</td>
+                          <td className="px-4 py-3 tabular-nums">{formatPesos(day.totalPesos)}</td>
+                          <td className="px-4 py-3 tabular-nums text-muted-foreground">{day.totalSellos}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
