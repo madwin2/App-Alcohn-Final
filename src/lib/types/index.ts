@@ -81,6 +81,8 @@ export interface Order {
   deadlineAt?: string | null;
   paidAmountCached: number;
   balanceAmountCached: number;
+  /** Origen del pedido (`ordenes.origen`); p. ej. `'Web'` en checkout ecommerce */
+  origen?: string | null;
   /** Vinculación a `direcciones` en Supabase; indica si ya hay datos de envío cargados */
   direccionId?: string | null;
   /** Usuario que cargó por primera vez los datos de envío */

@@ -140,6 +140,12 @@ const isSaleReadyForShippingData = (order: Order): boolean => {
   );
 };
 
+const isWebOrder = (order: Order): boolean => order.origen === 'Web';
+
+/** Datos del checkout web aún no confirmados por operaciones (`envio_datos_cargado_at`). */
+const isWebPendingShippingConfirmation = (order: Order): boolean =>
+  isWebOrder(order) && Boolean(order.direccionId) && !order.shippingDataLoadedAt;
+
 /** Ícono WhatsApp (marca registrada Meta); solo UI. */
 function WhatsappLogo({ className }: { className?: string }) {
   return (
@@ -229,6 +235,7 @@ export default function EnviosPage() {
   const [isLoadingExistingShippingData, setIsLoadingExistingShippingData] = useState(false);
   const [lastCsvSkipped, setLastCsvSkipped] = useState<Array<{ orderId: string; reason: string }>>([]);
   const [isConDatosExpanded, setIsConDatosExpanded] = useState(true);
+  const [isEnviosWebExpanded, setIsEnviosWebExpanded] = useState(true);
   const [isPendientesExpanded, setIsPendientesExpanded] = useState(true);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [manualSucursalCode, setManualSucursalCode] = useState('');
@@ -389,8 +396,16 @@ export default function EnviosPage() {
     });
   }, [eligibleOrders]);
 
+  const ordersEnviosWeb = useMemo(
+    () =>
+      eligibleOrders.filter(
+        (order) => isWebPendingShippingConfirmation(order) && isSaleReadyForShippingData(order),
+      ),
+    [eligibleOrders],
+  );
   const ordersConDatosEnvio = useMemo(
-    () => eligibleOrders.filter((order) => Boolean(order.direccionId)),
+    () =>
+      eligibleOrders.filter((order) => Boolean(order.direccionId) && !isWebPendingShippingConfirmation(order)),
     [eligibleOrders],
   );
   const ordersPendientesDatos = useMemo(
@@ -945,7 +960,8 @@ export default function EnviosPage() {
       if (addressError) throw addressError;
 
       const shippingTypeDb = shippingTypeDraft === 'SUCURSAL' ? 'Sucursal' : 'Domicilio';
-      const isEditingExistingShippingData = Boolean(selectedOrder.direccionId);
+      const isFirstShippingDataLoad = !selectedOrder.shippingDataLoadedAt;
+      const isEditingExistingShippingData = Boolean(selectedOrder.direccionId) && !isFirstShippingDataLoad;
 
       const orderUpdate: Record<string, unknown> = {
         direccion_id: addressRow.id,
@@ -1301,7 +1317,12 @@ export default function EnviosPage() {
 
   const renderOrderRow = (
     order: Order,
-    opts?: { showCsvLine?: boolean; showWhatsapp?: boolean; showShippingDetails?: boolean },
+    opts?: {
+      showCsvLine?: boolean;
+      showWhatsapp?: boolean;
+      showShippingDetails?: boolean;
+      confirmWebShipping?: boolean;
+    },
   ) => {
     const item = getRepresentativeItem(order);
     const availablePreview =
@@ -1459,14 +1480,18 @@ export default function EnviosPage() {
             disabled={!hasShippingTypeSelected}
             title={!hasShippingTypeSelected ? 'Seleccioná Domicilio o Sucursal primero' : undefined}
           >
-            {order.direccionId ? 'Editar datos' : 'Cargar datos'}
+            {opts?.confirmWebShipping
+              ? 'Confirmar datos'
+              : order.direccionId
+                ? 'Editar datos'
+                : 'Cargar datos'}
           </Button>
         </td>
       </tr>
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem
-            disabled={!order.direccionId}
+            disabled={!order.direccionId || opts?.confirmWebShipping}
             onSelect={() => {
               void handleClearShippingData(order);
             }}
@@ -1616,8 +1641,46 @@ export default function EnviosPage() {
                   {!ordersConDatosEnvio.length ? (
                     <div className="p-6 text-center text-sm text-muted-foreground border-t">
                       {eligibleOrders.length
-                        ? 'Ningún pedido con datos de envío aún. Usá «Cargar datos» en la tabla de abajo.'
+                        ? 'Ningún pedido con datos de envío confirmados. Revisá «Envíos de la web» o cargá datos en la tabla de pendientes.'
                         : 'No hay pedidos en esta lista.'}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="space-y-2 min-h-0 flex flex-col flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEnviosWebExpanded((prev) => !prev)}
+                    className="inline-flex items-center gap-1 text-sm font-medium text-foreground"
+                  >
+                    {isEnviosWebExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    Envíos de la web
+                  </button>
+                  <span className="text-xs text-muted-foreground tabular-nums">{ordersEnviosWeb.length}</span>
+                </div>
+                <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
+                  {isEnviosWebExpanded ? (
+                    <div className="overflow-auto max-h-[min(50vh,420px)]">
+                      <table className={getTableClass(false)}>
+                        {tableHead(false, { showWhatsapp: true })}
+                        <tbody>
+                          {ordersEnviosWeb.map((o) =>
+                            renderOrderRow(o, { showWhatsapp: true, confirmWebShipping: true }),
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                  {!ordersEnviosWeb.length && eligibleOrders.length > 0 ? (
+                    <div className="p-6 text-center text-sm text-muted-foreground border-t">
+                      No hay pedidos web listos para confirmar envío (fabricación hecha y foto enviada).
+                    </div>
+                  ) : null}
+                  {!eligibleOrders.length ? (
+                    <div className="p-6 text-center text-sm text-muted-foreground border-t">
+                      No hay órdenes con fabricación lista y filtro de envío aplicable.
                     </div>
                   ) : null}
                 </div>
@@ -1676,9 +1739,15 @@ export default function EnviosPage() {
       <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && closeShippingDialog()}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Cargar datos de envío</DialogTitle>
+            <DialogTitle>
+              {selectedOrder && isWebPendingShippingConfirmation(selectedOrder)
+                ? 'Confirmar datos de envío (web)'
+                : 'Cargar datos de envío'}
+            </DialogTitle>
             <DialogDescription>
-              Pegá el mensaje del cliente, revisá el parseo y confirmá antes de guardar.
+              {selectedOrder && isWebPendingShippingConfirmation(selectedOrder)
+                ? 'Revisá los datos del checkout, corregí si hace falta y confirmá antes de generar etiqueta.'
+                : 'Pegá el mensaje del cliente, revisá el parseo y confirmá antes de guardar.'}
             </DialogDescription>
           </DialogHeader>
 

@@ -299,6 +299,7 @@ export const mapOrdenToOrder = (
 
   return {
     id: orden.id,
+    origen: (orden as { origen?: string | null }).origen ?? null,
     direccionId: orden.direccion_id ?? null,
     shippingDataLoadedBy: shippingDataLoadedBy ?? null,
     shippingDataLoadedAt: (orden as { envio_datos_cargado_at?: string | null }).envio_datos_cargado_at ?? null,
