@@ -29,6 +29,12 @@ import {
 } from '@/lib/supabase/services/order-sticky-tasks.service';
 import { consumeStockForOrderWhenTrackingSent } from '@/lib/supabase/services/stock.service';
 import { supabase } from '@/lib/supabase/client';
+import {
+  isSelloMissingBaseAndVector,
+  orderHasSelloMissingFiles,
+} from '@/lib/utils/orderMissingFiles';
+
+const ROW_MISSING_FILES_BG = 'bg-red-500/[0.08] dark:bg-red-500/15';
 
 interface OrdersTableProps {
   orders: Order[];
@@ -501,6 +507,8 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
               const isExpandedState = isExpanded(order.id);
               
               if (!hasMultipleItems) {
+                const missingFiles =
+                  order.items[0] != null && isSelloMissingBaseAndVector(order.items[0]);
                 // Si solo tiene un item, mostrar la fila normal
                 return (
                   <ContextMenu key={order.id}>
@@ -508,7 +516,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                       <tr 
                         data-row 
                         onDoubleClick={() => handleRowDoubleClick(order.id)} 
-                        className={`hover:bg-muted/50 transition-colors ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''}`}
+                        className={`hover:bg-muted/50 transition-colors ${missingFiles ? ROW_MISSING_FILES_BG : ''} ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''}`}
                       >
                         {(() => {
                           const mockRow = {
@@ -566,11 +574,12 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                 );
               }
               
+              const summaryMissingFiles = orderHasSelloMissingFiles(order);
               // Si tiene múltiples items, mostrar fila expandible
               return (
                 <Fragment key={order.id}>
                   {/* Fila resumen con animación mejorada */}
-                  <tr className={`border-b hover:bg-primary/5 transition-colors duration-150 cursor-pointer group ${isExpandedState ? 'summary-row-expanded' : ''} ${isCollapsing(order.id) ? 'summary-row-collapsing' : ''} ${isExpanding(order.id) ? 'summary-row-expanding' : ''}`}>
+                  <tr className={`border-b hover:bg-primary/5 transition-colors duration-150 cursor-pointer group ${summaryMissingFiles ? ROW_MISSING_FILES_BG : ''} ${isExpandedState ? 'summary-row-expanded' : ''} ${isCollapsing(order.id) ? 'summary-row-collapsing' : ''} ${isExpanding(order.id) ? 'summary-row-expanding' : ''}`}>
                     {(() => {
                       const mockRow = {
                         original: order, // Usar el pedido completo
@@ -612,17 +621,19 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                   </tr>
                   
                   {/* Filas expandidas */}
-                  {isExpandedState && order.items.map((item, index) => (
+                  {isExpandedState && order.items.map((item, index) => {
+                    const itemMissingFiles = isSelloMissingBaseAndVector(item);
+                    return (
                     <ContextMenu key={`${order.id}-${item.id}`}>
                       <ContextMenuTrigger asChild>
                          <tr 
                            data-row 
                            onDoubleClick={() => handleRowDoubleClick(order.id)} 
-                           className={`hover:bg-muted/30 transition-colors duration-150 bg-muted/5 relative ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''} ${isCollapsing(order.id) ? 'expandable-item-exit' : 'expandable-item-enter'}`}
+                           className={`hover:bg-muted/30 transition-colors duration-150 relative ${itemMissingFiles ? ROW_MISSING_FILES_BG : 'bg-muted/5'} ${editingRowId === order.id ? 'ring-1 ring-primary/40' : ''} ${isCollapsing(order.id) ? 'expandable-item-exit' : 'expandable-item-enter'}`}
                            style={{
                              animationDelay: '0ms',
                              marginBottom: index < order.items.length - 1 ? '2px' : '0px',
-                             borderLeft: '2px solid #d1d5db',
+                             borderLeft: itemMissingFiles ? '2px solid rgb(248 113 113)' : '2px solid #d1d5db',
                            }}
                          >
                           {(() => {
@@ -708,7 +719,8 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                         <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(order.id)}>Eliminar pedido</ContextMenuItem>
                       </ContextMenuContent>
                     </ContextMenu>
-                  ))}
+                  );
+                  })}
                 </Fragment>
               );
             })}

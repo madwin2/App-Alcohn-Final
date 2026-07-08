@@ -8,6 +8,8 @@ interface SidebarItemProps {
   onClick?: () => void;
   isExpanded: boolean;
   disabled?: boolean;
+  /** Contador de notificación (rojo). 0 / undefined = oculto. */
+  badgeCount?: number;
 }
 
 export function SidebarItem({ 
@@ -16,14 +18,18 @@ export function SidebarItem({
   isActive = false, 
   onClick,
   isExpanded,
-  disabled = false
+  disabled = false,
+  badgeCount = 0,
 }: SidebarItemProps) {
+  const showBadge = !disabled && badgeCount > 0;
+  const badgeLabel = badgeCount > 99 ? '99+' : String(badgeCount);
+
   return (
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       className={cn(
-        "rounded-xl text-sm font-medium transition-colors duration-150 ease-out",
+        "relative rounded-xl text-sm font-medium transition-colors duration-150 ease-out",
         disabled
           ? "opacity-60 cursor-not-allowed text-gray-700 dark:text-gray-400"
           : "hover:bg-accent/50 hover:text-accent-foreground active:scale-[0.98]",
@@ -34,12 +40,19 @@ export function SidebarItem({
           ? "flex items-center justify-center w-12 h-12 mx-auto" 
           : "flex items-center gap-3 px-3 py-3 w-full"
       )}
-      title={!isExpanded ? label : undefined}
+      title={!isExpanded ? (showBadge ? `${label} (${badgeLabel})` : label) : undefined}
     >
-      <Icon className={cn(
-        "h-5 w-5 flex-shrink-0 transition-transform duration-300",
-        disabled && "opacity-50"
-      )} />
+      <span className="relative flex-shrink-0">
+        <Icon className={cn(
+          "h-5 w-5 transition-transform duration-300",
+          disabled && "opacity-50"
+        )} />
+        {showBadge && !isExpanded && (
+          <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white shadow-sm">
+            {badgeLabel}
+          </span>
+        )}
+      </span>
       <div className={cn(
         "transition-all duration-200 ease-out overflow-hidden",
         isExpanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"
@@ -51,6 +64,11 @@ export function SidebarItem({
           {label}
         </span>
       </div>
+      {showBadge && isExpanded && (
+        <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-semibold leading-none text-white">
+          {badgeLabel}
+        </span>
+      )}
     </button>
   );
 }

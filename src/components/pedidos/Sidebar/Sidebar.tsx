@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
+import { useSidebarNotifications } from '@/lib/hooks/useSidebarNotifications';
 import { getUserProfileImage } from '@/lib/utils/userImages';
 
 const sidebarItems = [
@@ -49,8 +50,15 @@ function SidebarInner() {
   const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
+  const { pedidosBadge, comercialBadge } = useSidebarNotifications();
 
   const isExpanded = sidebarExpanded || sidebarHovered;
+
+  const badgeForPath = (path: string): number => {
+    if (path === '/pedidos') return pedidosBadge;
+    if (path === '/comercial') return comercialBadge;
+    return 0;
+  };
 
   useEffect(() => {
     setSidebarHovered(false);
@@ -127,6 +135,7 @@ function SidebarInner() {
               isActive={location.pathname === item.path}
               isExpanded={isExpanded}
               disabled={item.disabled}
+              badgeCount={badgeForPath(item.path)}
               onClick={() => {
                 if (!item.disabled) {
                   navigate(item.path);
