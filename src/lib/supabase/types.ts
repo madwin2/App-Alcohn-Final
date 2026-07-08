@@ -264,6 +264,27 @@ export interface Database {
         };
         Update: Partial<Database['public']['Tables']['bronce_consumo']['Insert']>;
       };
+      estado_historial: {
+        Row: {
+          id: string;
+          orden_id: string;
+          sello_id: string | null;
+          campo: 'estado_fabricacion' | 'estado_venta' | 'estado_envio' | 'estado_orden';
+          estado_anterior: string | null;
+          estado_nuevo: string | null;
+          changed_at: string;
+        };
+        Insert: {
+          id?: string;
+          orden_id: string;
+          sello_id?: string | null;
+          campo: 'estado_fabricacion' | 'estado_venta' | 'estado_envio' | 'estado_orden';
+          estado_anterior?: string | null;
+          estado_nuevo?: string | null;
+          changed_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['estado_historial']['Insert']>;
+      };
       economia_movimientos_reales: {
         Row: {
           id: string;
