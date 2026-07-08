@@ -21,6 +21,13 @@ export function storageFileKindFromUrl(url: string): StorageFileKind {
   if (/\.eps(\?|#|$)/i.test(lower)) return 'eps';
   if (/\.svg(\?|#|$)/i.test(lower)) return 'svg';
   if (/\.(jpe?g|png|webp|gif)(\?|#|$)/i.test(lower)) return 'image';
+  // Ruta relativa de logos-web / mockups-web (sin URL completa)
+  if (!/^https?:\/\//i.test(lower) && lower.includes('/')) {
+    if (/\.pdf(\?|#|$)/i.test(lower)) return 'pdf';
+    if (/\.svg(\?|#|$)/i.test(lower)) return 'svg';
+    if (/\.(jpe?g|png|webp|gif|bmp)(\?|#|$)/i.test(lower)) return 'image';
+    return 'image';
+  }
   return 'other';
 }
 

@@ -132,13 +132,37 @@ export function estimateOrdenTotalFromNotas(
   return estimateWebOrdenTotal({ notasWeb, metodoPago: null });
 }
 
-export function resolveWebOrderSenia(notasWeb: Record<string, unknown> | null | undefined): number {
+export function resolveWebOrderSenia(
+  notasWeb: Record<string, unknown> | null | undefined,
+  metodoPago?: string | null,
+  carritoJson?: unknown,
+): number {
   if (notasWeb && typeof notasWeb === 'object') {
-    for (const key of ['senia_monto', 'monto_senia', 'senia_esperada'] as const) {
+    for (const key of [
+      'senia_monto',
+      'monto_senia',
+      'senia_esperada',
+      'monto_pagado',
+      'total_pagado',
+      'monto_cobrado',
+      'monto_openpay',
+    ] as const) {
       const raw = notasWeb[key];
       if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) return raw;
     }
   }
+
+  // Tarjeta / link: lo cobrado en checkout suele ser seña + envío (no va al valor del sello).
+  if (metodoPago && metodoPago !== 'Transferencia') {
+    const totalCobrado = estimateWebOrdenTotal({
+      notasWeb,
+      carritoJson,
+      metodoPago,
+      includeEnvio: true,
+    });
+    if (totalCobrado != null && totalCobrado > 0) return totalCobrado;
+  }
+
   return DEFAULT_WEB_SENIA;
 }
 
@@ -223,7 +247,7 @@ export function buildSellosFromWebCheckout(params: {
   const totalSenia =
     typeof params.seniaMonto === 'number' && Number.isFinite(params.seniaMonto) && params.seniaMonto >= 0
       ? params.seniaMonto
-      : resolveWebOrderSenia(params.notasWeb);
+      : resolveWebOrderSenia(params.notasWeb, params.metodoPago, params.carritoJson);
   const senias = allocateSeniaAcrossItems(valores, totalSenia);
   const mockupId = params.mockupSolicitudId ?? params.mockup?.id ?? null;
   const parsedFromMockup = Array.isArray(params.mockup?.medidas_cotizacion_json)

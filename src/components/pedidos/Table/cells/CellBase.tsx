@@ -9,9 +9,8 @@ import { useState, useRef } from 'react';
 import {
   uploadFile,
   generateFilePath,
-  deleteFile,
+  deleteBaseFile,
   downloadBaseFile,
-  getFilePathFromUrl,
   sanitizeDownloadFilename,
 } from '@/lib/supabase/services/storage.service';
 import { useToast } from '@/components/ui/use-toast';
@@ -120,22 +119,7 @@ export function CellBase({ order, onUpdate, editingRowId }: CellBaseProps) {
     if (!hasFile || !onUpdate) return;
 
     try {
-      // Obtener el path del archivo desde la URL
-      const filePath = getFilePathFromUrl(hasFile, 'base');
-      if (!filePath) {
-        console.error('No se pudo extraer el path de la URL:', hasFile);
-        throw new Error('No se pudo obtener la ruta del archivo');
-      }
-
-      // Eliminar archivo de Storage primero
-      try {
-        await deleteFile('base', filePath);
-        console.log('Archivo eliminado del bucket:', filePath);
-      } catch (storageError) {
-        console.error('Error eliminando archivo del bucket:', storageError);
-        // Continuar con la actualización de la BD aunque falle la eliminación del bucket
-        // para evitar que quede inconsistente
-      }
+      await deleteBaseFile(hasFile, item.mockupSolicitudId);
 
       // Actualizar la orden eliminando la URL del archivo
       const updatedItems = order.items.map(i => 

@@ -1,7 +1,7 @@
 import { buildSellosFromWebCheckout } from '@/lib/comercial/webCart';
 import { supabase } from '../client';
 import type { Database } from '../types';
-import { getOrderById, notifyOrderRegistered } from './orders.service';
+import { getOrderById } from './orders.service';
 import type { Order } from '@/lib/types/index';
 
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -93,12 +93,21 @@ export async function confirmWebOrderPayment(
 
   const now = new Date().toISOString();
   const hasComprobante = Boolean(orden.comprobante_subido_at || orden.comprobante_url);
+  const notasWeb = (orden.notas_web as Record<string, unknown> | null) ?? {};
 
   const ordenUpdate: Partial<OrdenRow> = {
     estado_pago_web: 'pagado',
     estado_orden: 'Señado',
     pago_confirmado_at: now,
     estado_envio: orden.estado_envio ?? 'Sin envio',
+    notas_web: {
+      ...notasWeb,
+      ...(skipWebhook ? { skip_pedido_registrado: true } : {}),
+      ...(typeof seniaMonto === 'number' && Number.isFinite(seniaMonto)
+        ? { senia_confirmada: seniaMonto }
+        : {}),
+      ...(disenoNombre?.trim() ? { diseno_confirmado: disenoNombre.trim() } : {}),
+    },
   };
 
   if (hasComprobante) {
@@ -114,9 +123,8 @@ export async function confirmWebOrderPayment(
     throw new Error('El pedido se confirmó pero no se pudo cargar para mostrar.');
   }
 
-  if (!skipWebhook) {
-    await notifyOrderRegistered(order);
-  }
+  // WhatsApp + normalización final: trigger SQL → confirm-web-order (migration_web_pedido_confirmado.sql).
+  // skipWebhook reservado por si hace falta confirmar sin notificar.
 
   return order;
 }

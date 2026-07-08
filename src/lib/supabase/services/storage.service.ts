@@ -2,6 +2,8 @@ import { supabase } from '../client';
 import {
   downloadPrivateStorageBlob,
   isPrivateWebStorageUrl,
+  resolveBaseFileStorageRef,
+  resolveStorageRefFromUrl,
 } from '@/lib/utils/storageUrlUtils';
 
 export type BucketType = 'base' | 'vector' | 'foto';
@@ -118,8 +120,10 @@ export const deleteFile = async (
  */
 export const getFilePathFromUrl = (url: string, bucket: BucketType): string | null => {
   try {
-    // La URL de Supabase Storage tiene el formato:
-    // https://[project].supabase.co/storage/v1/object/public/[bucket]/[path]
+    const ref = resolveStorageRefFromUrl(url);
+    if (ref?.bucket === bucket) return ref.path;
+
+    // Compat: URLs públicas antiguas solo con /public/
     const urlPattern = new RegExp(`/storage/v1/object/public/${bucket}/(.+)$`);
     const match = url.match(urlPattern);
     return match ? decodeURIComponent(match[1]) : null;
@@ -127,6 +131,22 @@ export const getFilePathFromUrl = (url: string, bucket: BucketType): string | nu
     console.error('Error extracting file path from URL:', error);
     return null;
   }
+};
+
+/** Elimina el archivo base resuelto (base/foto o, si aplica, logos-web). No borra mockups web. */
+export const deleteBaseFile = async (
+  url: string,
+  mockupSolicitudId?: string | null,
+): Promise<void> => {
+  const ref = await resolveBaseFileStorageRef(url, mockupSolicitudId);
+  if (!ref) return;
+
+  if (ref.bucket === 'base' || ref.bucket === 'vector' || ref.bucket === 'foto') {
+    await deleteFile(ref.bucket, ref.path);
+    return;
+  }
+
+  // logos-web / mockups-web: son assets del wizard; no eliminar al reemplazar en pedidos.
 };
 
 const JPEG_DOWNLOAD_QUALITY = 0.92;

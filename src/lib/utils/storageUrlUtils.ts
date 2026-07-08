@@ -128,14 +128,41 @@ export async function resolveBaseFileStorageRef(
   url: string,
   mockupSolicitudId?: string | null,
 ): Promise<StorageRef | null> {
-  // Pedidos web: archivo_base en sellos suele ser una ruta incorrecta del carrito;
-  // el path real está en mockup_solicitudes.archivo_base_path.
+  const trimmed = String(url ?? '').trim();
+
+  // 1. archivo_base del sello en buckets de la app (reemplazos desde Pedidos / Producción)
+  if (trimmed) {
+    const fromSello = resolveStorageRefFromUrl(trimmed);
+    if (
+      fromSello &&
+      (fromSello.bucket === 'base' ||
+        fromSello.bucket === 'vector' ||
+        fromSello.bucket === 'foto')
+    ) {
+      return fromSello;
+    }
+
+    // URL o ruta web válida guardada en el sello
+    if (
+      fromSello &&
+      (PRIVATE_WEB_BUCKETS as readonly string[]).includes(fromSello.bucket)
+    ) {
+      return fromSello;
+    }
+  }
+
+  // 2. Pedidos web: si el sello tiene ruta incorrecta, usar mockup_solicitudes
   if (mockupSolicitudId) {
     const fromMockup = await fetchMockupBaseStorageRef(mockupSolicitudId);
     if (fromMockup) return fromMockup;
   }
 
-  return resolveStorageRefFromUrl(url);
+  // 3. Último intento con lo guardado en sellos.archivo_base
+  if (trimmed) {
+    return resolveStorageRefFromUrl(trimmed);
+  }
+
+  return null;
 }
 
 async function createDisplayUrlForRef(ref: StorageRef): Promise<string> {

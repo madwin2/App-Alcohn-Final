@@ -33,9 +33,7 @@ export function StorageUrlImage({
         const resolved = await resolveStorageDisplayUrl(url, mockupSolicitudId);
         if (!cancelled) setSrc(resolved);
       } catch {
-        if (!cancelled) {
-          setSrc(url);
-        }
+        if (!cancelled) setFailed(true);
       }
     })();
 
