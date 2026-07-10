@@ -51,3 +51,31 @@ export const normalizeEmailCliente = (value: string | null | undefined): string 
 /** Teléfonos placeholder del import histórico (+549110000XXXXXX). */
 export const isPlaceholderClientePhone = (value: string): boolean =>
   /^\+?549110000\d{6}$/.test(normalizePhoneDigits(value) ? `+${normalizePhoneDigits(value)}` : '');
+
+/** Coincide búsqueda parcial o por variantes AR (+54, 549, 9…) contra uno o más teléfonos. */
+export const phoneMatchesSearch = (phones: string[], searchQuery: string): boolean => {
+  const searchDigits = normalizePhoneDigits(searchQuery);
+  if (searchDigits.length < 4) return false;
+
+  const searchVariantDigits = phoneSearchVariants(searchQuery).map(normalizePhoneDigits);
+
+  for (const phone of phones) {
+    if (!phone?.trim()) continue;
+    const phoneDigits = normalizePhoneDigits(phone);
+    if (!phoneDigits) continue;
+
+    if (phoneDigits.includes(searchDigits) || searchDigits.includes(phoneDigits)) {
+      return true;
+    }
+
+    if (
+      searchVariantDigits.some(
+        (variant) => variant && (phoneDigits.includes(variant) || variant.includes(phoneDigits)),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};

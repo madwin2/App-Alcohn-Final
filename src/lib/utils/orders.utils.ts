@@ -1,5 +1,6 @@
 import { Order, FabricationState, Filters, SortState } from '../types/index';
 import { parseOrderDateLocal } from './format';
+import { phoneMatchesSearch } from './phoneNormalization';
 
 /** Mínimo de caracteres para buscar en toda la base (evita renderizar miles de filas sin criterio). */
 export const MIN_SEARCH_CHARS_FULL_DATABASE = 4;
@@ -42,16 +43,24 @@ export const filterOrders = (
   // Aplicar búsqueda por texto
   if (searchQuery) {
     const searchLower = normalizedSearch;
-    result = result.filter(order =>
-      `${order.customer.firstName} ${order.customer.lastName}`
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-        .includes(searchLower) ||
-      order.customer.firstName.toLowerCase().includes(searchLower) ||
-      order.customer.lastName.toLowerCase().includes(searchLower) ||
-      order.customer.email?.toLowerCase().includes(searchLower) ||
-      order.items.some(item => item.designName.toLowerCase().includes(searchLower))
-    );
+    result = result.filter((order) => {
+      const orderPhones = [
+        order.customer.phoneE164,
+        ...order.items.map((item) => item.contact.phoneE164),
+      ];
+
+      return (
+        `${order.customer.firstName} ${order.customer.lastName}`
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+          .includes(searchLower) ||
+        order.customer.firstName.toLowerCase().includes(searchLower) ||
+        order.customer.lastName.toLowerCase().includes(searchLower) ||
+        order.customer.email?.toLowerCase().includes(searchLower) ||
+        order.items.some((item) => item.designName.toLowerCase().includes(searchLower)) ||
+        phoneMatchesSearch(orderPhones, searchQuery)
+      );
+    });
   }
 
   // Aplicar filtros del store (se ignoran solo cuando la búsqueda en toda la base ya está activa)
