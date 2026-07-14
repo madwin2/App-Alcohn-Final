@@ -130,7 +130,7 @@ export async function resolveBaseFileStorageRef(
 ): Promise<StorageRef | null> {
   const trimmed = String(url ?? '').trim();
 
-  // 1. archivo_base del sello en buckets de la app (reemplazos desde Pedidos / Producción)
+  // 1. Reemplazos subidos desde Pedidos / Producción (buckets de la app)
   if (trimmed) {
     const fromSello = resolveStorageRefFromUrl(trimmed);
     if (
@@ -141,28 +141,36 @@ export async function resolveBaseFileStorageRef(
     ) {
       return fromSello;
     }
-
-    // URL o ruta web válida guardada en el sello
-    if (
-      fromSello &&
-      (PRIVATE_WEB_BUCKETS as readonly string[]).includes(fromSello.bucket)
-    ) {
-      return fromSello;
-    }
   }
 
-  // 2. Pedidos web: si el sello tiene ruta incorrecta, usar mockup_solicitudes
+  // 2. Pedidos web: el path real está en mockup_solicitudes.
+  //    sellos.archivo_base a veces guarda rutas del carrito ({ordenId}/{mockupId}-logo.png)
+  //    que no existen en logos-web y provocan StorageUnknownError.
   if (mockupSolicitudId) {
     const fromMockup = await fetchMockupBaseStorageRef(mockupSolicitudId);
     if (fromMockup) return fromMockup;
   }
 
-  // 3. Último intento con lo guardado en sellos.archivo_base
+  // 3. Último intento con lo guardado en sellos.archivo_base (URL firmada o path web)
   if (trimmed) {
     return resolveStorageRefFromUrl(trimmed);
   }
 
   return null;
+}
+
+function storageErrorMessage(error: unknown): string {
+  if (!error) return 'No se pudo descargar el archivo';
+  if (error instanceof Error && error.message && error.message !== '{}') {
+    return error.message;
+  }
+  if (typeof error === 'object' && error !== null) {
+    const maybe = error as { message?: unknown; error?: unknown; statusCode?: unknown };
+    const msg = maybe.message ?? maybe.error;
+    if (typeof msg === 'string' && msg.trim() && msg !== '{}') return msg;
+    if (maybe.statusCode != null) return `Error de storage (${String(maybe.statusCode)})`;
+  }
+  return 'No se pudo descargar el archivo del storage';
 }
 
 async function createDisplayUrlForRef(ref: StorageRef): Promise<string> {
@@ -172,7 +180,7 @@ async function createDisplayUrlForRef(ref: StorageRef): Promise<string> {
 
   const { data, error } = await supabase.storage.from(ref.bucket).createSignedUrl(ref.path, 3600);
   if (error || !data?.signedUrl) {
-    throw error ?? new Error('No se pudo abrir el archivo web');
+    throw new Error(storageErrorMessage(error) || 'No se pudo abrir el archivo web');
   }
   return data.signedUrl;
 }
@@ -190,7 +198,31 @@ export async function resolveStorageDisplayUrl(
     throw new Error('URL de storage inválida');
   }
 
-  return createDisplayUrlForRef(ref);
+  try {
+    return await createDisplayUrlForRef(ref);
+  } catch (error) {
+    if (mockupSolicitudId) {
+      const fromMockup = await fetchMockupBaseStorageRef(mockupSolicitudId);
+      if (fromMockup && (fromMockup.bucket !== ref.bucket || fromMockup.path !== ref.path)) {
+        return createDisplayUrlForRef(fromMockup);
+      }
+    }
+    throw error instanceof Error ? error : new Error(storageErrorMessage(error));
+  }
+}
+
+async function downloadBlobFromRef(ref: StorageRef): Promise<Blob> {
+  if (ref.bucket === 'foto' || ref.bucket === 'base') {
+    const publicUrl = supabase.storage.from(ref.bucket).getPublicUrl(ref.path).data.publicUrl;
+    const response = await fetch(publicUrl);
+    if (!response.ok) throw new Error('Error al descargar el archivo');
+    return response.blob();
+  }
+
+  const { data, error } = await supabase.storage.from(ref.bucket).download(ref.path);
+  if (error) throw error;
+  if (!data) throw new Error('No se encontró el archivo en storage');
+  return data;
 }
 
 /** Descarga vía Storage API (buckets privados web o rutas relativas). */
@@ -201,19 +233,21 @@ export async function downloadPrivateStorageBlob(
   const ref = await resolveBaseFileStorageRef(url, mockupSolicitudId);
   if (!ref) throw new Error('URL de storage inválida');
 
-  if (ref.bucket === 'foto' || ref.bucket === 'base') {
-    const publicUrl = supabase.storage.from(ref.bucket).getPublicUrl(ref.path).data.publicUrl;
-    const response = await fetch(publicUrl);
-    if (!response.ok) throw new Error('Error al descargar el archivo');
-    return response.blob();
-  }
-
   try {
-    const { data, error } = await supabase.storage.from(ref.bucket).download(ref.path);
-    if (error) throw error;
-    if (!data) throw new Error('No se encontró el archivo en storage');
-    return data;
+    return await downloadBlobFromRef(ref);
   } catch (storageError) {
+    // Si falló con el ref del sello, reintentar con el mockup (path de carrito incorrecto)
+    if (mockupSolicitudId) {
+      const fromMockup = await fetchMockupBaseStorageRef(mockupSolicitudId);
+      if (fromMockup && (fromMockup.bucket !== ref.bucket || fromMockup.path !== ref.path)) {
+        try {
+          return await downloadBlobFromRef(fromMockup);
+        } catch {
+          // seguir con otros respaldos
+        }
+      }
+    }
+
     // Respaldo: URL firmada de Supabase aún vigente en archivo_base
     const trimmed = url.trim();
     if (
@@ -224,6 +258,7 @@ export async function downloadPrivateStorageBlob(
       const response = await fetch(trimmed);
       if (response.ok) return response.blob();
     }
-    throw storageError;
+
+    throw new Error(storageErrorMessage(storageError));
   }
 }

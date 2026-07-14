@@ -89,6 +89,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         estado_vectorizacion,
         programa_nombre,
         item_config,
+        mockup_solicitud_id,
         ordenes!inner (
           id,
           taken_by,
