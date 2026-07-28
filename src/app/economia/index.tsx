@@ -3,7 +3,6 @@ import { Navigate } from 'react-router-dom';
 import { AppMain } from '@/components/layout/AppMain';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useOrders } from '@/lib/hooks/useOrders';
-import { parseOrderDateLocal } from '@/lib/utils/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,6 +37,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import type { Order, OrderItem } from '@/lib/types';
+import {
+  currentArgentinaMonthKey,
+  monthKeyLabel,
+  monthKeyLabelLong,
+  orderBusinessMonthKey,
+  todayArgentinaDateKey,
+} from '@/lib/utils/argentinaDate';
 import {
   GASTOS_MONTHLY_UPDATED_EVENT,
   gananciaInversionesExtrasArs,
@@ -93,7 +99,10 @@ type MonthlyRow = {
   inversionCypreaArs: number;
   compraDolaresArs: number;
   pendiente: number;
+  /** Todas las unidades (sellos + accesorios). */
   unidades: number;
+  /** Solo ítems tipo SELLO. */
+  sellos: number;
   pedidos: number;
 };
 
@@ -105,17 +114,17 @@ function totalGananciasGrupoArs(r: Pick<MonthlyRow, 'inversionEmpresaArs' | 'inv
   return r.inversionEmpresaArs + r.inversionCypreaArs + r.compraDolaresArs;
 }
 
-const monthLabel = (key: string) => {
-  const [y, m] = key.split('-').map(Number);
-  const d = new Date(y, m - 1, 1);
-  return d.toLocaleString('es-AR', { month: 'short', year: '2-digit' });
-};
-
 const formatArs = (value: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
 
 const formatUsd = (value: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+
+const formatPct = (value: number | null) => {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(0)}%`;
+};
 
 const itemTypeLabel = (item: string) => {
   if (item === 'SELLO') return 'Sellos';
@@ -144,15 +153,7 @@ const itemTypeOf = (item: OrderItem): 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MAN
   return 'SELLO';
 };
 
-const orderMonthKey = (order: Order): string => {
-  const d = order.orderDate ? parseOrderDateLocal(order.orderDate) : new Date();
-  if (isNaN(d.getTime())) return '0000-00';
-  const y = d.getFullYear();
-  const m = `${d.getMonth() + 1}`.padStart(2, '0');
-  return `${y}-${m}`;
-};
-
-function TinyLineChart({ values }: { values: number[] }) {
+function TinyLineChart({ values, labels }: { values: number[]; labels?: string[] }) {
   if (values.length === 0) return <div className="h-24 text-xs text-muted-foreground">Sin datos</div>;
   const max = Math.max(...values, 1);
   const min = Math.min(...values, 0);
@@ -173,7 +174,54 @@ function TinyLineChart({ values }: { values: number[] }) {
       </svg>
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>Mín {min.toFixed(0)}</span>
+        {labels && labels.length > 0 ? (
+          <span>
+            {labels[0]} → {labels[labels.length - 1]}
+          </span>
+        ) : null}
         <span>Máx {max.toFixed(0)}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Barras mensuales con etiquetas (sellos / ventas). */
+function MonthlyBarChart({
+  rows,
+  valueKey,
+  highlightKey,
+  formatValue,
+}: {
+  rows: Array<{ key: string; label: string; value: number }>;
+  valueKey?: string;
+  highlightKey?: string;
+  formatValue?: (n: number) => string;
+}) {
+  if (rows.length === 0) return <div className="h-40 text-sm text-muted-foreground">Sin datos</div>;
+  const max = Math.max(...rows.map((r) => r.value), 1);
+  const fmt = formatValue ?? ((n: number) => String(Math.round(n)));
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex h-44 items-end gap-1.5 sm:gap-2">
+        {rows.map((r) => {
+          const h = Math.max((r.value / max) * 100, r.value > 0 ? 4 : 0);
+          const isHighlight = highlightKey === r.key;
+          return (
+            <div key={r.key} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+              <span className="text-[10px] font-medium text-muted-foreground tabular-nums">{fmt(r.value)}</span>
+              <div
+                className={`w-full max-w-10 rounded-t transition-colors ${
+                  isHighlight ? 'bg-primary' : 'bg-primary/45'
+                }`}
+                style={{ height: `${h}%` }}
+                title={`${r.label}: ${fmt(r.value)}${valueKey ? ` ${valueKey}` : ''}`}
+              />
+              <span className={`truncate text-[10px] ${isHighlight ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+                {r.label}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -265,7 +313,7 @@ export default function EconomiaPage() {
   const [realMovements, setRealMovements] = useState<RealMovement[]>([]);
   const [movementsLoading, setMovementsLoading] = useState(false);
 
-  const [movementDate, setMovementDate] = useState(new Date().toISOString().split('T')[0]);
+  const [movementDate, setMovementDate] = useState(todayArgentinaDateKey);
   const [usdAmount, setUsdAmount] = useState(0);
   const [usdBuyRate, setUsdBuyRate] = useState(usdRate);
   const [invEmpresaArs, setInvEmpresaArs] = useState(0);
@@ -418,7 +466,7 @@ export default function EconomiaPage() {
     const byMonth = new Map<string, MonthlyRow>();
 
     for (const order of orders) {
-      const key = orderMonthKey(order);
+      const key = orderBusinessMonthKey(order);
       const bundle = getBundleForMonth(gastosPorMes, key);
       const costosFijosMes = getFixedTotalForMonth(bundle, legacyFixed);
       const gastosExtrasSinEnvioMes = gastosExtrasSinEnvioParaEconomia(bundle.extras);
@@ -434,7 +482,7 @@ export default function EconomiaPage() {
         byMonth.get(key) ||
         ({
           key,
-          label: monthLabel(key),
+          label: monthKeyLabel(key),
           ventasBrutas: 0,
           costosFijos: costosFijosMes,
           costosVentas: 0,
@@ -453,6 +501,7 @@ export default function EconomiaPage() {
           compraDolaresArs: compraDolaresMes,
           pendiente: 0,
           unidades: 0,
+          sellos: 0,
           pedidos: 0,
         } satisfies MonthlyRow);
 
@@ -478,6 +527,7 @@ export default function EconomiaPage() {
 
       for (const item of order.items) {
         row.unidades += 1;
+        if (itemTypeOf(item) === 'SELLO') row.sellos += 1;
 
         const value = Number(item.itemValue || 0);
         if (item.saleState === 'TRANSFERIDO') {
@@ -529,6 +579,7 @@ export default function EconomiaPage() {
         acc.compraDolaresArs += r.compraDolaresArs;
         acc.pendiente += r.pendiente;
         acc.unidades += r.unidades;
+        acc.sellos += r.sellos;
         acc.pedidos += r.pedidos;
         return acc;
       },
@@ -550,13 +601,37 @@ export default function EconomiaPage() {
         compraDolaresArs: 0,
         pendiente: 0,
         unidades: 0,
+        sellos: 0,
         pedidos: 0,
       },
     );
   }, [monthly]);
 
+  const currentMonthKey = currentArgentinaMonthKey();
+  const currentMonth = useMemo(
+    () => monthly.find((m) => m.key === currentMonthKey) ?? null,
+    [monthly, currentMonthKey],
+  );
+  const previousMonth = useMemo(() => {
+    const idx = monthly.findIndex((m) => m.key === currentMonthKey);
+    if (idx > 0) return monthly[idx - 1];
+    // Si el mes actual aún no tiene ventas, comparar con el último mes con datos
+    if (idx < 0 && monthly.length > 0) return monthly[monthly.length - 1];
+    return null;
+  }, [monthly, currentMonthKey]);
+
+  const momSellosPct = useMemo(() => {
+    if (!currentMonth || !previousMonth || previousMonth.sellos <= 0) return null;
+    return ((currentMonth.sellos - previousMonth.sellos) / previousMonth.sellos) * 100;
+  }, [currentMonth, previousMonth]);
+
+  const momVentasPct = useMemo(() => {
+    if (!currentMonth || !previousMonth || previousMonth.ventasBrutas <= 0) return null;
+    return ((currentMonth.ventasBrutas - previousMonth.ventasBrutas) / previousMonth.ventasBrutas) * 100;
+  }, [currentMonth, previousMonth]);
+
   const mensualTablaCols =
-    2 + (mensualDetalleGastos ? 5 : 1) + 4 + (mensualDetalleGanancias ? 4 : 1);
+    4 + (mensualDetalleGastos ? 5 : 1) + 4 + (mensualDetalleGanancias ? 4 : 1);
 
   const totalCajaArs = useMemo(
     () =>
@@ -695,7 +770,10 @@ export default function EconomiaPage() {
                   <CardTitle>Economía</CardTitle>
                   <Badge variant="secondary">Panel ejecutivo</Badge>
                 </div>
-                <CardDescription>Vista consolidada de ventas, costos, márgenes y tendencias.</CardDescription>
+                <CardDescription>
+                  Vista consolidada de ventas, costos, márgenes y tendencias. Fechas y meses en zona Argentina
+                  (UTC−3).
+                </CardDescription>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1 sm:col-span-2">
@@ -727,11 +805,25 @@ export default function EconomiaPage() {
             </CardHeader>
           </Card>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             <Card>
               <CardHeader>
-                <CardDescription>Ventas brutas</CardDescription>
+                <CardDescription>Mes actual · {monthKeyLabelLong(currentMonthKey)}</CardDescription>
+                <CardTitle className="text-2xl">{currentMonth?.sellos ?? 0} sellos</CardTitle>
+                <CardDescription>
+                  {formatArs(currentMonth?.ventasBrutas ?? 0)}
+                  {momSellosPct != null ? ` · vs mes ant. sellos ${formatPct(momSellosPct)}` : ''}
+                  {momVentasPct != null ? ` · ventas ${formatPct(momVentasPct)}` : ''}
+                </CardDescription>
+              </CardHeader>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardDescription>Ventas brutas (todo)</CardDescription>
                 <CardTitle className="text-2xl">{formatArs(totals.ventasBrutas)}</CardTitle>
+                <CardDescription>
+                  {totals.sellos} sellos · {totals.pedidos} pedidos
+                </CardDescription>
               </CardHeader>
             </Card>
             <Card>
@@ -1014,12 +1106,132 @@ export default function EconomiaPage() {
             </Dialog>
           </div>
 
-          <Tabs defaultValue="mensual">
+          <Tabs defaultValue="ventas">
             <TabsList>
+              <TabsTrigger value="ventas">Ventas mensuales</TabsTrigger>
               <TabsTrigger value="mensual">Mensual</TabsTrigger>
               <TabsTrigger value="mix">Mix de ítems</TabsTrigger>
               <TabsTrigger value="tendencias">Tendencias</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="ventas">
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Sellos vendidos por mes</CardTitle>
+                    <CardDescription>
+                      Cantidad de sellos agrupados por mes de venta (hora Argentina). Mes actual resaltado.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <MonthlyBarChart
+                      rows={monthly.map((m) => ({ key: m.key, label: m.label, value: m.sellos }))}
+                      valueKey="sellos"
+                      highlightKey={currentMonthKey}
+                    />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Ventas brutas por mes</CardTitle>
+                    <CardDescription>Total facturado (pedido + envío imputado cuando corresponde).</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <MonthlyBarChart
+                      rows={monthly.map((m) => ({ key: m.key, label: m.label, value: m.ventasBrutas }))}
+                      highlightKey={currentMonthKey}
+                      formatValue={(n) =>
+                        new Intl.NumberFormat('es-AR', {
+                          notation: 'compact',
+                          maximumFractionDigits: 1,
+                        }).format(n)
+                      }
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle>Detalle mes a mes</CardTitle>
+                    <CardDescription>
+                      Compará volumen (sellos), pedidos, ticket y rentabilidad de cada mes.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="overflow-auto">
+                    <table className="w-full min-w-[720px] text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-muted-foreground">
+                          <th className="py-2 pr-3">Mes</th>
+                          <th className="py-2 pr-3 text-right">Sellos</th>
+                          <th className="py-2 pr-3 text-right">Pedidos</th>
+                          <th className="py-2 pr-3 text-right">Unidades</th>
+                          <th className="py-2 pr-3 text-right">Ventas</th>
+                          <th className="py-2 pr-3 text-right">Ticket prom.</th>
+                          <th className="py-2 pr-3 text-right">Rentabilidad</th>
+                          <th className="py-2 pr-3 text-right">vs mes ant.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {monthly.map((r, i) => {
+                          const prev = i > 0 ? monthly[i - 1] : null;
+                          const delta =
+                            prev && prev.sellos > 0
+                              ? ((r.sellos - prev.sellos) / prev.sellos) * 100
+                              : null;
+                          const ticket = r.pedidos > 0 ? r.ventasBrutas / r.pedidos : 0;
+                          const isCurrent = r.key === currentMonthKey;
+                          return (
+                            <tr
+                              key={r.key}
+                              className={`border-b last:border-0 ${isCurrent ? 'bg-primary/5' : ''}`}
+                            >
+                              <td className="py-2 pr-3">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant={isCurrent ? 'default' : 'outline'}>{r.label}</Badge>
+                                  {isCurrent ? (
+                                    <span className="text-[10px] text-muted-foreground">actual</span>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className="py-2 pr-3 text-right font-semibold tabular-nums">{r.sellos}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">{r.pedidos}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">{r.unidades}</td>
+                              <td className="py-2 pr-3 text-right">{formatArs(r.ventasBrutas)}</td>
+                              <td className="py-2 pr-3 text-right">{formatArs(ticket)}</td>
+                              <td className="py-2 pr-3 text-right">{formatArs(r.rentabilidadPesos)}</td>
+                              <td
+                                className={`py-2 pr-3 text-right tabular-nums ${
+                                  delta == null
+                                    ? 'text-muted-foreground'
+                                    : delta >= 0
+                                      ? 'text-emerald-600'
+                                      : 'text-red-600'
+                                }`}
+                              >
+                                {formatPct(delta)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-border bg-muted/40 font-semibold">
+                          <td className="py-2 pr-3">Total</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{totals.sellos}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{totals.pedidos}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{totals.unidades}</td>
+                          <td className="py-2 pr-3 text-right">{formatArs(totals.ventasBrutas)}</td>
+                          <td className="py-2 pr-3 text-right">
+                            {formatArs(totals.pedidos > 0 ? totals.ventasBrutas / totals.pedidos : 0)}
+                          </td>
+                          <td className="py-2 pr-3 text-right">{formatArs(totals.rentabilidadPesos)}</td>
+                          <td className="py-2 pr-3 text-right text-muted-foreground">—</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
 
             <TabsContent value="mensual">
               <Card>
@@ -1042,11 +1254,13 @@ export default function EconomiaPage() {
                 </CardHeader>
                 <CardContent className="overflow-auto">
                   <table
-                    className={`w-full text-sm ${mensualDetalleGastos || mensualDetalleGanancias ? 'min-w-[1280px]' : 'min-w-[880px]'}`}
+                    className={`w-full text-sm ${mensualDetalleGastos || mensualDetalleGanancias ? 'min-w-[1400px]' : 'min-w-[1000px]'}`}
                   >
                     <thead>
                       <tr className="border-b text-left text-muted-foreground">
                         <th className="py-2 pr-3">Mes</th>
+                        <th className="py-2 pr-3 text-right">Sellos</th>
+                        <th className="py-2 pr-3 text-right">Pedidos</th>
                         <th className="py-2 pr-3 text-right">Ventas brutas</th>
                         {mensualDetalleGastos ? (
                           <>
@@ -1131,10 +1345,12 @@ export default function EconomiaPage() {
                     </thead>
                     <tbody>
                       {monthly.map((r) => (
-                        <tr key={r.key} className="border-b last:border-0">
+                        <tr key={r.key} className={`border-b last:border-0 ${r.key === currentMonthKey ? 'bg-primary/5' : ''}`}>
                           <td className="py-2 pr-3">
-                            <Badge variant="outline">{r.label}</Badge>
+                            <Badge variant={r.key === currentMonthKey ? 'default' : 'outline'}>{r.label}</Badge>
                           </td>
+                          <td className="py-2 pr-3 text-right font-medium tabular-nums">{r.sellos}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{r.pedidos}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.ventasBrutas)}</td>
                           {mensualDetalleGastos ? (
                             <>
@@ -1174,6 +1390,8 @@ export default function EconomiaPage() {
                         <td className="py-2 pr-3">
                           <span className="text-foreground">Total</span>
                         </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">{totals.sellos}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums">{totals.pedidos}</td>
                         <td className="py-2 pr-3 text-right">{formatArs(totals.ventasBrutas)}</td>
                         {mensualDetalleGastos ? (
                           <>
@@ -1284,7 +1502,10 @@ export default function EconomiaPage() {
                     <CardDescription>{formatArs(totals.ventasBrutas)} acumulado</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <TinyLineChart values={monthly.map((m) => m.ventasBrutas)} />
+                    <TinyLineChart
+                      values={monthly.map((m) => m.ventasBrutas)}
+                      labels={monthly.map((m) => m.label)}
+                    />
                   </CardContent>
                 </Card>
                 <Card>
@@ -1295,16 +1516,22 @@ export default function EconomiaPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <TinyLineChart values={monthly.map((m) => m.rentabilidadUsd)} />
+                    <TinyLineChart
+                      values={monthly.map((m) => m.rentabilidadUsd)}
+                      labels={monthly.map((m) => m.label)}
+                    />
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Unidades vendidas</CardTitle>
-                    <CardDescription>{totals.unidades} unidades</CardDescription>
+                    <CardTitle className="text-base">Sellos vendidos</CardTitle>
+                    <CardDescription>{totals.sellos} sellos · {totals.unidades} unidades</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <TinyLineChart values={monthly.map((m) => m.unidades)} />
+                    <TinyLineChart
+                      values={monthly.map((m) => m.sellos)}
+                      labels={monthly.map((m) => m.label)}
+                    />
                   </CardContent>
                 </Card>
               </div>

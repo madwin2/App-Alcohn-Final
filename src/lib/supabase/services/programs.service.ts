@@ -1,6 +1,7 @@
 import { supabase } from '../client';
 import { Program, ProgramStamp } from '../../types/index';
 import { Database } from '../types';
+import { todayArgentinaDateKey } from '../../utils/argentinaDate';
 
 type ProgramaRow = Database['public']['Tables']['programa']['Row'];
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
@@ -126,7 +127,7 @@ export const getPrograms = async (): Promise<Program[]> => {
         category: 'PRODUCTION', // Valor por defecto
         machine: mapMachine(programa.maquina),
         stampCount: programa.cantidad_sellos || stamps.length,
-        productionDate: programa.fecha || new Date().toISOString().split('T')[0],
+        productionDate: programa.fecha || todayArgentinaDateKey(),
         notes: undefined, // No hay campo notas en la BD
         fabricationState: mapFabricationState(programa.estado_fabricacion),
         isVerified: programa.verificado || false,
@@ -152,7 +153,7 @@ export const createProgram = async (program: Partial<Program>): Promise<Program>
   try {
     const programaData = {
       nombre: program.name || 'Nuevo Programa',
-      fecha: program.productionDate || new Date().toISOString().split('T')[0],
+      fecha: program.productionDate || todayArgentinaDateKey(),
       maquina: program.machine || 'C',
       estado_fabricacion: program.fabricationState ? mapFabricationStateToDB(program.fabricationState) as any : 'Sin Hacer',
       verificado: program.isVerified || false,
@@ -241,7 +242,7 @@ export const getProgramById = async (programId: string): Promise<Program | null>
       category: 'PRODUCTION',
       machine: mapMachine(programa.maquina),
       stampCount: programa.cantidad_sellos || stamps.length,
-      productionDate: programa.fecha || new Date().toISOString().split('T')[0],
+      productionDate: programa.fecha || todayArgentinaDateKey(),
       notes: undefined,
       fabricationState: mapFabricationState(programa.estado_fabricacion),
       isVerified: programa.verificado || false,

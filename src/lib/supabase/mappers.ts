@@ -1,5 +1,6 @@
 import { Order, OrderItem, Customer, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, StampType, ProgressStep, Task, ItemType } from '../types/index';
 import { Database } from './types';
+import { todayArgentinaDateKey } from '../utils/argentinaDate';
 import { vectorUrlFromPreview } from '../utils/vectorUrlFromPreview';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
@@ -312,7 +313,7 @@ export const mapOrdenToOrder = (
     labelPaidAt: (orden as { etiqueta_pagada_at?: string | null }).etiqueta_pagada_at ?? null,
     shippingLabelError: (orden as { error_etiqueta_mensaje?: string | null }).error_etiqueta_mensaje ?? null,
     customer: mapClienteToCustomer(cliente),
-    orderDate: orden.fecha || new Date().toISOString().split('T')[0],
+    orderDate: orden.fecha || todayArgentinaDateKey(),
     createdAt: orden.created_at || undefined,
     takenBy: takenBy || null,
     totalValue: orden.valor_total ? Number(orden.valor_total) : 0,
@@ -389,6 +390,6 @@ export const mapOrderToOrden = (
         | 'Despachado'
         | 'Seguimiento Enviado')
     : null,
-  fecha: order.orderDate ? order.orderDate.split('T')[0] : new Date().toISOString().split('T')[0],
+  fecha: order.orderDate ? order.orderDate.split('T')[0] : todayArgentinaDateKey(),
 });
 

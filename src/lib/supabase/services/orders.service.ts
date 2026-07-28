@@ -18,6 +18,7 @@ import { Database } from '../types';
 import { uploadFile, generateFilePath, uploadVectorFileWithPreview } from './storage.service';
 import { runMigrations } from '../migrations';
 import { getSixMonthsCutoffDate } from '../../utils/orderLifecycle';
+import { todayArgentinaDateKey } from '../../utils/argentinaDate';
 import { isVectorAutoEnabled, vectorizationStateAfterBaseUpload } from '../../config/vectorAuto';
 import { enqueueVectorization } from '../../utils/vectorizeWorker';
 import {
@@ -571,7 +572,7 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
       {
         shipping: formData.shipping,
         saleStateOrder: 'SEÑADO',
-        orderDate: new Date().toISOString(),
+        orderDate: todayArgentinaDateKey(),
       },
       cliente.id
     );
@@ -644,6 +645,8 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
       ),
       // Sobrescribir campos específicos al crear el sello
       ...{
+        // Fecha de negocio en zona Argentina (evita CURRENT_DATE UTC del servidor)
+        fecha: todayArgentinaDateKey(),
         // Guardar prioridad en la nueva columna es_prioritario (independiente del estado de fabricación)
         es_prioritario: formData.states.isPriority ?? false,
         // Guardar fecha límite si se especificó al crear el pedido
