@@ -1,9 +1,9 @@
 /**
  * Mapeo de usuarios a sus imágenes de perfil ("Perfil") y de bienvenida ("Inicio").
  *
- * Las imágenes viven en `public/usuarios/` y se sirven como assets estáticos.
- * Usamos un matcher por nombre normalizado (sin acentos, en minúsculas) para
- * tolerar distintas variantes con/sin tilde, mayúsculas, etc.
+ * Las imágenes (y videos opcionales de inicio) viven en `public/usuarios/` y se sirven
+ * como assets estáticos. Usamos un matcher por nombre normalizado (sin acentos, en
+ * minúsculas) para tolerar distintas variantes con/sin tilde, mayúsculas, etc.
  */
 
 interface UserImageEntry {
@@ -11,6 +11,8 @@ interface UserImageEntry {
   match: string[];
   perfil: string;
   inicio: string;
+  /** Video en loop para el hero de inicio (reemplaza la imagen estática si existe). */
+  inicioVideo?: string;
 }
 
 const USER_IMAGES: UserImageEntry[] = [
@@ -23,6 +25,7 @@ const USER_IMAGES: UserImageEntry[] = [
     match: ['julian', 'bobasso'],
     perfil: '/usuarios/julian-bobasso-perfil.png',
     inicio: '/usuarios/julian-bobasso-inicio.png',
+    inicioVideo: '/usuarios/julian-bobasso-inicio.mp4',
   },
   {
     match: ['federico', 'minuto'],
@@ -34,6 +37,7 @@ const USER_IMAGES: UserImageEntry[] = [
     match: ['albornoz'],
     perfil: '/usuarios/cachi-albornoz-perfil.png',
     inicio: '/usuarios/cachi-albornoz-inicio.png',
+    inicioVideo: '/usuarios/cachi-albornoz-inicio.mp4',
   },
 ];
 
@@ -64,6 +68,11 @@ export function getUserProfileImage(name: string | null | undefined): string | n
 /** URL de la foto "Inicio" (cuerpo entero) del usuario, o `null` si no tiene foto. */
 export function getUserInicioImage(name: string | null | undefined): string | null {
   return findEntry(name)?.inicio ?? null;
+}
+
+/** URL del video "Inicio" en loop del usuario, o `null` si no tiene video. */
+export function getUserInicioVideo(name: string | null | undefined): string | null {
+  return findEntry(name)?.inicioVideo ?? null;
 }
 
 /** Iniciales tomadas del nombre completo (máx. 2). */

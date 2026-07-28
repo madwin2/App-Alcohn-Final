@@ -31,6 +31,7 @@ import stickyNoteAddWorkmateSvg from '@/assets/sticky-notes/sticky-note-add-work
 import stickyNoteTaskWorkmateSvg from '@/assets/sticky-notes/sticky-note-task-workmate.svg';
 import {
   getUserInicioImage,
+  getUserInicioVideo,
   getUserProfileImage,
 } from '@/lib/utils/userImages';
 import { UserTaskWidget } from '@/components/home/UserTaskWidget';
@@ -713,6 +714,8 @@ export default function HomePage() {
             Las laterales se contraen verticalmente cuando tanda > 0. */}
         {(() => {
           const inicioImage = getUserInicioImage(userName);
+          const inicioVideo = getUserInicioVideo(userName);
+          const hasInicioMedia = Boolean(inicioVideo || inicioImage);
           const stockEmpty = stockReplenishVms.length === 0;
           // Estilos compartidos: cards laterales se contraen al scrollear (tanda > 0).
           const lateralCollapseStyle: React.CSSProperties = {
@@ -771,7 +774,7 @@ export default function HomePage() {
                   }}
                 />
                 {/* Halo concentrado detrás del personaje */}
-                {inicioImage && (
+                {hasInicioMedia && (
                   <div
                     aria-hidden
                     className="pointer-events-none absolute left-1/2 top-[40%] -translate-x-1/2 -translate-y-1/2 w-[460px] h-[460px] rounded-full"
@@ -784,15 +787,29 @@ export default function HomePage() {
                 )}
 
                 {/* Personaje grande, ocupa toda la columna y llega al ras del bottom del viewport.
-                    `-mt-16` lo sube un toque para que la cabeza quede más arriba en la pantalla. */}
-                {inicioImage && (
+                    Preferimos video en loop si existe; si no, la imagen estática. */}
+                {hasInicioMedia && (
                   <div className="absolute inset-0 flex items-start justify-center overflow-hidden pointer-events-none">
-                    <img
-                      src={inicioImage}
-                      alt={userName}
-                      className="h-[940px] md:h-[1140px] w-auto max-w-none object-contain object-top select-none drop-shadow-[0_24px_40px_rgba(0,0,0,0.55)] -mt-10"
-                      draggable={false}
-                    />
+                    {inicioVideo ? (
+                      <video
+                        key={inicioVideo}
+                        src={inicioVideo}
+                        poster={inicioImage ?? undefined}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        aria-label={userName}
+                        className="h-[940px] md:h-[1140px] w-auto max-w-none object-contain object-top select-none drop-shadow-[0_24px_40px_rgba(0,0,0,0.55)] -mt-10"
+                      />
+                    ) : (
+                      <img
+                        src={inicioImage!}
+                        alt={userName}
+                        className="h-[940px] md:h-[1140px] w-auto max-w-none object-contain object-top select-none drop-shadow-[0_24px_40px_rgba(0,0,0,0.55)] -mt-10"
+                        draggable={false}
+                      />
+                    )}
                   </div>
                 )}
 
