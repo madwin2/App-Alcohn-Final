@@ -153,6 +153,23 @@ export function cotizarSelloRectangularCm(
   return null;
 }
 
+/**
+ * Clasifica un sello rectangular (mm de pedido) en chicos / medianos / grandes / xl
+ * con la misma tabla de semillas que precios.
+ */
+export function clasificarGrupoSelloRectangularMm(
+  widthMm: number,
+  heightMm: number,
+): SelloGrupoCodigo | null {
+  if (!Number.isFinite(widthMm) || !Number.isFinite(heightMm) || widthMm <= 0 || heightMm <= 0) {
+    return null;
+  }
+  const { anchoCm, altoCm } = mmPedidoAcm(widthMm, heightMm);
+  const oriented = orientacionTablaCm(anchoCm, altoCm);
+  const { ancho: as, largo: ls } = normalizarMedidaPlanchuelaCm(oriented.ancho, oriented.largo);
+  return inferirGrupoPorSemillas(as, ls) ?? grupoPorSemillaMasCercana2D(as, ls);
+}
+
 /** Parse "40×40", "35,5×25" o "40" (cuadrado) en **milímetros** → `requestedWidthMm` / `requestedHeightMm`. */
 export function parseMedidaMmAString(raw: string): { anchoMm: number; altoMm: number } | null {
   const t = raw.trim().replace(/,/g, '.').replace(/\s/g, '');

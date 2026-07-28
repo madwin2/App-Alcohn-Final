@@ -45,6 +45,14 @@ import {
   todayArgentinaDateKey,
 } from '@/lib/utils/argentinaDate';
 import {
+  activeProductKeys,
+  buildMonthlyProductBreakdown,
+  cellMetric,
+  economiaProductoMeta,
+  sumProductAcrossMonths,
+  type EconomiaMetricMode,
+} from '@/lib/economia/productCategory';
+import {
   GASTOS_MONTHLY_UPDATED_EVENT,
   gananciaInversionesExtrasArs,
   gastosExtrasEnviosManual,
@@ -124,15 +132,6 @@ const formatPct = (value: number | null) => {
   if (value == null || !Number.isFinite(value)) return '—';
   const sign = value > 0 ? '+' : '';
   return `${sign}${value.toFixed(0)}%`;
-};
-
-const itemTypeLabel = (item: string) => {
-  if (item === 'SELLO') return 'Sellos';
-  if (item === 'SOLDADOR') return 'Soldadores';
-  if (item === 'MANGO_GOLPE') return 'Mango de golpe';
-  if (item === 'ABECEDARIO') return 'Abecedarios';
-  if (item === 'BASE_REMACHADORA') return 'Base remachadora';
-  return item;
 };
 
 const pendingLabel = (state: string) => {
@@ -222,6 +221,80 @@ function MonthlyBarChart({
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/** Barras apiladas por categoría (mix mensual). */
+function StackedMonthlyBars({
+  rows,
+  keys,
+  mode,
+  highlightKey,
+  formatValue,
+}: {
+  rows: Array<{ key: string; label: string; values: Record<string, number> }>;
+  keys: Array<{ key: string; color: string; label: string }>;
+  mode: EconomiaMetricMode;
+  highlightKey?: string;
+  formatValue: (n: number) => string;
+}) {
+  if (rows.length === 0 || keys.length === 0) {
+    return <div className="h-48 text-sm text-muted-foreground">Sin datos</div>;
+  }
+  const totals = rows.map((r) => keys.reduce((s, k) => s + (r.values[k.key] || 0), 0));
+  const max = Math.max(...totals, 1);
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex h-52 items-end gap-1.5 sm:gap-2">
+        {rows.map((r, idx) => {
+          const total = totals[idx];
+          const h = Math.max((total / max) * 100, total > 0 ? 6 : 0);
+          const isHighlight = highlightKey === r.key;
+          return (
+            <div key={r.key} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+              <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+                {formatValue(total)}
+              </span>
+              <div
+                className={`flex w-full max-w-12 flex-col-reverse overflow-hidden rounded-t ${
+                  isHighlight ? 'ring-2 ring-primary/60' : ''
+                }`}
+                style={{ height: `${h}%` }}
+                title={`${r.label}: ${formatValue(total)} (${mode})`}
+              >
+                {keys.map((k) => {
+                  const v = r.values[k.key] || 0;
+                  if (v <= 0 || total <= 0) return null;
+                  const pct = (v / total) * 100;
+                  return (
+                    <div
+                      key={k.key}
+                      style={{ height: `${pct}%`, backgroundColor: k.color }}
+                      title={`${k.label}: ${formatValue(v)}`}
+                    />
+                  );
+                })}
+              </div>
+              <span
+                className={`truncate text-[10px] ${
+                  isHighlight ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                {r.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {keys.map((k) => (
+          <div key={k.key} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="size-2.5 rounded-sm" style={{ backgroundColor: k.color }} />
+            <span>{k.label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -320,6 +393,7 @@ export default function EconomiaPage() {
   const [invCypreaArs, setInvCypreaArs] = useState(0);
   const [mensualDetalleGastos, setMensualDetalleGastos] = useState(false);
   const [mensualDetalleGanancias, setMensualDetalleGanancias] = useState(false);
+  const [desgloseMetric, setDesgloseMetric] = useState<EconomiaMetricMode>('unidades');
   const [cajaBalances, setCajaBalances] = useState<EconomiaCajaRow>(() => emptyEconomiaCaja());
   const [economiaSettingsLoading, setEconomiaSettingsLoading] = useState(true);
   const [economiaSettingsHydrated, setEconomiaSettingsHydrated] = useState(false);
@@ -630,6 +704,79 @@ export default function EconomiaPage() {
     return ((currentMonth.ventasBrutas - previousMonth.ventasBrutas) / previousMonth.ventasBrutas) * 100;
   }, [currentMonth, previousMonth]);
 
+  const productBreakdown = useMemo(() => {
+    const itemsByMonth: Array<{ monthKey: string; item: OrderItem }> = [];
+    for (const order of orders) {
+      const monthKey = orderBusinessMonthKey(order);
+      for (const item of order.items) {
+        itemsByMonth.push({ monthKey, item });
+      }
+    }
+    const monthShell = monthly.map((m) => ({ key: m.key, label: m.label }));
+    for (const { monthKey } of itemsByMonth) {
+      if (!monthShell.some((m) => m.key === monthKey)) {
+        monthShell.push({ key: monthKey, label: monthKeyLabel(monthKey) });
+      }
+    }
+    monthShell.sort((a, b) => a.key.localeCompare(b.key));
+    return buildMonthlyProductBreakdown(monthShell, itemsByMonth);
+  }, [orders, monthly]);
+
+  const productKeysActive = useMemo(() => activeProductKeys(productBreakdown), [productBreakdown]);
+
+  const productTotals = useMemo(
+    () =>
+      productKeysActive.map((key) => {
+        const sum = sumProductAcrossMonths(productBreakdown, key);
+        const meta = economiaProductoMeta(key);
+        return { key, meta, ...sum };
+      }),
+    [productBreakdown, productKeysActive],
+  );
+
+  const currentProductRow = useMemo(
+    () => productBreakdown.find((r) => r.key === currentMonthKey) ?? null,
+    [productBreakdown, currentMonthKey],
+  );
+
+  const previousProductRow = useMemo(() => {
+    const idx = productBreakdown.findIndex((r) => r.key === currentMonthKey);
+    if (idx > 0) return productBreakdown[idx - 1];
+    if (idx < 0 && productBreakdown.length > 0) return productBreakdown[productBreakdown.length - 1];
+    return null;
+  }, [productBreakdown, currentMonthKey]);
+
+  const formatDesgloseMetric = (n: number) => {
+    if (desgloseMetric === 'unidades') return String(Math.round(n));
+    return formatArs(n);
+  };
+
+  const stackedBarRows = useMemo(
+    () =>
+      productBreakdown.map((r) => ({
+        key: r.key,
+        label: r.label,
+        values: Object.fromEntries(
+          productKeysActive.map((k) => [k, cellMetric(r.byProduct[k], desgloseMetric)]),
+        ) as Record<string, number>,
+      })),
+    [productBreakdown, productKeysActive, desgloseMetric],
+  );
+
+  const stackedBarKeys = useMemo(
+    () =>
+      productKeysActive.map((k) => {
+        const meta = economiaProductoMeta(k);
+        return { key: k, color: meta.color, label: meta.shortLabel };
+      }),
+    [productKeysActive],
+  );
+
+  const totalProductUnidades = useMemo(
+    () => productTotals.reduce((s, p) => s + p.unidades, 0),
+    [productTotals],
+  );
+
   const mensualTablaCols =
     4 + (mensualDetalleGastos ? 5 : 1) + 4 + (mensualDetalleGanancias ? 4 : 1);
 
@@ -642,26 +789,6 @@ export default function EconomiaPage() {
       cajaBalances.bbva,
     [cajaBalances],
   );
-
-  const itemBreakdown = useMemo(() => {
-    const map = new Map<string, { unidades: number; ventas: number; costos: number; ganancia: number }>();
-    for (const order of orders) {
-      for (const item of order.items) {
-        const t = itemTypeOf(item);
-        const current = map.get(t) || { unidades: 0, ventas: 0, costos: 0, ganancia: 0 };
-        current.unidades += 1;
-        current.ventas += Number(item.itemValue || 0);
-        current.costos += Number(item.fabricationCostItem || 0);
-        current.ganancia += Number(item.fabricationMarginItem || 0);
-        map.set(t, current);
-      }
-    }
-    return Array.from(map.entries()).map(([item, v]) => ({
-      item,
-      ...v,
-      pct: totals.unidades > 0 ? (v.unidades / totals.unidades) * 100 : 0,
-    }));
-  }, [orders, totals.unidades]);
 
   const ticketPromedio = totals.pedidos > 0 ? totals.ventasBrutas / totals.pedidos : 0;
   const unidadesPromedio = totals.pedidos > 0 ? totals.unidades / totals.pedidos : 0;
@@ -1107,8 +1234,9 @@ export default function EconomiaPage() {
           </div>
 
           <Tabs defaultValue="ventas">
-            <TabsList>
+            <TabsList className="flex h-auto flex-wrap gap-1">
               <TabsTrigger value="ventas">Ventas mensuales</TabsTrigger>
+              <TabsTrigger value="desglose">Desglose productos</TabsTrigger>
               <TabsTrigger value="mensual">Mensual</TabsTrigger>
               <TabsTrigger value="mix">Mix de ítems</TabsTrigger>
               <TabsTrigger value="tendencias">Tendencias</TabsTrigger>
@@ -1225,6 +1353,239 @@ export default function EconomiaPage() {
                           </td>
                           <td className="py-2 pr-3 text-right">{formatArs(totals.rentabilidadPesos)}</td>
                           <td className="py-2 pr-3 text-right text-muted-foreground">—</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="desglose">
+              <div className="flex flex-col gap-3">
+                <Card>
+                  <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <CardTitle>Desglose por producto</CardTitle>
+                      <CardDescription>
+                        Sellos chicos / medianos / grandes / XL (misma clasificación que precios), más 3 mm, lacre,
+                        alimento, abecedarios, soldadores y accesorios. Meses en hora Argentina.
+                      </CardDescription>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {(
+                        [
+                          { id: 'unidades' as const, label: 'Unidades' },
+                          { id: 'ventas' as const, label: 'Ventas $' },
+                          { id: 'margen' as const, label: 'Margen $' },
+                        ] as const
+                      ).map((opt) => (
+                        <Button
+                          key={opt.id}
+                          type="button"
+                          size="sm"
+                          variant={desgloseMetric === opt.id ? 'default' : 'outline'}
+                          onClick={() => setDesgloseMetric(opt.id)}
+                        >
+                          {opt.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <StackedMonthlyBars
+                      rows={stackedBarRows}
+                      keys={stackedBarKeys}
+                      mode={desgloseMetric}
+                      highlightKey={currentMonthKey}
+                      formatValue={formatDesgloseMetric}
+                    />
+                  </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                  <Card className="lg:col-span-2">
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        Mix del mes · {monthKeyLabelLong(currentMonthKey)}
+                      </CardTitle>
+                      <CardDescription>
+                        Participación por categoría en el mes actual
+                        {previousProductRow ? ` (vs ${previousProductRow.label})` : ''}.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-3">
+                      {productKeysActive.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Sin ventas en el período.</p>
+                      ) : (
+                        productKeysActive.map((key) => {
+                          const meta = economiaProductoMeta(key);
+                          const cur = currentProductRow?.byProduct[key];
+                          const prev = previousProductRow?.byProduct[key];
+                          const curVal = cur ? cellMetric(cur, desgloseMetric) : 0;
+                          const prevVal = prev ? cellMetric(prev, desgloseMetric) : 0;
+                          const monthTotal = currentProductRow
+                            ? desgloseMetric === 'unidades'
+                              ? currentProductRow.totalUnidades
+                              : desgloseMetric === 'ventas'
+                                ? currentProductRow.totalVentas
+                                : currentProductRow.totalMargen
+                            : 0;
+                          const pct = monthTotal > 0 ? (curVal / monthTotal) * 100 : 0;
+                          const delta =
+                            prevVal > 0 ? ((curVal - prevVal) / prevVal) * 100 : curVal > 0 ? null : null;
+                          return (
+                            <div key={key} className="flex flex-col gap-1">
+                              <div className="flex items-center justify-between gap-2 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="size-2.5 rounded-sm" style={{ backgroundColor: meta.color }} />
+                                  <span>{meta.label}</span>
+                                </div>
+                                <div className="flex items-center gap-3 tabular-nums">
+                                  <span className="text-xs text-muted-foreground">{pct.toFixed(0)}%</span>
+                                  <span className="font-medium">{formatDesgloseMetric(curVal)}</span>
+                                  <span
+                                    className={`w-12 text-right text-xs ${
+                                      delta == null
+                                        ? 'text-muted-foreground'
+                                        : delta >= 0
+                                          ? 'text-emerald-600'
+                                          : 'text-red-600'
+                                    }`}
+                                  >
+                                    {delta == null ? (prevVal === 0 && curVal > 0 ? 'nuevo' : '—') : formatPct(delta)}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="h-1.5 rounded bg-muted">
+                                <div
+                                  className="h-1.5 rounded"
+                                  style={{ width: `${pct}%`, backgroundColor: meta.color }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Totales del período</CardTitle>
+                      <CardDescription>Suma de todos los meses cargados.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-2">
+                      {productTotals
+                        .slice()
+                        .sort((a, b) => b.unidades - a.unidades)
+                        .map((p) => {
+                          const share =
+                            totalProductUnidades > 0 ? (p.unidades / totalProductUnidades) * 100 : 0;
+                          return (
+                            <div key={p.key} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="size-2.5 rounded-sm" style={{ backgroundColor: p.meta.color }} />
+                                <span>{p.meta.shortLabel}</span>
+                              </div>
+                              <div className="text-right tabular-nums">
+                                <span className="font-medium">{p.unidades}</span>
+                                <span className="ml-2 text-xs text-muted-foreground">{share.toFixed(0)}%</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Tabla mes × producto</CardTitle>
+                    <CardDescription>
+                      Cada celda muestra {desgloseMetric === 'unidades' ? 'unidades' : desgloseMetric === 'ventas' ? 'ventas' : 'margen de fabricación'}.
+                      Solo aparecen categorías con al menos una venta.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="overflow-auto">
+                    <table className="w-full min-w-[900px] text-sm">
+                      <thead>
+                        <tr className="border-b text-left text-muted-foreground">
+                          <th className="sticky left-0 z-10 bg-background py-2 pr-3">Mes</th>
+                          {productKeysActive.map((key) => {
+                            const meta = economiaProductoMeta(key);
+                            return (
+                              <th key={key} className="py-2 px-2 text-right" title={meta.label}>
+                                <div className="flex flex-col items-end gap-0.5">
+                                  <span
+                                    className="size-2 rounded-sm"
+                                    style={{ backgroundColor: meta.color }}
+                                  />
+                                  <span className="text-xs">{meta.shortLabel}</span>
+                                </div>
+                              </th>
+                            );
+                          })}
+                          <th className="py-2 pl-2 text-right font-medium text-foreground">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productBreakdown.map((r) => {
+                          const isCurrent = r.key === currentMonthKey;
+                          const rowTotal =
+                            desgloseMetric === 'unidades'
+                              ? r.totalUnidades
+                              : desgloseMetric === 'ventas'
+                                ? r.totalVentas
+                                : r.totalMargen;
+                          return (
+                            <tr
+                              key={r.key}
+                              className={`border-b last:border-0 ${isCurrent ? 'bg-primary/5' : ''}`}
+                            >
+                              <td className="sticky left-0 z-10 bg-background py-2 pr-3">
+                                <Badge variant={isCurrent ? 'default' : 'outline'}>{r.label}</Badge>
+                              </td>
+                              {productKeysActive.map((key) => {
+                                const v = cellMetric(r.byProduct[key], desgloseMetric);
+                                return (
+                                  <td
+                                    key={key}
+                                    className={`py-2 px-2 text-right tabular-nums ${
+                                      v === 0 ? 'text-muted-foreground/50' : ''
+                                    }`}
+                                  >
+                                    {v === 0 ? '—' : formatDesgloseMetric(v)}
+                                  </td>
+                                );
+                              })}
+                              <td className="py-2 pl-2 text-right font-semibold tabular-nums">
+                                {formatDesgloseMetric(rowTotal)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-border bg-muted/40 font-semibold">
+                          <td className="sticky left-0 z-10 bg-muted/40 py-2 pr-3">Total</td>
+                          {productKeysActive.map((key) => {
+                            const sum = sumProductAcrossMonths(productBreakdown, key);
+                            return (
+                              <td key={key} className="py-2 px-2 text-right tabular-nums">
+                                {formatDesgloseMetric(cellMetric(sum, desgloseMetric))}
+                              </td>
+                            );
+                          })}
+                          <td className="py-2 pl-2 text-right tabular-nums">
+                            {formatDesgloseMetric(
+                              desgloseMetric === 'unidades'
+                                ? productBreakdown.reduce((s, r) => s + r.totalUnidades, 0)
+                                : desgloseMetric === 'ventas'
+                                  ? productBreakdown.reduce((s, r) => s + r.totalVentas, 0)
+                                  : productBreakdown.reduce((s, r) => s + r.totalMargen, 0),
+                            )}
+                          </td>
                         </tr>
                       </tfoot>
                     </table>
@@ -1450,24 +1811,37 @@ export default function EconomiaPage() {
               <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
                 <Card className="xl:col-span-2">
                   <CardHeader>
-                    <CardTitle>Desglose de ítems vendidos</CardTitle>
-                    <CardDescription>Participación en unidades y ganancia por categoría.</CardDescription>
+                    <CardTitle>Mix acumulado por producto</CardTitle>
+                    <CardDescription>
+                      Participación en unidades y ventas en todo el período. El detalle mes a mes está en Desglose
+                      productos.
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
-                    {itemBreakdown.map((row) => (
-                      <div key={row.item} className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{itemTypeLabel(row.item)}</Badge>
-                            <span className="text-muted-foreground">{row.unidades} u.</span>
+                    {productTotals
+                      .slice()
+                      .sort((a, b) => b.unidades - a.unidades)
+                      .map((row) => {
+                        const pct = totalProductUnidades > 0 ? (row.unidades / totalProductUnidades) * 100 : 0;
+                        return (
+                          <div key={row.key} className="flex flex-col gap-1.5">
+                            <div className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="size-2.5 rounded-sm" style={{ backgroundColor: row.meta.color }} />
+                                <span>{row.meta.label}</span>
+                                <span className="text-muted-foreground">{row.unidades} u.</span>
+                              </div>
+                              <span className="font-medium">{formatArs(row.ventas)}</span>
+                            </div>
+                            <div className="h-2 rounded bg-muted">
+                              <div
+                                className="h-2 rounded"
+                                style={{ width: `${pct}%`, backgroundColor: row.meta.color }}
+                              />
+                            </div>
                           </div>
-                          <span className="font-medium">{formatArs(row.ganancia)}</span>
-                        </div>
-                        <div className="h-2 rounded bg-muted">
-                          <div className="h-2 rounded bg-primary" style={{ width: `${row.pct}%` }} />
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
                   </CardContent>
                 </Card>
 
@@ -1488,6 +1862,15 @@ export default function EconomiaPage() {
                     <CardHeader>
                       <CardDescription>Pedidos totales</CardDescription>
                       <CardTitle>{totals.pedidos}</CardTitle>
+                    </CardHeader>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardDescription>Sellos / unidades</CardDescription>
+                      <CardTitle>
+                        {totals.sellos}
+                        <span className="text-base font-normal text-muted-foreground"> / {totals.unidades}</span>
+                      </CardTitle>
                     </CardHeader>
                   </Card>
                 </div>
