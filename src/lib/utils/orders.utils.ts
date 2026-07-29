@@ -1,5 +1,6 @@
 import { Order, FabricationState, Filters, SortState } from '../types/index';
 import { parseOrderDateLocal } from './format';
+import { getItemTypeLabel, getOrderItemDisplayName } from './itemDisplayName';
 import { phoneMatchesSearch } from './phoneNormalization';
 
 /** Mínimo de caracteres para buscar en toda la base (evita renderizar miles de filas sin criterio). */
@@ -57,7 +58,16 @@ export const filterOrders = (
         order.customer.firstName.toLowerCase().includes(searchLower) ||
         order.customer.lastName.toLowerCase().includes(searchLower) ||
         order.customer.email?.toLowerCase().includes(searchLower) ||
-        order.items.some((item) => item.designName.toLowerCase().includes(searchLower)) ||
+        order.items.some((item) => {
+          const designName = item.designName?.toLowerCase() || '';
+          const displayName = getOrderItemDisplayName(item).toLowerCase();
+          const typeLabel = getItemTypeLabel(item.itemType).toLowerCase();
+          return (
+            designName.includes(searchLower) ||
+            displayName.includes(searchLower) ||
+            typeLabel.includes(searchLower)
+          );
+        }) ||
         phoneMatchesSearch(orderPhones, searchQuery)
       );
     });
