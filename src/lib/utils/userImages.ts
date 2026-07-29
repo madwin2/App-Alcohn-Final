@@ -20,24 +20,26 @@ const USER_IMAGES: UserImageEntry[] = [
     match: ['julian', 'moreno'],
     perfil: '/usuarios/julian-moreno-perfil.png',
     inicio: '/usuarios/julian-moreno-inicio.png',
+    inicioVideo: '/usuarios/julian-moreno-inicio.mp4',
   },
   {
     match: ['julian', 'bobasso'],
     perfil: '/usuarios/julian-bobasso-perfil.png',
     inicio: '/usuarios/julian-bobasso-inicio.png',
-    inicioVideo: '/usuarios/julian-bobasso-inicio.mp4',
+    inicioVideo: '/usuarios/julian-bobasso-inicio-v2.mp4',
   },
   {
     match: ['federico', 'minuto'],
     perfil: '/usuarios/federico-minuto-perfil.png',
     inicio: '/usuarios/federico-minuto-inicio.png',
+    inicioVideo: '/usuarios/federico-minuto-inicio.mp4',
   },
   {
     // Lautaro "Cachi" Albornoz: matcheamos por el apellido "Albornoz"
     match: ['albornoz'],
     perfil: '/usuarios/cachi-albornoz-perfil.png',
     inicio: '/usuarios/cachi-albornoz-inicio.png',
-    inicioVideo: '/usuarios/cachi-albornoz-inicio.mp4',
+    inicioVideo: '/usuarios/cachi-albornoz-inicio-v2.mp4',
   },
 ];
 
