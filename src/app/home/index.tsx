@@ -30,6 +30,7 @@ import stickyNoteTaskSvg from '@/assets/sticky-notes/sticky-note-task.svg';
 import stickyNoteAddWorkmateSvg from '@/assets/sticky-notes/sticky-note-add-workmate.svg';
 import stickyNoteTaskWorkmateSvg from '@/assets/sticky-notes/sticky-note-task-workmate.svg';
 import {
+  getUserBarraVideo,
   getUserInicioImage,
   getUserInicioVideo,
   getUserProfileImage,
@@ -516,8 +517,12 @@ export default function HomePage() {
               ? approvedUsers
               : [{ id: user?.id || 'me', name: userName }];
             const usersWithPhoto = baseUsers
-              .map((u) => ({ ...u, profile: getUserProfileImage(u.name) }))
-              .filter((u): u is { id: string; name: string; profile: string } => !!u.profile);
+              .map((u) => ({
+                ...u,
+                profile: getUserProfileImage(u.name),
+                barraVideo: getUserBarraVideo(u.name),
+              }))
+              .filter((u): u is { id: string; name: string; profile: string; barraVideo: string | null } => !!u.profile);
 
             if (usersWithPhoto.length === 0) {
               return <div className="min-h-[120px]" />;

@@ -1,10 +1,13 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { cn } from '@/lib/utils/cn';
+import { ChromaKeyVideo } from '@/components/home/ChromaKeyVideo';
 
 export interface DockUser {
   id: string;
   name: string;
   profile: string;
+  /** Video con fondo verde para hover (chroma key). */
+  barraVideo?: string | null;
 }
 
 const BASE_SIZE = 72;
@@ -29,6 +32,7 @@ interface HomeUserDockProps {
 /** Barra de avatares con efecto dock estilo macOS (magnificación por proximidad al cursor). */
 export function HomeUserDock({ users, className }: HomeUserDockProps) {
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const applyScales = useCallback(
     (mousePageX: number | null) => {
@@ -56,6 +60,7 @@ export function HomeUserDock({ users, className }: HomeUserDockProps) {
   };
 
   const handleMouseLeave = () => {
+    setHoveredId(null);
     itemRefs.current.forEach((el) => {
       el.style.transition = 'transform 0.28s cubic-bezier(0.22, 1, 0.36, 1)';
     });
@@ -76,25 +81,49 @@ export function HomeUserDock({ users, className }: HomeUserDockProps) {
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
-        {users.map((u) => (
-          <div
-            key={u.id}
-            ref={(node) => {
-              if (node) itemRefs.current.set(u.id, node);
-              else itemRefs.current.delete(u.id);
-            }}
-            title={u.name}
-            style={{ width: BASE_SIZE, height: BASE_SIZE }}
-            className="relative shrink-0 origin-bottom rounded-full overflow-hidden cursor-pointer bg-transparent shadow-[0_4px_16px_rgba(0,0,0,0.35)] will-change-transform"
-          >
-            <img
-              src={u.profile}
-              alt={u.name}
-              className="h-full w-full object-cover select-none"
-              draggable={false}
-            />
-          </div>
-        ))}
+        {users.map((u) => {
+          const isHovered = hoveredId === u.id;
+          const hasVideo = Boolean(u.barraVideo);
+
+          return (
+            <div
+              key={u.id}
+              ref={(node) => {
+                if (node) itemRefs.current.set(u.id, node);
+                else itemRefs.current.delete(u.id);
+              }}
+              title={u.name}
+              style={{ width: BASE_SIZE, height: BASE_SIZE, clipPath: 'circle(50%)' }}
+              className="relative shrink-0 origin-bottom overflow-hidden cursor-pointer bg-transparent will-change-transform"
+              onMouseEnter={() => {
+                if (hasVideo) setHoveredId(u.id);
+              }}
+              onMouseLeave={() => {
+                setHoveredId((prev) => (prev === u.id ? null : prev));
+              }}
+            >
+              <img
+                src={u.profile}
+                alt={u.name}
+                className={cn(
+                  'absolute inset-0 block h-full w-full object-cover object-center select-none transition-opacity duration-150',
+                  isHovered && hasVideo ? 'opacity-0' : 'opacity-100',
+                )}
+                draggable={false}
+              />
+              {hasVideo && u.barraVideo ? (
+                <div
+                  className={cn(
+                    'absolute inset-0 transition-opacity duration-150',
+                    isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none',
+                  )}
+                >
+                  <ChromaKeyVideo src={u.barraVideo} active={isHovered} />
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

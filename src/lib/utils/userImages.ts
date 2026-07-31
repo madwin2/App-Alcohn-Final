@@ -13,6 +13,8 @@ interface UserImageEntry {
   inicio: string;
   /** Video en loop para el hero de inicio (reemplaza la imagen estática si existe). */
   inicioVideo?: string;
+  /** Video con chroma verde para hover en la barra de usuarios del home. */
+  barraVideo?: string;
 }
 
 const USER_IMAGES: UserImageEntry[] = [
@@ -21,18 +23,21 @@ const USER_IMAGES: UserImageEntry[] = [
     perfil: '/usuarios/julian-moreno-perfil.png',
     inicio: '/usuarios/julian-moreno-inicio.png',
     inicioVideo: '/usuarios/julian-moreno-inicio.mp4',
+    barraVideo: '/usuarios/juli m barra.mp4',
   },
   {
     match: ['julian', 'bobasso'],
     perfil: '/usuarios/julian-bobasso-perfil.png',
     inicio: '/usuarios/julian-bobasso-inicio.png',
     inicioVideo: '/usuarios/julian-bobasso-inicio-v2.mp4',
+    barraVideo: '/usuarios/juli b barra.mp4',
   },
   {
     match: ['federico', 'minuto'],
     perfil: '/usuarios/federico-minuto-perfil.png',
     inicio: '/usuarios/federico-minuto-inicio.png',
     inicioVideo: '/usuarios/federico-minuto-inicio.mp4',
+    barraVideo: '/usuarios/fede barra.mp4',
   },
   {
     // Lautaro "Cachi" Albornoz: matcheamos por el apellido "Albornoz"
@@ -40,6 +45,7 @@ const USER_IMAGES: UserImageEntry[] = [
     perfil: '/usuarios/cachi-albornoz-perfil.png',
     inicio: '/usuarios/cachi-albornoz-inicio.png',
     inicioVideo: '/usuarios/cachi-albornoz-inicio-v2.mp4',
+    barraVideo: '/usuarios/cachi barra.mp4',
   },
 ];
 
@@ -75,6 +81,11 @@ export function getUserInicioImage(name: string | null | undefined): string | nu
 /** URL del video "Inicio" en loop del usuario, o `null` si no tiene video. */
 export function getUserInicioVideo(name: string | null | undefined): string | null {
   return findEntry(name)?.inicioVideo ?? null;
+}
+
+/** URL del video de la barra (hover), o `null` si no tiene. */
+export function getUserBarraVideo(name: string | null | undefined): string | null {
+  return findEntry(name)?.barraVideo ?? null;
 }
 
 /** Iniciales tomadas del nombre completo (máx. 2). */
