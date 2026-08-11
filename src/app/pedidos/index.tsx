@@ -153,9 +153,10 @@ export default function PedidosPage() {
         open={showUploadTracking}
         onOpenChange={setShowUploadTracking}
         orders={orders}
-        onApply={async (matches) => {
+        onApply={async (matches, meta) => {
           const appliedMatches: typeof matches = [];
           const failed: Array<{ match: (typeof matches)[number]; reason: string }> = [];
+          const isAndreani = meta.labelSource === 'ANDREANI';
 
           for (const match of matches) {
             try {
@@ -164,11 +165,15 @@ export default function PedidosPage() {
                 shipping: {
                   ...match.order.shipping,
                   trackingNumber: match.trackingNumber,
+                  ...(isAndreani ? { carrier: 'ANDREANI' as const } : {}),
                 },
                 items: match.order.items.map((item) => ({
                   id: item.id,
                   shippingState: 'DESPACHADO' as const,
-                  ...(hasNonTransferredItems ? { saleState: 'TRANSFERIDO' as const } : {}),
+                  // Andreani: el sello puede seguir sin pagar — no pasar a Transferido
+                  ...(!isAndreani && hasNonTransferredItems
+                    ? { saleState: 'TRANSFERIDO' as const }
+                    : {}),
                 })) as any,
               };
               await updateOrder(match.order.id, patch);

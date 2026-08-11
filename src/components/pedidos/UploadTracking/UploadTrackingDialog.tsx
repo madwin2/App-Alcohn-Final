@@ -11,7 +11,11 @@ import {
   parseTrackingPdf,
   TrackingPdfEntry,
 } from '@/lib/utils/trackingPdfParser';
+import { parseAndreaniTrackingPdf } from '@/lib/utils/andreaniTrackingPdfParser';
 import { enrichShippingLabelsPdf } from '@/lib/utils/enrichShippingLabelsPdf';
+import { enrichAndreaniLabelsPdf } from '@/lib/utils/enrichAndreaniLabelsPdf';
+
+export type TrackingLabelSource = 'CORREO_ARGENTINO' | 'ANDREANI';
 
 interface TrackingMatch {
   order: Order;
@@ -44,6 +48,7 @@ interface NameParts {
 }
 
 const DESIGN_LABEL_MAX_LENGTH = 64;
+const UNASSIGNED_TRACKING_VALUE = '__unassigned__';
 
 const getOrderMatchName = (
   order: Order,
@@ -83,7 +88,10 @@ interface UploadTrackingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   orders: Order[];
-  onApply: (matches: TrackingMatch[]) => Promise<ApplyTrackingResult>;
+  onApply: (
+    matches: TrackingMatch[],
+    meta: { labelSource: TrackingLabelSource },
+  ) => Promise<ApplyTrackingResult>;
 }
 
 export function UploadTrackingDialog({
@@ -94,6 +102,7 @@ export function UploadTrackingDialog({
 }: UploadTrackingDialogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const [labelSource, setLabelSource] = useState<TrackingLabelSource>('CORREO_ARGENTINO');
   const [fileName, setFileName] = useState<string>('');
   const [entries, setEntries] = useState<TrackingPdfEntry[]>([]);
   const [isParsing, setIsParsing] = useState(false);
@@ -318,7 +327,7 @@ export function UploadTrackingDialog({
     const manualMatches: TrackingMatch[] = [];
     for (const entry of unmatched) {
       const selectedOrderId = manualAssignments[entryKey(entry)];
-      if (!selectedOrderId) continue;
+      if (!selectedOrderId || selectedOrderId === UNASSIGNED_TRACKING_VALUE) continue;
       const order = manualCandidateOrders.find((c) => c.id === selectedOrderId);
       if (!order) continue;
       manualMatches.push({
@@ -338,8 +347,8 @@ export function UploadTrackingDialog({
   };
 
   const downloadEnrichedPdf = async (showSuccessToast = true, matchesToUse: TrackingMatch[] = allMatches) => {
-    if (!pdfFile || matchesToUse.length === 0) {
-      throw new Error('Necesitás el PDF cargado y al menos un pedido emparejado con seguimiento.');
+    if (!pdfFile) {
+      throw new Error('Necesitás el PDF cargado.');
     }
 
     const bytes = await pdfFile.arrayBuffer();
@@ -348,8 +357,14 @@ export function UploadTrackingDialog({
       map.set(match.trackingNumber, match.order);
     }
 
-    const out = await enrichShippingLabelsPdf(bytes, map);
-    const blob = new Blob([out], { type: 'application/pdf' });
+    const out =
+      labelSource === 'ANDREANI'
+        ? await enrichAndreaniLabelsPdf(bytes, map)
+        : await enrichShippingLabelsPdf(bytes, map);
+    if (!out?.length) {
+      throw new Error('El PDF de salida quedó vacío.');
+    }
+    const blob = new Blob([out as BlobPart], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -361,7 +376,11 @@ export function UploadTrackingDialog({
       toast({
         title: 'PDF generado',
         description:
-          'Etiquetas 100×152 mm: sin franja PAQ/Correo arriba; pedido y logos dentro del recuadro inferior de la etiqueta.',
+          labelSource === 'ANDREANI'
+            ? matchesToUse.length
+              ? 'Etiquetas Andreani 100×152 mm con logos e info del pedido en el pie.'
+              : 'Etiquetas Andreani 100×152 mm (sin pedidos emparejados — solo adaptación visual).'
+            : 'Etiquetas 100×152 mm: sin franja PAQ/Correo arriba; pedido y logos dentro del recuadro inferior de la etiqueta.',
       });
     }
   };
@@ -382,13 +401,16 @@ export function UploadTrackingDialog({
     setIsParsing(true);
     setFileName(file.name);
     try {
-      const parsed = await parseTrackingPdf(file);
+      const parsed =
+        labelSource === 'ANDREANI'
+          ? await parseAndreaniTrackingPdf(file)
+          : await parseTrackingPdf(file);
       setEntries(parsed);
       setPdfFile(file);
       setManualAssignments({});
       toast({
         title: 'PDF procesado',
-        description: `Se detectaron ${parsed.length} registros de seguimiento.`,
+        description: `Se detectaron ${parsed.length} registros de seguimiento (${labelSource === 'ANDREANI' ? 'Andreani' : 'Correo Argentino'}).`,
       });
     } catch (error) {
       setEntries([]);
@@ -428,7 +450,7 @@ export function UploadTrackingDialog({
 
     setIsApplying(true);
     try {
-      const result = await onApply(allMatches);
+      const result = await onApply(allMatches, { labelSource });
       const appliedMatches = result.appliedMatches || [];
       const failedMatches = result.failed || [];
       if (pdfFile && appliedMatches.length > 0) {
@@ -447,14 +469,22 @@ export function UploadTrackingDialog({
           return;
         }
       }
+      const skippedUnassigned = unmatched.filter((entry) => {
+        const selected = manualAssignments[entryKey(entry)];
+        return !selected || selected === UNASSIGNED_TRACKING_VALUE;
+      }).length;
+      const skippedSuffix =
+        skippedUnassigned > 0
+          ? ` Se omitieron ${skippedUnassigned} seguimiento${skippedUnassigned === 1 ? '' : 's'} sin asignar.`
+          : '';
       toast({
         title: failedMatches.length > 0 ? 'Seguimientos aplicados con incidencias' : 'Seguimientos actualizados',
         description:
           failedMatches.length > 0
-            ? `Se actualizaron ${appliedMatches.length} pedidos y ${failedMatches.length} quedaron con error.`
+            ? `Se actualizaron ${appliedMatches.length} pedidos y ${failedMatches.length} quedaron con error.${skippedSuffix}`
             : pdfFile
-              ? `Se actualizaron ${appliedMatches.length} pedidos y se descargó el PDF automáticamente.`
-              : `Se actualizaron ${appliedMatches.length} pedidos.`,
+              ? `Se actualizaron ${appliedMatches.length} pedidos y se descargó el PDF automáticamente.${skippedSuffix}`
+              : `Se actualizaron ${appliedMatches.length} pedidos.${skippedSuffix}`,
         ...(failedMatches.length > 0 ? { variant: 'destructive' as const } : {}),
       });
       resetState();
@@ -471,10 +501,18 @@ export function UploadTrackingDialog({
   };
 
   const handleDownloadEnrichedPdf = async () => {
-    if (!pdfFile || allMatches.length === 0) {
+    if (!pdfFile) {
       toast({
         title: 'No se puede generar el PDF',
-        description: 'Necesitás el PDF cargado y al menos un pedido emparejado con seguimiento.',
+        description: 'Necesitás el PDF cargado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (labelSource === 'CORREO_ARGENTINO' && allMatches.length === 0) {
+      toast({
+        title: 'No se puede generar el PDF',
+        description: 'Para Correo Argentino hace falta al menos un pedido emparejado.',
         variant: 'destructive',
       });
       return;
@@ -482,7 +520,7 @@ export function UploadTrackingDialog({
 
     setIsEnriching(true);
     try {
-      await downloadEnrichedPdf();
+      await downloadEnrichedPdf(true, allMatches);
     } catch (error) {
       toast({
         title: 'Error al enriquecer PDF',
@@ -507,35 +545,53 @@ export function UploadTrackingDialog({
         <DialogHeader>
           <DialogTitle>Subir seguimientos</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Cargá el PDF de etiquetas. Se tomará el número después de TN y se hará match por
-            nombre y apellido de envío (o del cliente si no hay datos de envío cargados) con
-            pedidos pendientes de despacho. Podés generar una copia con
-            miniaturas de los diseños y accesorios (p. ej. mango de golpe) en la franja inferior
-            de cada etiqueta.
+            Elegí el origen del PDF y cargá las etiquetas. Se hace match por nombre con pedidos
+            pendientes de despacho. Se genera una copia 100×152 mm con logos e info del pedido.
           </p>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <input
-              ref={inputRef}
-              type="file"
-              accept="application/pdf"
-              onChange={handleFileSelect}
-              className="hidden"
-              id="tracking-upload"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => inputRef.current?.click()}
-              disabled={isParsing || isApplying}
-              className="gap-2"
-            >
-              <Upload className="h-4 w-4" />
-              {isParsing ? 'Procesando...' : 'Seleccionar PDF'}
-            </Button>
-            {fileName && <span className="text-xs text-muted-foreground">{fileName}</span>}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Origen del PDF</p>
+              <Select
+                value={labelSource}
+                onValueChange={(v) => {
+                  setLabelSource(v as TrackingLabelSource);
+                  resetState();
+                }}
+                disabled={isParsing || isApplying}
+              >
+                <SelectTrigger className="w-[220px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CORREO_ARGENTINO">Correo Argentino</SelectItem>
+                  <SelectItem value="ANDREANI">Andreani</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2 pt-5">
+              <input
+                ref={inputRef}
+                type="file"
+                accept="application/pdf"
+                onChange={handleFileSelect}
+                className="hidden"
+                id="tracking-upload"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => inputRef.current?.click()}
+                disabled={isParsing || isApplying}
+                className="gap-2"
+              >
+                <Upload className="h-4 w-4" />
+                {isParsing ? 'Procesando...' : 'Seleccionar PDF'}
+              </Button>
+              {fileName && <span className="text-xs text-muted-foreground">{fileName}</span>}
+            </div>
           </div>
 
           <div className="grid grid-cols-4 gap-2 text-sm">
@@ -571,25 +627,32 @@ export function UploadTrackingDialog({
 
           {unmatched.length > 0 && (
             <div className="rounded border p-3 space-y-2 text-xs">
-              <p className="text-sm font-medium">Sin match en pedidos (asignación manual)</p>
+              <p className="text-sm font-medium">Sin match en pedidos (asignación opcional)</p>
               {unmatched.slice(0, 12).map((entry, idx) => (
                 <div key={`${entry.trackingNumber}-${idx}`} className="grid grid-cols-2 gap-2 items-center">
                   <div>
                     {entry.fullName} - <span className="font-mono">{entry.trackingNumber}</span>
                   </div>
                   <Select
-                    value={manualAssignments[entryKey(entry)] || ''}
+                    value={manualAssignments[entryKey(entry)] || UNASSIGNED_TRACKING_VALUE}
                     onValueChange={(value) =>
-                      setManualAssignments((prev) => ({
-                        ...prev,
-                        [entryKey(entry)]: value,
-                      }))
+                      setManualAssignments((prev) => {
+                        const next = { ...prev };
+                        const key = entryKey(entry);
+                        if (value === UNASSIGNED_TRACKING_VALUE) {
+                          delete next[key];
+                        } else {
+                          next[key] = value;
+                        }
+                        return next;
+                      })
                     }
                   >
                     <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Seleccionar pedido..." />
+                      <SelectValue placeholder="Dejar sin asignar" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value={UNASSIGNED_TRACKING_VALUE}>Dejar sin asignar</SelectItem>
                       {manualCandidateOrders.length === 0 ? (
                         <SelectItem value="none" disabled>
                           No hay pedidos elegibles
@@ -607,6 +670,7 @@ export function UploadTrackingDialog({
               ))}
               {unmatched.length > 12 && <div>...y {unmatched.length - 12} más</div>}
               <p className="text-[11px] text-muted-foreground">
+                Podés dejarlos sin asignar: se aplican igual los seguimientos que ya matchearon.
                 Solo se muestran pedidos con fabricación HECHO, venta FOTO ENVIADA o TRANSFERIDO,
                 sin seguimiento y con envío distinto de DESPACHADO / SEGUIMIENTO_ENVIADO.
               </p>
@@ -651,11 +715,21 @@ export function UploadTrackingDialog({
               type="button"
               variant="secondary"
               onClick={handleDownloadEnrichedPdf}
-              disabled={isApplying || isParsing || isEnriching || !pdfFile || allMatches.length === 0}
+              disabled={
+                isApplying ||
+                isParsing ||
+                isEnriching ||
+                !pdfFile ||
+                (labelSource === 'CORREO_ARGENTINO' && allMatches.length === 0)
+              }
               className="gap-2"
             >
               <Download className="h-4 w-4" />
-              {isEnriching ? 'Generando...' : 'Descargar PDF con previews'}
+              {isEnriching
+                ? 'Generando...'
+                : labelSource === 'ANDREANI' && allMatches.length === 0
+                  ? 'Probar adaptación PDF'
+                  : 'Descargar PDF con previews'}
             </Button>
             <Button
               onClick={applyMatches}
