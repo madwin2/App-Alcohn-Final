@@ -52,6 +52,38 @@ export const normalizeEmailCliente = (value: string | null | undefined): string 
 export const isPlaceholderClientePhone = (value: string): boolean =>
   /^\+?549110000\d{6}$/.test(normalizePhoneDigits(value) ? `+${normalizePhoneDigits(value)}` : '');
 
+/** Prefijos E.164 usados en comercial web para filtrar clientes por país. */
+export type ClientePaisFiltro = 'all' | 'AR' | 'PE' | 'CL' | 'CO' | 'MX';
+
+const PAIS_PHONE_PREFIXES: { code: Exclude<ClientePaisFiltro, 'all'>; prefix: string }[] = [
+  { code: 'AR', prefix: '54' },
+  { code: 'PE', prefix: '51' },
+  { code: 'MX', prefix: '52' },
+  { code: 'CL', prefix: '56' },
+  { code: 'CO', prefix: '57' },
+];
+
+export function detectClientePaisFromPhone(
+  phone: string | null | undefined,
+): Exclude<ClientePaisFiltro, 'all'> | null {
+  let digits = normalizePhoneDigits(phone ?? '');
+  if (!digits) return null;
+  if (digits.startsWith('00')) digits = digits.slice(2);
+
+  for (const { code, prefix } of PAIS_PHONE_PREFIXES) {
+    if (digits.startsWith(prefix)) return code;
+  }
+  return null;
+}
+
+export function phoneMatchesPaisFiltro(
+  phone: string | null | undefined,
+  filtro: ClientePaisFiltro,
+): boolean {
+  if (filtro === 'all') return true;
+  return detectClientePaisFromPhone(phone) === filtro;
+}
+
 /** Coincide búsqueda parcial o por variantes AR (+54, 549, 9…) contra uno o más teléfonos. */
 export const phoneMatchesSearch = (phones: string[], searchQuery: string): boolean => {
   const searchDigits = normalizePhoneDigits(searchQuery);

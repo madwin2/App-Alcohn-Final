@@ -24,7 +24,27 @@ import {
 } from '@/lib/comercial/utils';
 import { ExcludeButton } from '@/components/comercial/ComercialExcludeDialog';
 import { ConfirmPagoButton } from '@/components/comercial/ComercialConfirmPagoDialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  phoneMatchesPaisFiltro,
+  type ClientePaisFiltro,
+} from '@/lib/utils/phoneNormalization';
 import { useEffect, useMemo, useState } from 'react';
+
+const PAIS_FILTRO_OPTIONS: { value: ClientePaisFiltro; label: string }[] = [
+  { value: 'all', label: 'Todos los países' },
+  { value: 'AR', label: 'Argentinos (+54)' },
+  { value: 'PE', label: 'Peruanos (+51)' },
+  { value: 'CL', label: 'Chilenos (+56)' },
+  { value: 'CO', label: 'Colombianos (+57)' },
+  { value: 'MX', label: 'Mexicanos (+52)' },
+];
 
 const POTENCIALES_PAGE_SIZE = 10;
 
@@ -560,17 +580,20 @@ export function ClientesWebTable({
   onExclude?: (clienteId: string, label: string) => void;
 }) {
   const [query, setQuery] = useState('');
+  const [pais, setPais] = useState<ClientePaisFiltro>('all');
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      if (!phoneMatchesPaisFiltro(r.telefono, pais)) return false;
+      if (!q) return true;
+      return (
         r.nombre.toLowerCase().includes(q) ||
         r.telefono.includes(q) ||
         (r.email ?? '').toLowerCase().includes(q) ||
-        ETAPA_LABELS[r.etapa].toLowerCase().includes(q),
-    );
-  }, [rows, query]);
+        ETAPA_LABELS[r.etapa].toLowerCase().includes(q)
+      );
+    });
+  }, [rows, query, pais]);
 
   return (
     <SectionTable
@@ -579,14 +602,28 @@ export function ClientesWebTable({
       count={filtered.length}
     >
       <div className="border-b px-4 py-3">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar cliente..."
-            className="pl-9"
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative max-w-sm flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar cliente..."
+              className="pl-9"
+            />
+          </div>
+          <Select value={pais} onValueChange={(v) => setPais(v as ClientePaisFiltro)}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="País" />
+            </SelectTrigger>
+            <SelectContent>
+              {PAIS_FILTRO_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <table className="w-full min-w-[880px] text-sm">
