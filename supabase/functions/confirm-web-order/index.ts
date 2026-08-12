@@ -405,6 +405,7 @@ Deno.serve(async (req: Request) => {
         carrito_json,
         mockup_solicitud_id,
         pago_confirmado_at,
+        empresa_envio,
         clientes (
           nombre,
           apellido,
@@ -518,8 +519,34 @@ Deno.serve(async (req: Request) => {
     let webhookOk = false;
     let webhookError: string | null = null;
 
+    // Asignar link Andreani del pool si corresponde (misma regla que createOrder en la app)
+    let linkAndreani: string | null = null;
+    const empresaEnvio = typeof orden.empresa_envio === "string"
+      ? orden.empresa_envio.trim()
+      : "";
+    if (empresaEnvio.toLowerCase() === "andreani") {
+      try {
+        const { data: assignedUrl, error: assignError } = await supabase.rpc(
+          "asignar_link_andreani",
+          { p_orden_id: ordenId },
+        );
+        if (assignError) {
+          console.warn("confirm-web-order: no se pudo asignar link Andreani", assignError);
+        } else if (typeof assignedUrl === "string" && assignedUrl.trim()) {
+          linkAndreani = assignedUrl.trim();
+        }
+      } catch (linkErr) {
+        console.warn("confirm-web-order: error asignando link Andreani", linkErr);
+      }
+    }
+
     if (telefono) {
       const webhookUrl = `${supabaseUrl}/functions/v1/webhook-bot`;
+      const datos: Record<string, unknown> = { numero_pedido: ordenId };
+      if (linkAndreani) {
+        datos.link_andreani = linkAndreani;
+        datos.empresa_envio = "Andreani";
+      }
       const webhookResponse = await fetch(webhookUrl, {
         method: "POST",
         headers: {
@@ -530,7 +557,7 @@ Deno.serve(async (req: Request) => {
           numero_telefono: telefono,
           tipo_actualizacion: "pedido_registrado",
           nombre,
-          datos: { numero_pedido: ordenId },
+          datos,
         }),
       });
 

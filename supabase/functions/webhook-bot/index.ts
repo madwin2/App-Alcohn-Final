@@ -213,6 +213,7 @@ Deno.serve(async (req: Request) => {
           cliente_id,
           tipo_envio,
           empresa_envio,
+          seguimiento,
           clientes (
             nombre,
             apellido,
@@ -327,7 +328,57 @@ Deno.serve(async (req: Request) => {
 
         const tipoEnvioOrden = (orden as any)?.tipo_envio;
         const empresaEnvioOrden = (orden as any)?.empresa_envio;
+        const seguimientoOrden = (orden as any)?.seguimiento;
         const camposTipoEnvio = buildTipoEnvioCampos(tipoEnvioOrden);
+
+        // Link de pago Andreani (pool) si la orden es Andreani
+        let linkAndreani: string | null =
+          typeof body?.datos?.link_andreani === "string" &&
+            body.datos.link_andreani.trim()
+            ? String(body.datos.link_andreani).trim()
+            : null;
+
+        const esAndreani =
+          empresaEnvioOrden !== null &&
+          empresaEnvioOrden !== undefined &&
+          String(empresaEnvioOrden).trim().toLowerCase() === "andreani";
+
+        if (esAndreani && !linkAndreani) {
+          const { data: linkRow, error: linkError } = await supabase
+            .from("envios_andreani_links")
+            .select("url")
+            .eq("orden_id", numeroPedido)
+            .eq("estado", "asignado")
+            .maybeSingle();
+          if (linkError) {
+            console.warn("Error obteniendo link Andreani", linkError);
+          } else if (linkRow?.url) {
+            linkAndreani = String(linkRow.url);
+          }
+        }
+
+        // URL de seguimiento pública según carrier (pedido_enviado y similares)
+        let urlSeguimiento: string | null =
+          typeof body?.datos?.url_seguimiento === "string" &&
+            body.datos.url_seguimiento.trim()
+            ? String(body.datos.url_seguimiento).trim()
+            : null;
+        const seguimiento =
+          seguimientoOrden !== null &&
+            seguimientoOrden !== undefined &&
+            String(seguimientoOrden).trim() !== ""
+            ? String(seguimientoOrden).trim()
+            : null;
+        if (!urlSeguimiento && seguimiento) {
+          const emp = String(empresaEnvioOrden || "").trim();
+          if (emp === "Andreani") {
+            urlSeguimiento = `https://www.andreani.com/#!/envios/${seguimiento}`;
+          } else if (emp === "Correo Argentino") {
+            urlSeguimiento = "https://www.correoargentino.com.ar/formularios/e-commerce";
+          } else if (emp === "Via Cargo") {
+            urlSeguimiento = "https://www.viacargo.com.ar/seguimiento";
+          }
+        }
 
         body.datos = {
           ...(body.datos || {}),
@@ -346,6 +397,9 @@ Deno.serve(async (req: Request) => {
               String(empresaEnvioOrden).trim() !== ""
             ? { empresa_envio: String(empresaEnvioOrden).trim() }
             : {}),
+          ...(linkAndreani ? { link_andreani: linkAndreani } : {}),
+          ...(seguimiento ? { numero_seguimiento: seguimiento } : {}),
+          ...(urlSeguimiento ? { url_seguimiento: urlSeguimiento } : {}),
         };
 
         const tipoActualizacion = String(body.tipo_actualizacion || "").toLowerCase();

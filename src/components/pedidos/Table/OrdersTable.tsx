@@ -28,6 +28,10 @@ import {
   deleteOrderStickyTaskByTaskId,
 } from '@/lib/supabase/services/order-sticky-tasks.service';
 import { consumeStockForOrderWhenTrackingSent } from '@/lib/supabase/services/stock.service';
+import {
+  liberarLinkAndreani,
+  reasignarLinkAndreani,
+} from '@/lib/supabase/services/andreani.service';
 import { supabase } from '@/lib/supabase/client';
 import {
   isSelloMissingBaseAndVector,
@@ -106,8 +110,9 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
     }
     
     try {
-      await onUpdate(orderId, patch);
+      const updated = await onUpdate(orderId, patch);
       toast({ title: 'Pedido actualizado', description: 'Los cambios se guardaron correctamente' });
+      return updated;
     } catch (error) {
       console.error('Error updating order:', error);
       toast({ 
@@ -369,13 +374,67 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
     
-    await handleUpdate(orderId, { 
+    const updated = await handleUpdate(orderId, { 
       shipping: { 
         ...order.shipping, 
         carrier: newCarrier,
         service: newService !== undefined ? newService : order.shipping.service
       } 
     });
+
+    if (newCarrier === 'ANDREANI' && updated && !updated.andreaniLinkUrl) {
+      toast({
+        title: 'Sin links Andreani',
+        description: 'Sin links Andreani disponibles — generá más',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleQuitarLinkAndreani = async (orderId: string) => {
+    if (!onUpdate) return;
+    try {
+      await liberarLinkAndreani(orderId, false);
+      await onUpdate(orderId, {});
+      toast({ title: 'Link quitado', description: 'El link volvió al pool (disponible)' });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo quitar el link',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleReasignarLinkAndreani = async (orderId: string) => {
+    if (!onUpdate) return;
+    try {
+      const url = await reasignarLinkAndreani(orderId);
+      await onUpdate(orderId, {});
+      if (!url) {
+        toast({
+          title: 'Sin links Andreani',
+          description: 'Sin links Andreani disponibles — generá más',
+          variant: 'destructive',
+        });
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch {
+        /* ignore */
+      }
+      toast({
+        title: 'Link reasignado',
+        description: 'Nuevo link copiado al portapapeles',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo reasignar el link',
+        variant: 'destructive',
+      });
+    }
   };
 
 
@@ -567,6 +626,19 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                           Agregar sello
                         </ContextMenuItem>
                       )}
+                      {order.shipping?.carrier === 'ANDREANI' ? (
+                        <>
+                          <ContextMenuSeparator />
+                          {order.andreaniLinkUrl ? (
+                            <ContextMenuItem onSelect={() => void handleQuitarLinkAndreani(order.id)}>
+                              Quitar link Andreani
+                            </ContextMenuItem>
+                          ) : null}
+                          <ContextMenuItem onSelect={() => void handleReasignarLinkAndreani(order.id)}>
+                            Reasignar link Andreani
+                          </ContextMenuItem>
+                        </>
+                      ) : null}
                     <ContextMenuSeparator />
                       <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(order.id)}>Eliminar pedido</ContextMenuItem>
                   </ContextMenuContent>
@@ -715,6 +787,19 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                             </ContextMenuItem>
                           </>
                         )}
+                        {order.shipping?.carrier === 'ANDREANI' ? (
+                          <>
+                            <ContextMenuSeparator />
+                            {order.andreaniLinkUrl ? (
+                              <ContextMenuItem onSelect={() => void handleQuitarLinkAndreani(order.id)}>
+                                Quitar link Andreani
+                              </ContextMenuItem>
+                            ) : null}
+                            <ContextMenuItem onSelect={() => void handleReasignarLinkAndreani(order.id)}>
+                              Reasignar link Andreani
+                            </ContextMenuItem>
+                          </>
+                        ) : null}
                         <ContextMenuSeparator />
                         <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(order.id)}>Eliminar pedido</ContextMenuItem>
                       </ContextMenuContent>

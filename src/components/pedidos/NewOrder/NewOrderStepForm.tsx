@@ -94,7 +94,7 @@ const emptyDesignFormValues = {
     requestedHeightMm: 1,
   },
   values: { totalValue: 0, depositValue: 20000 },
-  shipping: { carrier: undefined, service: undefined },
+  shipping: { carrier: 'ANDREANI' as ShippingCarrier, service: 'DOMICILIO' as ShippingServiceDest },
   states: { fabrication: 'SIN_HACER' as FabricationState, isPriority: false, deadline: undefined },
 };
 
@@ -336,8 +336,8 @@ export function NewOrderStepForm({
         ...initialData.values,
       },
       shipping: {
-        carrier: undefined,
-        service: undefined,
+        carrier: 'ANDREANI',
+        service: 'DOMICILIO',
         ...initialData.shipping,
       },
       states: {

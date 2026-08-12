@@ -173,6 +173,14 @@ export function NewOrderDialog({
         description: `Se ha creado el pedido con ${designsToUse.length} diseño(s) para ${customerToUse.firstName} ${customerToUse.lastName}`,
       });
 
+      if (createdOrder.shipping?.carrier === 'ANDREANI' && !createdOrder.andreaniLinkUrl) {
+        toast({
+          title: 'Sin links Andreani',
+          description: 'Sin links Andreani disponibles — generá más',
+          variant: 'destructive',
+        });
+      }
+
       setCurrentStep(1);
       setCustomerData(null);
       setSkipConfirmationWebhook(false);

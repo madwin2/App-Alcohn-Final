@@ -7,6 +7,7 @@ import {
   mapCustomerToCliente, 
   mapOrderItemToSello, 
   mapOrderToOrden,
+  mapShippingCarrier,
   mapShippingCarrierToDB,
   mapShippingServiceToDB,
   mapSaleStateToDB,
@@ -26,6 +27,12 @@ import {
   normalizePhoneDigitsCliente,
   phoneSearchVariants,
 } from '../../utils/phoneNormalization';
+import {
+  asignarLinkAndreani,
+  getAssignedAndreaniLinksByOrdenIds,
+  getAssignedAndreaniLinkUrl,
+  liberarLinkAndreani,
+} from './andreani.service';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -89,14 +96,19 @@ const enqueueVectorizationSafely = async (input: {
 export const notifyOrderRegistered = async (order: Order): Promise<void> => {
   try {
     const fullName = `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim();
+    const datos: Record<string, unknown> = {
+      numero_pedido: order.id,
+    };
+    if (order.shipping?.carrier === 'ANDREANI' && order.andreaniLinkUrl) {
+      datos.link_andreani = order.andreaniLinkUrl;
+      datos.empresa_envio = 'Andreani';
+    }
     const { error } = await supabase.functions.invoke(ORDER_REGISTERED_WEBHOOK_FN, {
       body: {
         numero_telefono: order.customer.phoneE164,
         tipo_actualizacion: 'pedido_registrado',
         nombre: fullName || order.customer.firstName || 'Cliente',
-        datos: {
-          numero_pedido: order.id,
-        },
+        datos,
       },
     });
 
@@ -287,6 +299,14 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
     tareasPorOrden.set(tarea.orden_id, lista);
   });
 
+  let andreaniLinksByOrden = new Map<string, string>();
+  try {
+    andreaniLinksByOrden = await getAssignedAndreaniLinksByOrdenIds(ordenIds);
+  } catch (error) {
+    // Tabla/migración aún no aplicada: no bloquear listado de pedidos
+    console.warn('Error fetching Andreani links:', error);
+  }
+
   return ordenes.map((orden) => {
     const cliente = orden.clientes as unknown as ClienteRow;
     const sellosDeOrden = sellosPorOrden.get(orden.id) || [];
@@ -299,7 +319,9 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
       shippingLoadedByUserId && usersMap.has(shippingLoadedByUserId)
         ? usersMap.get(shippingLoadedByUserId)!
         : null;
-    return mapOrdenToOrder(orden, cliente, sellosDeOrden, tareasDeOrden, takenBy, shippingDataLoadedBy);
+    const order = mapOrdenToOrder(orden, cliente, sellosDeOrden, tareasDeOrden, takenBy, shippingDataLoadedBy);
+    order.andreaniLinkUrl = andreaniLinksByOrden.get(orden.id) ?? null;
+    return order;
   });
 };
 
@@ -447,7 +469,14 @@ export const getOrderById = async (orderId: string): Promise<Order | null> => {
         console.warn('Error fetching user information:', error);
       }
     }
-    return mapOrdenToOrder(orden, cliente, sellos || [], tareas || [], takenBy, shippingDataLoadedBy);
+    const order = mapOrdenToOrder(orden, cliente, sellos || [], tareas || [], takenBy, shippingDataLoadedBy);
+    try {
+      order.andreaniLinkUrl = await getAssignedAndreaniLinkUrl(orderId);
+    } catch (linkError) {
+      console.warn('Error fetching Andreani link for order:', linkError);
+      order.andreaniLinkUrl = null;
+    }
+    return order;
   } catch (error) {
     console.error('Error fetching order:', error);
     throw error;
@@ -743,7 +772,16 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
         .eq('id', sello.id);
     }
 
-    // 6. Obtener la orden completa
+    // 6. Asignar link Andreani del pool si corresponde
+    if (formData.shipping?.carrier === 'ANDREANI') {
+      try {
+        await asignarLinkAndreani(orden.id);
+      } catch (linkError) {
+        console.warn('Error asignando link Andreani:', linkError);
+      }
+    }
+
+    // 7. Obtener la orden completa (incluye andreaniLinkUrl si se asignó)
     return (await getOrderById(orden.id)) || (orden as unknown as Order);
   } catch (error) {
     console.error('Error creating order:', error);
@@ -784,6 +822,19 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
           break;
         }
       }
+    }
+
+    let previousCarrier: ShippingCarrier | null | undefined;
+    let nextCarrier: ShippingCarrier | null | undefined;
+    if (updates.shipping && 'carrier' in updates.shipping) {
+      nextCarrier = updates.shipping.carrier ?? null;
+      const { data: prevOrden, error: prevError } = await supabase
+        .from('ordenes')
+        .select('empresa_envio')
+        .eq('id', orderId)
+        .single();
+      if (prevError) throw prevError;
+      previousCarrier = mapShippingCarrier(prevOrden?.empresa_envio ?? null);
     }
 
     if (updates.shipping) {
@@ -1030,6 +1081,21 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
             throw ordenUpdateError;
           }
         }
+      }
+    }
+
+    // Pool Andreani: liberar al salir de Andreani; asignar al entrar
+    if (previousCarrier !== undefined && nextCarrier !== undefined) {
+      const wasAndreani = previousCarrier === 'ANDREANI';
+      const isAndreani = nextCarrier === 'ANDREANI';
+      try {
+        if (wasAndreani && !isAndreani) {
+          await liberarLinkAndreani(orderId, false);
+        } else if (!wasAndreani && isAndreani) {
+          await asignarLinkAndreani(orderId);
+        }
+      } catch (linkError) {
+        console.warn('Error sincronizando link Andreani:', linkError);
       }
     }
 

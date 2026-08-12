@@ -29,7 +29,7 @@ No hace falta modificar el `001` para que la app interna funcione. Las reglas qu
 | Confirma checkout (sin pagar todavía) | `ordenes` con `origen='Web'`, `estado_pago_web` ∈ {`pendiente`, `pago_fallido`, `esperando_comprobante`}. **NO crear `sellos` todavía.** |
 | Pago Openpay OK / Transferencia validada | Insertar `sellos`, actualizar `ordenes.estado_pago_web = 'pagado'` y `ordenes.estado_orden = 'Señado'`. |
 | Pago Openpay falla | UPDATE en la misma orden: `estado_pago_web = 'pago_fallido'` + `pago_error_codigo`, `pago_error_mensaje`. |
-| Cliente sube comprobante | Subir a bucket `comprobantes`, setear `comprobante_path`/`comprobante_url`/`comprobante_subido_at`. La app interna lo validará y pasará a `pagado`. |
+| Cliente sube comprobante | Subir a bucket `comprobantes`, setear **solo** `comprobante_path`/`comprobante_url`/`comprobante_subido_at`. **No** tocar `estado_pago_web` (si ya está `pagado` por confirmación manual, dejarlo). La app interna valida y pasa a `pagado` cuando corresponda. |
 
 **Por qué:** los triggers de la app (`update_orden_totals`, `trigger_consume_stock_on_envio`, etc.) se disparan ante cambios en `sellos`. Si la web inserta sellos antes de pagar, se mete ruido en producción y stock.
 

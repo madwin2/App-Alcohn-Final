@@ -1,7 +1,13 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Order, ShippingCarrier, ShippingServiceDest, ShippingOption } from '@/lib/types/index';
-import { getCarrierIcon } from '@/lib/utils/format';
 import { SvgIcon } from '@/components/ui/SvgIcon';
+import { Link2 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface CellEnvioProps {
   order: Order;
@@ -43,6 +49,7 @@ const getIconForOption = (option: ShippingOption): string | null => {
 export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
   const { shipping } = order;
   const currentOption = getCurrentShippingOption(shipping.carrier, shipping.service);
+  const hasAndreaniLink = Boolean(order.andreaniLinkUrl);
   
   const handleValueChange = (value: string) => {
     const selectedOption = shippingOptions.find(o => o.value === value);
@@ -52,7 +59,7 @@ export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
   };
 
   return (
-    <div className="flex justify-center items-center w-full">
+    <div className="flex justify-center items-center gap-1 w-full">
       <Select value={currentOption} onValueChange={handleValueChange}>
         <SelectTrigger className="w-auto h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors flex justify-center items-center px-2">
           <SelectValue>
@@ -86,6 +93,28 @@ export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
           ))}
         </SelectContent>
       </Select>
+      {hasAndreaniLink ? (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="p-0.5 text-red-600 hover:text-red-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void navigator.clipboard.writeText(order.andreaniLinkUrl!);
+                }}
+                aria-label="Copiar link Andreani"
+              >
+                <Link2 className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs">
+              Link Andreani asignado — click para copiar
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : null}
     </div>
   );
 }

@@ -42,6 +42,9 @@ pids
 *.seed
 *.pid.lock
 
+# Artefactos locales de prueba
+artifacts/
+
 # Coverage directory used by tools like istanbul
 coverage/
 
@@ -96,3 +99,14 @@ services/micorreo-worker/artifacts/
 services/micorreo-worker/tmp/
 services/micorreo-worker/playwright-report/
 services/micorreo-worker/test-results/
+
+# Andreani worker (servicio externo)
+services/andreani-worker/node_modules/
+services/andreani-worker/dist/
+services/andreani-worker/.env
+services/andreani-worker/artifacts/
+services/andreani-worker/data/
+services/andreani-worker/tmp/
+services/andreani-worker/playwright-report/
+services/andreani-worker/test-results/
+tmp/

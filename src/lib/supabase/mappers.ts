@@ -82,7 +82,7 @@ export const mapShippingStateToDB = (estado: ShippingState): string => {
 };
 
 // Mapeo de transportistas
-const mapShippingCarrier = (empresa: string | null): ShippingCarrier | null => {
+export const mapShippingCarrier = (empresa: string | null): ShippingCarrier | null => {
   if (!empresa) return null;
   const mapping: Record<string, ShippingCarrier> = {
     'Andreani': 'ANDREANI',

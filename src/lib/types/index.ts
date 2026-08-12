@@ -107,6 +107,8 @@ export interface Order {
     origin: ShippingOriginMethod;
     trackingNumber?: string | null;
   };
+  /** Link Andreani de pago asignado desde el pool (`envios_andreani_links`). */
+  andreaniLinkUrl?: string | null;
   items: OrderItem[];
   tasks?: Task[];
   progressStep?: ProgressStep;

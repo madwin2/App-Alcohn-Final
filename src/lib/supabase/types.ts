@@ -639,6 +639,27 @@ export interface Database {
         };
         Update: Partial<Database['public']['Tables']['comercial_exclusiones']['Insert']>;
       };
+      envios_andreani_links: {
+        Row: {
+          id: string;
+          url: string;
+          estado: 'disponible' | 'asignado' | 'descartado';
+          orden_id: string | null;
+          creado_en: string;
+          asignado_en: string | null;
+          nota: string | null;
+        };
+        Insert: {
+          id?: string;
+          url: string;
+          estado?: 'disponible' | 'asignado' | 'descartado';
+          orden_id?: string | null;
+          creado_en?: string;
+          asignado_en?: string | null;
+          nota?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['envios_andreani_links']['Insert']>;
+      };
       web_analytics_events: {
         Row: {
           id: string;
