@@ -1114,6 +1114,14 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
 // Eliminar orden (cascada elimina sellos)
 export const deleteOrder = async (orderId: string): Promise<void> => {
   try {
+    // Devolver el link al pool antes del DELETE (el FK solo hace orden_id = null
+    // y dejaría el link huérfano en estado "asignado").
+    try {
+      await liberarLinkAndreani(orderId, false);
+    } catch (linkError) {
+      console.warn('No se pudo liberar link Andreani al eliminar pedido:', linkError);
+    }
+
     const { error } = await supabase
       .from('ordenes')
       .delete()

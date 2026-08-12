@@ -463,32 +463,53 @@ Deno.serve(async (req: Request) => {
       ? notasWeb.senia_confirmada
       : null;
 
-    const sellosPayload = buildSellosFromWebCheckout({
-      ordenId,
-      carritoJson,
-      notasWeb,
-      metodoPago: orden.metodo_pago ?? null,
-      mockup,
-      mockupSolicitudId: mockupId,
-      seniaMonto,
-      disenoNombre,
-    });
-
     const { data: existingSellos } = await supabase
       .from("sellos")
       .select("id, valor, senia")
       .eq("orden_id", ordenId);
 
-    let sellosNormalized = false;
-    if (sellosNeedNormalization(existingSellos ?? [], sellosPayload)) {
-      if (existingSellos?.length) {
-        const { error: deleteError } = await supabase.from("sellos").delete().eq("orden_id", ordenId);
-        if (deleteError) throw deleteError;
-      }
+    const hasExistingSellos = (existingSellos?.length ?? 0) > 0;
+    const cartItems = asCartItems(carritoJson);
 
-      const { error: insertError } = await supabase.from("sellos").insert(sellosPayload);
-      if (insertError) throw insertError;
-      sellosNormalized = true;
+    // La normalización de sellos NO debe bloquear el WhatsApp.
+    // La web externa suele crear sellos por su cuenta; si no hay carrito_json
+    // usable, igual hay que confirmar el pedido al cliente.
+    let sellosNormalized = false;
+    let sellosError: string | null = null;
+
+    if (cartItems.length > 0) {
+      try {
+        const sellosPayload = buildSellosFromWebCheckout({
+          ordenId,
+          carritoJson,
+          notasWeb,
+          metodoPago: orden.metodo_pago ?? null,
+          mockup,
+          mockupSolicitudId: mockupId,
+          seniaMonto,
+          disenoNombre,
+        });
+
+        if (sellosNeedNormalization(existingSellos ?? [], sellosPayload)) {
+          if (existingSellos?.length) {
+            const { error: deleteError } = await supabase
+              .from("sellos")
+              .delete()
+              .eq("orden_id", ordenId);
+            if (deleteError) throw deleteError;
+          }
+
+          const { error: insertError } = await supabase.from("sellos").insert(sellosPayload);
+          if (insertError) throw insertError;
+          sellosNormalized = true;
+        }
+      } catch (err: unknown) {
+        sellosError = err instanceof Error ? err.message : "Error normalizando sellos";
+        console.error("confirm-web-order sellos normalization skipped", sellosError);
+      }
+    } else if (!hasExistingSellos) {
+      sellosError = "El pedido no tiene ítems en carrito_json ni sellos existentes.";
+      console.error("confirm-web-order", sellosError);
     }
 
     const now = new Date().toISOString();
@@ -513,7 +534,9 @@ Deno.serve(async (req: Request) => {
       telefono?: string | null;
     } | null;
 
-    const telefono = cliente?.telefono?.trim() ?? "";
+    const mockupWhatsapp =
+      typeof mockup?.whatsapp === "string" ? mockup.whatsapp.trim() : "";
+    const telefono = cliente?.telefono?.trim() || mockupWhatsapp;
     const nombre = `${cliente?.nombre ?? ""} ${cliente?.apellido ?? ""}`.trim() || "Cliente";
 
     let webhookOk = false;
@@ -569,12 +592,19 @@ Deno.serve(async (req: Request) => {
       webhookError = "cliente_sin_telefono";
     }
 
+    // Conservar detalle de sellos si el webhook falló, o anexarlo si hubo warning.
+    const logWebhookError = webhookError
+      ? (sellosError ? `${webhookError} | sellos: ${sellosError}` : webhookError)
+      : sellosError
+        ? `sellos_warning: ${sellosError}`
+        : null;
+
     await supabase.from("web_pedido_confirm_log").upsert({
       orden_id: ordenId,
       success: webhookOk,
       sellos_normalized: sellosNormalized,
       webhook_sent_at: webhookOk ? now : null,
-      webhook_error: webhookError,
+      webhook_error: logWebhookError,
       processed_at: now,
     });
 
@@ -583,8 +613,10 @@ Deno.serve(async (req: Request) => {
         success: webhookOk,
         orden_id: ordenId,
         sellos_normalized: sellosNormalized,
+        sellos_error: sellosError,
         webhook_sent: webhookOk,
         webhook_error: webhookError,
+        link_andreani: linkAndreani,
       }),
       {
         status: webhookOk ? 200 : 502,

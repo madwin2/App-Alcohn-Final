@@ -4,7 +4,8 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const BOT_WEBHOOK_URL =
   Deno.env.get("BOT_WEBHOOK_URL") || "http://188.245.218.22:3000/webhook/pedido";
 const WEBHOOK_TOKEN = (Deno.env.get("WEBHOOK_TOKEN") ?? "").trim();
-const BOT_WEBHOOK_TIMEOUT = 10000; // 10 segundos
+const BOT_WEBHOOK_TIMEOUT = Number(Deno.env.get("BOT_WEBHOOK_TIMEOUT_MS")) ||
+  120000; // WhatsApp puede tardar al subir media
 
 /** Defaults alineados con `messages.json` del bot (Correo Argentino). */
 const DEFAULT_COSTO_ENVIO_SUCURSAL = 6000;
@@ -105,6 +106,27 @@ const tieneFotoSello = (row: { foto_sello?: unknown }): boolean => {
   return String(f).trim() !== "";
 };
 
+/** URL pública de Storage (misma lógica que trigger_foto_sello_subida en SQL). */
+const resolveFotoSelloUrl = (fotoSello: unknown): string | null => {
+  const f = typeof fotoSello === "string" ? fotoSello.trim() : "";
+  if (!f) return null;
+  const base = (Deno.env.get("SUPABASE_URL") ||
+    "https://dgbyrejfcqearevvzdmf.supabase.co").replace(/\/$/, "");
+  if (f.startsWith("http")) return encodeURI(f);
+
+  const normalized = f.replace(/^\/+/, "");
+  if (normalized.startsWith("storage/v1/")) {
+    return encodeURI(`${base}/${normalized}`);
+  }
+
+  const storageIndex = f.indexOf("/storage/");
+  if (storageIndex >= 0) {
+    return encodeURI(`${base}/${f.slice(storageIndex + 1)}`);
+  }
+
+  return encodeURI(`${base}/storage/v1/object/public/foto/${normalized}`);
+};
+
 const countSellosTipoSello = (
   rows: Array<{ item_type?: unknown }>,
 ): number => {
@@ -162,10 +184,6 @@ Deno.serve(async (req: Request) => {
         mockup_cuero_url: Boolean(body?.datos?.mockup_cuero_url),
         mockup_madera_url: Boolean(body?.datos?.mockup_madera_url),
         medidas_cotizacion: nMed,
-      });
-    } else if (tipoAct === "generador_muestras_contacto") {
-      console.log("generador_muestras_contacto → saludo comercial generador web", {
-        solicitud_mockup_id: body?.datos?.solicitud_mockup_id,
       });
     }
 
@@ -331,6 +349,20 @@ Deno.serve(async (req: Request) => {
         const seguimientoOrden = (orden as any)?.seguimiento;
         const camposTipoEnvio = buildTipoEnvioCampos(tipoEnvioOrden);
 
+        const selloActualDb = currentItemId
+          ? rawSellos.find((s: { id?: unknown }) =>
+            String(s.id) === String(currentItemId)
+          ) || null
+          : null;
+
+        const imagenUrlExistente =
+          typeof body.datos?.imagen_url === "string"
+            ? body.datos.imagen_url.trim()
+            : "";
+        const imagenUrlDesdeDb = selloActualDb
+          ? resolveFotoSelloUrl(selloActualDb.foto_sello)
+          : null;
+
         // Link de pago Andreani (pool) si la orden es Andreani
         let linkAndreani: string | null =
           typeof body?.datos?.link_andreani === "string" &&
@@ -400,6 +432,11 @@ Deno.serve(async (req: Request) => {
           ...(linkAndreani ? { link_andreani: linkAndreani } : {}),
           ...(seguimiento ? { numero_seguimiento: seguimiento } : {}),
           ...(urlSeguimiento ? { url_seguimiento: urlSeguimiento } : {}),
+          ...(imagenUrlExistente
+            ? {}
+            : imagenUrlDesdeDb
+            ? { imagen_url: imagenUrlDesdeDb }
+            : {}),
         };
 
         const tipoActualizacion = String(body.tipo_actualizacion || "").toLowerCase();
