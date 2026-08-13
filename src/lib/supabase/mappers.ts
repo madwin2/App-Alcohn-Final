@@ -267,8 +267,17 @@ export const mapOrdenToOrder = (
   takenBy: { id: string; name: string } | null = null,
   shippingDataLoadedBy: { id: string; name: string } | null = null,
 ): Order => {
+  // Orden estable por fecha de creación: la UI usa items[0] como sello principal
+  // (prioridad, envío, etc.) y Postgres no garantiza el orden de las filas.
+  const sellosOrdenados = [...sellos].sort((a, b) => {
+    const ca = (a as any).created_at || '';
+    const cb = (b as any).created_at || '';
+    if (ca !== cb) return ca < cb ? -1 : 1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
   // Primero mapear sellos a items básicos
-  const baseItems = sellos.map(sello => mapSelloToOrderItem(sello, cliente));
+  const baseItems = sellosOrdenados.map(sello => mapSelloToOrderItem(sello, cliente));
 
   // Asignar el estado de envío a nivel orden a todos los items
   const shippingStateFromOrder = mapShippingState(orden.estado_envio);
@@ -362,6 +371,7 @@ export const mapOrderItemToSello = (
   valor: item.itemValue || 0,
   senia: item.depositValueItem || 0,
   estado_fabricacion: mapFabricationStateToDB(item.fabricationState) as 'Sin Hacer' | 'Haciendo' | 'Hecho' | 'Rehacer' | 'Retocar' | 'Prioridad' | 'Verificar',
+  es_prioritario: item.isPriority === true,
   estado_venta: mapSaleStateToDB(item.saleState) as 'Señado' | 'Foto' | 'Transferido',
   archivo_base: item.files?.baseUrl || null,
   foto_sello: item.files?.photoUrl || null,

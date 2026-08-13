@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { NewOrderFormData, FabricationState, ShippingCarrier, ShippingServiceDest, ShippingOption, StampType, ItemType, SoldadorPower, AbecedarioCase } from '@/lib/types/index';
+import { NewOrderFormData, FabricationState, ShippingCarrier, ShippingServiceDest, StampType, ItemType, SoldadorPower, AbecedarioCase } from '@/lib/types/index';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, X } from 'lucide-react';
 import { findCustomer } from '@/lib/supabase/services/orders.service';
@@ -134,15 +134,20 @@ const abecedarioCaseOptions: { value: AbecedarioCase; label: string }[] = [
   { value: 'AMBAS', label: 'Ambas' },
 ];
 
-const carrierOptions = [
+const carrierOptions: {
+  value: string;
+  label: string;
+  carrier?: ShippingCarrier;
+  service?: ShippingServiceDest;
+}[] = [
   { value: 'NONE', label: '—' },
-  { value: 'ANDREANI_DOMICILIO', label: 'Andreani - Domicilio' },
-  { value: 'ANDREANI_SUCURSAL', label: 'Andreani - Sucursal' },
-  { value: 'CORREO_ARGENTINO_DOMICILIO', label: 'Correo Argentino - Domicilio' },
-  { value: 'CORREO_ARGENTINO_SUCURSAL', label: 'Correo Argentino - Sucursal' },
-  { value: 'VIA_CARGO_DOMICILIO', label: 'Vía Cargo - Domicilio' },
-  { value: 'VIA_CARGO_SUCURSAL', label: 'Vía Cargo - Sucursal' },
-  { value: 'OTRO', label: 'Otro' },
+  { value: 'ANDREANI_DOMICILIO', label: 'Andreani - Domicilio', carrier: 'ANDREANI', service: 'DOMICILIO' },
+  { value: 'ANDREANI_SUCURSAL', label: 'Andreani - Sucursal', carrier: 'ANDREANI', service: 'SUCURSAL' },
+  { value: 'CORREO_ARGENTINO_DOMICILIO', label: 'Correo Argentino - Domicilio', carrier: 'CORREO_ARGENTINO', service: 'DOMICILIO' },
+  { value: 'CORREO_ARGENTINO_SUCURSAL', label: 'Correo Argentino - Sucursal', carrier: 'CORREO_ARGENTINO', service: 'SUCURSAL' },
+  { value: 'VIA_CARGO_DOMICILIO', label: 'Vía Cargo - Domicilio', carrier: 'VIA_CARGO', service: 'DOMICILIO' },
+  { value: 'VIA_CARGO_SUCURSAL', label: 'Vía Cargo - Sucursal', carrier: 'VIA_CARGO', service: 'SUCURSAL' },
+  { value: 'OTRO', label: 'Otro', carrier: 'OTRO' },
 ];
 
 const serviceOptions = [
@@ -851,24 +856,14 @@ export function NewOrderStepForm({
         <div className="grid grid-cols-6 gap-4">
           <div className="col-span-3">
             <Select onValueChange={(value) => {
-              if (value === 'NONE') {
-                orderForm.setValue('shipping.carrier', undefined);
-                orderForm.setValue('shipping.service', undefined);
-              } else if (value === 'OTRO') {
-                orderForm.setValue('shipping.carrier', 'OTRO');
-                orderForm.setValue('shipping.service', undefined);
-              } else {
-                const [carrier, service] = value.split('_') as [ShippingCarrier, ShippingServiceDest];
-                orderForm.setValue('shipping.carrier', carrier);
-                orderForm.setValue('shipping.service', service);
-              }
+              const option = carrierOptions.find((o) => o.value === value);
+              orderForm.setValue('shipping.carrier', option?.carrier, { shouldDirty: true, shouldValidate: true });
+              orderForm.setValue('shipping.service', option?.service, { shouldDirty: true, shouldValidate: true });
             }} value={(() => {
               const carrier = orderForm.watch('shipping.carrier');
               const service = orderForm.watch('shipping.service');
-              if (!carrier) return 'NONE';
-              if (carrier === 'OTRO') return 'OTRO';
-              if (carrier && service) return `${carrier}_${service}` as ShippingOption;
-              return 'NONE';
+              const match = carrierOptions.find((o) => o.carrier === carrier && o.service === service);
+              return match?.value ?? 'NONE';
             })()}>
               <SelectTrigger>
                 <SelectValue placeholder="Transportista" />
@@ -905,7 +900,7 @@ export function NewOrderStepForm({
                 <Checkbox 
                   id="isPriority" 
                   checked={orderForm.watch('states.isPriority')}
-                  onCheckedChange={(checked) => orderForm.setValue('states.isPriority', !!checked)}
+                  onCheckedChange={(checked) => orderForm.setValue('states.isPriority', checked === true, { shouldDirty: true })}
                 />
                 <Label htmlFor="isPriority" className="text-sm font-medium">
                   🔥 Pedido Prioritario
