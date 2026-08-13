@@ -131,7 +131,7 @@ export function andreaniGenerateDevProxy(env: Record<string, string>): Plugin {
           const count =
             typeof countRaw === 'number' && Number.isFinite(countRaw)
               ? Math.min(50, Math.max(1, Math.floor(countRaw)))
-              : 5;
+              : 10;
 
           const response = await fetch(`${baseUrl}/generate`, {
             method: 'POST',

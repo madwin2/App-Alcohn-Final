@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   const count =
     typeof countRaw === 'number' && Number.isFinite(countRaw)
       ? Math.min(50, Math.max(1, Math.floor(countRaw)))
-      : 5;
+      : 10;
 
   try {
     const response = await fetch(`${baseUrl}/generate`, {

@@ -77,7 +77,7 @@ export function AndreaniPoolCard() {
       const res = await fetch('/api/andreani-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: 5 }),
+        body: JSON.stringify({ count: 10 }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
