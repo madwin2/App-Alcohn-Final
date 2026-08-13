@@ -14,15 +14,21 @@ export default async function handler(req, res) {
 
   const baseUrl = workerBaseUrl();
   const apiKey = safeTrim(process.env.ANDREANI_WORKER_API_KEY);
+  const hasUrl = Boolean(baseUrl);
+  const hasKey = Boolean(apiKey);
 
-  if (!baseUrl || !apiKey) {
+  if (!hasUrl || !hasKey) {
     res.status(503).json({
       status: 'system_error',
       message:
-        'Generación automática no configurada (ANDREANI_WORKER_URL / ANDREANI_WORKER_API_KEY en Vercel).',
+        'Generación automática no configurada. En Vercel: ANDREANI_WORKER_URL + ANDREANI_WORKER_API_KEY, después Redeploy.',
       httpStatus: 503,
       generated: 0,
       urls: [],
+      debug: {
+        has_ANDREANI_WORKER_URL: hasUrl,
+        has_ANDREANI_WORKER_API_KEY: hasKey,
+      },
     });
     return;
   }
