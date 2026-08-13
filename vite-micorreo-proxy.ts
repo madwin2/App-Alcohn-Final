@@ -99,6 +99,79 @@ export function micorreoUploadDevProxy(env: Record<string, string>): Plugin {
   };
 }
 
+/** En `npm run dev`, reenvía POST /api/andreani-generate al worker Andreani. */
+export function andreaniGenerateDevProxy(env: Record<string, string>): Plugin {
+  return {
+    name: 'andreani-generate-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/andreani-generate', async (req, res) => {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { status: 'system_error', message: 'Method not allowed', httpStatus: 405 });
+          return;
+        }
+
+        const baseUrl = (env.ANDREANI_WORKER_URL || '').replace(/\/$/, '');
+        const apiKey = env.ANDREANI_WORKER_API_KEY || '';
+
+        if (!baseUrl || !apiKey) {
+          sendJson(res, 503, {
+            status: 'system_error',
+            message:
+              'Configurá ANDREANI_WORKER_URL y ANDREANI_WORKER_API_KEY en .env.local para desarrollo.',
+            httpStatus: 503,
+            generated: 0,
+            urls: [],
+          });
+          return;
+        }
+
+        try {
+          const body = await readJsonBody(req);
+          const countRaw = body.count;
+          const count =
+            typeof countRaw === 'number' && Number.isFinite(countRaw)
+              ? Math.min(50, Math.max(1, Math.floor(countRaw)))
+              : 5;
+
+          const response = await fetch(`${baseUrl}/generate`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ count }),
+          });
+
+          const raw = await response.text();
+          let data: unknown;
+          try {
+            data = raw ? JSON.parse(raw) : {};
+          } catch {
+            sendJson(res, 503, {
+              status: 'system_error',
+              message: 'Respuesta inválida del worker Andreani.',
+              httpStatus: 503,
+              generated: 0,
+              urls: [],
+            });
+            return;
+          }
+
+          sendJson(res, response.status, data as Record<string, unknown>);
+        } catch (error) {
+          sendJson(res, 503, {
+            status: 'system_error',
+            message: error instanceof Error ? error.message : 'No se pudo contactar al worker Andreani.',
+            httpStatus: 503,
+            generated: 0,
+            urls: [],
+          });
+        }
+      });
+    },
+  };
+}
+
 /** En `npm run dev`, reenvía POST /api/vectorize-enqueue al worker de vectorización. */
 export function vectorizeEnqueueDevProxy(env: Record<string, string>): Plugin {
   return {

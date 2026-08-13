@@ -9,10 +9,6 @@ import {
 } from '@/lib/supabase/services/andreani.service';
 import { Loader2, RefreshCw } from 'lucide-react';
 
-const WORKER_URL =
-  ((import.meta as any)?.env?.VITE_ANDREANI_WORKER_URL as string | undefined)?.replace(/\/$/, '') ||
-  '';
-
 export function AndreaniPoolCard() {
   const { toast } = useToast();
   const [counts, setCounts] = useState<Record<AndreaniLinkEstado, number>>({
@@ -76,22 +72,21 @@ export function AndreaniPoolCard() {
   };
 
   const handleGenerate = async () => {
-    if (!WORKER_URL) {
-      toast({
-        title: 'Worker no configurado',
-        description: 'Por ahora pegá links a mano. El worker (VITE_ANDREANI_WORKER_URL) viene en Etapa 2.',
-      });
-      return;
-    }
     setBusy(true);
     try {
-      const res = await fetch(`${WORKER_URL}/generate`, {
+      const res = await fetch('/api/andreani-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ count: 5 }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof json?.message === 'string'
+            ? json.message
+            : `Error ${res.status} al generar links`,
+        );
+      }
       toast({
         title: 'Links generados',
         description: `Se generaron ${json.generated ?? '?'} links`,
