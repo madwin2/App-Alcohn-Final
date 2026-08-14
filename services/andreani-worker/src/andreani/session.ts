@@ -18,7 +18,12 @@ function launchProxy(config: WorkerConfig): { server: string; username?: string;
 }
 
 export async function getBrowser(config: WorkerConfig): Promise<Browser> {
-  if (browser) return browser;
+  if (browser && browser.isConnected()) return browser;
+  if (browser) {
+    console.warn('[andreani] Browser desconectado — relanzando Chromium');
+    await browser.close().catch(() => undefined);
+    browser = null;
+  }
   const proxy = launchProxy(config);
   if (proxy) {
     console.log(`[andreani] Playwright proxy: ${proxy.server}`);
@@ -37,6 +42,10 @@ export async function getBrowser(config: WorkerConfig): Promise<Browser> {
       '--disable-dev-shm-usage',
     ],
   });
+  browser.on('disconnected', () => {
+    console.warn('[andreani] Chromium se desconectó');
+    browser = null;
+  });
   return browser;
 }
 
@@ -48,18 +57,27 @@ export async function closeBrowser(): Promise<void> {
 }
 
 async function newContext(config: WorkerConfig): Promise<BrowserContext> {
-  const b = await getBrowser(config);
-  const statePath = config.storageStatePath;
   const opts: Parameters<Browser['newContext']>[0] = {
     locale: 'es-AR',
     viewport: { width: 1400, height: 900 },
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
   };
-  if (existsSync(statePath)) {
-    opts.storageState = statePath;
+  if (existsSync(config.storageStatePath)) {
+    opts.storageState = config.storageStatePath;
   }
-  return b.newContext(opts);
+
+  try {
+    const b = await getBrowser(config);
+    return await b.newContext(opts);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/has been closed|Target closed|Browser closed/i.test(message)) throw error;
+    console.warn('[andreani] newContext falló con browser cerrado — retry con relanzamiento');
+    await closeBrowser();
+    const b = await getBrowser(config);
+    return b.newContext(opts);
+  }
 }
 
 export async function saveStorageState(
