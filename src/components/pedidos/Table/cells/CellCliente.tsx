@@ -5,9 +5,10 @@ interface CellClienteProps {
   order: Order;
   editingRowId?: string | null;
   onUpdate?: (orderId: string, updates: any) => void;
+  onOpenProfile?: (order: Order) => void;
 }
 
-export function CellCliente({ order, editingRowId, onUpdate }: CellClienteProps) {
+export function CellCliente({ order, editingRowId, onUpdate, onOpenProfile }: CellClienteProps) {
   const { customer } = order;
   const isEditing = editingRowId === order.id;
   
@@ -27,15 +28,33 @@ export function CellCliente({ order, editingRowId, onUpdate }: CellClienteProps)
       </div>
     );
   }
-  
-  return (
-    <div className="min-w-0">
+
+  const content = (
+    <>
       <p className="text-sm font-medium truncate">
         {customer.firstName}
       </p>
       <p className="text-xs text-muted-foreground truncate">
         {customer.lastName}
       </p>
-    </div>
+    </>
+  );
+
+  if (!onOpenProfile || !customer.id) {
+    return <div className="min-w-0">{content}</div>;
+  }
+  
+  return (
+    <button
+      type="button"
+      title="Ver ficha del cliente"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenProfile(order);
+      }}
+      className="min-w-0 w-full rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {content}
+    </button>
   );
 }

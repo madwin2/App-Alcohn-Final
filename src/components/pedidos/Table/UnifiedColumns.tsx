@@ -38,6 +38,7 @@ interface UnifiedColumnsProps {
   editingRowId?: string | null;
   onUpdate?: (orderId: string, updates: any) => void;
   onExpand?: (orderId: string) => void;
+  onOpenClienteProfile?: (order: Order) => void;
 }
 
 export function createUnifiedColumns({
@@ -55,6 +56,7 @@ export function createUnifiedColumns({
   editingRowId,
   onUpdate,
   onExpand,
+  onOpenClienteProfile,
   isSubitem = false
 }: UnifiedColumnsProps): ColumnDef<Order>[] {
   const columnConfigs = getColumnsForViewMode('items');
@@ -91,6 +93,7 @@ export function createUnifiedColumns({
         order={row.original}
         onUpdate={onUpdate}
         editingRowId={editingRowId}
+        onOpenProfile={isSubitem ? undefined : onOpenClienteProfile}
       />
     ),
     

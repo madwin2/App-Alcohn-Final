@@ -23,6 +23,7 @@ import { ResizableHeader } from './ResizableHeader';
 import { useExpandableRows } from './useExpandableRows';
 import './expand-animations.css';
 import { AddStampDialog } from '../AddStamp/AddStampDialog';
+import { ClienteProfileDialog } from '../ClienteProfile/ClienteProfileDialog';
 import {
   createOrderStickyTask,
   deleteOrderStickyTaskByTaskId,
@@ -67,6 +68,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   const { toggleRow, isExpanded, isCollapsing, isExpanding } = useExpandableRows();
   const [addStampDialogOpen, setAddStampDialogOpen] = useState(false);
   const [selectedOrderForStamp, setSelectedOrderForStamp] = useState<Order | null>(null);
+  const [clienteProfileOrder, setClienteProfileOrder] = useState<Order | null>(null);
   const [visibleCount, setVisibleCount] = useState(ORDERS_PAGE_SIZE);
 
   useEffect(() => {
@@ -453,6 +455,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
       editingRowId,
       onUpdate: handleUpdate,
       onExpand: toggleRow,
+      onOpenClienteProfile: setClienteProfileOrder,
       isSubitem: false
     });
   }, [editingRowId, toggleRow, onUpdate]);
@@ -842,6 +845,18 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
           }}
         />
       )}
+
+      <ClienteProfileDialog
+        open={Boolean(clienteProfileOrder?.customer.id)}
+        onOpenChange={(open) => {
+          if (!open) setClienteProfileOrder(null);
+        }}
+        clienteId={clienteProfileOrder?.customer.id ?? null}
+        fallbackName={[clienteProfileOrder?.customer.firstName, clienteProfileOrder?.customer.lastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim()}
+      />
     </div>
   );
 }
