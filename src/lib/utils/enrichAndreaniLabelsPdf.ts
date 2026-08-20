@@ -5,8 +5,9 @@ import type { Order, OrderItem } from '@/lib/types';
 import { listAndreaniTrackingNumbersByPage } from '@/lib/utils/andreaniTrackingPdfParser';
 
 /**
- * Etiqueta Andreani → **100×152 mm** con logos + info del pedido en el rectángulo inferior.
- * El PDF fuente suele ser A4; se recortan márgenes blancos y la franja legal / QR inferior.
+ * Etiqueta Andreani → **siempre 100×152 mm** con logos + info del pedido en el pie.
+ * - Zebra / 10×15 (página chica, p. ej. 196×298 pt): se escala en vector, sin recorte A4.
+ * - A4: se recortan márgenes blancos y la franja legal / QR inferior, luego se rasteriza.
  */
 const MM_TO_PT = 72 / 25.4;
 const LABEL_W_MM = 100;
@@ -180,12 +181,143 @@ const embedPreviewImage = async (
   }
 };
 
+const isZebraSourcePage = (widthPt: number, heightPt: number): boolean =>
+  widthPt > 0 && heightPt > 0 && widthPt < 500 && heightPt < 700;
+
+const enrichZebraVector = async (
+  root: Uint8Array,
+  trackingPerPage: (string | null)[],
+  trackingToOrder: Map<string, Order>,
+): Promise<Uint8Array> => {
+  const srcDoc = await PDFDocument.load(root);
+  const outDoc = await PDFDocument.create();
+  const font = await outDoc.embedFont(StandardFonts.Helvetica);
+  const embeddedPages = await outDoc.embedPages(srcDoc.getPages());
+
+  let embeddedAlcohn: PDFImage | null = null;
+  try {
+    const logoRes = await fetch('/logo-alcohn.jpg');
+    if (logoRes.ok) embeddedAlcohn = await outDoc.embedJpg(await logoRes.arrayBuffer());
+  } catch {
+    embeddedAlcohn = null;
+  }
+
+  for (let i = 0; i < embeddedPages.length; i += 1) {
+    const embeddedPng = embeddedPages[i];
+    const labelPage = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
+    const bandH = LABEL_H_PT * FOOTER_FRAC_OF_PAGE;
+    const iw = embeddedPng.width;
+    const ih = embeddedPng.height;
+    const availableH = Math.max(
+      40,
+      LABEL_H_PT - TOP_PRINT_MARGIN_PT - bandH - BOTTOM_FOOTER_GAP_PT,
+    );
+    const scale = Math.min(LABEL_W_PT / iw, availableH / ih) * FIT_ZOOM;
+    const dw = iw * scale;
+    const dh = ih * scale;
+    const xImg = (LABEL_W_PT - dw) / 2 + HORIZONTAL_NUDGE_PT;
+    const yImg = LABEL_H_PT - TOP_PRINT_MARGIN_PT - dh;
+
+    labelPage.drawPage(embeddedPng, { x: xImg, y: yImg, width: dw, height: dh });
+
+    const pad = Math.max(3, dw * 0.024);
+    const bandY = BOTTOM_FOOTER_GAP_PT * 0.4;
+    labelPage.drawRectangle({
+      x: xImg - 2,
+      y: bandY,
+      width: dw + 4,
+      height: bandH,
+      color: rgb(1, 1, 1),
+      borderWidth: 0,
+    });
+
+    const tn = trackingPerPage[i] ?? null;
+    const order = tn ? trackingToOrder.get(tn) : undefined;
+    const footerContent = order ? buildFooterContent(order) : null;
+    const imageCandidates = footerContent?.imageCandidates ?? [];
+    const centerLines = buildCenterFooterLines(order, tn);
+
+    const leftColW = dw * 0.24;
+    const rightColW = dw * 0.24;
+    const centerX = xImg + leftColW + pad * 0.5;
+    const centerW = Math.max(28, dw - leftColW - rightColW - pad);
+    const logoMaxH = bandH * 0.78;
+    const logoMaxW = leftColW - pad * 1.2;
+
+    if (embeddedAlcohn) {
+      const ls = Math.min(logoMaxW / embeddedAlcohn.width, logoMaxH / embeddedAlcohn.height);
+      const lw = embeddedAlcohn.width * ls;
+      const lh = embeddedAlcohn.height * ls;
+      labelPage.drawImage(embeddedAlcohn, {
+        x: xImg + (leftColW - lw) / 2,
+        y: bandY + (bandH - lh) / 2,
+        width: lw,
+        height: lh,
+      });
+    }
+
+    const slotW = Math.min(30, rightColW * 0.44);
+    const nPrev = imageCandidates.length;
+    const maxPrev = Math.min(2, nPrev);
+    const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
+
+    const textLines = centerLines.slice(0, 3);
+    const textSize = Math.max(3.6, Math.min(4.6, bandH * 0.18));
+    const lineStep = textSize + 0.7;
+    const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
+    let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize;
+    for (const line of textLines) {
+      labelPage.drawText(line, {
+        x: centerX,
+        y: textBaseline,
+        size: textSize,
+        font,
+        color: rgb(0.06, 0.06, 0.06),
+        maxWidth: centerW,
+        lineHeight: lineStep,
+      });
+      textBaseline -= lineStep;
+      if (textBaseline < bandY + 1) break;
+    }
+
+    if (order && maxPrev > 0) {
+      let px = xImg + dw - rightColW + (rightColW - totalPrevW) / 2;
+      for (let j = 0; j < maxPrev; j += 1) {
+        let embedded: PDFImage | null = null;
+        for (const candidateUrl of imageCandidates[j] ?? []) {
+          embedded = await embedPreviewImage(outDoc, candidateUrl);
+          if (embedded) break;
+        }
+        if (!embedded) continue;
+        const sc = Math.min(slotW / embedded.width, logoMaxH / embedded.height);
+        const dwj = embedded.width * sc;
+        const dhj = embedded.height * sc;
+        labelPage.drawImage(embedded, {
+          x: px + (slotW - dwj) / 2,
+          y: bandY + (bandH - dhj) / 2,
+          width: dwj,
+          height: dhj,
+        });
+        px += slotW + 2;
+      }
+    }
+  }
+
+  return outDoc.save();
+};
+
 export const enrichAndreaniLabelsPdf = async (
   pdfBytes: ArrayBuffer,
   trackingToOrder: Map<string, Order>,
 ): Promise<Uint8Array> => {
   const root = new Uint8Array(pdfBytes);
   const trackingPerPage = await listAndreaniTrackingNumbersByPage(root.slice());
+
+  const probe = await PDFDocument.load(root.slice());
+  const probePage = probe.getPage(0);
+  if (probePage && isZebraSourcePage(probePage.getWidth(), probePage.getHeight())) {
+    return enrichZebraVector(root.slice(), trackingPerPage, trackingToOrder);
+  }
 
   const srcPdf = await getDocument({ data: root.slice() }).promise;
   const outDoc = await PDFDocument.create();

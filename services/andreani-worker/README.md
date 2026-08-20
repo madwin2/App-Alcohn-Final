@@ -11,6 +11,15 @@ Misma arquitectura que `micorreo-worker`: HTTP + cola serial + artifacts en disc
 | `GET` | `/health` | no | — | `{ ok, poolDisponibles, … }` |
 | `POST` | `/generate` | Bearer / `x-api-key` | `{ count }` | `{ generated, urls, status }` |
 | `POST` | `/refill` | Bearer / `x-api-key` | `{ min? }` (default 15) | genera la diferencia si faltan |
+| `POST` | `/sync-labels` | Bearer / `x-api-key` | — | baja etiquetas Zebra nuevas, las enriquece y las guarda |
+
+### Traer etiquetas (botón en Envíos)
+
+```bash
+$env:ANDREANI_HEADLESS="false"; npm run sync-labels:test
+```
+
+Hace falta correr `migration_envios_andreani_etiquetas.sql` en Supabase. Deduplica por tracking; no hay cron.
 
 ## Setup
 

@@ -169,7 +169,7 @@ export default function PedidosPage() {
                 },
                 items: match.order.items.map((item) => ({
                   id: item.id,
-                  shippingState: 'DESPACHADO' as const,
+                  shippingState: isAndreani ? 'ETIQUETA_LISTA' : 'DESPACHADO',
                   // Andreani: el sello puede seguir sin pagar — no pasar a Transferido
                   ...(!isAndreani && hasNonTransferredItems
                     ? { saleState: 'TRANSFERIDO' as const }

@@ -60,6 +60,7 @@ async function newContext(config: WorkerConfig): Promise<BrowserContext> {
   const opts: Parameters<Browser['newContext']>[0] = {
     locale: 'es-AR',
     viewport: { width: 1400, height: 900 },
+    acceptDownloads: true,
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
   };

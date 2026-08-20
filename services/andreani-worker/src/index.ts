@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { envFileExists, loadConfig } from './config.js';
-import { enqueueGenerateJob, enqueueRefillJob } from './job-queue.js';
+import { enqueueGenerateJob, enqueueRefillJob, enqueueSyncLabelsJob } from './job-queue.js';
 import { shutdownWorker } from './generate-service.js';
 import { countDisponibles } from './supabase.js';
 
@@ -92,6 +92,24 @@ async function handleRefill(req: IncomingMessage, res: ServerResponse): Promise<
   sendJson(res, result.httpStatus, result);
 }
 
+async function handleSyncLabels(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const config = loadConfig();
+  if (!isAuthorized(_req, config.apiKey)) {
+    sendJson(res, 401, {
+      status: 'system_error',
+      message: 'No autorizado',
+      skipped: 0,
+      downloaded: 0,
+      assigned: 0,
+      orphans: 0,
+    });
+    return;
+  }
+
+  const result = await enqueueSyncLabelsJob();
+  sendJson(res, result.httpStatus, result);
+}
+
 export function startServer(): void {
   const config = loadConfig();
 
@@ -127,6 +145,11 @@ export function startServer(): void {
         return;
       }
 
+      if (req.method === 'POST' && (req.url === '/sync-labels' || req.url === '/sync-labels/')) {
+        await handleSyncLabels(req, res);
+        return;
+      }
+
       sendJson(res, 404, { status: 'system_error', message: 'Ruta no encontrada' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -134,9 +157,11 @@ export function startServer(): void {
     }
   });
 
+  server.requestTimeout = 0;
+  server.timeout = 0;
   server.listen(config.port, () => {
     console.log(`[andreani-worker] escuchando en http://0.0.0.0:${config.port}`);
-    console.log(`[andreani-worker] GET /health | POST /generate | POST /refill`);
+    console.log('[andreani-worker] GET /health | POST /generate | POST /refill | POST /sync-labels');
     if (!envFileExists()) {
       console.warn('[andreani-worker] No hay .env — copiá .env.example → .env');
     }

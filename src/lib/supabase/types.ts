@@ -660,6 +660,39 @@ export interface Database {
         };
         Update: Partial<Database['public']['Tables']['envios_andreani_links']['Insert']>;
       };
+      envios_andreani_etiquetas: {
+        Row: {
+          id: string;
+          tracking: string;
+          nro_operacion: string | null;
+          destinatario: string | null;
+          destino: string | null;
+          fecha_portal: string | null;
+          estado_portal: string | null;
+          orden_id: string | null;
+          estado: 'asignada' | 'huerfano';
+          pdf_path: string | null;
+          nota: string | null;
+          creado_en: string;
+          asignado_en: string | null;
+        };
+        Insert: {
+          id?: string;
+          tracking: string;
+          nro_operacion?: string | null;
+          destinatario?: string | null;
+          destino?: string | null;
+          fecha_portal?: string | null;
+          estado_portal?: string | null;
+          orden_id?: string | null;
+          estado?: 'asignada' | 'huerfano';
+          pdf_path?: string | null;
+          nota?: string | null;
+          creado_en?: string;
+          asignado_en?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['envios_andreani_etiquetas']['Insert']>;
+      };
       web_analytics_events: {
         Row: {
           id: string;

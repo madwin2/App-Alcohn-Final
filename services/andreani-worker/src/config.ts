@@ -53,6 +53,10 @@ export function loadConfig() {
     },
     artifactsDir,
     storageStatePath,
+    logoPath: path.resolve(
+      workerRoot,
+      process.env.ANDREANI_LOGO_PATH?.trim() || '../../public/logo-alcohn.jpg',
+    ),
   };
 }
 

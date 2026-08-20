@@ -20,3 +20,16 @@ export interface GenerateResult {
     requested?: number;
   };
 }
+
+export interface SyncLabelsResult {
+  status: GenerateStatus;
+  message: string;
+  httpStatus: number;
+  skipped: number;
+  downloaded: number;
+  assigned: number;
+  orphans: number;
+  details?: {
+    artifactDir?: string;
+  };
+}

@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.json",
     "generate:test": "tsx src/scripts/cli-generate.ts",
+    "sync-labels:test": "tsx src/scripts/cli-sync-labels.ts",
     "probe:net": "tsx src/scripts/probe-andreani-net.ts",
     "login:manual": "tsx src/scripts/cli-login-manual.ts",
     "codegen": "playwright codegen https://pymes.andreani.com/",
@@ -21,6 +22,7 @@
   "dependencies": {
     "@supabase/supabase-js": "2.49.1",
     "dotenv": "^16.4.7",
+    "pdf-lib": "^1.17.1",
     "playwright": "^1.51.0",
     "zod": "^3.24.2"
   },

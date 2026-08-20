@@ -22,6 +22,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { AndreaniPoolCard } from '@/components/envios/AndreaniPoolCard';
+import { AndreaniLabelsPanel } from '@/components/envios/AndreaniLabelsPanel';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { formatDate, formatDateTime, getShippingChipVisual, getShippingLabel } from '@/lib/utils/format';
@@ -1593,6 +1594,12 @@ export default function EnviosPage() {
 
         <div className="flex-1 p-6 overflow-hidden flex flex-col gap-6 min-h-0">
           <AndreaniPoolCard />
+          <AndreaniLabelsPanel
+            orders={orders}
+            onAssigned={() => {
+              void fetchOrders({ silent: true });
+            }}
+          />
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-muted-foreground">Cargando órdenes...</p>
