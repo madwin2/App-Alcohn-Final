@@ -115,7 +115,9 @@ export function startServer(): void {
 
   const server = createServer(async (req, res) => {
     try {
-      if (req.method === 'GET' && req.url === '/health') {
+      const pathname = (req.url || '/').split('?')[0].replace(/\/$/, '') || '/';
+
+      if (req.method === 'GET' && pathname === '/health') {
         let poolDisponibles: number | null = null;
         try {
           if (config.supabaseUrl && config.supabaseServiceRoleKey) {
@@ -135,17 +137,17 @@ export function startServer(): void {
         return;
       }
 
-      if (req.method === 'POST' && req.url === '/generate') {
+      if (req.method === 'POST' && pathname === '/generate') {
         await handleGenerate(req, res);
         return;
       }
 
-      if (req.method === 'POST' && req.url === '/refill') {
+      if (req.method === 'POST' && pathname === '/refill') {
         await handleRefill(req, res);
         return;
       }
 
-      if (req.method === 'POST' && (req.url === '/sync-labels' || req.url === '/sync-labels/')) {
+      if (req.method === 'POST' && pathname === '/sync-labels') {
         await handleSyncLabels(req, res);
         return;
       }

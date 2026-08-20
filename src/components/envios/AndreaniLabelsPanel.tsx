@@ -66,7 +66,13 @@ export function AndreaniLabelsPanel({
       const res = await fetch('/api/andreani-sync-labels', { method: 'POST' });
       const json = (await res.json().catch(() => ({}))) as SyncResponse;
       if (!res.ok) {
-        throw new Error(typeof json.message === 'string' ? json.message : `Error ${res.status}`);
+        const msg = typeof json.message === 'string' ? json.message : `Error ${res.status}`;
+        if (res.status === 404 || /ruta no encontrada/i.test(msg)) {
+          throw new Error(
+            'El worker Andreani no tiene /sync-labels. Actualizá y reiniciá el servicio en el VPS (git pull + build + pm2 restart).',
+          );
+        }
+        throw new Error(msg);
       }
       toast({
         title: 'Etiquetas actualizadas',
