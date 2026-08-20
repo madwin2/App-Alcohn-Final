@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.json",
     "generate:test": "tsx src/scripts/cli-generate.ts",
     "sync-labels:test": "tsx src/scripts/cli-sync-labels.ts",
+    "diag:sync-labels": "tsx src/scripts/diag-sync-labels.ts",
     "probe:net": "tsx src/scripts/probe-andreani-net.ts",
     "login:manual": "tsx src/scripts/cli-login-manual.ts",
     "codegen": "playwright codegen https://pymes.andreani.com/",

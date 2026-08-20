@@ -133,29 +133,54 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
 
   try {
     await goToPaidShipments(page, config);
+    console.log(`[andreani] sync-labels URL=${page.url()}`);
 
+    let sawAny = false;
     for (let guard = 0; guard < 40; guard += 1) {
       const rows = await scrapeCurrentPage(page);
+      console.log(`[andreani] scrape página ${guard + 1}: ${rows.length} envío(s)`);
+      if (rows.length) sawAny = true;
       const fresh = rows.filter((r) => !known.has(r.tracking));
       skipped += rows.length - fresh.length;
 
       if (fresh.length) {
         console.log(`[andreani] página: ${fresh.length} envío(s) nuevos de ${rows.length}`);
-        const pdf = await downloadNewLabelsFromCurrentPage(
-          page,
-          config,
-          fresh.map((r) => r.tracking),
-        );
-        if (pdf) {
-          const result = await persistPage(fresh, pdf, candidates, usedOrdenIds, config.logoPath);
-          downloaded += result.downloaded;
-          assigned += result.assigned;
-          orphans += result.orphans;
-          for (const r of fresh) known.add(r.tracking);
+        try {
+          const pdf = await downloadNewLabelsFromCurrentPage(
+            page,
+            config,
+            fresh.map((r) => r.tracking),
+          );
+          if (pdf) {
+            const result = await persistPage(fresh, pdf, candidates, usedOrdenIds, config.logoPath);
+            downloaded += result.downloaded;
+            assigned += result.assigned;
+            orphans += result.orphans;
+            for (const r of fresh) known.add(r.tracking);
+          }
+        } catch (pageError) {
+          console.warn('[andreani] falló página de etiquetas:', pageError);
+          await saveArtifacts(page, config.artifactsDir, 'sync-labels-page-error').catch(() => undefined);
+          // Seguir con la página siguiente; no tumbar todo el job
         }
       }
 
       if (!(await goNextPage(page))) break;
+    }
+
+    if (!sawAny) {
+      const artifactDir = await saveArtifacts(page, config.artifactsDir, 'sync-labels-empty');
+      return {
+        status: 'system_error',
+        message:
+          'No se encontraron envíos en el historial Pagados (¿cambió el portal o el filtro de fechas?). Revisá artifacts.',
+        httpStatus: 503,
+        skipped,
+        downloaded: 0,
+        assigned: 0,
+        orphans: 0,
+        details: { artifactDir },
+      };
     }
 
     return {
