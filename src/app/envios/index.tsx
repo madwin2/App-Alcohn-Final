@@ -148,6 +148,9 @@ const isWebOrder = (order: Order): boolean => order.origen === 'Web';
 const isWebPendingShippingConfirmation = (order: Order): boolean =>
   isWebOrder(order) && Boolean(order.direccionId) && !order.shippingDataLoadedAt;
 
+/** Andreani usa links/etiquetas propias; no entra en el flujo de datos MiCorreo. */
+const isAndreaniShipping = (order: Order): boolean => order.shipping?.carrier === 'ANDREANI';
+
 /** Ícono WhatsApp (marca registrada Meta); solo UI. */
 function WhatsappLogo({ className }: { className?: string }) {
   return (
@@ -401,17 +404,31 @@ export default function EnviosPage() {
   const ordersEnviosWeb = useMemo(
     () =>
       eligibleOrders.filter(
-        (order) => isWebPendingShippingConfirmation(order) && isSaleReadyForShippingData(order),
+        (order) =>
+          !isAndreaniShipping(order) &&
+          isWebPendingShippingConfirmation(order) &&
+          isSaleReadyForShippingData(order),
       ),
     [eligibleOrders],
   );
   const ordersConDatosEnvio = useMemo(
     () =>
-      eligibleOrders.filter((order) => Boolean(order.direccionId) && !isWebPendingShippingConfirmation(order)),
+      eligibleOrders.filter(
+        (order) =>
+          !isAndreaniShipping(order) &&
+          Boolean(order.direccionId) &&
+          !isWebPendingShippingConfirmation(order),
+      ),
     [eligibleOrders],
   );
   const ordersPendientesDatos = useMemo(
-    () => eligibleOrders.filter((order) => !order.direccionId && isSaleReadyForShippingData(order)),
+    () =>
+      eligibleOrders.filter(
+        (order) =>
+          !isAndreaniShipping(order) &&
+          !order.direccionId &&
+          isSaleReadyForShippingData(order),
+      ),
     [eligibleOrders],
   );
 
