@@ -18,6 +18,7 @@ export interface AndreaniEtiquetaRow {
   creadoEn: string;
   asignadoEn: string | null;
   clienteNombre: string | null;
+  disenoNombre: string | null;
   saleTransferred: boolean;
 }
 
@@ -39,12 +40,12 @@ const mapListRow = (row: {
     | {
         estado_orden: string | null;
         clientes: { nombre: string | null; apellido: string | null } | { nombre: string | null; apellido: string | null }[] | null;
-        sellos: { estado_venta: string | null }[] | null;
+        sellos: { diseno: string | null; estado_venta: string | null }[] | null;
       }
     | {
         estado_orden: string | null;
         clientes: { nombre: string | null; apellido: string | null } | { nombre: string | null; apellido: string | null }[] | null;
-        sellos: { estado_venta: string | null }[] | null;
+        sellos: { diseno: string | null; estado_venta: string | null }[] | null;
       }[]
     | null;
 }): AndreaniEtiquetaRow => {
@@ -57,6 +58,9 @@ const mapListRow = (row: {
     sellos.length > 0
       ? sellos.every((s) => s.estado_venta === 'Transferido')
       : orden?.estado_orden === 'Transferido';
+  const designNames = sellos.map((s) => s.diseno?.trim()).filter((name): name is string => Boolean(name));
+  const disenoNombre =
+    designNames.length === 0 ? null : designNames.length === 1 ? designNames[0] : designNames.join(', ');
 
   return {
     id: row.id,
@@ -73,6 +77,7 @@ const mapListRow = (row: {
     creadoEn: row.creado_en,
     asignadoEn: row.asignado_en,
     clienteNombre: cliente ? `${cliente.nombre ?? ''} ${cliente.apellido ?? ''}`.trim() || null : null,
+    disenoNombre,
     saleTransferred: Boolean(allTransferred),
   };
 };
@@ -87,7 +92,7 @@ export const listAndreaniEtiquetas = async (): Promise<AndreaniEtiquetaRow[]> =>
       ordenes (
         estado_orden,
         clientes ( nombre, apellido ),
-        sellos ( estado_venta )
+        sellos ( diseno, estado_venta )
       )
     `,
     )

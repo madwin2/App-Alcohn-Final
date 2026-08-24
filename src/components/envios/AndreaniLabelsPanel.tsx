@@ -179,6 +179,7 @@ export function AndreaniLabelsPanel({
           <thead className="bg-muted/50 text-left sticky top-0">
             <tr>
               <th className="px-2 py-1.5 font-medium">Pedido</th>
+              <th className="px-2 py-1.5 font-medium">Diseño</th>
               <th className="px-2 py-1.5 font-medium">Seguimiento</th>
               <th className="px-2 py-1.5 font-medium">Operación</th>
               <th className="px-2 py-1.5 font-medium">Venta</th>
@@ -188,7 +189,7 @@ export function AndreaniLabelsPanel({
           <tbody>
             {assigned.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-2 py-4 text-center text-muted-foreground">
+                <td colSpan={6} className="px-2 py-4 text-center text-muted-foreground">
                   Todavía no hay etiquetas asignadas a pedidos.
                 </td>
               </tr>
@@ -198,6 +199,7 @@ export function AndreaniLabelsPanel({
                 return (
                   <tr key={row.id} className="border-t">
                     <td className="px-2 py-1.5">{row.clienteNombre || '—'}</td>
+                    <td className="px-2 py-1.5">{row.disenoNombre || '—'}</td>
                     <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
                     <td className="px-2 py-1.5 font-mono tabular-nums">{row.nroOperacion || '—'}</td>
                     <td className="px-2 py-1.5">{row.saleTransferred ? 'Transferido' : 'Pendiente'}</td>
