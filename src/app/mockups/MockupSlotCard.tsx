@@ -50,6 +50,7 @@ import {
 import {
   dataUrlToFile,
   fetchUrlAsFile,
+  fileToAiApiDataUrl,
   fileToDataUrl,
   getFileExtension,
   storageUrlWithCacheBust,
@@ -150,6 +151,32 @@ async function measureLogoForStoredAsset(
     return await measureLogoInkBoundsFromFile(fromStorage);
   } catch {
     return await measureLogoInkBoundsFromFile(storedFile);
+  }
+}
+
+type AiLogoApiJson = {
+  ok?: boolean;
+  optimizedDataUrl?: string | null;
+  error?: string;
+  details?: string;
+  message?: string;
+  hint?: string;
+  triedModels?: string[];
+  attemptsSummary?: Array<{ model: string; ok?: boolean; message?: string }>;
+};
+
+async function parseAiLogoResponse(response: Response): Promise<AiLogoApiJson> {
+  if (response.status === 413) {
+    throw new Error('La imagen supera el límite del servidor. Se redujo el envío; reintentá con un archivo más liviano.');
+  }
+  const raw = await response.text();
+  if (!raw) {
+    throw new Error(response.ok ? 'Respuesta IA vacía' : `Error IA (${response.status})`);
+  }
+  try {
+    return JSON.parse(raw) as AiLogoApiJson;
+  } catch {
+    throw new Error(`Error IA (${response.status}): respuesta no válida`);
   }
 }
 
@@ -485,22 +512,13 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   }, [sourcePreview]);
 
   const runAiOptimize = useCallback(async (file: File, slug: string): Promise<File> => {
-    const inputDataUrl = await fileToDataUrl(file);
+    const inputDataUrl = await fileToAiApiDataUrl(file);
     const aiResponse = await fetch('/api/optimize-logo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageDataUrl: inputDataUrl }),
     });
-    const aiJson = (await aiResponse.json()) as {
-      ok?: boolean;
-      optimizedDataUrl?: string | null;
-      error?: string;
-      details?: string;
-      message?: string;
-      hint?: string;
-      triedModels?: string[];
-      attemptsSummary?: Array<{ model: string; ok?: boolean; message?: string }>;
-    };
+    const aiJson = await parseAiLogoResponse(aiResponse);
     if (!aiJson.optimizedDataUrl) {
       const summary =
         aiJson.attemptsSummary?.map((s) => `${s.model}: ${s.message || '—'}`).join(' · ') || '';
@@ -517,21 +535,13 @@ export const MockupSlotCard = forwardRef<MockupSlotHandle, Props>(function Mocku
   }, []);
 
   const runAiSimplify = useCallback(async (file: File, slug: string): Promise<File> => {
-    const inputDataUrl = await fileToDataUrl(file);
+    const inputDataUrl = await fileToAiApiDataUrl(file);
     const aiResponse = await fetch('/api/simplify-logo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageDataUrl: inputDataUrl }),
     });
-    const aiJson = (await aiResponse.json()) as {
-      ok?: boolean;
-      optimizedDataUrl?: string | null;
-      error?: string;
-      details?: string;
-      message?: string;
-      triedModels?: string[];
-      attemptsSummary?: Array<{ model: string; ok?: boolean; message?: string }>;
-    };
+    const aiJson = await parseAiLogoResponse(aiResponse);
     if (!aiJson.optimizedDataUrl) {
       const summary =
         aiJson.attemptsSummary?.map((s) => `${s.model}: ${s.message || '—'}`).join(' · ') || '';

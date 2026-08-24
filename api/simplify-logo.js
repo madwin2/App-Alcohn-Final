@@ -187,6 +187,15 @@ async function tryModel({ apiKey, model, imageDataUrl, inputBuffer, mime }) {
   }
 }
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '4.5mb',
+    },
+  },
+  maxDuration: 60,
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
