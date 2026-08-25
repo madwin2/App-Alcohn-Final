@@ -15,7 +15,9 @@ import {
   insertEtiqueta,
   listAssignedLinkCandidates,
   listKnownTrackings,
+  loadEnrichInputByTracking,
   trackingAlreadyStored,
+  updateEtiquetaPdfPath,
   uploadEtiquetaPdf,
   type LabelMatchCandidate,
 } from './supabase.js';
@@ -29,80 +31,94 @@ function toMatchCandidates(rows: LabelMatchCandidate[]): MatchCandidate[] {
   }));
 }
 
+function toEnrichInput(order: LabelMatchCandidate) {
+  return {
+    id: order.ordenId,
+    designNames: order.designNames,
+    caption: order.caption,
+    imageUrls: order.imageUrls,
+  };
+}
+
 async function persistPage(
   shipments: PortalShipment[],
   pdfBytes: Buffer,
   candidates: LabelMatchCandidate[],
   usedOrdenIds: Set<string>,
   logoPath: string,
-): Promise<{ assigned: number; orphans: number; downloaded: number }> {
+): Promise<{ assigned: number; orphans: number; downloaded: number; refreshed: number }> {
   const pages = await splitPdfPages(new Uint8Array(pdfBytes));
   const n = Math.min(pages.length, shipments.length);
   let assigned = 0;
   let orphans = 0;
+  let refreshed = 0;
 
   for (let i = 0; i < n; i += 1) {
     const ship = shipments[i];
-    if (await trackingAlreadyStored(ship.tracking)) continue;
+    const alreadyStored = await trackingAlreadyStored(ship.tracking);
 
-    const openCandidates = candidates.filter((c) => !usedOrdenIds.has(c.ordenId));
-    const match = matchDestinatario(ship.destinatario, toMatchCandidates(openCandidates));
+    let enrichInput: ReturnType<typeof toEnrichInput> | undefined;
 
-    let ordenId: string | null = null;
-    let estado: 'asignada' | 'huerfano' = 'huerfano';
-    let nota: string | null = null;
-    if (match.kind === 'hit') {
-      ordenId = match.ordenId;
-      estado = 'asignada';
-    } else if (match.kind === 'ambiguous') {
-      nota = 'ambiguous';
-    }
-
-    const order = ordenId ? candidates.find((c) => c.ordenId === ordenId) : undefined;
-    const enriched = await enrichZebraLabelPdf(
-      pages[i],
-      ship.tracking,
-      order
-        ? {
-            id: order.ordenId,
-            designNames: order.designNames,
-            caption: order.caption,
-            imageUrls: order.imageUrls,
-          }
-        : undefined,
-      logoPath,
-    );
-
-    let pdfPath: string | null = null;
-    try {
-      pdfPath = await uploadEtiquetaPdf(ship.tracking, enriched);
-    } catch (error) {
-      console.warn('[andreani] upload PDF falló', ship.tracking, error);
-    }
-
-    await insertEtiqueta({
-      tracking: ship.tracking,
-      nroOperacion: ship.operacion,
-      destinatario: ship.destinatario,
-      destino: ship.destino,
-      fechaPortal: ship.fecha,
-      estadoPortal: ship.estado,
-      ordenId,
-      estado,
-      pdfPath,
-      nota,
-    });
-
-    if (ordenId) {
-      await applyTrackingToOrder(ordenId, ship.tracking);
-      usedOrdenIds.add(ordenId);
-      assigned += 1;
+    if (alreadyStored) {
+      const existing = await loadEnrichInputByTracking(ship.tracking);
+      if (existing) enrichInput = toEnrichInput(existing);
     } else {
-      orphans += 1;
+      const openCandidates = candidates.filter((c) => !usedOrdenIds.has(c.ordenId));
+      const match = matchDestinatario(ship.destinatario, toMatchCandidates(openCandidates));
+      let ordenId: string | null = null;
+      let estado: 'asignada' | 'huerfano' = 'huerfano';
+      let nota: string | null = null;
+      if (match.kind === 'hit') {
+        ordenId = match.ordenId;
+        estado = 'asignada';
+        const order = candidates.find((c) => c.ordenId === ordenId);
+        if (order) enrichInput = toEnrichInput(order);
+      } else if (match.kind === 'ambiguous') {
+        nota = 'ambiguous';
+      }
+
+      const enrichedNew = await enrichZebraLabelPdf(pages[i], ship.tracking, enrichInput, logoPath);
+      let pdfPath: string | null = null;
+      try {
+        pdfPath = await uploadEtiquetaPdf(ship.tracking, enrichedNew);
+      } catch (error) {
+        console.warn('[andreani] upload PDF falló', ship.tracking, error);
+      }
+
+      await insertEtiqueta({
+        tracking: ship.tracking,
+        nroOperacion: ship.operacion,
+        destinatario: ship.destinatario,
+        destino: ship.destino,
+        fechaPortal: ship.fecha,
+        estadoPortal: ship.estado,
+        ordenId,
+        estado,
+        pdfPath,
+        nota,
+      });
+
+      if (ordenId) {
+        await applyTrackingToOrder(ordenId, ship.tracking);
+        usedOrdenIds.add(ordenId);
+        assigned += 1;
+      } else {
+        orphans += 1;
+      }
+      continue;
+    }
+
+    const enriched = await enrichZebraLabelPdf(pages[i], ship.tracking, enrichInput, logoPath);
+    try {
+      const pdfPath = await uploadEtiquetaPdf(ship.tracking, enriched);
+      await updateEtiquetaPdfPath(ship.tracking, pdfPath);
+      refreshed += 1;
+    } catch (error) {
+      console.warn('[andreani] refresh PDF falló', ship.tracking, error);
     }
   }
 
-  return { assigned, orphans, downloaded: n };
+  return { assigned, orphans, downloaded: n, refreshed };
 }
 
 export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
@@ -130,6 +146,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
   let downloaded = 0;
   let assigned = 0;
   let orphans = 0;
+  let refreshed = 0;
 
   try {
     await goToPaidShipments(page, config);
@@ -143,25 +160,31 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       const fresh = rows.filter((r) => !known.has(r.tracking));
       skipped += rows.length - fresh.length;
 
-      if (fresh.length) {
-        console.log(`[andreani] página: ${fresh.length} envío(s) nuevos de ${rows.length}`);
+      // En las primeras páginas también regeneramos PDFs ya guardados (escala corregida).
+      const refreshKnown = guard < 3;
+      const toDownload = refreshKnown ? rows : fresh;
+
+      if (toDownload.length) {
+        console.log(
+          `[andreani] página: ${fresh.length} nuevo(s), descargando ${toDownload.length} (refreshKnown=${refreshKnown})`,
+        );
         try {
           const pdf = await downloadNewLabelsFromCurrentPage(
             page,
             config,
-            fresh.map((r) => r.tracking),
+            toDownload.map((r) => r.tracking),
           );
           if (pdf) {
-            const result = await persistPage(fresh, pdf, candidates, usedOrdenIds, config.logoPath);
+            const result = await persistPage(toDownload, pdf, candidates, usedOrdenIds, config.logoPath);
             downloaded += result.downloaded;
             assigned += result.assigned;
             orphans += result.orphans;
-            for (const r of fresh) known.add(r.tracking);
+            refreshed += result.refreshed;
+            for (const r of toDownload) known.add(r.tracking);
           }
         } catch (pageError) {
           console.warn('[andreani] falló página de etiquetas:', pageError);
           await saveArtifacts(page, config.artifactsDir, 'sync-labels-page-error').catch(() => undefined);
-          // Seguir con la página siguiente; no tumbar todo el job
         }
       }
 
@@ -185,12 +208,13 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
 
     return {
       status: 'ok',
-      message: `Omitidos ${skipped} (ya en sistema). Nuevos ${downloaded}: ${assigned} asignados, ${orphans} huérfanos.`,
+      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Ya estaban omitidos en conteo: ${skipped}.`,
       httpStatus: 200,
       skipped,
       downloaded,
       assigned,
       orphans,
+      details: { refreshed },
     };
   } catch (error) {
     const artifactDir = await saveArtifacts(page, config.artifactsDir, 'sync-labels-error').catch(
@@ -198,14 +222,17 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
     );
     const message = error instanceof Error ? error.message : String(error);
     return {
-      status: downloaded || assigned || orphans ? 'ok' : 'system_error',
-      message: downloaded || assigned || orphans ? `Parcial: ${message}` : message,
-      httpStatus: downloaded || assigned || orphans ? 200 : 503,
+      status: downloaded || assigned || orphans || refreshed ? 'ok' : 'system_error',
+      message:
+        downloaded || assigned || orphans || refreshed
+          ? `Parcial: ${message} (regenerados ${refreshed})`
+          : message,
+      httpStatus: downloaded || assigned || orphans || refreshed ? 200 : 503,
       skipped,
       downloaded,
       assigned,
       orphans,
-      details: { artifactDir },
+      details: { artifactDir, refreshed },
     };
   } finally {
     await page.close().catch(() => undefined);

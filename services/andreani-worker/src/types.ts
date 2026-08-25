@@ -31,5 +31,6 @@ export interface SyncLabelsResult {
   orphans: number;
   details?: {
     artifactDir?: string;
+    refreshed?: number;
   };
 }

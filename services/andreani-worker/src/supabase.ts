@@ -173,6 +173,57 @@ export async function trackingAlreadyStored(tracking: string): Promise<boolean> 
   return Boolean(data);
 }
 
+/** Datos de pie para re-enriquecer un PDF ya asociado a un pedido. */
+export async function loadEnrichInputByTracking(tracking: string): Promise<LabelMatchCandidate | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('envios_andreani_etiquetas')
+    .select(
+      `
+      orden_id,
+      ordenes (
+        id,
+        direccion_id,
+        clientes ( nombre, apellido ),
+        sellos ( diseno, archivo_base, archivo_vector_preview, item_type )
+      )
+    `,
+    )
+    .eq('tracking', tracking)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.orden_id) return null;
+
+  type OrdenLite = {
+    id: string;
+    direccion_id: string | null;
+    clientes: { nombre: string | null; apellido: string | null } | { nombre: string | null; apellido: string | null }[] | null;
+    sellos: SelloLite[] | null;
+  };
+  const ordenRaw = (data as { ordenes?: unknown }).ordenes;
+  const orden = (Array.isArray(ordenRaw) ? ordenRaw[0] : ordenRaw) as OrdenLite | null;
+  if (!orden?.id) return null;
+
+  const cliente = Array.isArray(orden.clientes) ? orden.clientes[0] : orden.clientes;
+  const sellos = orden.sellos ?? [];
+  const imageUrls: string[][] = [];
+  for (const s of sellos) {
+    const urls = [s.archivo_base, s.archivo_vector_preview].filter(
+      (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
+    );
+    if (urls.length) imageUrls.push(urls);
+  }
+
+  return {
+    ordenId: orden.id,
+    customerName: `${cliente?.nombre ?? ''} ${cliente?.apellido ?? ''}`.trim(),
+    shippingName: null,
+    designNames: sellos.map((s) => s.diseno?.trim() || '').filter(Boolean),
+    caption: captionFromSellos(sellos),
+    imageUrls: imageUrls.slice(0, 3),
+  };
+}
+
 export async function uploadEtiquetaPdf(tracking: string, bytes: Uint8Array): Promise<string> {
   const supabase = getSupabase();
   const pathName = `${tracking}.pdf`;
@@ -182,6 +233,15 @@ export async function uploadEtiquetaPdf(tracking: string, bytes: Uint8Array): Pr
   });
   if (error) throw error;
   return pathName;
+}
+
+export async function updateEtiquetaPdfPath(tracking: string, pdfPath: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('envios_andreani_etiquetas')
+    .update({ pdf_path: pdfPath })
+    .eq('tracking', tracking);
+  if (error) throw error;
 }
 
 export async function insertEtiqueta(row: {

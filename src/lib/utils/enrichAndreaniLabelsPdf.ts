@@ -1,4 +1,16 @@
-import { PDFDocument, StandardFonts, rgb, type PDFImage } from 'pdf-lib';
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  type PDFImage,
+  pushGraphicsState,
+  popGraphicsState,
+  moveTo,
+  lineTo,
+  closePath,
+  clip,
+  endPath,
+} from 'pdf-lib';
 import { getDocument } from 'pdfjs-dist';
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
 import type { Order, OrderItem } from '@/lib/types';
@@ -16,7 +28,7 @@ const LABEL_W_PT = LABEL_W_MM * MM_TO_PT;
 const LABEL_H_PT = LABEL_H_MM * MM_TO_PT;
 
 /** Alto del zócalo (pedido + logos), relativo al alto de página. */
-const FOOTER_FRAC_OF_PAGE = 0.10;
+const FOOTER_FRAC_OF_PAGE = 0.085;
 const RENDER_SCALE = 2.5;
 const TRIM_WHITE_THRESHOLD = 250;
 const TRIM_PADDING_PX = 6;
@@ -24,12 +36,14 @@ const TRIM_PADDING_PX = 6;
  * Fracción inferior del A4 a descartar: disclaimer IMPORTANTE + QR/tracking duplicado
  * del pie Andreani (así no se come el zócalo).
  */
-const BOTTOM_LEGAL_CROP_FRAC = 0.36;
+const BOTTOM_LEGAL_CROP_FRAC = 0.42;
 /** Escala de la etiqueta original. */
-const FIT_ZOOM = 0.97;
-const TOP_PRINT_MARGIN_PT = MM_TO_PT * 1.5;
-const BOTTOM_FOOTER_GAP_PT = MM_TO_PT * 1.2;
+const FIT_ZOOM = 1;
+const TOP_PRINT_MARGIN_PT = MM_TO_PT * 1.0;
+const BOTTOM_FOOTER_GAP_PT = MM_TO_PT * 0.8;
 const HORIZONTAL_NUDGE_PT = 0;
+/** En Zebra, descartar franja inferior de QR duplicado para poder agrandar. */
+const ZEBRA_BOTTOM_DISCARD_FRAC = 0.08;
 
 const itemTypeShortLabel = (item: OrderItem): string | null => {
   switch (item.itemType) {
@@ -206,22 +220,36 @@ const enrichZebraVector = async (
     const embeddedPng = embeddedPages[i];
     const labelPage = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
     const bandH = LABEL_H_PT * FOOTER_FRAC_OF_PAGE;
+    const bandY = BOTTOM_FOOTER_GAP_PT * 0.4;
     const iw = embeddedPng.width;
     const ih = embeddedPng.height;
+    const contentH = ih * (1 - ZEBRA_BOTTOM_DISCARD_FRAC);
     const availableH = Math.max(
       40,
       LABEL_H_PT - TOP_PRINT_MARGIN_PT - bandH - BOTTOM_FOOTER_GAP_PT,
     );
-    const scale = Math.min(LABEL_W_PT / iw, availableH / ih) * FIT_ZOOM;
+    const scale = Math.min(LABEL_W_PT / iw, availableH / contentH) * FIT_ZOOM;
     const dw = iw * scale;
-    const dh = ih * scale;
+    const dhFull = ih * scale;
     const xImg = (LABEL_W_PT - dw) / 2 + HORIZONTAL_NUDGE_PT;
-    const yImg = LABEL_H_PT - TOP_PRINT_MARGIN_PT - dh;
+    const yTop = LABEL_H_PT - TOP_PRINT_MARGIN_PT;
+    const yImg = yTop - dhFull;
 
-    labelPage.drawPage(embeddedPng, { x: xImg, y: yImg, width: dw, height: dh });
+    const clipY = bandY + bandH;
+    labelPage.pushOperators(
+      pushGraphicsState(),
+      moveTo(0, clipY),
+      lineTo(LABEL_W_PT, clipY),
+      lineTo(LABEL_W_PT, LABEL_H_PT),
+      lineTo(0, LABEL_H_PT),
+      closePath(),
+      clip(),
+      endPath(),
+    );
+    labelPage.drawPage(embeddedPng, { x: xImg, y: yImg, width: dw, height: dhFull });
+    labelPage.pushOperators(popGraphicsState());
 
     const pad = Math.max(3, dw * 0.024);
-    const bandY = BOTTOM_FOOTER_GAP_PT * 0.4;
     labelPage.drawRectangle({
       x: xImg - 2,
       y: bandY,
@@ -262,7 +290,7 @@ const enrichZebraVector = async (
     const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
 
     const textLines = centerLines.slice(0, 3);
-    const textSize = Math.max(3.6, Math.min(4.6, bandH * 0.18));
+    const textSize = Math.max(3.8, Math.min(5.2, bandH * 0.2));
     const lineStep = textSize + 0.7;
     const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
     let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize;
