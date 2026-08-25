@@ -7,9 +7,11 @@ import {
   andreaniAssignCandidatesFromOrders,
   assignAndreaniEtiquetaToOrder,
   downloadAndreaniEtiquetaPdf,
+  downloadMergedAndreaniEtiquetasPdfs,
   listAndreaniEtiquetas,
   type AndreaniEtiquetaRow,
 } from '@/lib/supabase/services/andreaniEtiquetas.service';
+import { normalizePhoneDigits } from '@/lib/utils/shippingNormalization';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
 
 type SyncResponse = {
@@ -20,6 +22,15 @@ type SyncResponse = {
   orphans?: number;
   downloaded?: number;
 };
+
+/** Ícono WhatsApp (marca registrada Meta); solo UI. */
+function WhatsappLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.074-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.372a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  );
+}
 
 export function AndreaniLabelsPanel({
   orders,
@@ -35,8 +46,18 @@ export function AndreaniLabelsPanel({
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignPick, setAssignPick] = useState<Record<string, string>>({});
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   const candidates = useMemo(() => andreaniAssignCandidatesFromOrders(orders), [orders]);
+
+  const phoneByOrderId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const order of orders) {
+      const digits = normalizePhoneDigits(order.customer.phoneE164 || '');
+      if (digits) map.set(order.id, digits);
+    }
+    return map;
+  }, [orders]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -57,8 +78,30 @@ export function AndreaniLabelsPanel({
     void refresh();
   }, [refresh]);
 
-  const assigned = rows.filter((r) => r.estado === 'asignada');
+  const assigned = useMemo(() => {
+    const list = rows.filter((r) => r.estado === 'asignada');
+    return [...list].sort((a, b) => {
+      const aReady = Boolean(a.pdfPath) && a.saleTransferred ? 0 : 1;
+      const bReady = Boolean(b.pdfPath) && b.saleTransferred ? 0 : 1;
+      if (aReady !== bReady) return aReady - bReady;
+      return b.creadoEn.localeCompare(a.creadoEn);
+    });
+  }, [rows]);
+
   const orphans = rows.filter((r) => r.estado === 'huerfano');
+
+  const downloadable = useMemo(
+    () => assigned.filter((r) => Boolean(r.pdfPath) && r.saleTransferred),
+    [assigned],
+  );
+  const pendingCount = assigned.length - downloadable.length;
+
+  const resolvePhoneDigits = (row: AndreaniEtiquetaRow): string => {
+    const fromCliente = normalizePhoneDigits(row.clienteTelefono || '');
+    if (fromCliente) return fromCliente;
+    if (row.ordenId) return phoneByOrderId.get(row.ordenId) || '';
+    return '';
+  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -148,6 +191,61 @@ export function AndreaniLabelsPanel({
     }
   };
 
+  const handleDownloadAll = async () => {
+    const paths = downloadable.map((r) => r.pdfPath).filter((p): p is string => Boolean(p));
+    if (paths.length === 0) {
+      toast({
+        title: 'Nada para descargar',
+        description: 'No hay etiquetas con venta Transferido y PDF listo.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setDownloadingAll(true);
+    try {
+      await downloadMergedAndreaniEtiquetasPdfs(paths);
+      toast({
+        title: 'PDF listo',
+        description: `${paths.length} etiqueta${paths.length === 1 ? '' : 's'} en un solo archivo (100×152).`,
+      });
+    } catch (error) {
+      toast({
+        title: 'No se pudo unir los PDFs',
+        description: error instanceof Error ? error.message : 'Error al generar el archivo',
+        variant: 'destructive',
+      });
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
+
+  const handleCopyPhone = (row: AndreaniEtiquetaRow) => {
+    const digits = resolvePhoneDigits(row);
+    if (!digits) {
+      toast({
+        title: 'Sin teléfono',
+        description: 'Este pedido no tiene número cargado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    void navigator.clipboard.writeText(digits).then(
+      () => {
+        toast({
+          title: 'Teléfono copiado',
+          description: digits,
+        });
+      },
+      () => {
+        toast({
+          title: 'No se pudo copiar',
+          description: 'Permisos del portapapeles o HTTPS requerido.',
+          variant: 'destructive',
+        });
+      },
+    );
+  };
+
   return (
     <div className="rounded-xl border bg-card shadow-sm p-4 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -157,7 +255,15 @@ export function AndreaniLabelsPanel({
             Traé las etiquetas pagadas del portal. El PDF de despacho se habilita cuando la venta está Transferido.
           </p>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-[11px] tabular-nums text-muted-foreground">
+            <span className="rounded-md border border-emerald-600/30 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700 dark:text-emerald-400">
+              {downloadable.length} para descargar
+            </span>
+            <span className="rounded-md border px-1.5 py-0.5">
+              {pendingCount} pendiente{pendingCount === 1 ? '' : 's'}
+            </span>
+          </div>
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => void refresh()} disabled={loading || syncing}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </Button>
@@ -169,6 +275,26 @@ export function AndreaniLabelsPanel({
               </>
             ) : (
               'Traer etiquetas'
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={downloadable.length === 0 || downloadingAll || syncing}
+            title="Descarga todas las etiquetas Transferido en un PDF (hojas 100×152)"
+            onClick={() => void handleDownloadAll()}
+          >
+            {downloadingAll ? (
+              <>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Uniendo…
+              </>
+            ) : (
+              <>
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Descargar todas ({downloadable.length})
+              </>
             )}
           </Button>
         </div>
@@ -196,9 +322,27 @@ export function AndreaniLabelsPanel({
             ) : (
               assigned.map((row) => {
                 const canDownload = Boolean(row.pdfPath) && row.saleTransferred;
+                const phoneDigits = resolvePhoneDigits(row);
                 return (
                   <tr key={row.id} className="border-t">
-                    <td className="px-2 py-1.5">{row.clienteNombre || '—'}</td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="truncate">{row.clienteNombre || '—'}</span>
+                        <button
+                          type="button"
+                          title={phoneDigits ? 'Copiar número al portapapeles' : 'Sin teléfono en la orden'}
+                          disabled={!phoneDigits}
+                          onClick={() => handleCopyPhone(row)}
+                          className={`inline-flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                            phoneDigits
+                              ? 'border-green-600/35 bg-green-500/15 text-green-700 hover:bg-green-500/25 dark:border-green-400/35 dark:text-green-400'
+                              : 'cursor-not-allowed border-muted text-muted-foreground opacity-40'
+                          }`}
+                        >
+                          <WhatsappLogo className="size-3.5" />
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-2 py-1.5">{row.disenoNombre || '—'}</td>
                     <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
                     <td className="px-2 py-1.5 font-mono tabular-nums">{row.nroOperacion || '—'}</td>
@@ -209,7 +353,7 @@ export function AndreaniLabelsPanel({
                         variant="outline"
                         size="sm"
                         className="h-7 px-2"
-                        disabled={!canDownload || downloadingId === row.id}
+                        disabled={!canDownload || downloadingId === row.id || downloadingAll}
                         title={
                           row.saleTransferred
                             ? 'Descargar etiqueta 100×152'

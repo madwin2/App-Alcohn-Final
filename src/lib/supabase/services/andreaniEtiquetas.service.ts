@@ -1,3 +1,4 @@
+import { PDFDocument } from 'pdf-lib';
 import { supabase } from '../client';
 import type { Order } from '@/lib/types';
 
@@ -18,9 +19,20 @@ export interface AndreaniEtiquetaRow {
   creadoEn: string;
   asignadoEn: string | null;
   clienteNombre: string | null;
+  clienteTelefono: string | null;
   disenoNombre: string | null;
   saleTransferred: boolean;
 }
+
+const MM_TO_PT = 72 / 25.4;
+const LABEL_W_PT = 100 * MM_TO_PT;
+const LABEL_H_PT = 152 * MM_TO_PT;
+
+type ClienteJoin = {
+  nombre: string | null;
+  apellido: string | null;
+  telefono: string | null;
+} | null;
 
 const mapListRow = (row: {
   id: string;
@@ -39,12 +51,12 @@ const mapListRow = (row: {
   ordenes:
     | {
         estado_orden: string | null;
-        clientes: { nombre: string | null; apellido: string | null } | { nombre: string | null; apellido: string | null }[] | null;
+        clientes: ClienteJoin | ClienteJoin[] | null;
         sellos: { diseno: string | null; estado_venta: string | null }[] | null;
       }
     | {
         estado_orden: string | null;
-        clientes: { nombre: string | null; apellido: string | null } | { nombre: string | null; apellido: string | null }[] | null;
+        clientes: ClienteJoin | ClienteJoin[] | null;
         sellos: { diseno: string | null; estado_venta: string | null }[] | null;
       }[]
     | null;
@@ -77,6 +89,7 @@ const mapListRow = (row: {
     creadoEn: row.creado_en,
     asignadoEn: row.asignado_en,
     clienteNombre: cliente ? `${cliente.nombre ?? ''} ${cliente.apellido ?? ''}`.trim() || null : null,
+    clienteTelefono: cliente?.telefono?.trim() || null,
     disenoNombre,
     saleTransferred: Boolean(allTransferred),
   };
@@ -91,7 +104,7 @@ export const listAndreaniEtiquetas = async (): Promise<AndreaniEtiquetaRow[]> =>
       orden_id, estado, pdf_path, nota, creado_en, asignado_en,
       ordenes (
         estado_orden,
-        clientes ( nombre, apellido ),
+        clientes ( nombre, apellido, telefono ),
         sellos ( diseno, estado_venta )
       )
     `,
@@ -110,19 +123,68 @@ export const assignAndreaniEtiquetaToOrder = async (etiquetaId: string, ordenId:
   if (error) throw error;
 };
 
-export const downloadAndreaniEtiquetaPdf = async (pdfPath: string): Promise<void> => {
-  const { data, error } = await supabase.storage
-    .from('etiquetas-andreani')
-    .createSignedUrl(pdfPath, 120);
+const fetchAndreaniEtiquetaPdfBytes = async (pdfPath: string): Promise<Uint8Array> => {
+  const { data, error } = await supabase.storage.from('etiquetas-andreani').createSignedUrl(pdfPath, 120);
   if (error || !data?.signedUrl) {
     throw new Error(error?.message || 'No se pudo firmar el PDF');
   }
+  const res = await fetch(data.signedUrl);
+  if (!res.ok) {
+    throw new Error(`No se pudo descargar el PDF (${res.status})`);
+  }
+  return new Uint8Array(await res.arrayBuffer());
+};
+
+const triggerBrowserDownload = (href: string, filename: string) => {
   const a = document.createElement('a');
-  a.href = data.signedUrl;
-  a.download = pdfPath.split('/').pop() || 'etiqueta-andreani.pdf';
+  a.href = href;
+  a.download = filename;
   a.target = '_blank';
   a.rel = 'noopener';
   a.click();
+};
+
+export const downloadAndreaniEtiquetaPdf = async (pdfPath: string): Promise<void> => {
+  const { data, error } = await supabase.storage.from('etiquetas-andreani').createSignedUrl(pdfPath, 120);
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message || 'No se pudo firmar el PDF');
+  }
+  triggerBrowserDownload(data.signedUrl, pdfPath.split('/').pop() || 'etiqueta-andreani.pdf');
+};
+
+/** Une varios PDFs en uno solo, una hoja 100×152 mm por etiqueta. */
+export const downloadMergedAndreaniEtiquetasPdfs = async (pdfPaths: string[]): Promise<void> => {
+  if (pdfPaths.length === 0) {
+    throw new Error('No hay PDFs para descargar');
+  }
+
+  const outDoc = await PDFDocument.create();
+
+  for (const pdfPath of pdfPaths) {
+    const bytes = await fetchAndreaniEtiquetaPdfBytes(pdfPath);
+    const src = await PDFDocument.load(bytes);
+    const embeddedPages = await outDoc.embedPages(src.getPages());
+
+    for (const embedded of embeddedPages) {
+      const page = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
+      const scale = Math.min(LABEL_W_PT / embedded.width, LABEL_H_PT / embedded.height);
+      const w = embedded.width * scale;
+      const h = embedded.height * scale;
+      page.drawPage(embedded, {
+        x: (LABEL_W_PT - w) / 2,
+        y: (LABEL_H_PT - h) / 2,
+        width: w,
+        height: h,
+      });
+    }
+  }
+
+  const merged = await outDoc.save();
+  const blob = new Blob([merged as BlobPart], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().slice(0, 10);
+  triggerBrowserDownload(url, `etiquetas-andreani-${stamp}.pdf`);
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 };
 
 export const andreaniAssignCandidatesFromOrders = (orders: Order[]): Array<{ id: string; label: string }> =>
