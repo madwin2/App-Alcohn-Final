@@ -50,9 +50,28 @@ export const liberarLinkAndreani = async (
   const { data, error } = await supabase.rpc('liberar_link_andreani', {
     p_orden_id: ordenId,
     p_descartar: descartar,
+    p_eliminar: false,
   });
   if (error) throw error;
   return Boolean(data);
+};
+
+/** Quita el link del pedido y lo borra de la base de datos. */
+export const eliminarLinkAndreani = async (ordenId: string): Promise<boolean> => {
+  const { data, error } = await supabase.rpc('liberar_link_andreani', {
+    p_orden_id: ordenId,
+    p_descartar: false,
+    p_eliminar: true,
+  });
+  if (error) throw error;
+  return Boolean(data);
+};
+
+/** Elimina del pool los disponibles creados hace más de 48h. */
+export const purgarLinksAndreaniViejos = async (): Promise<number> => {
+  const { data, error } = await supabase.rpc('purgar_links_andreani_viejos');
+  if (error) throw error;
+  return typeof data === 'number' ? data : 0;
 };
 
 /** Reasigna: descarta el actual y toma uno nuevo del pool. */
@@ -102,6 +121,11 @@ export const getAndreaniPoolCounts = async (): Promise<Record<AndreaniLinkEstado
     asignado: 0,
     descartado: 0,
   };
+  try {
+    await purgarLinksAndreaniViejos();
+  } catch {
+    /* si la migración 48h aún no corrió, seguimos con el conteo */
+  }
   const { data, error } = await supabase.from('envios_andreani_links').select('estado');
   if (error) throw error;
   for (const row of data ?? []) {

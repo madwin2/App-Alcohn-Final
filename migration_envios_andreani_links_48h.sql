@@ -1,61 +1,9 @@
--- Pool de links de pago Andreani (envíos donde el destinatario completa datos y abona).
--- Ver GUIA_CURSOR_ANDREANI_LINKS.md — Etapa 1.
+-- Links Andreani: solo asignar creados en las últimas 48h;
+-- "Quitar link" elimina de la DB; borrar pedido sigue devolviendo al pool.
+-- Ejecutar en Supabase SQL Editor sobre la DB ya migrada.
 
-create extension if not exists pgcrypto;
-
-create table if not exists public.envios_andreani_links (
-  id uuid primary key default gen_random_uuid(),
-  url text not null unique,
-  estado text not null default 'disponible'
-    check (estado in ('disponible', 'asignado', 'descartado')),
-  orden_id uuid references public.ordenes(id) on delete set null,
-  creado_en timestamptz not null default now(),
-  asignado_en timestamptz,
-  nota text
-);
-
-create index if not exists idx_envios_andreani_links_estado
-  on public.envios_andreani_links (estado);
-
-create index if not exists idx_envios_andreani_links_orden
-  on public.envios_andreani_links (orden_id)
-  where orden_id is not null;
-
--- Máximo un link asignado por orden
-create unique index if not exists envios_andreani_un_asignado
-  on public.envios_andreani_links (orden_id)
-  where estado = 'asignado';
-
-comment on table public.envios_andreani_links is
-  'Pool de links Andreani (pago por destinatario). disponible → asignado a una orden; descartado = vencido/roto.';
-
-alter table public.envios_andreani_links enable row level security;
-
-drop policy if exists "envios_andreani_links_select_authenticated" on public.envios_andreani_links;
-drop policy if exists "envios_andreani_links_insert_authenticated" on public.envios_andreani_links;
-drop policy if exists "envios_andreani_links_update_authenticated" on public.envios_andreani_links;
-drop policy if exists "envios_andreani_links_delete_authenticated" on public.envios_andreani_links;
-
-create policy "envios_andreani_links_select_authenticated"
-  on public.envios_andreani_links
-  for select to authenticated
-  using (true);
-
-create policy "envios_andreani_links_insert_authenticated"
-  on public.envios_andreani_links
-  for insert to authenticated
-  with check (true);
-
-create policy "envios_andreani_links_update_authenticated"
-  on public.envios_andreani_links
-  for update to authenticated
-  using (true)
-  with check (true);
-
-create policy "envios_andreani_links_delete_authenticated"
-  on public.envios_andreani_links
-  for delete to authenticated
-  using (true);
+-- Quitar overload vieja (2 args) para no chocar con la nueva (3 args)
+drop function if exists public.liberar_link_andreani(uuid, boolean);
 
 -- ---------------------------------------------------------------------------
 -- Purga disponibles con más de 48h
@@ -82,7 +30,7 @@ comment on function public.purgar_links_andreani_viejos() is
   'Elimina del pool los links disponibles creados hace más de 48 horas.';
 
 -- ---------------------------------------------------------------------------
--- RPC: asignar link del pool a una orden (solo <48h)
+-- Asignar: solo links frescos (<48h); purga viejos antes
 -- ---------------------------------------------------------------------------
 create or replace function public.asignar_link_andreani(p_orden_id uuid)
 returns text
@@ -110,6 +58,7 @@ begin
     return v_existing_url;
   end if;
 
+  -- Sacar del pool los disponibles vencidos (>48h)
   perform public.purgar_links_andreani_viejos();
 
   -- Tomar el disponible más antiguo entre los frescos (concurrencia segura)
@@ -140,10 +89,8 @@ comment on function public.asignar_link_andreani(uuid) is
   'Asigna el link Andreani disponible más antiguo (<48h) a la orden. Si ya tiene uno, lo reutiliza. Null si el pool está vacío.';
 
 -- ---------------------------------------------------------------------------
--- RPC: liberar link de una orden (disponible / descartado / eliminar)
+-- Liberar: disponible / descartado / eliminar de la DB
 -- ---------------------------------------------------------------------------
-drop function if exists public.liberar_link_andreani(uuid, boolean);
-
 create or replace function public.liberar_link_andreani(
   p_orden_id uuid,
   p_descartar boolean default false,
@@ -162,6 +109,7 @@ begin
   end if;
 
   if p_eliminar then
+    -- Quitar link del pedido: borrar de la DB
     delete from public.envios_andreani_links
     where orden_id = p_orden_id
       and estado = 'asignado';
@@ -171,7 +119,7 @@ begin
     where orden_id = p_orden_id
       and estado = 'asignado';
   else
-    -- Volver al pool (ej. borrar pedido). Si ya tiene >48h, se elimina.
+    -- Volver al pool (ej. al borrar pedido). Si ya tiene >48h, se elimina.
     delete from public.envios_andreani_links
     where orden_id = p_orden_id
       and estado = 'asignado'
@@ -202,3 +150,6 @@ comment on function public.liberar_link_andreani(uuid, boolean, boolean) is
 grant execute on function public.purgar_links_andreani_viejos() to authenticated, service_role;
 grant execute on function public.asignar_link_andreani(uuid) to authenticated, service_role;
 grant execute on function public.liberar_link_andreani(uuid, boolean, boolean) to authenticated, service_role;
+
+-- Purga inmediata de lo que ya esté vencido en el pool
+select public.purgar_links_andreani_viejos();

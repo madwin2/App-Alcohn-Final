@@ -30,7 +30,7 @@ import {
 } from '@/lib/supabase/services/order-sticky-tasks.service';
 import { consumeStockForOrderWhenTrackingSent } from '@/lib/supabase/services/stock.service';
 import {
-  liberarLinkAndreani,
+  eliminarLinkAndreani,
   reasignarLinkAndreani,
 } from '@/lib/supabase/services/andreani.service';
 import { supabase } from '@/lib/supabase/client';
@@ -396,9 +396,9 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   const handleQuitarLinkAndreani = async (orderId: string) => {
     if (!onUpdate) return;
     try {
-      await liberarLinkAndreani(orderId, false);
+      await eliminarLinkAndreani(orderId);
       await onUpdate(orderId, {});
-      toast({ title: 'Link quitado', description: 'El link volvió al pool (disponible)' });
+      toast({ title: 'Link quitado', description: 'El link se borró de la base de datos' });
     } catch (error) {
       toast({
         title: 'Error',
