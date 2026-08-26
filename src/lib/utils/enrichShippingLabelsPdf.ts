@@ -57,9 +57,8 @@ const itemTypeShortLabel = (item: OrderItem): string | null => {
 
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
 
-const buildFooterContent = (order: Order): { imageCandidates: string[][]; caption: string } => {
+const buildFooterContent = (order: Order): { imageCandidates: string[][] } => {
   const imageCandidates: string[][] = [];
-  const captionBits: string[] = [];
 
   for (const item of order.items) {
     const rawUrls = [item.files?.baseUrl, item.files?.vectorPreviewUrl];
@@ -67,31 +66,25 @@ const buildFooterContent = (order: Order): { imageCandidates: string[][]; captio
       (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
     );
     if (candidates.length > 0) imageCandidates.push(candidates);
-
-    const t = itemTypeShortLabel(item);
-    if (t) captionBits.push(t);
   }
 
   return {
     imageCandidates: imageCandidates.slice(0, 3),
-    caption: [...new Set(captionBits)].join(' · '),
   };
 };
 
+/** Una línea por ítem (máx. 3) + Pedido; evita el bloque “nombres juntos + caption duplicado”. */
 const buildCenterFooterLines = (order: Order | undefined, trackingNumber: string | null): string[] => {
   const lines: string[] = [];
   if (order) {
     const shortId = order.id.replace(/-/g, '').slice(0, 14);
     lines.push(`Pedido: ${shortId}`);
-    const designNames = order.items
-      .map((i) => i.designName?.trim())
-      .filter((n): n is string => Boolean(n));
-    if (designNames.length > 0) {
-      const joined = designNames.slice(0, 3).join(', ');
-      lines.push(joined.length > 120 ? `${joined.slice(0, 117)}…` : joined);
+    for (const item of order.items) {
+      if (lines.length >= 4) break; // Pedido + 3 ítems
+      const label = itemTypeShortLabel(item);
+      if (!label) continue;
+      lines.push(label.length > 42 ? `${label.slice(0, 39)}…` : label);
     }
-    const { caption } = buildFooterContent(order);
-    if (caption) lines.push(caption);
   } else if (trackingNumber) {
     lines.push(`TN ${trackingNumber}`);
   }
@@ -544,16 +537,16 @@ export const enrichShippingLabelsPdf = async (
       leftBlockW = leftColW;
     }
 
-    const slotW = Math.min(30, rightColW * 0.44);
     const nPrev = imageCandidates.length;
-    const maxPrev = Math.min(2, nPrev);
+    const maxPrev = Math.min(3, nPrev);
+    const slotW = Math.min(maxPrev >= 3 ? 22 : 28, rightColW * (maxPrev >= 3 ? 0.3 : 0.42));
     const totalPrevW =
       maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
     const rightBlockW = rightColW;
 
-    const textLines = centerLines.slice(0, 3);
-    const textSize = Math.max(3.9, Math.min(5, bandH * 0.1));
-    const lineStep = textSize + 0.9;
+    const textLines = centerLines.slice(0, 4);
+    const textSize = Math.max(4.6, Math.min(6.2, bandH * 0.135));
+    const lineStep = textSize + 1.05;
     const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
     let textBaseline = yImg + (bandH + textBlockH) / 2 - textSize;
     for (const line of textLines) {

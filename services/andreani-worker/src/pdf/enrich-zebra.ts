@@ -210,11 +210,21 @@ export async function enrichZebraLabelPdf(
   const centerLines: string[] = [];
   if (order) {
     centerLines.push(`Pedido: ${order.id.replace(/-/g, '').slice(0, 14)}`);
-    if (order.designNames.length) {
-      const joined = order.designNames.slice(0, 3).join(', ');
-      centerLines.push(joined.length > 120 ? `${joined.slice(0, 117)}…` : joined);
+    for (const name of order.designNames.slice(0, 3)) {
+      const label = name.trim();
+      if (!label) continue;
+      centerLines.push(label.length > 42 ? `${label.slice(0, 39)}…` : label);
     }
-    if (order.caption) centerLines.push(order.caption);
+    // Accesorios / extras del caption que no estén ya como diseño
+    if (order.caption) {
+      for (const part of order.caption.split(/\s*[·|]\s*/)) {
+        if (centerLines.length >= 4) break;
+        const p = part.trim();
+        if (!p) continue;
+        if (order.designNames.some((d) => d.trim().toLowerCase() === p.toLowerCase())) continue;
+        centerLines.push(p.length > 42 ? `${p.slice(0, 39)}…` : p);
+      }
+    }
   } else {
     centerLines.push(`Andreani ${tracking}`);
   }
@@ -238,9 +248,9 @@ export async function enrichZebraLabelPdf(
     });
   }
 
-  const textLines = centerLines.slice(0, 3);
-  const textSize = Math.max(3.8, Math.min(5.2, bandH * 0.2));
-  const lineStep = textSize + 0.7;
+  const textLines = centerLines.slice(0, 4);
+  const textSize = Math.max(4.6, Math.min(6.2, bandH * 0.2));
+  const lineStep = textSize + 1.0;
   const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
   let textBaseline = snugBandY + (bandH + textBlockH) / 2 - textSize;
   for (const line of textLines) {
@@ -257,9 +267,9 @@ export async function enrichZebraLabelPdf(
     if (textBaseline < snugBandY + 1) break;
   }
 
-  const imageCandidates = order?.imageUrls.slice(0, 2) ?? [];
-  const slotW = Math.min(30, rightColW * 0.44);
+  const imageCandidates = order?.imageUrls.slice(0, 3) ?? [];
   const maxPrev = imageCandidates.length;
+  const slotW = Math.min(maxPrev >= 3 ? 22 : 28, rightColW * (maxPrev >= 3 ? 0.3 : 0.42));
   const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
   if (maxPrev > 0) {
     let px = drawn.x + drawn.width - rightColW + (rightColW - totalPrevW) / 2;
