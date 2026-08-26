@@ -18,9 +18,9 @@ import { existsSync } from 'node:fs';
 const MM_TO_PT = 72 / 25.4;
 const LABEL_W_PT = 100 * MM_TO_PT;
 const LABEL_H_PT = 152 * MM_TO_PT;
-/** Zócalo del pedido: compacto para dejar más alto a la etiqueta. */
-const FOOTER_FRAC_OF_PAGE = 0.085;
-const FIT_ZOOM = 1;
+/** Zócalo del pedido. */
+const FOOTER_FRAC_OF_PAGE = 0.08;
+const FIT_ZOOM = 0.995;
 const TOP_PRINT_MARGIN_PT = MM_TO_PT * 1.0;
 const BOTTOM_FOOTER_GAP_PT = MM_TO_PT * 0.8;
 
@@ -29,13 +29,18 @@ const isZebraSourcePage = (widthPt: number, heightPt: number): boolean =>
   widthPt > 0 && heightPt > 0 && widthPt < 500 && heightPt < 700;
 
 /**
- * Fracción inferior a descartar del PDF fuente al escalar:
- * - Zebra: franja chica de QR/duplicado Andreani
- * - A4: disclaimer legal + márgenes; además se recortan laterales
+ * En A4 el bloque de etiqueta suele estar arriba-izquierda (~100×150 mm).
+ * No usar inset lateral porcentual: corta el contenido (se veía el N° de seguimiento partido).
  */
-const ZEBRA_BOTTOM_DISCARD_FRAC = 0.08;
-const A4_BOTTOM_DISCARD_FRAC = 0.42;
-const A4_SIDE_INSET_FRAC = 0.14;
+const A4_LABEL_W_PT = 106 * MM_TO_PT;
+const A4_LABEL_H_PT = 128 * MM_TO_PT;
+const A4_MARGIN_TOP_PT = 5 * MM_TO_PT;
+const A4_MARGIN_LEFT_PT = 5 * MM_TO_PT;
+/**
+ * En Zebra, descartar pie duplicado Andreani (QR + tracking inferior)
+ * para poder escalar a ancho completo 100 mm.
+ */
+const ZEBRA_BOTTOM_DISCARD_FRAC = 0.11;
 
 export type EnrichOrderInput = {
   id: string;
@@ -82,16 +87,21 @@ export async function splitPdfPages(bytes: Uint8Array): Promise<Uint8Array[]> {
 
 type CropBox = { x: number; y: number; width: number; height: number };
 
-/** Ventana de contenido útil dentro de la página fuente (coords PDF, origen abajo-izq). */
+/** Ventana de contenido útil (coords PDF, origen abajo-izq). */
 function contentCrop(iw: number, ih: number): CropBox {
   if (isZebraSourcePage(iw, ih)) {
     const height = ih * (1 - ZEBRA_BOTTOM_DISCARD_FRAC);
     return { x: 0, y: ih - height, width: iw, height };
   }
-  const height = ih * (1 - A4_BOTTOM_DISCARD_FRAC);
-  const x = iw * A4_SIDE_INSET_FRAC;
-  const width = iw * (1 - 2 * A4_SIDE_INSET_FRAC);
-  return { x, y: ih - height, width, height };
+  // A4 / hoja grande: ventana fija arriba-izquierda del tamaño de una etiqueta térmica.
+  const width = Math.min(A4_LABEL_W_PT, iw - A4_MARGIN_LEFT_PT);
+  const height = Math.min(A4_LABEL_H_PT, ih - A4_MARGIN_TOP_PT);
+  return {
+    x: A4_MARGIN_LEFT_PT,
+    y: ih - A4_MARGIN_TOP_PT - height,
+    width,
+    height,
+  };
 }
 
 function clipRect(page: PDFPage, x: number, y: number, w: number, h: number): void {
@@ -112,12 +122,12 @@ function endClip(page: PDFPage): void {
 }
 
 /**
- * Dibuja solo la ventana `crop` de la página embebida, escalada para llenar
- * el rectángulo destino (letterbox centrado).
+ * Escala la ventana `crop` para llenar `dest`, alineada arriba y centrada en X.
+ * (No centrar en Y: dejaba un hueco enorme entre etiqueta y pie.)
  */
 function drawCroppedPage(
   page: PDFPage,
-  embedded: { width: number; height: number; /* drawPage-compatible */ },
+  embedded: { width: number; height: number },
   crop: CropBox,
   dest: { x: number; y: number; width: number; height: number },
   draw: (args: { x: number; y: number; width: number; height: number }) => void,
@@ -126,9 +136,10 @@ function drawCroppedPage(
   const drawnCropW = crop.width * scale;
   const drawnCropH = crop.height * scale;
   const destX = dest.x + (dest.width - drawnCropW) / 2;
-  const destY = dest.y + (dest.height - drawnCropH) / 2;
+  // Top-align dentro del área disponible (dest.y es el borde inferior del área).
+  const destTop = dest.y + dest.height;
+  const destY = destTop - drawnCropH;
 
-  // Posición del drawPage (página completa) para que `crop` caiga en destX/destY
   const fullW = embedded.width * scale;
   const fullH = embedded.height * scale;
   const pageX = destX - crop.x * scale;
@@ -182,13 +193,14 @@ export async function enrichZebraLabelPdf(
     },
   );
 
+  // Pegar el pie justo debajo de la etiqueta (no al fondo de la hoja si sobra espacio).
+  const snugBandY = Math.max(bandY, drawn.y - BOTTOM_FOOTER_GAP_PT - bandH);
   const pad = Math.max(3, drawn.width * 0.024);
-  // Pie a ancho completo de la etiqueta dibujada (centrado como la etiqueta)
-  const footerX = drawn.x - 2;
-  const footerW = drawn.width + 4;
+  const footerX = Math.max(0, drawn.x - 2);
+  const footerW = Math.min(LABEL_W_PT - footerX, drawn.width + 4);
   labelPage.drawRectangle({
     x: footerX,
-    y: bandY,
+    y: snugBandY,
     width: footerW,
     height: bandH,
     color: rgb(1, 1, 1),
@@ -220,7 +232,7 @@ export async function enrichZebraLabelPdf(
     const lh = alcohn.height * ls;
     labelPage.drawImage(alcohn, {
       x: drawn.x + (leftColW - lw) / 2,
-      y: bandY + (bandH - lh) / 2,
+      y: snugBandY + (bandH - lh) / 2,
       width: lw,
       height: lh,
     });
@@ -230,7 +242,7 @@ export async function enrichZebraLabelPdf(
   const textSize = Math.max(3.8, Math.min(5.2, bandH * 0.2));
   const lineStep = textSize + 0.7;
   const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
-  let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize;
+  let textBaseline = snugBandY + (bandH + textBlockH) / 2 - textSize;
   for (const line of textLines) {
     labelPage.drawText(line, {
       x: centerX,
@@ -242,7 +254,7 @@ export async function enrichZebraLabelPdf(
       lineHeight: lineStep,
     });
     textBaseline -= lineStep;
-    if (textBaseline < bandY + 1) break;
+    if (textBaseline < snugBandY + 1) break;
   }
 
   const imageCandidates = order?.imageUrls.slice(0, 2) ?? [];
@@ -263,7 +275,7 @@ export async function enrichZebraLabelPdf(
       const dhj = img.height * sc;
       labelPage.drawImage(img, {
         x: px + (slotW - dwj) / 2,
-        y: bandY + (bandH - dhj) / 2,
+        y: snugBandY + (bandH - dhj) / 2,
         width: dwj,
         height: dhj,
       });
