@@ -28,7 +28,7 @@ const LABEL_W_PT = LABEL_W_MM * MM_TO_PT;
 const LABEL_H_PT = LABEL_H_MM * MM_TO_PT;
 
 /** Alto del zócalo (pedido + logos), relativo al alto de página. */
-const FOOTER_FRAC_OF_PAGE = 0.085;
+const FOOTER_FRAC_OF_PAGE = 0.125;
 const RENDER_SCALE = 2.5;
 const TRIM_WHITE_THRESHOLD = 250;
 const TRIM_PADDING_PX = 6;
@@ -42,8 +42,8 @@ const FIT_ZOOM = 1;
 const TOP_PRINT_MARGIN_PT = MM_TO_PT * 1.0;
 const BOTTOM_FOOTER_GAP_PT = MM_TO_PT * 0.8;
 const HORIZONTAL_NUDGE_PT = 0;
-/** En Zebra, descartar franja inferior de QR duplicado para poder agrandar. */
-const ZEBRA_BOTTOM_DISCARD_FRAC = 0.08;
+/** Mantener stub inferior Andreani (tracking + QR); no descartar. */
+const ZEBRA_BOTTOM_DISCARD_FRAC = 0;
 
 const itemTypeShortLabel = (item: OrderItem): string | null => {
   switch (item.itemType) {
@@ -283,10 +283,10 @@ const enrichZebraVector = async (
     const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
 
     const textLines = centerLines.slice(0, 4);
-    const textSize = Math.max(4.6, Math.min(6.2, bandH * 0.2));
-    const lineStep = textSize + 1.0;
+    const textSize = Math.max(6.5, Math.min(8.2, bandH * 0.34));
+    const lineStep = textSize + 1.35;
     const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
-    let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize;
+    let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize * 0.15;
     for (const line of textLines) {
       labelPage.drawText(line, {
         x: centerX,
@@ -424,10 +424,10 @@ export const enrichAndreaniLabelsPdf = async (
     const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
 
     const textLines = centerLines.slice(0, 4);
-    const textSize = Math.max(4.6, Math.min(6.2, bandH * 0.2));
-    const lineStep = textSize + 1.0;
+    const textSize = Math.max(6.5, Math.min(8.2, bandH * 0.34));
+    const lineStep = textSize + 1.35;
     const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
-    let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize;
+    let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize * 0.15;
     for (const line of textLines) {
       labelPage.drawText(line, {
         x: centerX,

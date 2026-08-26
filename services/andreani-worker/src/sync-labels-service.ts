@@ -8,6 +8,7 @@ import {
   type PortalShipment,
 } from './andreani/download-labels.js';
 import { saveArtifacts } from './browser-helpers.js';
+import { setJobDetail } from './job-status.js';
 import { enrichZebraLabelPdf, splitPdfPages } from './pdf/enrich-zebra.js';
 import { matchDestinatario, type MatchCandidate } from './match-names.js';
 import {
@@ -149,24 +150,35 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
   let refreshed = 0;
 
   try {
+    setJobDetail('Abriendo historial Pagados…');
     await goToPaidShipments(page, config);
     console.log(`[andreani] sync-labels URL=${page.url()}`);
 
     let sawAny = false;
     for (let guard = 0; guard < 40; guard += 1) {
+      setJobDetail(`Revisando página ${guard + 1} del historial…`);
       const rows = await scrapeCurrentPage(page);
       console.log(`[andreani] scrape página ${guard + 1}: ${rows.length} envío(s)`);
       if (rows.length) sawAny = true;
       const fresh = rows.filter((r) => !known.has(r.tracking));
       skipped += rows.length - fresh.length;
 
-      // En las primeras páginas también regeneramos PDFs ya guardados (escala corregida).
-      const refreshKnown = guard < 3;
+      // Antes: refreshKnown en páginas 0–2 regeneraba PDFs viejos (crop).
+      // Eso alarga el sync y suele fallar en “Imprimir etiquetas” → 504 en Vercel.
+      // Solo nuevos, salvo ANDREANI_REFRESH_KNOWN_LABELS=true.
+      const refreshKnown =
+        (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '').toLowerCase() === 'true' ||
+        (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '') === '1'
+          ? guard < 3
+          : false;
       const toDownload = refreshKnown ? rows : fresh;
 
       if (toDownload.length) {
         console.log(
           `[andreani] página: ${fresh.length} nuevo(s), descargando ${toDownload.length} (refreshKnown=${refreshKnown})`,
+        );
+        setJobDetail(
+          `Página ${guard + 1}: descargando ${toDownload.length} etiqueta(s)${fresh.length ? ` (${fresh.length} nuevas)` : ''}…`,
         );
         try {
           const pdf = await downloadNewLabelsFromCurrentPage(
@@ -175,6 +187,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
             toDownload.map((r) => r.tracking),
           );
           if (pdf) {
+            setJobDetail(`Página ${guard + 1}: guardando PDFs en Supabase…`);
             const result = await persistPage(toDownload, pdf, candidates, usedOrdenIds, config.logoPath);
             downloaded += result.downloaded;
             assigned += result.assigned;

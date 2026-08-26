@@ -11,6 +11,13 @@ import {
   listAndreaniEtiquetas,
   type AndreaniEtiquetaRow,
 } from '@/lib/supabase/services/andreaniEtiquetas.service';
+import {
+  andreaniJobKindLabel,
+  fetchAndreaniWorkerJob,
+  isAndreaniJobActive,
+  waitAndreaniWorkerJob,
+  type AndreaniWorkerJob,
+} from '@/lib/andreaniWorkerJob';
 import { normalizePhoneDigits } from '@/lib/utils/shippingNormalization';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
 
@@ -47,6 +54,47 @@ export function AndreaniLabelsPanel({
   const [assignPick, setAssignPick] = useState<Record<string, string>>({});
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
+  const [workerJob, setWorkerJob] = useState<AndreaniWorkerJob | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const next = await listAndreaniEtiquetas();
+      setRows(next);
+    } catch (error) {
+      console.warn('Error cargando etiquetas Andreani:', error);
+      toast({
+        title: 'Etiquetas Andreani',
+        description: 'No se pudo leer la lista (¿corriste la migración?)',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  // Poll del estado del worker mientras haya job activo (o al montar).
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const job = await fetchAndreaniWorkerJob();
+      if (!cancelled) setWorkerJob(job);
+    };
+    void tick();
+    const id = window.setInterval(() => {
+      void tick();
+    }, 4_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const jobActive = isAndreaniJobActive(workerJob);
 
   const candidates = useMemo(() => andreaniAssignCandidatesFromOrders(orders), [orders]);
 
@@ -58,25 +106,6 @@ export function AndreaniLabelsPanel({
     }
     return map;
   }, [orders]);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      setRows(await listAndreaniEtiquetas());
-    } catch (error) {
-      toast({
-        title: 'Etiquetas Andreani',
-        description: error instanceof Error ? error.message : 'No se pudieron leer las etiquetas (¿corriste la migración?)',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
 
   const assigned = useMemo(() => {
     const list = rows.filter((r) => r.estado === 'asignada');
@@ -108,7 +137,7 @@ export function AndreaniLabelsPanel({
     try {
       const res = await fetch('/api/andreani-sync-labels', { method: 'POST' });
       const json = (await res.json().catch(() => ({}))) as SyncResponse;
-      if (!res.ok) {
+      if (!res.ok && res.status !== 202) {
         const msg = typeof json.message === 'string' ? json.message : `Error ${res.status}`;
         if (res.status === 404 || /ruta no encontrada/i.test(msg)) {
           throw new Error(
@@ -117,22 +146,44 @@ export function AndreaniLabelsPanel({
         }
         throw new Error(msg);
       }
+
       toast({
-        title: 'Etiquetas actualizadas',
-        description:
-          json.message ||
-          `Nuevas: ${json.downloaded ?? 0} · asignadas: ${json.assigned ?? 0} · huérfanas: ${json.orphans ?? 0} · ya estaban: ${json.skipped ?? 0}`,
+        title: 'Trayendo etiquetas…',
+        description: 'Vas a ver el progreso abajo. Cuando termine, la lista se actualiza sola.',
       });
+
+      const finalJob = await waitAndreaniWorkerJob({
+        pollMs: 4_000,
+        maxMs: 12 * 60_000,
+        onUpdate: (job) => setWorkerJob(job),
+      });
+
       await refresh();
       onAssigned?.();
+
+      if (finalJob?.phase === 'error' || finalJob?.lastOk === false) {
+        toast({
+          title: 'Sync terminó con error',
+          description: finalJob.lastMessage || finalJob.detail || 'Revisá el worker',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Etiquetas actualizadas',
+          description: finalJob?.lastMessage || 'Listo',
+        });
+      }
     } catch (error) {
       toast({
         title: 'No se pudieron traer etiquetas',
         description: error instanceof Error ? error.message : 'Falló el worker',
         variant: 'destructive',
       });
+      await refresh();
     } finally {
       setSyncing(false);
+      const job = await fetchAndreaniWorkerJob();
+      setWorkerJob(job);
     }
   };
 
@@ -248,6 +299,30 @@ export function AndreaniLabelsPanel({
 
   return (
     <div className="rounded-xl border bg-card shadow-sm p-4 space-y-4">
+      {(jobActive || workerJob?.phase === 'done' || workerJob?.phase === 'error') && workerJob ? (
+        <div
+          className={
+            workerJob.phase === 'error'
+              ? 'rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs'
+              : workerJob.phase === 'done'
+                ? 'rounded-lg border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-xs'
+                : 'rounded-lg border border-amber-600/30 bg-amber-500/10 px-3 py-2 text-xs'
+          }
+        >
+          <div className="flex items-center gap-2 font-medium">
+            {jobActive ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : null}
+            <span>
+              {jobActive ? 'Worker en curso' : workerJob.phase === 'error' ? 'Worker: error' : 'Worker: listo'}
+              {workerJob.kind ? ` · ${andreaniJobKindLabel(workerJob.kind)}` : ''}
+              {workerJob.queueDepth > 0 ? ` · cola ${workerJob.queueDepth}` : ''}
+            </span>
+          </div>
+          <p className="mt-0.5 text-muted-foreground">{workerJob.detail}</p>
+          {workerJob.lastMessage && !jobActive ? (
+            <p className="mt-0.5 text-muted-foreground">{workerJob.lastMessage}</p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">Envíos Andreani (etiquetas)</h2>
@@ -267,8 +342,8 @@ export function AndreaniLabelsPanel({
           <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => void refresh()} disabled={loading || syncing}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </Button>
-          <Button type="button" size="sm" onClick={() => void handleSync()} disabled={syncing}>
-            {syncing ? (
+          <Button type="button" size="sm" onClick={() => void handleSync()} disabled={syncing || jobActive}>
+            {syncing || (jobActive && workerJob?.kind === 'sync-labels') ? (
               <>
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 Trayendo…

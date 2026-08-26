@@ -29,6 +29,17 @@ Write-Host "SOCKS: 127.0.0.1:${RemoteSocksPort} en el VPS (sale por este WiFi)"
 Write-Host "Dejá esta ventana ABIERTA. Ctrl+C para cortar."
 Write-Host ""
 
+# Si el puerto remoto quedó colgado de un túnel viejo, liberarlo antes.
+Write-Host "Liberando puerto remoto $RemoteSocksPort (si estaba ocupado)..." -ForegroundColor DarkGray
+& ssh @(
+  "-o", "BatchMode=yes",
+  "-o", "ConnectTimeout=10",
+  "-i", $IdentityFile,
+  "${User}@${HetznerHost}",
+  "fuser -k ${RemoteSocksPort}/tcp 2>/dev/null; true"
+) | Out-Null
+Start-Sleep -Seconds 1
+
 $sshArgs = @(
   "-N",
   "-o", "BatchMode=yes",

@@ -3,6 +3,13 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import {
+  andreaniJobKindLabel,
+  fetchAndreaniWorkerJob,
+  isAndreaniJobActive,
+  waitAndreaniWorkerJob,
+  type AndreaniWorkerJob,
+} from '@/lib/andreaniWorkerJob';
+import {
   getAndreaniPoolCounts,
   insertAndreaniLinksDisponibles,
   type AndreaniLinkEstado,
@@ -19,6 +26,7 @@ export function AndreaniPoolCard() {
   const [loading, setLoading] = useState(true);
   const [pasteUrls, setPasteUrls] = useState('');
   const [busy, setBusy] = useState(false);
+  const [workerJob, setWorkerJob] = useState<AndreaniWorkerJob | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -40,6 +48,24 @@ export function AndreaniPoolCard() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const job = await fetchAndreaniWorkerJob();
+      if (!cancelled) setWorkerJob(job);
+    };
+    void tick();
+    const id = window.setInterval(() => {
+      void tick();
+    }, 4_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const jobActive = isAndreaniJobActive(workerJob);
 
   const handleInsertPaste = async () => {
     const urls = pasteUrls
@@ -80,31 +106,89 @@ export function AndreaniPoolCard() {
         body: JSON.stringify({ count: 10 }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(
+      if (!res.ok && res.status !== 202) {
+        const raw =
           typeof json?.message === 'string'
             ? json.message
-            : `Error ${res.status} al generar links`,
-        );
+            : `Error ${res.status} al generar links`;
+        const short = raw
+          .split(/\n/)
+          .map((l: string) => l.trim())
+          .find((l: string) => l && !l.startsWith('Call log') && !l.startsWith('- waiting'))
+          ?.slice(0, 280);
+        throw new Error(short || `Error ${res.status} al generar links`);
       }
+
       toast({
-        title: 'Links generados',
-        description: `Se generaron ${json.generated ?? '?'} links`,
+        title: 'Generando links…',
+        description: 'El progreso se ve abajo. El contador se actualiza al terminar.',
       });
+
+      const finalJob = await waitAndreaniWorkerJob({
+        pollMs: 4_000,
+        maxMs: 12 * 60_000,
+        onUpdate: (job) => {
+          setWorkerJob(job);
+          if (job.kind === 'generate' && /guardado en pool/i.test(job.detail)) {
+            void refresh();
+          }
+        },
+      });
+
       await refresh();
+
+      if (finalJob?.phase === 'error' || finalJob?.lastOk === false) {
+        toast({
+          title: 'Generación con error',
+          description: finalJob.lastMessage || finalJob.detail || 'Revisá el worker',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Links generados',
+          description: finalJob?.lastMessage || 'Listo',
+        });
+      }
     } catch (error) {
       toast({
         title: 'Error al generar',
         description: error instanceof Error ? error.message : 'Falló el worker',
         variant: 'destructive',
       });
+      await refresh();
     } finally {
       setBusy(false);
+      setWorkerJob(await fetchAndreaniWorkerJob());
     }
   };
 
   return (
     <div className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+      {(jobActive || workerJob?.phase === 'done' || workerJob?.phase === 'error') && workerJob ? (
+        <div
+          className={
+            workerJob.phase === 'error'
+              ? 'rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs'
+              : workerJob.phase === 'done'
+                ? 'rounded-lg border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-xs'
+                : 'rounded-lg border border-amber-600/30 bg-amber-500/10 px-3 py-2 text-xs'
+          }
+        >
+          <div className="flex items-center gap-2 font-medium">
+            {jobActive ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : null}
+            <span>
+              {jobActive ? 'Worker en curso' : workerJob.phase === 'error' ? 'Worker: error' : 'Worker: listo'}
+              {workerJob.kind ? ` · ${andreaniJobKindLabel(workerJob.kind)}` : ''}
+              {workerJob.queueDepth > 0 ? ` · cola ${workerJob.queueDepth}` : ''}
+            </span>
+          </div>
+          <p className="mt-0.5 text-muted-foreground">{workerJob.detail}</p>
+          {workerJob.lastMessage && !jobActive ? (
+            <p className="mt-0.5 text-muted-foreground">{workerJob.lastMessage}</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">Pool links Andreani</h2>
@@ -145,11 +229,11 @@ export function AndreaniPoolCard() {
         onChange={(e) => setPasteUrls(e.target.value)}
         placeholder="Pegá links acá (uno por línea)…"
         className="min-h-[72px] text-xs"
-        disabled={busy}
+        disabled={busy || jobActive}
       />
 
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" onClick={() => void handleInsertPaste()} disabled={busy}>
+        <Button type="button" size="sm" onClick={() => void handleInsertPaste()} disabled={busy || jobActive}>
           Agregar al pool
         </Button>
         <Button
@@ -157,9 +241,16 @@ export function AndreaniPoolCard() {
           size="sm"
           variant="outline"
           onClick={() => void handleGenerate()}
-          disabled={busy}
+          disabled={busy || jobActive}
         >
-          Generar más
+          {busy || (jobActive && workerJob?.kind === 'generate') ? (
+            <>
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              Generando…
+            </>
+          ) : (
+            'Generar más'
+          )}
         </Button>
       </div>
     </div>

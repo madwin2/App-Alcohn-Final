@@ -31,7 +31,9 @@ export function loadConfig() {
       sucursalDespacho:
         stripQuotes(process.env.ANDREANI_SUCURSAL_DESPACHO) || 'Alberti 1254, Mar Del Plata',
       sucursalNombre:
-        stripQuotes(process.env.ANDREANI_SUCURSAL_NOMBRE) || 'Kiosko wow',
+        // Kiosko wow ya no aparece cerca de Alberti; preferir sucursal oficial MDP.
+        stripQuotes(process.env.ANDREANI_SUCURSAL_NOMBRE) ||
+        'Sucursal Mar Del Plata',
       paquete: {
         alto: Number(process.env.ANDREANI_PAQUETE_ALTO || 25),
         ancho: Number(process.env.ANDREANI_PAQUETE_ANCHO || 8),

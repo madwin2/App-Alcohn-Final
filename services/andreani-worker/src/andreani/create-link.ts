@@ -1,4 +1,4 @@
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import type { WorkerConfig } from '../config.js';
 import { clickFirstMatch, saveArtifacts } from '../browser-helpers.js';
 
@@ -231,6 +231,93 @@ export async function createOnePaymentLink(
   }
 }
 
+async function confirmOrigenAutocomplete(page: Page, searchText: string): Promise<void> {
+  // Sin clickear la sugerencia, Andreani deja skeletons y el mapa en BA.
+  const suggestion = page
+    .getByRole('option')
+    .filter({ hasText: /Mar\s*del\s*Plata/i })
+    .first()
+    .or(page.getByText(/Alberti\s*1254.*Mar\s*del\s*Plata/i).first())
+    .or(page.getByText(/Mar\s*del\s*Plata,\s*Argentina/i).first());
+
+  if (await suggestion.isVisible({ timeout: 6_000 }).catch(() => false)) {
+    await suggestion.click();
+    console.log('[andreani] origen: sugerencia autocomplete clickeada');
+    return;
+  }
+
+  const searchBtn = page.locator('button[aria-label*="buscar" i]').first();
+  if (await searchBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await searchBtn.click();
+  } else {
+    await page.keyboard.press('Enter');
+  }
+  console.log(`[andreani] origen: sin dropdown claro → Enter/buscar (${searchText})`);
+}
+
+async function waitOrigenListReady(page: Page, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + Math.min(timeoutMs, 40_000);
+  while (Date.now() < deadline) {
+    const body = await page.locator('body').innerText().catch(() => '');
+    const hasCards =
+      /voy a despachar en/i.test(body) &&
+      (/m[aá]s cercana|[uú]ltima seleccionada|punto andreani|sucursal /i.test(body) ||
+        /\d+\s*m\b|\d+[.,]\d+\s*km/i.test(body));
+    const skeleton = await page
+      .locator('.MuiSkeleton-root, [class*="skeleton" i], [class*="Skeleton"]')
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (hasCards && !skeleton) return;
+    await page.waitForTimeout(500);
+  }
+  const stillSkeleton = await page
+    .locator('.MuiSkeleton-root, [class*="skeleton" i], [class*="Skeleton"]')
+    .first()
+    .isVisible()
+    .catch(() => false);
+  if (stillSkeleton) {
+    throw new Error(
+      'Andreani no cargó sucursales (lista en loading infinito). Revisá túnel oficina / reintentá.',
+    );
+  }
+}
+
+/** Preferencia: nombre env → Última seleccionada → Más cercana → primera card usable. */
+async function findOrigenCardHit(
+  page: Page,
+  cardName: string,
+): Promise<{ hit: Locator; label: string }> {
+  const preferred = [
+    cardName,
+    'Sucursal Mar Del Plata',
+    'av Independencia',
+    'Independencia 1946',
+  ].filter(Boolean);
+
+  for (const name of preferred) {
+    const re = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const hit = page.getByText(re).first();
+    if (await hit.isVisible({ timeout: 1200 }).catch(() => false)) {
+      return { hit, label: name };
+    }
+  }
+
+  const lastSelected = page.getByText(/[uú]ltima seleccionada/i).first();
+  if (await lastSelected.isVisible({ timeout: 800 }).catch(() => false)) {
+    return { hit: lastSelected, label: 'Última seleccionada' };
+  }
+
+  const nearest = page.getByText(/m[aá]s cercana/i).first();
+  if (await nearest.isVisible({ timeout: 800 }).catch(() => false)) {
+    return { hit: nearest, label: 'Más cercana' };
+  }
+
+  throw new Error(
+    `No apareció la sucursal "${cardName}" (ni fallback MDP/Independencia/última/más cercana).`,
+  );
+}
+
 async function selectOrigenSucursal(
   page: Page,
   opts: { timeoutMs: number; searchText: string; cardName: string },
@@ -241,12 +328,11 @@ async function selectOrigenSucursal(
     return;
   }
 
-  const nameRe = new RegExp(cardName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-  console.log(`[andreani] origen: buscando "${searchText}" → card "${cardName}"`);
+  console.log(`[andreani] origen: buscando "${searchText}" → card preferida "${cardName}"`);
 
   // Si la card ya está en lista (sesión previa), no hace falta rebuscar
-  let nameHit = page.getByText(nameRe).first();
-  if (!(await nameHit.isVisible({ timeout: 2500 }).catch(() => false))) {
+  let resolved = await findOrigenCardHit(page, cardName).catch(() => null);
+  if (!resolved) {
     const searchBox = page
       .locator('input[type="search"], input[placeholder*="direcci" i], input[placeholder*="sucursal" i]')
       .or(page.getByPlaceholder(/direcci|sucursal|buscar/i))
@@ -258,19 +344,13 @@ async function selectOrigenSucursal(
     await box.click({ clickCount: 3 }).catch(() => undefined);
     await box.fill('');
     await box.fill(searchText);
-
-    const searchBtn = box
-      .locator('xpath=following::button[1]')
-      .or(page.locator('button[aria-label*="buscar" i]').first());
-    if (await searchBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await searchBtn.click();
-    } else {
-      await box.press('Enter');
-    }
-
-    nameHit = page.getByText(nameRe).first();
-    await nameHit.waitFor({ state: 'visible', timeout: timeoutMs });
+    await page.waitForTimeout(800);
+    await confirmOrigenAutocomplete(page, searchText);
+    await waitOrigenListReady(page, timeoutMs);
+    resolved = await findOrigenCardHit(page, cardName);
   }
+
+  const { hit: nameHit, label } = resolved;
 
   // Click en la card (contenedor clickeable), no solo el texto
   const card = nameHit.locator(
@@ -281,7 +361,7 @@ async function selectOrigenSucursal(
   } else {
     await nameHit.click({ force: true });
   }
-  console.log(`[andreani] origen: card "${cardName}" clickeada`);
+  console.log(`[andreani] origen: card "${label}" clickeada`);
   await page.waitForTimeout(600);
 
   const siguiente = page

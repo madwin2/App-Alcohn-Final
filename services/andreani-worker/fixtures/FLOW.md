@@ -19,7 +19,7 @@ Capturado manualmente (Ago 2026). Selectores en `src/andreani/*.ts` siguen estos
 4. **¿Desde dónde vas a hacer tus envíos?**
    - Buscar: `ANDREANI_SUCURSAL_DESPACHO` = `Alberti 1254, Mar Del Plata`  
      _(No usar solo "Independencia" → cae en Córdoba)_
-   - Elegir card `ANDREANI_SUCURSAL_NOMBRE` = **Kiosko wow** (badge Más cercana)
+   - Elegir card `ANDREANI_SUCURSAL_NOMBRE` = **Sucursal Mar Del Plata** (av Independencia; fallback: Última seleccionada / Más cercana)
    - Click **Siguiente** (obligatorio; sin esto no avanza el formulario)
 
 5. **Completá la información de tu envío**

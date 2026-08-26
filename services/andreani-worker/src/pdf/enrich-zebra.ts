@@ -18,8 +18,8 @@ import { existsSync } from 'node:fs';
 const MM_TO_PT = 72 / 25.4;
 const LABEL_W_PT = 100 * MM_TO_PT;
 const LABEL_H_PT = 152 * MM_TO_PT;
-/** Zócalo del pedido. */
-const FOOTER_FRAC_OF_PAGE = 0.08;
+/** Zócalo del pedido (más alto → texto legible). */
+const FOOTER_FRAC_OF_PAGE = 0.125;
 const FIT_ZOOM = 0.995;
 const TOP_PRINT_MARGIN_PT = MM_TO_PT * 1.0;
 const BOTTOM_FOOTER_GAP_PT = MM_TO_PT * 0.8;
@@ -37,10 +37,10 @@ const A4_LABEL_H_PT = 128 * MM_TO_PT;
 const A4_MARGIN_TOP_PT = 5 * MM_TO_PT;
 const A4_MARGIN_LEFT_PT = 5 * MM_TO_PT;
 /**
- * En Zebra, descartar pie duplicado Andreani (QR + tracking inferior)
- * para poder escalar a ancho completo 100 mm.
+ * Antes se descartaba ~11% inferior (stub QR + tracking).
+ * Eso era justo lo que faltaba en el despacho — no descartar nada en Zebra.
  */
-const ZEBRA_BOTTOM_DISCARD_FRAC = 0.11;
+const ZEBRA_BOTTOM_DISCARD_FRAC = 0;
 
 export type EnrichOrderInput = {
   id: string;
@@ -210,31 +210,37 @@ export async function enrichZebraLabelPdf(
   const centerLines: string[] = [];
   if (order) {
     centerLines.push(`Pedido: ${order.id.replace(/-/g, '').slice(0, 14)}`);
+    const seen = new Set<string>();
     for (const name of order.designNames.slice(0, 3)) {
       const label = name.trim();
       if (!label) continue;
-      centerLines.push(label.length > 42 ? `${label.slice(0, 39)}…` : label);
+      const key = label.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      centerLines.push(label.length > 36 ? `${label.slice(0, 33)}…` : label);
     }
-    // Accesorios / extras del caption que no estén ya como diseño
     if (order.caption) {
       for (const part of order.caption.split(/\s*[·|]\s*/)) {
         if (centerLines.length >= 4) break;
         const p = part.trim();
         if (!p) continue;
-        if (order.designNames.some((d) => d.trim().toLowerCase() === p.toLowerCase())) continue;
-        centerLines.push(p.length > 42 ? `${p.slice(0, 39)}…` : p);
+        const key = p.toLowerCase();
+        if (seen.has(key)) continue;
+        if (order.designNames.some((d) => d.trim().toLowerCase() === key)) continue;
+        seen.add(key);
+        centerLines.push(p.length > 36 ? `${p.slice(0, 33)}…` : p);
       }
     }
   } else {
     centerLines.push(`Andreani ${tracking}`);
   }
 
-  const leftColW = drawn.width * 0.24;
-  const rightColW = drawn.width * 0.24;
+  const leftColW = drawn.width * 0.22;
+  const rightColW = drawn.width * 0.28;
   const centerX = drawn.x + leftColW + pad * 0.5;
-  const centerW = Math.max(28, drawn.width - leftColW - rightColW - pad);
-  const logoMaxH = bandH * 0.78;
-  const logoMaxW = leftColW - pad * 1.2;
+  const centerW = Math.max(36, drawn.width - leftColW - rightColW - pad);
+  const logoMaxH = bandH * 0.82;
+  const logoMaxW = leftColW - pad * 1.0;
 
   if (alcohn) {
     const ls = Math.min(logoMaxW / alcohn.width, logoMaxH / alcohn.height);
@@ -249,10 +255,11 @@ export async function enrichZebraLabelPdf(
   }
 
   const textLines = centerLines.slice(0, 4);
-  const textSize = Math.max(4.6, Math.min(6.2, bandH * 0.2));
-  const lineStep = textSize + 1.0;
+  // bandH ~19pt → ~7–8pt legible en térmica
+  const textSize = Math.max(6.5, Math.min(8.2, bandH * 0.34));
+  const lineStep = textSize + 1.35;
   const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
-  let textBaseline = snugBandY + (bandH + textBlockH) / 2 - textSize;
+  let textBaseline = snugBandY + (bandH + textBlockH) / 2 - textSize * 0.15;
   for (const line of textLines) {
     labelPage.drawText(line, {
       x: centerX,
