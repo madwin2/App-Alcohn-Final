@@ -2,9 +2,10 @@ import { loadConfig, assertRuntimeConfig } from './config.js';
 import { closeBrowser, openAuthenticatedPage } from './andreani/session.js';
 import {
   downloadNewLabelsFromCurrentPage,
+  ensurePaidShipmentsGrid,
   goNextPage,
   goToPaidShipments,
-  goToTablePage,
+  goToPaidTablePage,
   readTablePagination,
   scrapeCurrentPage,
   type PortalShipment,
@@ -255,7 +256,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       );
     }
 
-    // Fase 2: volver a cada página que necesita descarga e imprimir ahí.
+    // Fase 2: descargar etiqueta por etiqueta (imprimir varias rompe la grilla).
     const pagesWithDownloads = pageWorks.filter((w) => w.toDownload.length);
     for (const work of pagesWithDownloads) {
       const freshCount = work.toDownload.filter((r) => !known.has(r.tracking)).length;
@@ -265,44 +266,57 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       setJobDetail(
         `Página ${work.pageNum}: descargando ${work.toDownload.length} etiqueta(s)${freshCount ? ` (${freshCount} nuevas)` : ''}…`,
       );
-      try {
-        const onPage = await goToTablePage(page, work.pageNum);
-        if (!onPage) {
-          downloadFailedPages += 1;
-          console.warn(`[andreani] no se pudo navegar a página ${work.pageNum} para descargar`);
-          continue;
-        }
-        const pdf = await downloadNewLabelsFromCurrentPage(
-          page,
-          config,
-          work.toDownload.map((r) => r.tracking),
-          { allowSearch: false },
-        );
-        if (pdf) {
-          setJobDetail(`Página ${work.pageNum}: guardando PDFs en Supabase…`);
-          const result = await persistPage(
-            work.toDownload,
-            pdf,
-            candidates,
-            usedOrdenIds,
-            config.logoPath,
+
+      let pageOk = 0;
+      let pageFail = 0;
+
+      for (const ship of work.toDownload) {
+        setJobDetail(`Página ${work.pageNum}: etiqueta ${ship.tracking}…`);
+        try {
+          const onPage = await goToPaidTablePage(page, config, work.pageNum);
+          if (!onPage) {
+            pageFail += 1;
+            console.warn(
+              `[andreani] no se pudo navegar a página ${work.pageNum} para ${ship.tracking}`,
+            );
+            continue;
+          }
+
+          const pdf = await downloadNewLabelsFromCurrentPage(
+            page,
+            config,
+            [ship.tracking],
+            { allowSearch: false },
           );
-          downloaded += result.downloaded;
-          assigned += result.assigned;
-          orphans += result.orphans;
-          refreshed += result.refreshed;
-          for (const r of work.toDownload) known.add(r.tracking);
-        } else {
-          downloadFailedPages += 1;
-          console.warn(
-            `[andreani] página ${work.pageNum}: no se obtuvo PDF para ${work.toDownload.length} tracking(s)`,
+          if (pdf) {
+            const result = await persistPage(
+              [ship],
+              pdf,
+              candidates,
+              usedOrdenIds,
+              config.logoPath,
+            );
+            downloaded += result.downloaded;
+            assigned += result.assigned;
+            orphans += result.orphans;
+            refreshed += result.refreshed;
+            known.add(ship.tracking);
+            pageOk += 1;
+          } else {
+            pageFail += 1;
+            console.warn(`[andreani] sin PDF para ${ship.tracking} (página ${work.pageNum})`);
+          }
+        } catch (labelError) {
+          pageFail += 1;
+          console.warn('[andreani] falló etiqueta', ship.tracking, labelError);
+          await saveArtifacts(page, config.artifactsDir, 'sync-labels-label-error').catch(
+            () => undefined,
           );
+          await ensurePaidShipmentsGrid(page, config).catch(() => undefined);
         }
-      } catch (pageError) {
-        downloadFailedPages += 1;
-        console.warn('[andreani] falló descarga página', work.pageNum, pageError);
-        await saveArtifacts(page, config.artifactsDir, 'sync-labels-page-error').catch(() => undefined);
       }
+
+      if (pageFail > 0 && pageOk === 0) downloadFailedPages += 1;
     }
 
     if (!sawAny) {

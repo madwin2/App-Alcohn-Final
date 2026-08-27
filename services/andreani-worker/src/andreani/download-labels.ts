@@ -501,6 +501,9 @@ async function checkTracking(
 
   if (!(await row.isVisible({ timeout: 4000 }).catch(() => false))) return false;
 
+  await row.scrollIntoViewIfNeeded().catch(() => undefined);
+  await page.waitForTimeout(200);
+
   const jsOk = await page.evaluate(`(tracking) => {
     const rows = Array.from(document.querySelectorAll('table tbody tr, [role="row"]'));
     for (const tr of rows) {
@@ -662,6 +665,67 @@ export async function collectPortalShipments(page: Page): Promise<PortalShipment
   return all;
 }
 
+/** Restaura la grilla Pagados sin re-login (evita clickHistory que rompe sesión). */
+async function ensurePaidShipmentsGrid(
+  page: Page,
+  config: WorkerConfig,
+): Promise<boolean> {
+  await restorePaidListView(page);
+  if (await readTablePagination(page)) return true;
+
+  const url = page.url();
+  if (!url.includes('ver-envios')) {
+    console.log('[andreani] restaurando grilla → /ver-envios');
+    await page.goto('https://pymes.andreani.com/ver-envios', {
+      waitUntil: 'domcontentloaded',
+      timeout: config.andreani.timeoutMs,
+    });
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
+    await page.waitForTimeout(1200);
+  }
+
+  const pagados = page
+    .getByRole('tab', { name: /^pagados$/i })
+    .or(page.getByRole('button', { name: /^pagados$/i }))
+    .or(page.locator('[role="tab"], button, a').filter({ hasText: /^pagados$/i }))
+    .first();
+  if (await pagados.isVisible({ timeout: 4000 }).catch(() => false)) {
+    await pagados.click();
+    await page.waitForTimeout(800);
+  }
+
+  await ensureLast30DaysFilter(page);
+
+  await Promise.race([
+    page.waitForSelector('table tbody tr', { timeout: 12_000 }),
+    page.waitForSelector('[role="row"]', { timeout: 12_000 }),
+    page.waitForFunction(
+      () => /\b36\d{12,}\b/.test(document.body?.innerText || ''),
+      { timeout: 12_000 },
+    ),
+  ]).catch(() => undefined);
+  await page.waitForTimeout(600);
+
+  const ok = !!(await readTablePagination(page));
+  if (!ok) console.warn('[andreani] ensurePaidShipmentsGrid: grilla sin paginación');
+  return ok;
+}
+
+/** Ir a página N: restaura grilla si hace falta y usa paginación. */
+async function goToPaidTablePage(
+  page: Page,
+  config: WorkerConfig,
+  targetPage: number,
+): Promise<boolean> {
+  await ensurePaidShipmentsGrid(page, config);
+  const ok = await goToTablePage(page, targetPage);
+  if (ok) {
+    await page.waitForSelector('table tbody tr, [role="row"]', { timeout: 10_000 }).catch(() => undefined);
+    await page.waitForTimeout(400);
+  }
+  return ok;
+}
+
 /** Pagados + Últimos 30 días + ir a la página N (1-based). */
 export async function goToPaidShipmentsPage(
   page: Page,
@@ -738,7 +802,13 @@ export async function downloadNewLabelsFromCurrentPage(
       if (ok) selected.push(tracking);
     }
   }
-  if (!selected.length) return null;
+  if (!selected.length) {
+    console.warn(
+      `[andreani] no se pudo marcar ningún tracking en la grilla: ${trackings.join(', ')}`,
+    );
+    return null;
+  }
+  console.log(`[andreani] imprimiendo ${selected.length} etiqueta(s): ${selected.join(', ')}`);
   try {
     const pdf = await printZebraAndDownload(page, config.andreani.timeoutMs);
     await restorePaidListView(page);
@@ -750,4 +820,12 @@ export async function downloadNewLabelsFromCurrentPage(
   }
 }
 
-export { scrapeCurrentPage, goNextPage, readTablePagination, restorePaidListView, goToTablePage };
+export {
+  scrapeCurrentPage,
+  goNextPage,
+  readTablePagination,
+  restorePaidListView,
+  goToTablePage,
+  ensurePaidShipmentsGrid,
+  goToPaidTablePage,
+};
