@@ -35,6 +35,7 @@ export interface SyncLabelsResult {
     pagesVisited?: number;
     skippedNotPendiente?: number;
     retriedMissingPdf?: number;
+    portalTotal?: number;
   };
 }
 

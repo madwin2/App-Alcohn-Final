@@ -4,6 +4,8 @@ import {
   downloadNewLabelsFromCurrentPage,
   goNextPage,
   goToPaidShipments,
+  goToPaidShipmentsPage,
+  readTablePagination,
   scrapeCurrentPage,
   type PortalShipment,
 } from './andreani/download-labels.js';
@@ -125,6 +127,30 @@ async function persistPage(
   return { assigned, orphans, downloaded: n, refreshed };
 }
 
+type PageWork = {
+  pageNum: number;
+  rows: PortalShipment[];
+  pendienteRows: PortalShipment[];
+  toDownload: PortalShipment[];
+};
+
+function pickToDownload(
+  pendienteRows: PortalShipment[],
+  known: Set<string>,
+  missingPdf: Set<string>,
+  refreshList: string[],
+  refreshAllKnown: boolean,
+): PortalShipment[] {
+  const fresh = pendienteRows.filter((r) => !known.has(r.tracking));
+  return pendienteRows.filter((r) => {
+    if (fresh.some((f) => f.tracking === r.tracking)) return true;
+    if (missingPdf.has(r.tracking)) return true;
+    if (refreshList.length) return refreshList.includes(r.tracking);
+    if (refreshAllKnown) return true;
+    return false;
+  });
+}
+
 export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
   const config = loadConfig();
   try {
@@ -160,19 +186,35 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
     await goToPaidShipments(page, config);
     console.log(`[andreani] sync-labels URL=${page.url()}`);
 
+    const refreshList = (process.env.ANDREANI_REFRESH_TRACKINGS || '')
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const refreshAllKnown =
+      (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '').toLowerCase() === 'true' ||
+      (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '') === '1';
+
+    // Fase 1: recorrer TODAS las páginas sin imprimir (imprimir rompe la paginación).
+    const pageWorks: PageWork[] = [];
     let sawAny = false;
     let pagesVisited = 0;
+    let portalTotal = 0;
+
     for (let guard = 0; guard < 80; guard += 1) {
       pagesVisited = guard + 1;
       setJobDetail(`Revisando página ${guard + 1} del historial…`);
+      const pag = await readTablePagination(page);
+      if (pag?.total) portalTotal = pag.total;
       const rows = await scrapeCurrentPage(page);
-      console.log(`[andreani] scrape página ${guard + 1}: ${rows.length} envío(s)`);
+      console.log(
+        `[andreani] scrape página ${guard + 1}: ${rows.length} envío(s)` +
+          (pag ? ` (${pag.from}-${pag.to} de ${pag.total})` : ''),
+      );
       if (rows.length) sawAny = true;
 
       const pendienteRows = rows.filter((r) => isPendienteIngreso(r.estado));
       skippedNotPendiente += rows.length - pendienteRows.length;
 
-      // Actualizar estado_portal de filas ya conocidas (UI + filtros).
       for (const row of rows) {
         if (!known.has(row.tracking)) continue;
         try {
@@ -185,58 +227,73 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
         }
       }
 
-      const fresh = pendienteRows.filter((r) => !known.has(r.tracking));
-
-      // Solo regenerar PDFs conocidos si ANDREANI_REFRESH_KNOWN_LABELS=true
-      // o si se pasan trackings explícitos en ANDREANI_REFRESH_TRACKINGS.
-      const refreshList = (process.env.ANDREANI_REFRESH_TRACKINGS || '')
-        .split(/[\s,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const refreshAllKnown =
-        (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '').toLowerCase() === 'true' ||
-        (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '') === '1';
-      const toDownload = pendienteRows.filter((r) => {
-        if (fresh.some((f) => f.tracking === r.tracking)) return true;
-        if (missingPdf.has(r.tracking)) return true;
-        if (refreshList.length) return refreshList.includes(r.tracking);
-        if (refreshAllKnown) return true;
-        return false;
-      });
+      const toDownload = pickToDownload(
+        pendienteRows,
+        known,
+        missingPdf,
+        refreshList,
+        refreshAllKnown,
+      );
       retriedMissingPdf += toDownload.filter((r) => missingPdf.has(r.tracking)).length;
       skipped += pendienteRows.length - toDownload.length;
 
-      if (toDownload.length) {
-        console.log(
-          `[andreani] página ${guard + 1}: ${fresh.length} nuevo(s), descargando ${toDownload.length}`,
-        );
-        setJobDetail(
-          `Página ${guard + 1}: descargando ${toDownload.length} etiqueta(s)${fresh.length ? ` (${fresh.length} nuevas)` : ''}…`,
-        );
-        try {
-          const pdf = await downloadNewLabelsFromCurrentPage(
-            page,
-            config,
-            toDownload.map((r) => r.tracking),
-          );
-          if (pdf) {
-            setJobDetail(`Página ${guard + 1}: guardando PDFs en Supabase…`);
-            const result = await persistPage(toDownload, pdf, candidates, usedOrdenIds, config.logoPath);
-            downloaded += result.downloaded;
-            assigned += result.assigned;
-            orphans += result.orphans;
-            refreshed += result.refreshed;
-            for (const r of toDownload) known.add(r.tracking);
-          }
-        } catch (pageError) {
-          console.warn('[andreani] falló página de etiquetas:', pageError);
-          await saveArtifacts(page, config.artifactsDir, 'sync-labels-page-error').catch(() => undefined);
-        }
-      }
+      pageWorks.push({ pageNum: guard + 1, rows, pendienteRows, toDownload });
 
       if (!(await goNextPage(page))) {
-        console.log(`[andreani] fin de paginación en página ${guard + 1} (total visitadas=${pagesVisited})`);
+        console.log(
+          `[andreani] fin scrape página ${guard + 1} (visitadas=${pagesVisited}, portal total=${portalTotal || '?'})`,
+        );
         break;
+      }
+    }
+
+    const expectedPages = portalTotal ? Math.ceil(portalTotal / 10) : pagesVisited;
+    if (portalTotal && pagesVisited < expectedPages) {
+      console.warn(
+        `[andreani] ADVERTENCIA: scrapeó ${pagesVisited} página(s) pero el portal indica ${expectedPages} (${portalTotal} envíos)`,
+      );
+    }
+
+    // Fase 2: volver a cada página que necesita descarga e imprimir ahí.
+    const pagesWithDownloads = pageWorks.filter((w) => w.toDownload.length);
+    for (const work of pagesWithDownloads) {
+      const freshCount = work.toDownload.filter((r) => !known.has(r.tracking)).length;
+      console.log(
+        `[andreani] página ${work.pageNum}: descargando ${work.toDownload.length} etiqueta(s)${freshCount ? ` (${freshCount} nuevas)` : ''}`,
+      );
+      setJobDetail(
+        `Página ${work.pageNum}: descargando ${work.toDownload.length} etiqueta(s)${freshCount ? ` (${freshCount} nuevas)` : ''}…`,
+      );
+      try {
+        await goToPaidShipmentsPage(page, config, work.pageNum);
+        const pdf = await downloadNewLabelsFromCurrentPage(
+          page,
+          config,
+          work.toDownload.map((r) => r.tracking),
+          { allowSearch: false },
+        );
+        if (pdf) {
+          setJobDetail(`Página ${work.pageNum}: guardando PDFs en Supabase…`);
+          const result = await persistPage(
+            work.toDownload,
+            pdf,
+            candidates,
+            usedOrdenIds,
+            config.logoPath,
+          );
+          downloaded += result.downloaded;
+          assigned += result.assigned;
+          orphans += result.orphans;
+          refreshed += result.refreshed;
+          for (const r of work.toDownload) known.add(r.tracking);
+        } else {
+          console.warn(
+            `[andreani] página ${work.pageNum}: no se obtuvo PDF para ${work.toDownload.length} tracking(s)`,
+          );
+        }
+      } catch (pageError) {
+        console.warn('[andreani] falló descarga página', work.pageNum, pageError);
+        await saveArtifacts(page, config.artifactsDir, 'sync-labels-page-error').catch(() => undefined);
       }
     }
 
@@ -257,13 +314,13 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
 
     return {
       status: 'ok',
-      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Reintento sin PDF: ${retriedMissingPdf}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}. Páginas: ${pagesVisited}.`,
+      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Reintento sin PDF: ${retriedMissingPdf}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}. Páginas: ${pagesVisited}${portalTotal ? ` de ${Math.ceil(portalTotal / 10)} (${portalTotal} en portal)` : ''}.`,
       httpStatus: 200,
       skipped,
       downloaded,
       assigned,
       orphans,
-      details: { refreshed, pagesVisited, skippedNotPendiente, retriedMissingPdf },
+      details: { refreshed, pagesVisited, skippedNotPendiente, retriedMissingPdf, portalTotal },
     };
   } catch (error) {
     const artifactDir = await saveArtifacts(page, config.artifactsDir, 'sync-labels-error').catch(

@@ -262,7 +262,31 @@ async function goNextPage(page: Page): Promise<boolean> {
     }
   }
 
+  const pagFinal = await readTablePagination(page);
+  console.warn(
+    `[andreani] goNextPage=false (pag=${pagFinal ? `${pagFinal.from}-${pagFinal.to} de ${pagFinal.total}` : '?'})`,
+  );
   return false;
+}
+
+/** Limpia búsqueda/modal que rompe la paginación tras imprimir etiquetas. */
+async function restorePaidListView(page: Page): Promise<void> {
+  await page.keyboard.press('Escape').catch(() => undefined);
+  await page.waitForTimeout(300);
+
+  const search = page
+    .getByPlaceholder(/env[ií]o|operaci|destinatario|seguimiento/i)
+    .or(page.locator('input[type="search"], input[placeholder*="envío" i], input[placeholder*="Envío" i]'))
+    .first();
+  if (await search.isVisible({ timeout: 800 }).catch(() => false)) {
+    const val = await search.inputValue().catch(() => '');
+    if (val.trim()) {
+      await search.fill('');
+      await page.keyboard.press('Enter').catch(() => undefined);
+      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
+    }
+  }
 }
 
 /** Fuerza el filtro de fechas a "Últimos 30 días" (nunca menos). */
@@ -343,15 +367,19 @@ async function uncheckVisible(page: Page): Promise<void> {
   }
 }
 
-async function checkTracking(page: Page, tracking: string): Promise<boolean> {
+async function checkTracking(
+  page: Page,
+  tracking: string,
+  opts?: { allowSearch?: boolean },
+): Promise<boolean> {
+  const allowSearch = opts?.allowSearch !== false;
   let row = page
     .locator('table tbody tr', { hasText: tracking })
     .or(page.locator('[role="row"]', { hasText: tracking }))
     .first();
 
-  // Solo buscar en el portal si la fila no está en la página actual
-  // (buscar siempre borra la selección múltiple al filtrar la grilla).
-  if (!(await row.isVisible({ timeout: 1500 }).catch(() => false))) {
+  // Buscar en el portal filtra la grilla y rompe la paginación — solo si allowSearch.
+  if (allowSearch && !(await row.isVisible({ timeout: 1500 }).catch(() => false))) {
     const search = page
       .getByPlaceholder(/env[ií]o|operaci|destinatario|seguimiento/i)
       .or(page.locator('input[type="search"], input[placeholder*="envío" i], input[placeholder*="Envío" i]'))
@@ -532,6 +560,21 @@ export async function collectPortalShipments(page: Page): Promise<PortalShipment
   return all;
 }
 
+/** Pagados + Últimos 30 días + ir a la página N (1-based). */
+export async function goToPaidShipmentsPage(
+  page: Page,
+  config: WorkerConfig,
+  targetPage: number,
+): Promise<void> {
+  await goToPaidShipments(page, config);
+  for (let i = 1; i < targetPage; i += 1) {
+    if (!(await goNextPage(page))) {
+      console.warn(`[andreani] no se pudo avanzar a página ${targetPage}, quedó en ${i}`);
+      break;
+    }
+  }
+}
+
 export async function goToPaidShipments(page: Page, config: WorkerConfig): Promise<void> {
   await clickHistory(page, config.andreani.timeoutMs);
   await page.getByText(/estos son tus env[ií]os|pagados/i).first().waitFor({
@@ -568,12 +611,13 @@ export async function downloadNewLabelsFromCurrentPage(
   page: Page,
   config: WorkerConfig,
   trackings: string[],
+  opts?: { allowSearch?: boolean },
 ): Promise<Buffer | null> {
   if (!trackings.length) return null;
   await uncheckVisible(page);
   const selected: string[] = [];
   for (const tracking of trackings) {
-    if (await checkTracking(page, tracking)) selected.push(tracking);
+    if (await checkTracking(page, tracking, opts)) selected.push(tracking);
   }
   if (!selected.length) {
     // Último intento: marcar por JS según texto de la fila
@@ -594,11 +638,14 @@ export async function downloadNewLabelsFromCurrentPage(
   }
   if (!selected.length) return null;
   try {
-    return await printZebraAndDownload(page, config.andreani.timeoutMs);
+    const pdf = await printZebraAndDownload(page, config.andreani.timeoutMs);
+    await restorePaidListView(page);
+    return pdf;
   } catch (error) {
+    await restorePaidListView(page);
     await saveArtifacts(page, config.artifactsDir, 'print-zebra-error');
     throw error;
   }
 }
 
-export { scrapeCurrentPage, goNextPage };
+export { scrapeCurrentPage, goNextPage, readTablePagination, restorePaidListView };
