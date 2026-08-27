@@ -17,9 +17,11 @@ import {
   insertEtiqueta,
   listAssignedLinkCandidates,
   listKnownTrackings,
+  listTrackingsMissingPdf,
   loadEnrichInputByTracking,
   trackingAlreadyStored,
   updateEtiquetaPdfPath,
+  updateEtiquetaPortalStatus,
   uploadEtiquetaPdf,
   type LabelMatchCandidate,
 } from './supabase.js';
@@ -140,12 +142,14 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
   }
 
   const known = await listKnownTrackings();
+  const missingPdf = await listTrackingsMissingPdf();
   const candidates = await listAssignedLinkCandidates();
   const usedOrdenIds = new Set<string>();
 
   const { page, context } = await openAuthenticatedPage(config);
   let skipped = 0;
   let skippedNotPendiente = 0;
+  let retriedMissingPdf = 0;
   let downloaded = 0;
   let assigned = 0;
   let orphans = 0;
@@ -168,8 +172,20 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       const pendienteRows = rows.filter((r) => isPendienteIngreso(r.estado));
       skippedNotPendiente += rows.length - pendienteRows.length;
 
+      // Actualizar estado_portal de filas ya conocidas (UI + filtros).
+      for (const row of rows) {
+        if (!known.has(row.tracking)) continue;
+        try {
+          await updateEtiquetaPortalStatus(row.tracking, {
+            estadoPortal: row.estado,
+            fechaPortal: row.fecha,
+          });
+        } catch {
+          /* */
+        }
+      }
+
       const fresh = pendienteRows.filter((r) => !known.has(r.tracking));
-      skipped += pendienteRows.length - fresh.length;
 
       // Solo regenerar PDFs conocidos si ANDREANI_REFRESH_KNOWN_LABELS=true
       // o si se pasan trackings explícitos en ANDREANI_REFRESH_TRACKINGS.
@@ -182,10 +198,13 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
         (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '') === '1';
       const toDownload = pendienteRows.filter((r) => {
         if (fresh.some((f) => f.tracking === r.tracking)) return true;
+        if (missingPdf.has(r.tracking)) return true;
         if (refreshList.length) return refreshList.includes(r.tracking);
         if (refreshAllKnown) return true;
         return false;
       });
+      retriedMissingPdf += toDownload.filter((r) => missingPdf.has(r.tracking)).length;
+      skipped += pendienteRows.length - toDownload.length;
 
       if (toDownload.length) {
         console.log(
@@ -238,13 +257,13 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
 
     return {
       status: 'ok',
-      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}. Páginas: ${pagesVisited}.`,
+      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Reintento sin PDF: ${retriedMissingPdf}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}. Páginas: ${pagesVisited}.`,
       httpStatus: 200,
       skipped,
       downloaded,
       assigned,
       orphans,
-      details: { refreshed, pagesVisited, skippedNotPendiente },
+      details: { refreshed, pagesVisited, skippedNotPendiente, retriedMissingPdf },
     };
   } catch (error) {
     const artifactDir = await saveArtifacts(page, config.artifactsDir, 'sync-labels-error').catch(

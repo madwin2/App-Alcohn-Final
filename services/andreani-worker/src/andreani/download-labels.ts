@@ -83,7 +83,15 @@ async function scrapeCurrentPage(page: Page): Promise<PortalShipment[]> {
           destinatario: iDest >= 0 ? cells[iDest] || '' : '',
           destino: iDestino >= 0 ? cells[iDestino] || '' : '',
           fecha: iFecha >= 0 ? cells[iFecha] || '' : '',
-          estado: iEstado >= 0 ? cells[iEstado] || '' : '',
+          estado: (() => {
+            const fromCell = iEstado >= 0 ? cells[iEstado] || '' : '';
+            if (fromCell) return fromCell;
+            const rowText = normalize(tr.innerText || '');
+            if (/pendiente\\s*(de\\s*)?ingreso/i.test(rowText)) return 'Pendiente de ingreso';
+            if (/en\\s+camino/i.test(rowText)) return 'En camino';
+            if (/entregad/i.test(rowText)) return 'Entregado';
+            return '';
+          })(),
         });
       }
     }
@@ -162,8 +170,31 @@ async function scrapeCurrentPage(page: Page): Promise<PortalShipment[]> {
   })()`) as Promise<PortalShipment[]>;
 }
 
+type TablePagination = { from: number; to: number; total: number; pageSize: number };
+
+async function readTablePagination(page: Page): Promise<TablePagination | null> {
+  return page.evaluate(`(() => {
+    const text = document.body.innerText || '';
+    const m = text.match(/(\\d+)\\s*[-–]\\s*(\\d+)\\s+de\\s+(\\d+)/i);
+    if (!m) return null;
+    const from = parseInt(m[1], 10);
+    const to = parseInt(m[2], 10);
+    const total = parseInt(m[3], 10);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || !Number.isFinite(total)) return null;
+    return { from, to, total, pageSize: Math.max(1, to - from + 1) };
+  })()`) as Promise<TablePagination | null>;
+}
+
 async function goNextPage(page: Page): Promise<boolean> {
-  const before = (await scrapeCurrentPage(page)).map((r) => r.tracking).join(',');
+  const pagBefore = await readTablePagination(page);
+  if (pagBefore && pagBefore.to >= pagBefore.total) {
+    console.log(
+      `[andreani] paginación ${pagBefore.from}-${pagBefore.to} de ${pagBefore.total} — fin`,
+    );
+    return false;
+  }
+
+  const before = (await scrapeCurrentPage(page)).map((r) => r.tracking).join('|');
 
   const candidates = [
     page.getByRole('button', { name: /next page|go to next page|p[aá]gina siguiente|siguiente/i }),
@@ -172,6 +203,7 @@ async function goNextPage(page: Page): Promise<boolean> {
     page.locator('button[title*="next" i]'),
     page.locator('.MuiTablePagination-actions button').last(),
     page.locator('[class*="Pagination"] button').filter({ hasText: /^\s*>\s*$|›|»/ }).last(),
+    page.locator('button').filter({ hasText: /^›$|^>\s*$|»/ }).last(),
   ];
 
   for (const loc of candidates) {
@@ -183,16 +215,37 @@ async function goNextPage(page: Page): Promise<boolean> {
       (await btn.getAttribute('aria-disabled').catch(() => null)) === 'true';
     if (disabled) continue;
     await btn.click({ force: true }).catch(() => undefined);
-    await page.waitForTimeout(1100);
-    await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
-    const after = (await scrapeCurrentPage(page)).map((r) => r.tracking).join(',');
+    await page.waitForTimeout(1500);
+    await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => undefined);
+    const pagAfter = await readTablePagination(page);
+    if (pagAfter && pagBefore && pagAfter.from > pagBefore.from) {
+      console.log(
+        `[andreani] paginación ${pagBefore.from}-${pagBefore.to} → ${pagAfter.from}-${pagAfter.to} de ${pagAfter.total}`,
+      );
+      return true;
+    }
+    const after = (await scrapeCurrentPage(page)).map((r) => r.tracking).join('|');
     if (after !== before && after.length > 0) return true;
   }
 
   // Fallback: clickear el número de página siguiente si hay botones 1,2,3…
-  const active = page.locator(
-    'button[aria-current="true"], button.Mui-selected, [aria-current="page"]',
-  ).first();
+  if (pagBefore) {
+    const nextPageNum = Math.floor((pagBefore.to) / pagBefore.pageSize) + 1;
+    const nextNum = page
+      .getByRole('button', { name: new RegExp(`^\\s*${nextPageNum + 1}\\s*$`) })
+      .or(page.locator(`button:text-is("${nextPageNum + 1}")`))
+      .first();
+    if (await nextNum.isVisible({ timeout: 800 }).catch(() => false)) {
+      await nextNum.click({ force: true });
+      await page.waitForTimeout(1500);
+      const pagAfter = await readTablePagination(page);
+      if (pagAfter && pagAfter.from > pagBefore.from) return true;
+    }
+  }
+
+  const active = page
+    .locator('button[aria-current="true"], button.Mui-selected, [aria-current="page"]')
+    .first();
   if (await active.isVisible({ timeout: 500 }).catch(() => false)) {
     const cur = Number.parseInt(((await active.textContent()) || '').trim(), 10);
     if (Number.isFinite(cur) && cur > 0) {
@@ -202,8 +255,8 @@ async function goNextPage(page: Page): Promise<boolean> {
         .first();
       if (await nextNum.isVisible({ timeout: 800 }).catch(() => false)) {
         await nextNum.click({ force: true });
-        await page.waitForTimeout(1100);
-        const after = (await scrapeCurrentPage(page)).map((r) => r.tracking).join(',');
+        await page.waitForTimeout(1500);
+        const after = (await scrapeCurrentPage(page)).map((r) => r.tracking).join('|');
         if (after !== before && after.length > 0) return true;
       }
     }

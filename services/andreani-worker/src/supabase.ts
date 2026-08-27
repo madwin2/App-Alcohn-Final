@@ -47,6 +47,17 @@ export async function listKnownTrackings(): Promise<Set<string>> {
   return new Set((data ?? []).map((r) => r.tracking as string).filter(Boolean));
 }
 
+/** Trackings en DB pero sin PDF guardado — hay que reintentar descarga. */
+export async function listTrackingsMissingPdf(): Promise<Set<string>> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('envios_andreani_etiquetas')
+    .select('tracking')
+    .is('pdf_path', null);
+  if (error) throw error;
+  return new Set((data ?? []).map((r) => r.tracking as string).filter(Boolean));
+}
+
 export type LabelMatchCandidate = {
   ordenId: string;
   customerName: string;

@@ -34,6 +34,7 @@ export interface SyncLabelsResult {
     refreshed?: number;
     pagesVisited?: number;
     skippedNotPendiente?: number;
+    retriedMissingPdf?: number;
   };
 }
 
