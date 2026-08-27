@@ -4,7 +4,7 @@ import {
   downloadNewLabelsFromCurrentPage,
   goNextPage,
   goToPaidShipments,
-  goToPaidShipmentsPage,
+  goToTablePage,
   readTablePagination,
   scrapeCurrentPage,
   type PortalShipment,
@@ -180,6 +180,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
   let assigned = 0;
   let orphans = 0;
   let refreshed = 0;
+  let downloadFailedPages = 0;
 
   try {
     setJobDetail('Abriendo historial Pagados…');
@@ -265,7 +266,12 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
         `Página ${work.pageNum}: descargando ${work.toDownload.length} etiqueta(s)${freshCount ? ` (${freshCount} nuevas)` : ''}…`,
       );
       try {
-        await goToPaidShipmentsPage(page, config, work.pageNum);
+        const onPage = await goToTablePage(page, work.pageNum);
+        if (!onPage) {
+          downloadFailedPages += 1;
+          console.warn(`[andreani] no se pudo navegar a página ${work.pageNum} para descargar`);
+          continue;
+        }
         const pdf = await downloadNewLabelsFromCurrentPage(
           page,
           config,
@@ -287,11 +293,13 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
           refreshed += result.refreshed;
           for (const r of work.toDownload) known.add(r.tracking);
         } else {
+          downloadFailedPages += 1;
           console.warn(
             `[andreani] página ${work.pageNum}: no se obtuvo PDF para ${work.toDownload.length} tracking(s)`,
           );
         }
       } catch (pageError) {
+        downloadFailedPages += 1;
         console.warn('[andreani] falló descarga página', work.pageNum, pageError);
         await saveArtifacts(page, config.artifactsDir, 'sync-labels-page-error').catch(() => undefined);
       }
@@ -312,15 +320,25 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       };
     }
 
+    const failNote =
+      downloadFailedPages > 0 ? ` Fallos descarga: ${downloadFailedPages} página(s).` : '';
+
     return {
-      status: 'ok',
-      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Reintento sin PDF: ${retriedMissingPdf}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}. Páginas: ${pagesVisited}${portalTotal ? ` de ${Math.ceil(portalTotal / 10)} (${portalTotal} en portal)` : ''}.`,
-      httpStatus: 200,
+      status: downloadFailedPages > 0 && !(assigned + orphans + refreshed) ? 'system_error' : 'ok',
+      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Reintento sin PDF: ${retriedMissingPdf}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}. Páginas: ${pagesVisited}${portalTotal ? ` de ${Math.ceil(portalTotal / 10)} (${portalTotal} en portal)` : ''}.${failNote}`,
+      httpStatus: downloadFailedPages > 0 && !(assigned + orphans + refreshed) ? 503 : 200,
       skipped,
       downloaded,
       assigned,
       orphans,
-      details: { refreshed, pagesVisited, skippedNotPendiente, retriedMissingPdf, portalTotal },
+      details: {
+        refreshed,
+        pagesVisited,
+        skippedNotPendiente,
+        retriedMissingPdf,
+        portalTotal,
+        downloadFailedPages,
+      },
     };
   } catch (error) {
     const artifactDir = await saveArtifacts(page, config.artifactsDir, 'sync-labels-error').catch(

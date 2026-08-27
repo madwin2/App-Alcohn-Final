@@ -269,6 +269,108 @@ async function goNextPage(page: Page): Promise<boolean> {
   return false;
 }
 
+function tablePageIndex(pag: TablePagination): number {
+  return Math.floor((pag.from - 1) / pag.pageSize) + 1;
+}
+
+async function clickTablePageNumber(page: Page, pageNum: number): Promise<boolean> {
+  const pagBefore = await readTablePagination(page);
+  const btn = page
+    .getByRole('button', { name: new RegExp(`^\\s*${pageNum}\\s*$`) })
+    .or(page.locator(`button:text-is("${pageNum}")`))
+    .first();
+  if (!(await btn.isVisible({ timeout: 800 }).catch(() => false))) return false;
+  await btn.click({ force: true });
+  await page.waitForTimeout(1500);
+  await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => undefined);
+  const pagAfter = await readTablePagination(page);
+  if (pagAfter && pagBefore && pagAfter.from !== pagBefore.from) return true;
+  return pagAfter ? tablePageIndex(pagAfter) === pageNum : false;
+}
+
+async function goPrevPage(page: Page): Promise<boolean> {
+  const pagBefore = await readTablePagination(page);
+  if (!pagBefore || pagBefore.from <= 1) return false;
+
+  const before = (await scrapeCurrentPage(page)).map((r) => r.tracking).join('|');
+  const candidates = [
+    page.getByRole('button', { name: /previous page|go to previous page|p[aá]gina anterior|anterior/i }),
+    page.locator('button[aria-label*="previous page" i]'),
+    page.locator('button[aria-label*="anterior" i]'),
+    page.locator('.MuiTablePagination-actions button').first(),
+    page.locator('[class*="Pagination"] button').filter({ hasText: /^\s*<\s*$|‹|«/ }).first(),
+    page.locator('button').filter({ hasText: /^‹$|^<\s*$|«/ }).first(),
+  ];
+
+  for (const loc of candidates) {
+    const btn = loc.first();
+    if (!(await btn.isVisible({ timeout: 800 }).catch(() => false))) continue;
+    const disabled =
+      (await btn.isDisabled().catch(() => false)) ||
+      (await btn.getAttribute('disabled').catch(() => null)) != null ||
+      (await btn.getAttribute('aria-disabled').catch(() => null)) === 'true';
+    if (disabled) continue;
+    await btn.click({ force: true }).catch(() => undefined);
+    await page.waitForTimeout(1500);
+    await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => undefined);
+    const pagAfter = await readTablePagination(page);
+    if (pagAfter && pagBefore && pagAfter.from < pagBefore.from) {
+      console.log(
+        `[andreani] paginación ${pagBefore.from}-${pagBefore.to} ← ${pagAfter.from}-${pagAfter.to} de ${pagAfter.total}`,
+      );
+      return true;
+    }
+    const after = (await scrapeCurrentPage(page)).map((r) => r.tracking).join('|');
+    if (after !== before && after.length > 0) return true;
+  }
+
+  if (pagBefore) {
+    const prevPageNum = tablePageIndex(pagBefore) - 1;
+    if (prevPageNum >= 1 && (await clickTablePageNumber(page, prevPageNum))) return true;
+  }
+
+  return false;
+}
+
+/** Ir a página N usando solo los controles de la grilla (sin re-login). */
+async function goToTablePage(page: Page, targetPage: number): Promise<boolean> {
+  if (targetPage < 1) return false;
+
+  let pag = await readTablePagination(page);
+  if (!pag) {
+    console.warn('[andreani] goToTablePage: sin paginación visible');
+    return false;
+  }
+
+  let cur = tablePageIndex(pag);
+  if (cur === targetPage) return true;
+
+  if (await clickTablePageNumber(page, targetPage)) {
+    console.log(`[andreani] goToTablePage ${cur} → ${targetPage} (número directo)`);
+    return true;
+  }
+
+  if (targetPage < cur && (await clickTablePageNumber(page, 1))) {
+    pag = await readTablePagination(page);
+    cur = pag ? tablePageIndex(pag) : 1;
+  }
+
+  for (let guard = 0; guard < 80; guard += 1) {
+    pag = await readTablePagination(page);
+    if (!pag) return false;
+    cur = tablePageIndex(pag);
+    if (cur === targetPage) return true;
+    if (cur < targetPage) {
+      if (!(await goNextPage(page))) break;
+    } else if (!(await goPrevPage(page))) break;
+  }
+
+  pag = await readTablePagination(page);
+  const ok = pag ? tablePageIndex(pag) === targetPage : false;
+  if (!ok) console.warn(`[andreani] goToTablePage: no se llegó a página ${targetPage}`);
+  return ok;
+}
+
 /** Limpia búsqueda/modal que rompe la paginación tras imprimir etiquetas. */
 async function restorePaidListView(page: Page): Promise<void> {
   await page.keyboard.press('Escape').catch(() => undefined);
@@ -648,4 +750,4 @@ export async function downloadNewLabelsFromCurrentPage(
   }
 }
 
-export { scrapeCurrentPage, goNextPage, readTablePagination, restorePaidListView };
+export { scrapeCurrentPage, goNextPage, readTablePagination, restorePaidListView, goToTablePage };
