@@ -22,6 +22,7 @@ export interface AndreaniEtiquetaRow {
   clienteTelefono: string | null;
   disenoNombre: string | null;
   saleTransferred: boolean;
+  estadoEnvio: string | null;
 }
 
 const MM_TO_PT = 72 / 25.4;
@@ -51,11 +52,13 @@ const mapListRow = (row: {
   ordenes:
     | {
         estado_orden: string | null;
+        estado_envio: string | null;
         clientes: ClienteJoin | ClienteJoin[] | null;
         sellos: { diseno: string | null; estado_venta: string | null }[] | null;
       }
     | {
         estado_orden: string | null;
+        estado_envio: string | null;
         clientes: ClienteJoin | ClienteJoin[] | null;
         sellos: { diseno: string | null; estado_venta: string | null }[] | null;
       }[]
@@ -92,6 +95,7 @@ const mapListRow = (row: {
     clienteTelefono: cliente?.telefono?.trim() || null,
     disenoNombre,
     saleTransferred: Boolean(allTransferred),
+    estadoEnvio: orden?.estado_envio ?? null,
   };
 };
 
@@ -104,6 +108,7 @@ export const listAndreaniEtiquetas = async (): Promise<AndreaniEtiquetaRow[]> =>
       orden_id, estado, pdf_path, nota, creado_en, asignado_en,
       ordenes (
         estado_orden,
+        estado_envio,
         clientes ( nombre, apellido, telefono ),
         sellos ( diseno, estado_venta )
       )

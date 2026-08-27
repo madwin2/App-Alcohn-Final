@@ -33,6 +33,7 @@ export interface SyncLabelsResult {
     artifactDir?: string;
     refreshed?: number;
     pagesVisited?: number;
+    skippedNotPendiente?: number;
   };
 }
 

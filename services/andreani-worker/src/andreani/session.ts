@@ -97,35 +97,55 @@ export async function openAuthenticatedPage(config: WorkerConfig): Promise<{
   page: Page;
   context: BrowserContext;
 }> {
-  const context = await newContext(config);
-  const page = await context.newPage();
-  page.setDefaultTimeout(config.andreani.timeoutMs);
+  const maxAttempts = 3;
+  let lastError: unknown;
 
-  try {
-    await page.goto(config.andreani.homeUrl, {
-      waitUntil: 'domcontentloaded',
-      timeout: config.andreani.timeoutMs,
-    });
-    await page.waitForLoadState('networkidle', { timeout: config.andreani.timeoutMs }).catch(() => undefined);
-    // La SPA a veces pinta el shell vacío; esperar hero autenticado o login
-    await Promise.race([
-      page.getByText(/todo listo para empezar/i).first().waitFor({ state: 'visible', timeout: config.andreani.timeoutMs }),
-      page.getByRole('button', { name: /^ingresar$/i }).first().waitFor({ state: 'visible', timeout: config.andreani.timeoutMs }),
-      page.getByRole('link', { name: /^ingresar$/i }).first().waitFor({ state: 'visible', timeout: config.andreani.timeoutMs }),
-    ]).catch(() => undefined);
-    await page.waitForTimeout(1000);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const context = await newContext(config);
+    const page = await context.newPage();
+    page.setDefaultTimeout(config.andreani.timeoutMs);
 
-    if (!(await looksLoggedIn(page))) {
-      console.warn('[andreani] Sesión inválida o expirada — re-login');
-      await ensureLoggedIn(page, config);
-      await saveStorageState(context, config);
-      console.log('[andreani] storageState guardado en', config.storageStatePath);
+    try {
+      await page.goto(config.andreani.homeUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: config.andreani.timeoutMs,
+      });
+      await page.waitForLoadState('networkidle', { timeout: config.andreani.timeoutMs }).catch(() => undefined);
+      // La SPA a veces pinta el shell vacío; esperar hero autenticado o login
+      await Promise.race([
+        page.getByText(/todo listo para empezar/i).first().waitFor({ state: 'visible', timeout: config.andreani.timeoutMs }),
+        page.getByRole('button', { name: /^ingresar$/i }).first().waitFor({ state: 'visible', timeout: config.andreani.timeoutMs }),
+        page.getByRole('link', { name: /^ingresar$/i }).first().waitFor({ state: 'visible', timeout: config.andreani.timeoutMs }),
+      ]).catch(() => undefined);
+      await page.waitForTimeout(1000);
+
+      if (!(await looksLoggedIn(page))) {
+        console.warn('[andreani] Sesión inválida o expirada — re-login');
+        await ensureLoggedIn(page, config);
+        await saveStorageState(context, config);
+        console.log('[andreani] storageState guardado en', config.storageStatePath);
+      }
+
+      return { page, context };
+    } catch (error) {
+      lastError = error;
+      await saveArtifacts(page, config.artifactsDir, `session-open-error-${attempt}`).catch(() => undefined);
+      await context.close().catch(() => undefined);
+
+      const message = error instanceof Error ? error.message : String(error);
+      const retryable =
+        /ERR_CONNECTION_CLOSED|ERR_CONNECTION_RESET|ERR_TUNNEL_CONNECTION_FAILED|ERR_PROXY_CONNECTION_FAILED|ETIMEDOUT|Timeout/i.test(
+          message,
+        );
+      if (retryable && attempt < maxAttempts) {
+        console.warn(`[andreani] goto falló (intento ${attempt}/${maxAttempts}): ${message.slice(0, 120)} — retry`);
+        await closeBrowser();
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+        continue;
+      }
+      throw error;
     }
-
-    return { page, context };
-  } catch (error) {
-    await saveArtifacts(page, config.artifactsDir, 'session-open-error').catch(() => undefined);
-    await context.close().catch(() => undefined);
-    throw error;
   }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }

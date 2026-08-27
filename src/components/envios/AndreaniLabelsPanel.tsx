@@ -19,6 +19,7 @@ import {
   type AndreaniWorkerJob,
 } from '@/lib/andreaniWorkerJob';
 import { normalizePhoneDigits } from '@/lib/utils/shippingNormalization';
+import { isEtiquetaActivaEnTabla } from '@/lib/utils/andreaniPortalEstado';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
 
 type SyncResponse = {
@@ -118,7 +119,7 @@ export function AndreaniLabelsPanel({
   }, [orders]);
 
   const assigned = useMemo(() => {
-    const list = rows.filter((r) => r.estado === 'asignada');
+    const list = rows.filter((r) => r.estado === 'asignada' && isEtiquetaActivaEnTabla(r));
     return [...list].sort((a, b) => {
       const aReady = Boolean(a.pdfPath) && a.saleTransferred ? 0 : 1;
       const bReady = Boolean(b.pdfPath) && b.saleTransferred ? 0 : 1;
@@ -127,7 +128,10 @@ export function AndreaniLabelsPanel({
     });
   }, [rows]);
 
-  const orphans = rows.filter((r) => r.estado === 'huerfano');
+  const orphans = useMemo(
+    () => rows.filter((r) => r.estado === 'huerfano' && isEtiquetaActivaEnTabla(r)),
+    [rows],
+  );
 
   const downloadable = useMemo(
     () => assigned.filter((r) => Boolean(r.pdfPath) && r.saleTransferred),
@@ -159,7 +163,7 @@ export function AndreaniLabelsPanel({
 
       toast({
         title: 'Trayendo etiquetas…',
-        description: 'Vas a ver el progreso abajo. Cuando termine, la lista se actualiza sola.',
+        description: 'Solo envíos pendientes de ingreso (los que se pueden imprimir).',
       });
 
       const finalJob = await waitAndreaniWorkerJob({

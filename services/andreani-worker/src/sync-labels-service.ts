@@ -10,6 +10,7 @@ import {
 import { saveArtifacts } from './browser-helpers.js';
 import { setJobDetail } from './job-status.js';
 import { enrichZebraLabelPdf, splitPdfPages } from './pdf/enrich-zebra.js';
+import { isPendienteIngreso } from './map-andreani-portal-estado.js';
 import { matchDestinatario, type MatchCandidate } from './match-names.js';
 import {
   applyTrackingToOrder,
@@ -144,6 +145,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
 
   const { page, context } = await openAuthenticatedPage(config);
   let skipped = 0;
+  let skippedNotPendiente = 0;
   let downloaded = 0;
   let assigned = 0;
   let orphans = 0;
@@ -162,8 +164,12 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       const rows = await scrapeCurrentPage(page);
       console.log(`[andreani] scrape página ${guard + 1}: ${rows.length} envío(s)`);
       if (rows.length) sawAny = true;
-      const fresh = rows.filter((r) => !known.has(r.tracking));
-      skipped += rows.length - fresh.length;
+
+      const pendienteRows = rows.filter((r) => isPendienteIngreso(r.estado));
+      skippedNotPendiente += rows.length - pendienteRows.length;
+
+      const fresh = pendienteRows.filter((r) => !known.has(r.tracking));
+      skipped += pendienteRows.length - fresh.length;
 
       // Solo regenerar PDFs conocidos si ANDREANI_REFRESH_KNOWN_LABELS=true
       // o si se pasan trackings explícitos en ANDREANI_REFRESH_TRACKINGS.
@@ -174,7 +180,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       const refreshAllKnown =
         (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '').toLowerCase() === 'true' ||
         (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '') === '1';
-      const toDownload = rows.filter((r) => {
+      const toDownload = pendienteRows.filter((r) => {
         if (fresh.some((f) => f.tracking === r.tracking)) return true;
         if (refreshList.length) return refreshList.includes(r.tracking);
         if (refreshAllKnown) return true;
@@ -232,13 +238,13 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
 
     return {
       status: 'ok',
-      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Omitidos: ${skipped}. Páginas revisadas: ${pagesVisited}.`,
+      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}. Páginas: ${pagesVisited}.`,
       httpStatus: 200,
       skipped,
       downloaded,
       assigned,
       orphans,
-      details: { refreshed, pagesVisited },
+      details: { refreshed, pagesVisited, skippedNotPendiente },
     };
   } catch (error) {
     const artifactDir = await saveArtifacts(page, config.artifactsDir, 'sync-labels-error').catch(
