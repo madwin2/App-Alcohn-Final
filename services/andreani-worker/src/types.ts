@@ -34,3 +34,14 @@ export interface SyncLabelsResult {
     refreshed?: number;
   };
 }
+
+export interface SyncTrackingResult {
+  status: GenerateStatus;
+  message: string;
+  httpStatus: number;
+  checked: number;
+  updated: number;
+  dispatched: number;
+  pending: number;
+  notFound: number;
+}

@@ -1,5 +1,6 @@
 import { runGenerateJob, runRefillJob } from './generate-service.js';
 import { runSyncLabelsJob } from './sync-labels-service.js';
+import { runSyncTrackingJob } from './sync-tracking-service.js';
 import {
   bumpQueueDepth,
   markJobFinished,
@@ -7,7 +8,7 @@ import {
   markJobRunning,
   type WorkerJobKind,
 } from './job-status.js';
-import type { GenerateResult, SyncLabelsResult } from './types.js';
+import type { GenerateResult, SyncLabelsResult, SyncTrackingResult } from './types.js';
 
 /** Pausa entre jobs para no saturar el portal. */
 const GAP_BETWEEN_JOBS_MS = 5_000;
@@ -79,6 +80,16 @@ export function enqueueSyncLabelsJob(): Promise<SyncLabelsResult> {
     'En cola: traer etiquetas',
     'Trayendo etiquetas del portal…',
     () => runSyncLabelsJob(),
+    (r) => ({ ok: r.status === 'ok', message: r.message }),
+  );
+}
+
+export function enqueueSyncTrackingJob(): Promise<SyncTrackingResult> {
+  return enqueue(
+    'sync-tracking',
+    'En cola: actualizar seguimientos',
+    'Revisando estados en portal Andreani…',
+    () => runSyncTrackingJob(),
     (r) => ({ ok: r.status === 'ok', message: r.message }),
   );
 }

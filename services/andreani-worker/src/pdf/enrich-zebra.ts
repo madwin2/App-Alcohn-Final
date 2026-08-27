@@ -1,3 +1,9 @@
+/**
+ * Enrich Zebra → 100×152 mm térmico. Flujo simple:
+ * 1) Si el PDF ya tiene pie "Pedido:", se recorta (evita duplicar).
+ * 2) Se dibuja la etiqueta Andreani arriba (achicada para dejar aire).
+ * 3) Un solo pie fino abajo, sin tapar el stub (2 QR).
+ */
 import {
   PDFDocument,
   StandardFonts,
@@ -14,33 +20,26 @@ import {
 } from 'pdf-lib';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
 
 const MM_TO_PT = 72 / 25.4;
 const LABEL_W_PT = 100 * MM_TO_PT;
 const LABEL_H_PT = 152 * MM_TO_PT;
-/** Zócalo del pedido (más alto → texto legible). */
-const FOOTER_FRAC_OF_PAGE = 0.125;
-const FIT_ZOOM = 0.995;
-const TOP_PRINT_MARGIN_PT = MM_TO_PT * 1.0;
-const BOTTOM_FOOTER_GAP_PT = MM_TO_PT * 0.8;
 
-/** Páginas chicas tipo Zebra 10×15 (p. ej. 196×298 pt). */
-const isZebraSourcePage = (widthPt: number, heightPt: number): boolean =>
-  widthPt > 0 && heightPt > 0 && widthPt < 500 && heightPt < 700;
+/** Pie fino (~8 mm texto / ~11 mm con preview). */
+const FOOTER_H_TEXT_PT = 8 * MM_TO_PT;
+const FOOTER_H_PREVIEW_PT = 11 * MM_TO_PT;
+/** Aire claro entre stub (2 QR) y el pie Pedido. */
+const GAP_PT = 8 * MM_TO_PT;
+const TOP_MARGIN_PT = 0.5 * MM_TO_PT;
+const BOTTOM_SAFE_PT = 1.5 * MM_TO_PT;
+/** Andreani un poco más chica que el hueco → aire bajo el stub. */
+const FIT_ZOOM = 0.92;
 
-/**
- * En A4 el bloque de etiqueta suele estar arriba-izquierda (~100×150 mm).
- * No usar inset lateral porcentual: corta el contenido (se veía el N° de seguimiento partido).
- */
 const A4_LABEL_W_PT = 106 * MM_TO_PT;
-const A4_LABEL_H_PT = 128 * MM_TO_PT;
-const A4_MARGIN_TOP_PT = 5 * MM_TO_PT;
-const A4_MARGIN_LEFT_PT = 5 * MM_TO_PT;
-/**
- * Antes se descartaba ~11% inferior (stub QR + tracking).
- * Eso era justo lo que faltaba en el despacho — no descartar nada en Zebra.
- */
-const ZEBRA_BOTTOM_DISCARD_FRAC = 0;
+const A4_LABEL_H_PT = 130 * MM_TO_PT;
+const A4_MARGIN_TOP_PT = 4 * MM_TO_PT;
+const A4_MARGIN_LEFT_PT = 4 * MM_TO_PT;
 
 export type EnrichOrderInput = {
   id: string;
@@ -48,6 +47,108 @@ export type EnrichOrderInput = {
   caption: string;
   imageUrls: string[][];
 };
+
+type CropBox = { x: number; y: number; width: number; height: number };
+
+const isSmallPage = (w: number, h: number) => w > 0 && h > 0 && w < 500 && h < 700;
+
+/** Texto PDF + streams Flate inflados (Pedido suele ir comprimido). */
+function pdfSearchableText(pdfBytes: Uint8Array): string {
+  const raw = Buffer.from(pdfBytes).toString('latin1');
+  const chunks = [raw];
+  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw))) {
+    try {
+      const bin = Buffer.from(m[1], 'latin1');
+      if (bin.length > 2 && bin[0] === 0x78) {
+        chunks.push(inflateSync(bin).toString('latin1'));
+      }
+    } catch {
+      /* stream no zlib */
+    }
+  }
+  return chunks.join('\n');
+}
+
+/**
+ * Si ya enriquecimos este PDF, recortar pies Pedido viejos (a veces 2–3 apilados + hueco).
+ * Zebra crudo del portal no tiene "Pedido:" → 0.
+ * pdf-lib suele escribir el texto en hex (<50656469646f…>) dentro de streams Flate.
+ */
+function autoDiscardBottomFrac(pdfBytes: Uint8Array, iw: number, ih: number): number {
+  if (!isSmallPage(iw, ih)) return 0;
+  const text = pdfSearchableText(pdfBytes);
+  const literal = text.match(/Pedido\s*:/gi)?.length ?? 0;
+  // "Pedido" en hex PDF: 50 65 64 69 64 6f
+  const hex = text.match(/50656469646f/gi)?.length ?? 0;
+  const hits = Math.max(literal, hex);
+  if (!hits) return 0;
+  // 1 pie fino ≈ 12 %; pies viejos/duplicados + hueco pueden llegar a ~50 %.
+  return Math.min(0.52, 0.1 + hits * 0.14);
+}
+
+function contentCrop(iw: number, ih: number, discardBottomFrac: number): CropBox {
+  if (isSmallPage(iw, ih)) {
+    const frac = Math.min(0.55, Math.max(0, discardBottomFrac));
+    const height = ih * (1 - frac);
+    // y = borde inferior del crop (origen PDF abajo-izq)
+    return { x: 0, y: ih - height, width: iw, height };
+  }
+  const width = Math.min(A4_LABEL_W_PT, iw - A4_MARGIN_LEFT_PT);
+  const height = Math.min(A4_LABEL_H_PT, ih - A4_MARGIN_TOP_PT);
+  return {
+    x: A4_MARGIN_LEFT_PT,
+    y: ih - A4_MARGIN_TOP_PT - height,
+    width,
+    height,
+  };
+}
+
+function clipRect(page: PDFPage, x: number, y: number, w: number, h: number): void {
+  page.pushOperators(
+    pushGraphicsState(),
+    moveTo(x, y),
+    lineTo(x + w, y),
+    lineTo(x + w, y + h),
+    lineTo(x, y + h),
+    closePath(),
+    clip(),
+    endPath(),
+  );
+}
+
+function endClip(page: PDFPage): void {
+  page.pushOperators(popGraphicsState());
+}
+
+/** Dibuja el crop escalado, centrado en X, alineado ARRIBA dentro de dest. */
+function drawCroppedPage(
+  page: PDFPage,
+  embedded: { width: number; height: number },
+  crop: CropBox,
+  dest: { x: number; y: number; width: number; height: number },
+  draw: (args: { x: number; y: number; width: number; height: number }) => void,
+): void {
+  const scale = Math.min(dest.width / crop.width, dest.height / crop.height) * FIT_ZOOM;
+  const drawnW = crop.width * scale;
+  const drawnH = crop.height * scale;
+  const destX = dest.x + (dest.width - drawnW) / 2;
+  const destTop = dest.y + dest.height;
+  const destY = destTop - drawnH;
+
+  const pageX = destX - crop.x * scale;
+  const pageY = destY - crop.y * scale;
+
+  clipRect(page, dest.x, dest.y, dest.width, dest.height);
+  draw({
+    x: pageX,
+    y: pageY,
+    width: embedded.width * scale,
+    height: embedded.height * scale,
+  });
+  endClip(page);
+}
 
 async function embedPreview(doc: PDFDocument, url: string): Promise<PDFImage | null> {
   try {
@@ -85,218 +186,147 @@ export async function splitPdfPages(bytes: Uint8Array): Promise<Uint8Array[]> {
   return out;
 }
 
-type CropBox = { x: number; y: number; width: number; height: number };
-
-/** Ventana de contenido útil (coords PDF, origen abajo-izq). */
-function contentCrop(iw: number, ih: number): CropBox {
-  if (isZebraSourcePage(iw, ih)) {
-    const height = ih * (1 - ZEBRA_BOTTOM_DISCARD_FRAC);
-    return { x: 0, y: ih - height, width: iw, height };
-  }
-  // A4 / hoja grande: ventana fija arriba-izquierda del tamaño de una etiqueta térmica.
-  const width = Math.min(A4_LABEL_W_PT, iw - A4_MARGIN_LEFT_PT);
-  const height = Math.min(A4_LABEL_H_PT, ih - A4_MARGIN_TOP_PT);
-  return {
-    x: A4_MARGIN_LEFT_PT,
-    y: ih - A4_MARGIN_TOP_PT - height,
-    width,
-    height,
-  };
-}
-
-function clipRect(page: PDFPage, x: number, y: number, w: number, h: number): void {
-  page.pushOperators(
-    pushGraphicsState(),
-    moveTo(x, y),
-    lineTo(x + w, y),
-    lineTo(x + w, y + h),
-    lineTo(x, y + h),
-    closePath(),
-    clip(),
-    endPath(),
-  );
-}
-
-function endClip(page: PDFPage): void {
-  page.pushOperators(popGraphicsState());
-}
-
 /**
- * Escala la ventana `crop` para llenar `dest`, alineada arriba y centrada en X.
- * (No centrar en Y: dejaba un hueco enorme entre etiqueta y pie.)
+ * Zebra Andreani → etiqueta 100×152 con pie Pedido (una sola vez, sin tapar stub).
  */
-function drawCroppedPage(
-  page: PDFPage,
-  embedded: { width: number; height: number },
-  crop: CropBox,
-  dest: { x: number; y: number; width: number; height: number },
-  draw: (args: { x: number; y: number; width: number; height: number }) => void,
-): { x: number; y: number; width: number; height: number } {
-  const scale = Math.min(dest.width / crop.width, dest.height / crop.height) * FIT_ZOOM;
-  const drawnCropW = crop.width * scale;
-  const drawnCropH = crop.height * scale;
-  const destX = dest.x + (dest.width - drawnCropW) / 2;
-  // Top-align dentro del área disponible (dest.y es el borde inferior del área).
-  const destTop = dest.y + dest.height;
-  const destY = destTop - drawnCropH;
-
-  const fullW = embedded.width * scale;
-  const fullH = embedded.height * scale;
-  const pageX = destX - crop.x * scale;
-  const pageY = destY - crop.y * scale;
-
-  clipRect(page, dest.x, dest.y, dest.width, dest.height);
-  draw({ x: pageX, y: pageY, width: fullW, height: fullH });
-  endClip(page);
-
-  return { x: destX, y: destY, width: drawnCropW, height: drawnCropH };
-}
-
 export async function enrichZebraLabelPdf(
   pageBytes: Uint8Array,
   tracking: string,
   order: EnrichOrderInput | undefined,
   logoPath?: string,
+  opts?: { discardBottomFrac?: number },
 ): Promise<Uint8Array> {
   const srcDoc = await PDFDocument.load(pageBytes);
   const outDoc = await PDFDocument.create();
   const font = await outDoc.embedFont(StandardFonts.Helvetica);
-  const embeddedPages = await outDoc.embedPages(srcDoc.getPages());
-  const embedded = embeddedPages[0];
+  const [embedded] = await outDoc.embedPages(srcDoc.getPages());
   if (!embedded) return pageBytes;
-
-  const alcohn = await embedLogo(outDoc, logoPath);
-  const labelPage = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
-  const bandH = LABEL_H_PT * FOOTER_FRAC_OF_PAGE;
-  const bandY = BOTTOM_FOOTER_GAP_PT * 0.4;
-  const availableH = Math.max(
-    40,
-    LABEL_H_PT - TOP_PRINT_MARGIN_PT - bandH - BOTTOM_FOOTER_GAP_PT,
-  );
 
   const iw = embedded.width;
   const ih = embedded.height;
-  const crop = contentCrop(iw, ih);
+  const discard =
+    opts?.discardBottomFrac ?? autoDiscardBottomFrac(pageBytes, iw, ih);
+  if (discard > 0) {
+    console.log(
+      `[enrich] ${tracking}: fuente ya tenía pie Pedido → discardBottom=${(discard * 100).toFixed(0)}%`,
+    );
+  }
 
-  const drawn = drawCroppedPage(
-    labelPage,
-    embedded,
-    crop,
-    {
-      x: 0,
-      y: bandY + bandH,
-      width: LABEL_W_PT,
-      height: availableH,
-    },
-    (args) => {
-      labelPage.drawPage(embedded, args);
-    },
-  );
+  const hasPreviews = (order?.imageUrls ?? []).some((u) => u.length > 0);
+  const bandH = hasPreviews ? FOOTER_H_PREVIEW_PT : FOOTER_H_TEXT_PT;
+  const footerY = BOTTOM_SAFE_PT;
+  const andreaniBottom = footerY + bandH + GAP_PT;
+  const availableH = Math.max(40, LABEL_H_PT - TOP_MARGIN_PT - andreaniBottom);
 
-  // Pegar el pie justo debajo de la etiqueta (no al fondo de la hoja si sobra espacio).
-  const snugBandY = Math.max(bandY, drawn.y - BOTTOM_FOOTER_GAP_PT - bandH);
-  const pad = Math.max(3, drawn.width * 0.024);
-  const footerX = Math.max(0, drawn.x - 2);
-  const footerW = Math.min(LABEL_W_PT - footerX, drawn.width + 4);
-  labelPage.drawRectangle({
-    x: footerX,
-    y: snugBandY,
-    width: footerW,
-    height: bandH,
+  const page = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width: LABEL_W_PT,
+    height: LABEL_H_PT,
     color: rgb(1, 1, 1),
     borderWidth: 0,
   });
 
-  const centerLines: string[] = [];
+  const crop = contentCrop(iw, ih, discard);
+  drawCroppedPage(
+    page,
+    embedded,
+    crop,
+    { x: 0, y: andreaniBottom, width: LABEL_W_PT, height: availableH },
+    (args) => page.drawPage(embedded, args),
+  );
+
+  // Pie: solo la franja (NO blanquear andeaniBottom entero — eso comía los QR del stub).
+  const pad = 3;
+  page.drawRectangle({
+    x: 0,
+    y: footerY,
+    width: LABEL_W_PT,
+    height: bandH,
+    color: rgb(1, 1, 1),
+    borderWidth: 0,
+  });
+  page.drawLine({
+    start: { x: 3, y: footerY + bandH },
+    end: { x: LABEL_W_PT - 3, y: footerY + bandH },
+    thickness: 0.6,
+    color: rgb(0.35, 0.35, 0.35),
+  });
+
+  const alcohn = await embedLogo(outDoc, logoPath);
+  const lines: string[] = [];
   if (order) {
-    centerLines.push(`Pedido: ${order.id.replace(/-/g, '').slice(0, 14)}`);
+    lines.push(`Pedido: ${order.id.replace(/-/g, '').slice(0, 14)}`);
     const seen = new Set<string>();
-    for (const name of order.designNames.slice(0, 3)) {
-      const label = name.trim();
-      if (!label) continue;
-      const key = label.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      centerLines.push(label.length > 36 ? `${label.slice(0, 33)}…` : label);
-    }
-    if (order.caption) {
-      for (const part of order.caption.split(/\s*[·|]\s*/)) {
-        if (centerLines.length >= 4) break;
-        const p = part.trim();
-        if (!p) continue;
-        const key = p.toLowerCase();
-        if (seen.has(key)) continue;
-        if (order.designNames.some((d) => d.trim().toLowerCase() === key)) continue;
-        seen.add(key);
-        centerLines.push(p.length > 36 ? `${p.slice(0, 33)}…` : p);
-      }
+    for (const name of order.designNames.slice(0, 2)) {
+      const t = name.trim();
+      if (!t) continue;
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      lines.push(t.length > 34 ? `${t.slice(0, 31)}…` : t);
     }
   } else {
-    centerLines.push(`Andreani ${tracking}`);
+    lines.push(`Andreani ${tracking}`);
   }
 
-  const leftColW = drawn.width * 0.22;
-  const rightColW = drawn.width * 0.28;
-  const centerX = drawn.x + leftColW + pad * 0.5;
-  const centerW = Math.max(36, drawn.width - leftColW - rightColW - pad);
-  const logoMaxH = bandH * 0.82;
-  const logoMaxW = leftColW - pad * 1.0;
+  const leftW = LABEL_W_PT * 0.14;
+  const rightW = LABEL_W_PT * 0.4;
+  const textX = leftW + pad;
+  const textW = Math.max(36, LABEL_W_PT - leftW - rightW - pad * 2);
+  const contentTop = footerY + bandH - 2;
+  const imgH = bandH - 4;
 
   if (alcohn) {
-    const ls = Math.min(logoMaxW / alcohn.width, logoMaxH / alcohn.height);
-    const lw = alcohn.width * ls;
-    const lh = alcohn.height * ls;
-    labelPage.drawImage(alcohn, {
-      x: drawn.x + (leftColW - lw) / 2,
-      y: snugBandY + (bandH - lh) / 2,
+    const sc = Math.min((leftW - 2) / alcohn.width, imgH / alcohn.height);
+    const lw = alcohn.width * sc;
+    const lh = alcohn.height * sc;
+    page.drawImage(alcohn, {
+      x: (leftW - lw) / 2,
+      y: contentTop - lh,
       width: lw,
       height: lh,
     });
   }
 
-  const textLines = centerLines.slice(0, 4);
-  // bandH ~19pt → ~7–8pt legible en térmica
-  const textSize = Math.max(6.5, Math.min(8.2, bandH * 0.34));
-  const lineStep = textSize + 1.35;
-  const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
-  let textBaseline = snugBandY + (bandH + textBlockH) / 2 - textSize * 0.15;
-  for (const line of textLines) {
-    labelPage.drawText(line, {
-      x: centerX,
-      y: textBaseline,
-      size: textSize,
+  const fontSize = Math.max(6, Math.min(7.2, bandH * 0.35));
+  let y = contentTop - fontSize;
+  for (const line of lines.slice(0, 2)) {
+    page.drawText(line, {
+      x: textX,
+      y,
+      size: fontSize,
       font,
-      color: rgb(0.06, 0.06, 0.06),
-      maxWidth: centerW,
-      lineHeight: lineStep,
+      color: rgb(0.05, 0.05, 0.05),
+      maxWidth: textW,
     });
-    textBaseline -= lineStep;
-    if (textBaseline < snugBandY + 1) break;
+    y -= fontSize + 1;
+    if (y < footerY + 1) break;
   }
 
-  const imageCandidates = order?.imageUrls.slice(0, 3) ?? [];
-  const maxPrev = imageCandidates.length;
-  const slotW = Math.min(maxPrev >= 3 ? 22 : 28, rightColW * (maxPrev >= 3 ? 0.3 : 0.42));
-  const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
-  if (maxPrev > 0) {
-    let px = drawn.x + drawn.width - rightColW + (rightColW - totalPrevW) / 2;
-    for (let j = 0; j < maxPrev; j += 1) {
+  const urls = (order?.imageUrls ?? []).slice(0, 2);
+  if (urls.length) {
+    const gap = 2;
+    const slot = Math.min(40, (rightW - pad - gap * (urls.length - 1)) / urls.length);
+    let px = LABEL_W_PT - rightW + 2;
+    for (const group of urls) {
       let img: PDFImage | null = null;
-      for (const url of imageCandidates[j] ?? []) {
+      for (const url of group) {
         img = await embedPreview(outDoc, url);
         if (img) break;
       }
       if (!img) continue;
-      const sc = Math.min(slotW / img.width, logoMaxH / img.height);
-      const dwj = img.width * sc;
-      const dhj = img.height * sc;
-      labelPage.drawImage(img, {
-        x: px + (slotW - dwj) / 2,
-        y: snugBandY + (bandH - dhj) / 2,
-        width: dwj,
-        height: dhj,
+      const sc = Math.min(slot / img.width, imgH / img.height);
+      const dw = img.width * sc;
+      const dh = img.height * sc;
+      page.drawImage(img, {
+        x: px + (slot - dw) / 2,
+        y: contentTop - dh,
+        width: dw,
+        height: dh,
       });
-      px += slotW + 2;
+      px += slot + gap;
     }
   }
 

@@ -286,3 +286,102 @@ export async function applyTrackingToOrder(ordenId: string, tracking: string): P
   if (error) throw error;
 }
 
+export type TrackingStatusCandidate = {
+  tracking: string;
+  ordenId: string;
+};
+
+/** Etiquetas asignadas: venta Transferido + envío Etiqueta lista (candidatas a pasar a Despachado). */
+export async function listTrackingsForStatusRefresh(): Promise<TrackingStatusCandidate[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('envios_andreani_etiquetas')
+    .select(
+      `
+      tracking,
+      orden_id,
+      pdf_path,
+      ordenes (
+        id,
+        estado_envio,
+        estado_orden,
+        sellos ( estado_venta )
+      )
+    `,
+    )
+    .eq('estado', 'asignada')
+    .not('orden_id', 'is', null)
+    .not('pdf_path', 'is', null);
+  if (error) throw error;
+
+  type Row = {
+    tracking: string;
+    orden_id: string | null;
+    pdf_path: string | null;
+    ordenes:
+      | {
+          id: string;
+          estado_envio: string | null;
+          estado_orden: string | null;
+          sellos: { estado_venta: string | null }[] | null;
+        }
+      | {
+          id: string;
+          estado_envio: string | null;
+          estado_orden: string | null;
+          sellos: { estado_venta: string | null }[] | null;
+        }[]
+      | null;
+  };
+
+  const out: TrackingStatusCandidate[] = [];
+  for (const row of (data ?? []) as Row[]) {
+    if (!row.tracking || !row.orden_id || !row.pdf_path) continue;
+    const ordenRaw = row.ordenes;
+    const orden = Array.isArray(ordenRaw) ? ordenRaw[0] : ordenRaw;
+    if (!orden?.id) continue;
+    if (orden.estado_envio !== 'Etiqueta Lista') continue;
+
+    const sellos = orden.sellos ?? [];
+    const saleTransferred =
+      sellos.length > 0
+        ? sellos.every((s) => s.estado_venta === 'Transferido')
+        : orden.estado_orden === 'Transferido';
+    if (!saleTransferred) continue;
+
+    out.push({ tracking: row.tracking, ordenId: orden.id });
+  }
+  return out;
+}
+
+export async function updateEtiquetaPortalStatus(
+  tracking: string,
+  patch: { estadoPortal: string; fechaPortal?: string },
+): Promise<void> {
+  const supabase = getSupabase();
+  const update: Record<string, string> = { estado_portal: patch.estadoPortal };
+  if (patch.fechaPortal) update.fecha_portal = patch.fechaPortal;
+  const { error } = await supabase.from('envios_andreani_etiquetas').update(update).eq('tracking', tracking);
+  if (error) throw error;
+}
+
+/** Solo si el envío sigue en Etiqueta lista → Despachado. */
+export async function markOrderDespachado(ordenId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error: readErr } = await supabase
+    .from('ordenes')
+    .select('estado_envio')
+    .eq('id', ordenId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (data?.estado_envio !== 'Etiqueta Lista') return false;
+
+  const { error } = await supabase
+    .from('ordenes')
+    .update({ estado_envio: 'Despachado' })
+    .eq('id', ordenId)
+    .eq('estado_envio', 'Etiqueta Lista');
+  if (error) throw error;
+  return true;
+}
+

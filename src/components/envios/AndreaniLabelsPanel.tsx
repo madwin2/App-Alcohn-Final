@@ -30,6 +30,15 @@ type SyncResponse = {
   downloaded?: number;
 };
 
+type SyncTrackingResponse = {
+  status?: string;
+  message?: string;
+  checked?: number;
+  dispatched?: number;
+  pending?: number;
+  notFound?: number;
+};
+
 /** Ícono WhatsApp (marca registrada Meta); solo UI. */
 function WhatsappLogo({ className }: { className?: string }) {
   return (
@@ -50,6 +59,7 @@ export function AndreaniLabelsPanel({
   const [rows, setRows] = useState<AndreaniEtiquetaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [updatingTracking, setUpdatingTracking] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignPick, setAssignPick] = useState<Record<string, string>>({});
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -182,6 +192,62 @@ export function AndreaniLabelsPanel({
       await refresh();
     } finally {
       setSyncing(false);
+      const job = await fetchAndreaniWorkerJob();
+      setWorkerJob(job);
+    }
+  };
+
+  const handleUpdateTracking = async () => {
+    setUpdatingTracking(true);
+    try {
+      const res = await fetch('/api/andreani-sync-tracking', { method: 'POST' });
+      const json = (await res.json().catch(() => ({}))) as SyncTrackingResponse;
+      if (!res.ok && res.status !== 202) {
+        const msg = typeof json.message === 'string' ? json.message : `Error ${res.status}`;
+        if (res.status === 404 || /ruta no encontrada/i.test(msg)) {
+          throw new Error(
+            'El worker Andreani no tiene /sync-tracking. Actualizá y reiniciá el servicio en el VPS.',
+          );
+        }
+        throw new Error(msg);
+      }
+
+      toast({
+        title: 'Actualizando seguimientos…',
+        description:
+          'Revisamos el portal Andreani. Si ya no están “Pendiente de ingreso”, el envío pasa a Despachado.',
+      });
+
+      const finalJob = await waitAndreaniWorkerJob({
+        pollMs: 4_000,
+        maxMs: 12 * 60_000,
+        onUpdate: (job) => setWorkerJob(job),
+      });
+
+      await refresh();
+      onAssigned?.();
+
+      if (finalJob?.phase === 'error' || finalJob?.lastOk === false) {
+        toast({
+          title: 'Actualización terminó con error',
+          description: finalJob.lastMessage || finalJob.detail || 'Revisá el worker',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Seguimientos actualizados',
+          description: finalJob?.lastMessage || 'Listo',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'No se pudieron actualizar seguimientos',
+        description: error instanceof Error ? error.message : 'Falló el worker',
+        variant: 'destructive',
+      });
+      await refresh();
+    } finally {
+      setUpdatingTracking(false);
       const job = await fetchAndreaniWorkerJob();
       setWorkerJob(job);
     }
@@ -339,10 +405,27 @@ export function AndreaniLabelsPanel({
               {pendingCount} pendiente{pendingCount === 1 ? '' : 's'}
             </span>
           </div>
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => void refresh()} disabled={loading || syncing}>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => void refresh()} disabled={loading || syncing || updatingTracking}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </Button>
-          <Button type="button" size="sm" onClick={() => void handleSync()} disabled={syncing || jobActive}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void handleUpdateTracking()}
+            disabled={updatingTracking || syncing || jobActive}
+            title="Consulta el portal Andreani y marca Despachado si ya no están pendientes de ingreso"
+          >
+            {updatingTracking || (jobActive && workerJob?.kind === 'sync-tracking') ? (
+              <>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Actualizando…
+              </>
+            ) : (
+              'Actualizar seguimientos'
+            )}
+          </Button>
+          <Button type="button" size="sm" onClick={() => void handleSync()} disabled={syncing || updatingTracking || jobActive}>
             {syncing || (jobActive && workerJob?.kind === 'sync-labels') ? (
               <>
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -356,7 +439,7 @@ export function AndreaniLabelsPanel({
             type="button"
             variant="outline"
             size="sm"
-            disabled={downloadable.length === 0 || downloadingAll || syncing}
+            disabled={downloadable.length === 0 || downloadingAll || syncing || updatingTracking}
             title="Descarga todas las etiquetas Transferido en un PDF (hojas 100×152)"
             onClick={() => void handleDownloadAll()}
           >
@@ -384,13 +467,14 @@ export function AndreaniLabelsPanel({
               <th className="px-2 py-1.5 font-medium">Seguimiento</th>
               <th className="px-2 py-1.5 font-medium">Operación</th>
               <th className="px-2 py-1.5 font-medium">Venta</th>
+              <th className="px-2 py-1.5 font-medium">Estado Andreani</th>
               <th className="px-2 py-1.5 font-medium text-right">PDF</th>
             </tr>
           </thead>
           <tbody>
             {assigned.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-2 py-4 text-center text-muted-foreground">
+                <td colSpan={7} className="px-2 py-4 text-center text-muted-foreground">
                   Todavía no hay etiquetas asignadas a pedidos.
                 </td>
               </tr>
@@ -422,6 +506,7 @@ export function AndreaniLabelsPanel({
                     <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
                     <td className="px-2 py-1.5 font-mono tabular-nums">{row.nroOperacion || '—'}</td>
                     <td className="px-2 py-1.5">{row.saleTransferred ? 'Transferido' : 'Pendiente'}</td>
+                    <td className="px-2 py-1.5 text-muted-foreground">{row.estadoPortal || '—'}</td>
                     <td className="px-2 py-1.5 text-right">
                       <Button
                         type="button"

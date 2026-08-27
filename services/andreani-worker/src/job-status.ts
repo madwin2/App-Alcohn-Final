@@ -1,4 +1,4 @@
-export type WorkerJobKind = 'generate' | 'refill' | 'sync-labels';
+export type WorkerJobKind = 'generate' | 'refill' | 'sync-labels' | 'sync-tracking';
 
 export type WorkerJobPhase = 'idle' | 'queued' | 'running' | 'done' | 'error';
 

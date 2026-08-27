@@ -67,7 +67,7 @@ export const eliminarLinkAndreani = async (ordenId: string): Promise<boolean> =>
   return Boolean(data);
 };
 
-/** Elimina del pool los disponibles creados hace más de 48h. */
+/** Elimina del pool los disponibles creados hace más de 30h. */
 export const purgarLinksAndreaniViejos = async (): Promise<number> => {
   const { data, error } = await supabase.rpc('purgar_links_andreani_viejos');
   if (error) throw error;
@@ -124,7 +124,7 @@ export const getAndreaniPoolCounts = async (): Promise<Record<AndreaniLinkEstado
   try {
     await purgarLinksAndreaniViejos();
   } catch {
-    /* si la migración 48h aún no corrió, seguimos con el conteo */
+    /* si la migración de purga aún no corrió, seguimos con el conteo */
   }
   const { data, error } = await supabase.from('envios_andreani_links').select('estado');
   if (error) throw error;

@@ -28,7 +28,7 @@ const LABEL_W_PT = LABEL_W_MM * MM_TO_PT;
 const LABEL_H_PT = LABEL_H_MM * MM_TO_PT;
 
 /** Alto del zócalo (pedido + logos), relativo al alto de página. */
-const FOOTER_FRAC_OF_PAGE = 0.125;
+const FOOTER_FRAC_OF_PAGE = 0.14;
 const RENDER_SCALE = 2.5;
 const TRIM_WHITE_THRESHOLD = 250;
 const TRIM_PADDING_PX = 6;
@@ -258,19 +258,19 @@ const enrichZebraVector = async (
     const imageCandidates = footerContent?.imageCandidates ?? [];
     const centerLines = buildCenterFooterLines(order, tn);
 
-    const leftColW = dw * 0.24;
-    const rightColW = dw * 0.24;
-    const centerX = xImg + leftColW + pad * 0.5;
-    const centerW = Math.max(28, dw - leftColW - rightColW - pad);
-    const logoMaxH = bandH * 0.78;
-    const logoMaxW = leftColW - pad * 1.2;
+    const leftColW = LABEL_W_PT * 0.16;
+    const rightColW = LABEL_W_PT * 0.44;
+    const centerX = leftColW + pad;
+    const centerW = Math.max(40, LABEL_W_PT - leftColW - rightColW - pad * 2);
+    const logoMaxH = bandH * 0.9;
+    const logoMaxW = leftColW - pad;
 
     if (embeddedAlcohn) {
       const ls = Math.min(logoMaxW / embeddedAlcohn.width, logoMaxH / embeddedAlcohn.height);
       const lw = embeddedAlcohn.width * ls;
       const lh = embeddedAlcohn.height * ls;
       labelPage.drawImage(embeddedAlcohn, {
-        x: xImg + (leftColW - lw) / 2,
+        x: (leftColW - lw) / 2,
         y: bandY + (bandH - lh) / 2,
         width: lw,
         height: lh,
@@ -279,12 +279,16 @@ const enrichZebraVector = async (
 
     const nPrev = imageCandidates.length;
     const maxPrev = Math.min(3, nPrev);
-    const slotW = Math.min(maxPrev >= 3 ? 22 : 28, rightColW * (maxPrev >= 3 ? 0.3 : 0.42));
-    const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
+    const gapPrev = 3;
+    const slotW =
+      maxPrev > 0
+        ? Math.min(56, (rightColW - pad - gapPrev * Math.max(0, maxPrev - 1)) / maxPrev)
+        : 0;
+    const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * gapPrev : 0;
 
-    const textLines = centerLines.slice(0, 4);
-    const textSize = Math.max(6.5, Math.min(8.2, bandH * 0.34));
-    const lineStep = textSize + 1.35;
+    const textLines = centerLines.slice(0, 3);
+    const textSize = Math.max(6.8, Math.min(8.5, bandH * 0.26));
+    const lineStep = textSize + 1.4;
     const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
     let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize * 0.15;
     for (const line of textLines) {
@@ -302,7 +306,7 @@ const enrichZebraVector = async (
     }
 
     if (order && maxPrev > 0) {
-      let px = xImg + dw - rightColW + (rightColW - totalPrevW) / 2;
+      let px = LABEL_W_PT - rightColW + (rightColW - totalPrevW) / 2;
       for (let j = 0; j < maxPrev; j += 1) {
         let embedded: PDFImage | null = null;
         for (const candidateUrl of imageCandidates[j] ?? []) {
@@ -319,7 +323,7 @@ const enrichZebraVector = async (
           width: dwj,
           height: dhj,
         });
-        px += slotW + 2;
+        px += slotW + gapPrev;
       }
     }
   }
@@ -399,19 +403,19 @@ export const enrichAndreaniLabelsPdf = async (
     const imageCandidates = footerContent?.imageCandidates ?? [];
     const centerLines = buildCenterFooterLines(order, tn);
 
-    const leftColW = dw * 0.24;
-    const rightColW = dw * 0.24;
-    const centerX = xImg + leftColW + pad * 0.5;
-    const centerW = Math.max(28, dw - leftColW - rightColW - pad);
-    const logoMaxH = bandH * 0.78;
-    const logoMaxW = leftColW - pad * 1.2;
+    const leftColW = LABEL_W_PT * 0.16;
+    const rightColW = LABEL_W_PT * 0.44;
+    const centerX = leftColW + pad;
+    const centerW = Math.max(40, LABEL_W_PT - leftColW - rightColW - pad * 2);
+    const logoMaxH = bandH * 0.9;
+    const logoMaxW = leftColW - pad;
 
     if (embeddedAlcohn) {
       const ls = Math.min(logoMaxW / embeddedAlcohn.width, logoMaxH / embeddedAlcohn.height);
       const lw = embeddedAlcohn.width * ls;
       const lh = embeddedAlcohn.height * ls;
       labelPage.drawImage(embeddedAlcohn, {
-        x: xImg + (leftColW - lw) / 2,
+        x: (leftColW - lw) / 2,
         y: bandY + (bandH - lh) / 2,
         width: lw,
         height: lh,
@@ -420,12 +424,16 @@ export const enrichAndreaniLabelsPdf = async (
 
     const nPrev = imageCandidates.length;
     const maxPrev = Math.min(3, nPrev);
-    const slotW = Math.min(maxPrev >= 3 ? 22 : 28, rightColW * (maxPrev >= 3 ? 0.3 : 0.42));
-    const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * 2 : 0;
+    const gapPrev = 3;
+    const slotW =
+      maxPrev > 0
+        ? Math.min(56, (rightColW - pad - gapPrev * Math.max(0, maxPrev - 1)) / maxPrev)
+        : 0;
+    const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * gapPrev : 0;
 
-    const textLines = centerLines.slice(0, 4);
-    const textSize = Math.max(6.5, Math.min(8.2, bandH * 0.34));
-    const lineStep = textSize + 1.35;
+    const textLines = centerLines.slice(0, 3);
+    const textSize = Math.max(6.8, Math.min(8.5, bandH * 0.26));
+    const lineStep = textSize + 1.4;
     const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
     let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize * 0.15;
     for (const line of textLines) {
@@ -443,7 +451,7 @@ export const enrichAndreaniLabelsPdf = async (
     }
 
     if (order && maxPrev > 0) {
-      let px = xImg + dw - rightColW + (rightColW - totalPrevW) / 2;
+      let px = LABEL_W_PT - rightColW + (rightColW - totalPrevW) / 2;
       for (let j = 0; j < maxPrev; j += 1) {
         let embedded: PDFImage | null = null;
         for (const candidateUrl of imageCandidates[j] ?? []) {
@@ -460,7 +468,7 @@ export const enrichAndreaniLabelsPdf = async (
           width: dwj,
           height: dhj,
         });
-        px += slotW + 2;
+        px += slotW + gapPrev;
       }
     }
   }

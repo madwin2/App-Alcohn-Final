@@ -28,7 +28,6 @@ import {
   phoneSearchVariants,
 } from '../../utils/phoneNormalization';
 import {
-  asignarLinkAndreani,
   getAssignedAndreaniLinksByOrdenIds,
   getAssignedAndreaniLinkUrl,
   liberarLinkAndreani,
@@ -772,16 +771,7 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
         .eq('id', sello.id);
     }
 
-    // 6. Asignar link Andreani del pool si corresponde
-    if (formData.shipping?.carrier === 'ANDREANI') {
-      try {
-        await asignarLinkAndreani(orden.id);
-      } catch (linkError) {
-        console.warn('Error asignando link Andreani:', linkError);
-      }
-    }
-
-    // 7. Obtener la orden completa (incluye andreaniLinkUrl si se asignó)
+    // Link Andreani: se asigna al enviar la foto (webhook pedido_listo), no al crear.
     return (await getOrderById(orden.id)) || (orden as unknown as Order);
   } catch (error) {
     console.error('Error creating order:', error);
@@ -1084,18 +1074,16 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
       }
     }
 
-    // Pool Andreani: liberar al salir de Andreani; asignar al entrar
+    // Pool Andreani: liberar al salir de Andreani (la asignación ocurre al enviar la foto)
     if (previousCarrier !== undefined && nextCarrier !== undefined) {
       const wasAndreani = previousCarrier === 'ANDREANI';
       const isAndreani = nextCarrier === 'ANDREANI';
-      try {
-        if (wasAndreani && !isAndreani) {
+      if (wasAndreani && !isAndreani) {
+        try {
           await liberarLinkAndreani(orderId, false);
-        } else if (!wasAndreani && isAndreani) {
-          await asignarLinkAndreani(orderId);
+        } catch (linkError) {
+          console.warn('Error liberando link Andreani:', linkError);
         }
-      } catch (linkError) {
-        console.warn('Error sincronizando link Andreani:', linkError);
       }
     }
 

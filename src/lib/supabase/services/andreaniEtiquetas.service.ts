@@ -152,7 +152,7 @@ export const downloadAndreaniEtiquetaPdf = async (pdfPath: string): Promise<void
   triggerBrowserDownload(data.signedUrl, pdfPath.split('/').pop() || 'etiqueta-andreani.pdf');
 };
 
-/** Une varios PDFs en uno solo, una hoja 100×152 mm por etiqueta. */
+/** Une varios PDFs en uno solo, una hoja 100×152 mm por etiqueta (copia directa, sin reescalar). */
 export const downloadMergedAndreaniEtiquetasPdfs = async (pdfPaths: string[]): Promise<void> => {
   if (pdfPaths.length === 0) {
     throw new Error('No hay PDFs para descargar');
@@ -163,19 +163,16 @@ export const downloadMergedAndreaniEtiquetasPdfs = async (pdfPaths: string[]): P
   for (const pdfPath of pdfPaths) {
     const bytes = await fetchAndreaniEtiquetaPdfBytes(pdfPath);
     const src = await PDFDocument.load(bytes);
-    const embeddedPages = await outDoc.embedPages(src.getPages());
-
-    for (const embedded of embeddedPages) {
-      const page = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
-      const scale = Math.min(LABEL_W_PT / embedded.width, LABEL_H_PT / embedded.height);
-      const w = embedded.width * scale;
-      const h = embedded.height * scale;
-      page.drawPage(embedded, {
-        x: (LABEL_W_PT - w) / 2,
-        y: (LABEL_H_PT - h) / 2,
-        width: w,
-        height: h,
-      });
+    const indices = src.getPageIndices();
+    const copied = await outDoc.copyPages(src, indices);
+    for (const page of copied) {
+      // Normalizar a 100×152 si viniera otro tamaño.
+      const w = page.getWidth();
+      const h = page.getHeight();
+      if (Math.abs(w - LABEL_W_PT) > 0.5 || Math.abs(h - LABEL_H_PT) > 0.5) {
+        page.setSize(LABEL_W_PT, LABEL_H_PT);
+      }
+      outDoc.addPage(page);
     }
   }
 

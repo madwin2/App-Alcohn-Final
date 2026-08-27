@@ -155,7 +155,9 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
     console.log(`[andreani] sync-labels URL=${page.url()}`);
 
     let sawAny = false;
-    for (let guard = 0; guard < 40; guard += 1) {
+    let pagesVisited = 0;
+    for (let guard = 0; guard < 80; guard += 1) {
+      pagesVisited = guard + 1;
       setJobDetail(`Revisando página ${guard + 1} del historial…`);
       const rows = await scrapeCurrentPage(page);
       console.log(`[andreani] scrape página ${guard + 1}: ${rows.length} envío(s)`);
@@ -163,19 +165,25 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       const fresh = rows.filter((r) => !known.has(r.tracking));
       skipped += rows.length - fresh.length;
 
-      // Antes: refreshKnown en páginas 0–2 regeneraba PDFs viejos (crop).
-      // Eso alarga el sync y suele fallar en “Imprimir etiquetas” → 504 en Vercel.
-      // Solo nuevos, salvo ANDREANI_REFRESH_KNOWN_LABELS=true.
-      const refreshKnown =
+      // Solo regenerar PDFs conocidos si ANDREANI_REFRESH_KNOWN_LABELS=true
+      // o si se pasan trackings explícitos en ANDREANI_REFRESH_TRACKINGS.
+      const refreshList = (process.env.ANDREANI_REFRESH_TRACKINGS || '')
+        .split(/[\s,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const refreshAllKnown =
         (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '').toLowerCase() === 'true' ||
-        (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '') === '1'
-          ? guard < 3
-          : false;
-      const toDownload = refreshKnown ? rows : fresh;
+        (process.env.ANDREANI_REFRESH_KNOWN_LABELS ?? '') === '1';
+      const toDownload = rows.filter((r) => {
+        if (fresh.some((f) => f.tracking === r.tracking)) return true;
+        if (refreshList.length) return refreshList.includes(r.tracking);
+        if (refreshAllKnown) return true;
+        return false;
+      });
 
       if (toDownload.length) {
         console.log(
-          `[andreani] página: ${fresh.length} nuevo(s), descargando ${toDownload.length} (refreshKnown=${refreshKnown})`,
+          `[andreani] página ${guard + 1}: ${fresh.length} nuevo(s), descargando ${toDownload.length}`,
         );
         setJobDetail(
           `Página ${guard + 1}: descargando ${toDownload.length} etiqueta(s)${fresh.length ? ` (${fresh.length} nuevas)` : ''}…`,
@@ -201,7 +209,10 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
         }
       }
 
-      if (!(await goNextPage(page))) break;
+      if (!(await goNextPage(page))) {
+        console.log(`[andreani] fin de paginación en página ${guard + 1} (total visitadas=${pagesVisited})`);
+        break;
+      }
     }
 
     if (!sawAny) {
@@ -221,13 +232,13 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
 
     return {
       status: 'ok',
-      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Ya estaban omitidos en conteo: ${skipped}.`,
+      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Omitidos: ${skipped}. Páginas revisadas: ${pagesVisited}.`,
       httpStatus: 200,
       skipped,
       downloaded,
       assigned,
       orphans,
-      details: { refreshed },
+      details: { refreshed, pagesVisited },
     };
   } catch (error) {
     const artifactDir = await saveArtifacts(page, config.artifactsDir, 'sync-labels-error').catch(
