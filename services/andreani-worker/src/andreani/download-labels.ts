@@ -504,25 +504,29 @@ async function checkTracking(
   await row.scrollIntoViewIfNeeded().catch(() => undefined);
   await page.waitForTimeout(200);
 
-  const jsOk = await page.evaluate(`(tracking) => {
+  // OJO: page.evaluate con string debe ser un IIFE. Un string tipo
+  // "(arg) => {...}" se evalúa como expresión → devuelve una función → undefined.
+  const jsOk = await page.evaluate(`(() => {
+    const tracking = ${JSON.stringify(tracking)};
     const rows = Array.from(document.querySelectorAll('table tbody tr, [role="row"]'));
     for (const tr of rows) {
-      if (!(tr.innerText || '').includes(tracking)) continue;
+      if ((tr.innerText || '').indexOf(tracking) === -1) continue;
       const box = tr.querySelector('input[type="checkbox"]');
       if (!box) continue;
-      if (!box.checked) {
-        box.click();
-        if (!box.checked) {
-          box.checked = true;
-          box.dispatchEvent(new Event('change', { bubbles: true }));
-          box.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      }
+      if (!box.checked) box.click();
       return !!box.checked;
     }
     return false;
-  }`, tracking);
+  })()`);
   if (jsOk) return true;
+
+  // MUI esconde el input (opacity 0); el área clickeable es el span contenedor.
+  const muiBox = row.locator('.MuiCheckbox-root, span[class*="Checkbox"]').first();
+  if (await muiBox.count().catch(() => 0)) {
+    await muiBox.click({ force: true }).catch(() => undefined);
+    await page.waitForTimeout(300);
+    if (await isTrackingChecked(page, tracking)) return true;
+  }
 
   const box = row.locator('input[type="checkbox"]').first();
   if (await box.count().catch(() => 0)) {
@@ -532,11 +536,27 @@ async function checkTracking(
     } catch {
       await box.click({ force: true }).catch(() => undefined);
     }
-    if (await box.isChecked().catch(() => false)) return true;
+    if (await isTrackingChecked(page, tracking)) return true;
   }
-  await row.click({ force: true }).catch(() => undefined);
-  await page.waitForTimeout(200);
-  return box.isChecked().catch(() => false);
+
+  await row.locator('td').first().click({ force: true }).catch(() => undefined);
+  await page.waitForTimeout(300);
+  return isTrackingChecked(page, tracking);
+}
+
+/** Lee del DOM si la fila del tracking quedó tildada. */
+async function isTrackingChecked(page: Page, tracking: string): Promise<boolean> {
+  const checked = await page.evaluate(`(() => {
+    const tracking = ${JSON.stringify(tracking)};
+    const rows = Array.from(document.querySelectorAll('table tbody tr, [role="row"]'));
+    for (const tr of rows) {
+      if ((tr.innerText || '').indexOf(tracking) === -1) continue;
+      const box = tr.querySelector('input[type="checkbox"]');
+      return !!(box && box.checked);
+    }
+    return false;
+  })()`);
+  return checked === true;
 }
 
 async function chooseZebraFormat(page: Page, timeoutMs: number): Promise<void> {
@@ -786,20 +806,8 @@ export async function downloadNewLabelsFromCurrentPage(
     if (await checkTracking(page, tracking, opts)) selected.push(tracking);
   }
   if (!selected.length) {
-    // Último intento: marcar por JS según texto de la fila
     for (const tracking of trackings) {
-      const ok = await page.evaluate(`(tracking) => {
-        const rows = Array.from(document.querySelectorAll('table tbody tr, [role="row"]'));
-        for (const tr of rows) {
-          if (!(tr.innerText || '').includes(tracking)) continue;
-          const box = tr.querySelector('input[type="checkbox"]');
-          if (!box) continue;
-          if (!box.checked) box.click();
-          return !!box.checked;
-        }
-        return false;
-      }`, tracking);
-      if (ok) selected.push(tracking);
+      if (await isTrackingChecked(page, tracking)) selected.push(tracking);
     }
   }
   if (!selected.length) {
@@ -822,29 +830,56 @@ export async function downloadNewLabelsFromCurrentPage(
 
 /** Diagnóstico: qué ve el scraper en la grilla actual. */
 async function describeGrid(page: Page, tracking: string): Promise<string> {
-  return page.evaluate(
-    `(tracking) => {
-      const rows = Array.from(document.querySelectorAll('table tbody tr, [role="row"]'));
-      const tracks = [];
-      let rowFound = false;
-      let hasBox = false;
-      let boxDisabled = false;
-      for (const tr of rows) {
-        const text = (tr.innerText || '').replace(/\\s+/g, ' ');
-        const m = text.match(/\\b(36\\d{12,})\\b/);
-        if (m) tracks.push(m[1]);
-        if (text.includes(tracking)) {
-          rowFound = true;
-          const box = tr.querySelector('input[type="checkbox"]');
-          hasBox = !!box;
-          boxDisabled = !!(box && box.disabled);
-        }
+  const result = (await page.evaluate(`(() => {
+    const tracking = ${JSON.stringify(tracking)};
+    const rows = Array.from(document.querySelectorAll('table tbody tr, [role="row"]'));
+    const tracks = [];
+    let rowFound = false;
+    let boxes = 0;
+    let boxDisabled = false;
+    let rowHtml = '';
+    for (const tr of rows) {
+      const text = (tr.innerText || '').replace(/\\s+/g, ' ');
+      const m = text.match(/(36\\d{12,})/);
+      if (m) tracks.push(m[1]);
+      if (text.indexOf(tracking) !== -1) {
+        rowFound = true;
+        const found = tr.querySelectorAll('input[type="checkbox"]');
+        boxes = found.length;
+        boxDisabled = found.length > 0 && !!found[0].disabled;
+        rowHtml = (tr.outerHTML || '').slice(0, 600);
       }
-      return 'filas=' + rows.length + ' trackings=[' + tracks.join(',') + '] fila=' + rowFound +
-        ' checkbox=' + hasBox + ' disabled=' + boxDisabled;
-    }`,
-    tracking,
-  ) as Promise<string>;
+    }
+    const headerBoxes = document.querySelectorAll('thead input[type="checkbox"]').length;
+    return {
+      rows: rows.length,
+      tracks: tracks,
+      rowFound: rowFound,
+      boxes: boxes,
+      boxDisabled: boxDisabled,
+      headerBoxes: headerBoxes,
+      rowHtml: rowHtml,
+    };
+  })()`)) as {
+    rows: number;
+    tracks: string[];
+    rowFound: boolean;
+    boxes: number;
+    boxDisabled: boolean;
+    headerBoxes: number;
+    rowHtml: string;
+  } | null;
+
+  if (!result) return '(evaluate devolvió null)';
+  return [
+    `filas=${result.rows}`,
+    `trackings=[${result.tracks.join(',')}]`,
+    `fila=${result.rowFound}`,
+    `checkboxes=${result.boxes}`,
+    `disabled=${result.boxDisabled}`,
+    `headerCheckbox=${result.headerBoxes}`,
+    `html=${result.rowHtml}`,
+  ].join(' ');
 }
 
 /** Filtra la grilla por un tracking usando el buscador del portal. */
