@@ -820,6 +820,97 @@ export async function downloadNewLabelsFromCurrentPage(
   }
 }
 
+/** Diagnóstico: qué ve el scraper en la grilla actual. */
+async function describeGrid(page: Page, tracking: string): Promise<string> {
+  return page.evaluate(
+    `(tracking) => {
+      const rows = Array.from(document.querySelectorAll('table tbody tr, [role="row"]'));
+      const tracks = [];
+      let rowFound = false;
+      let hasBox = false;
+      let boxDisabled = false;
+      for (const tr of rows) {
+        const text = (tr.innerText || '').replace(/\\s+/g, ' ');
+        const m = text.match(/\\b(36\\d{12,})\\b/);
+        if (m) tracks.push(m[1]);
+        if (text.includes(tracking)) {
+          rowFound = true;
+          const box = tr.querySelector('input[type="checkbox"]');
+          hasBox = !!box;
+          boxDisabled = !!(box && box.disabled);
+        }
+      }
+      return 'filas=' + rows.length + ' trackings=[' + tracks.join(',') + '] fila=' + rowFound +
+        ' checkbox=' + hasBox + ' disabled=' + boxDisabled;
+    }`,
+    tracking,
+  ) as Promise<string>;
+}
+
+/** Filtra la grilla por un tracking usando el buscador del portal. */
+async function searchTracking(page: Page, tracking: string): Promise<boolean> {
+  const search = page
+    .getByPlaceholder(/env[ií]o|operaci|destinatario|seguimiento/i)
+    .or(page.locator('input[type="search"], input[placeholder*="envío" i], input[placeholder*="Envío" i]'))
+    .first();
+
+  if (!(await search.isVisible({ timeout: 2000 }).catch(() => false))) {
+    console.warn('[andreani] no se encontró el buscador de la grilla');
+    return false;
+  }
+
+  await search.click({ force: true }).catch(() => undefined);
+  await search.fill('');
+  await page.waitForTimeout(300);
+  await search.fill(tracking);
+  await page.keyboard.press('Enter').catch(() => undefined);
+  await page.waitForTimeout(1500);
+  await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => undefined);
+
+  const row = page
+    .locator('table tbody tr', { hasText: tracking })
+    .or(page.locator('[role="row"]', { hasText: tracking }))
+    .first();
+  return row.isVisible({ timeout: 8000 }).catch(() => false);
+}
+
+/**
+ * Descarga la etiqueta Zebra de UN tracking usando el buscador del portal.
+ * No depende de la paginación (que se rompe al imprimir).
+ */
+export async function downloadLabelByTracking(
+  page: Page,
+  config: WorkerConfig,
+  tracking: string,
+): Promise<Buffer | null> {
+  await ensurePaidShipmentsGrid(page, config);
+
+  if (!(await searchTracking(page, tracking))) {
+    console.warn(`[andreani] ${tracking}: no apareció en la búsqueda del portal`);
+    return null;
+  }
+
+  await uncheckVisible(page);
+
+  if (!(await checkTracking(page, tracking, { allowSearch: false }))) {
+    const info = await describeGrid(page, tracking).catch(() => '(sin info)');
+    console.warn(`[andreani] ${tracking}: no se pudo marcar el checkbox — ${info}`);
+    await restorePaidListView(page);
+    return null;
+  }
+
+  console.log(`[andreani] imprimiendo etiqueta ${tracking}`);
+  try {
+    const pdf = await printZebraAndDownload(page, config.andreani.timeoutMs);
+    await restorePaidListView(page);
+    return pdf;
+  } catch (error) {
+    await restorePaidListView(page);
+    await saveArtifacts(page, config.artifactsDir, 'print-zebra-error').catch(() => undefined);
+    throw error;
+  }
+}
+
 export {
   scrapeCurrentPage,
   goNextPage,
@@ -828,4 +919,5 @@ export {
   goToTablePage,
   ensurePaidShipmentsGrid,
   goToPaidTablePage,
+  describeGrid,
 };

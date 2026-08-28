@@ -1,11 +1,10 @@
 import { loadConfig, assertRuntimeConfig } from './config.js';
 import { closeBrowser, openAuthenticatedPage } from './andreani/session.js';
 import {
-  downloadNewLabelsFromCurrentPage,
+  downloadLabelByTracking,
   ensurePaidShipmentsGrid,
   goNextPage,
   goToPaidShipments,
-  goToPaidTablePage,
   readTablePagination,
   scrapeCurrentPage,
   type PortalShipment,
@@ -273,21 +272,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       for (const ship of work.toDownload) {
         setJobDetail(`Página ${work.pageNum}: etiqueta ${ship.tracking}…`);
         try {
-          const onPage = await goToPaidTablePage(page, config, work.pageNum);
-          if (!onPage) {
-            pageFail += 1;
-            console.warn(
-              `[andreani] no se pudo navegar a página ${work.pageNum} para ${ship.tracking}`,
-            );
-            continue;
-          }
-
-          const pdf = await downloadNewLabelsFromCurrentPage(
-            page,
-            config,
-            [ship.tracking],
-            { allowSearch: false },
-          );
+          const pdf = await downloadLabelByTracking(page, config, ship.tracking);
           if (pdf) {
             const result = await persistPage(
               [ship],
