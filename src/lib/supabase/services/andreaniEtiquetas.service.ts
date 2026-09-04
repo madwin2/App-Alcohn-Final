@@ -151,6 +151,15 @@ export const assignAndreaniEtiquetaToOrder = async (etiquetaId: string, ordenId:
   if (error) throw error;
 };
 
+export type AndreaniPedidoTrasLiberar = 'sin_envio' | 'seguimiento_enviado';
+
+export type LiberarEliminarEtiquetaOptions = {
+  /** Qué hacer con el pedido si la etiqueta estaba asignada. */
+  pedidoAccion?: AndreaniPedidoTrasLiberar;
+  /** Seguimiento manual (solo con seguimiento_enviado). Vacío = sin número. */
+  seguimiento?: string | null;
+};
+
 const removeEtiquetaPdfFromStorage = async (pdfPath: string | null | undefined): Promise<void> => {
   if (!pdfPath) return;
   const { error } = await supabase.storage.from('etiquetas-andreani').remove([pdfPath]);
@@ -160,17 +169,27 @@ const removeEtiquetaPdfFromStorage = async (pdfPath: string | null | undefined):
 };
 
 /** Quita la etiqueta del pedido y la deja huérfana (PDF se conserva). */
-export const liberarAndreaniEtiqueta = async (etiquetaId: string): Promise<void> => {
+export const liberarAndreaniEtiqueta = async (
+  etiquetaId: string,
+  options?: LiberarEliminarEtiquetaOptions,
+): Promise<void> => {
   const { error } = await supabase.rpc('liberar_etiqueta_andreani', {
     p_etiqueta_id: etiquetaId,
+    p_pedido_accion: options?.pedidoAccion ?? 'sin_envio',
+    p_seguimiento: options?.seguimiento?.trim() || null,
   });
   if (error) throw error;
 };
 
-/** Elimina la etiqueta (fila + PDF). Si estaba asignada, limpia el seguimiento del pedido. */
-export const deleteAndreaniEtiqueta = async (etiquetaId: string): Promise<void> => {
+/** Elimina la etiqueta (fila + PDF). Si estaba asignada, aplica destino del pedido. */
+export const deleteAndreaniEtiqueta = async (
+  etiquetaId: string,
+  options?: LiberarEliminarEtiquetaOptions,
+): Promise<void> => {
   const { data: pdfPath, error } = await supabase.rpc('eliminar_etiqueta_andreani', {
     p_etiqueta_id: etiquetaId,
+    p_pedido_accion: options?.pedidoAccion ?? 'sin_envio',
+    p_seguimiento: options?.seguimiento?.trim() || null,
   });
   if (error) throw error;
   await removeEtiquetaPdfFromStorage(typeof pdfPath === 'string' ? pdfPath : null);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -22,6 +23,7 @@ import {
   liberarAndreaniEtiqueta,
   listAndreaniEtiquetas,
   type AndreaniEtiquetaRow,
+  type AndreaniPedidoTrasLiberar,
 } from '@/lib/supabase/services/andreaniEtiquetas.service';
 import {
   andreaniJobKindLabel,
@@ -132,6 +134,8 @@ export function AndreaniLabelsPanel({
   const [ventaBusyId, setVentaBusyId] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [pedidoAccion, setPedidoAccion] = useState<AndreaniPedidoTrasLiberar>('sin_envio');
+  const [seguimientoManual, setSeguimientoManual] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
@@ -501,18 +505,46 @@ export function AndreaniLabelsPanel({
     }
   };
 
+  const openConfirmAction = (action: ConfirmAction) => {
+    setPedidoAccion('sin_envio');
+    setSeguimientoManual('');
+    setConfirmAction(action);
+  };
+
+  const needsPedidoDestino = Boolean(confirmAction?.row.ordenId);
+
   const runConfirmAction = async () => {
     if (!confirmAction) return;
     const { kind, row } = confirmAction;
     setActionBusyId(row.id);
     setMenuOpenId(null);
     try {
+      const options = row.ordenId
+        ? {
+            pedidoAccion,
+            seguimiento: pedidoAccion === 'seguimiento_enviado' ? seguimientoManual : null,
+          }
+        : undefined;
+
       if (kind === 'liberar') {
-        await liberarAndreaniEtiqueta(row.id);
-        toast({ title: 'PDF liberado', description: 'Quedó como huérfano.' });
+        await liberarAndreaniEtiqueta(row.id, options);
+        toast({
+          title: 'PDF liberado',
+          description:
+            pedidoAccion === 'sin_envio'
+              ? 'Quedó huérfano. El pedido pasó a Sin envío.'
+              : 'Quedó huérfano. El pedido pasó a Seguimiento enviado.',
+        });
       } else {
-        await deleteAndreaniEtiqueta(row.id);
-        toast({ title: 'PDF eliminado' });
+        await deleteAndreaniEtiqueta(row.id, options);
+        toast({
+          title: 'PDF eliminado',
+          description: row.ordenId
+            ? pedidoAccion === 'sin_envio'
+              ? 'El pedido quedó en Sin envío.'
+              : 'El pedido quedó en Seguimiento enviado.'
+            : undefined,
+        });
       }
       setConfirmAction(null);
       await refresh();
@@ -599,7 +631,7 @@ export function AndreaniLabelsPanel({
             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted"
             onClick={() => {
               setMenuOpenId(null);
-              setConfirmAction({ kind: 'liberar', row });
+              openConfirmAction({ kind: 'liberar', row });
             }}
           >
             <Unlink className="h-3.5 w-3.5" />
@@ -611,7 +643,7 @@ export function AndreaniLabelsPanel({
           className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
           onClick={() => {
             setMenuOpenId(null);
-            setConfirmAction({ kind: 'eliminar', row });
+            openConfirmAction({ kind: 'eliminar', row });
           }}
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -950,7 +982,12 @@ export function AndreaniLabelsPanel({
         </>
       ) : null}
 
-      <Dialog open={Boolean(confirmAction)} onOpenChange={(open) => !open && setConfirmAction(null)}>
+      <Dialog
+        open={Boolean(confirmAction)}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -959,11 +996,61 @@ export function AndreaniLabelsPanel({
             <DialogDescription>
               {confirmAction?.kind === 'liberar'
                 ? `Se desvincula el seguimiento ${confirmAction.row.tracking} del pedido. El PDF queda disponible como huérfano.`
-                : `Se elimina permanentemente la etiqueta ${confirmAction?.row.tracking ?? ''}${
-                    confirmAction?.row.estado === 'asignada' ? ' y se limpia el seguimiento del pedido' : ''
-                  }.`}
+                : `Se elimina permanentemente la etiqueta ${confirmAction?.row.tracking ?? ''}.`}
             </DialogDescription>
           </DialogHeader>
+
+          {needsPedidoDestino ? (
+            <div className="space-y-3 py-1">
+              <p className="text-sm font-medium">¿Qué hacer con el pedido?</p>
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 has-[:checked]:border-foreground/40 has-[:checked]:bg-muted/40">
+                <input
+                  type="radio"
+                  name="pedido-destino"
+                  className="mt-0.5"
+                  checked={pedidoAccion === 'sin_envio'}
+                  onChange={() => setPedidoAccion('sin_envio')}
+                />
+                <span className="text-sm leading-snug">
+                  <span className="font-medium">Sin envío</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Queda disponible para asignarle otro PDF de Andreani.
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 has-[:checked]:border-foreground/40 has-[:checked]:bg-muted/40">
+                <input
+                  type="radio"
+                  name="pedido-destino"
+                  className="mt-0.5"
+                  checked={pedidoAccion === 'seguimiento_enviado'}
+                  onChange={() => setPedidoAccion('seguimiento_enviado')}
+                />
+                <span className="text-sm leading-snug">
+                  <span className="font-medium">Seguimiento enviado</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Cierra el envío. Podés cargar un número manual o dejarlo en blanco.
+                  </span>
+                </span>
+              </label>
+              {pedidoAccion === 'seguimiento_enviado' ? (
+                <div className="space-y-1.5 pl-6">
+                  <label className="text-xs text-muted-foreground" htmlFor="seguimiento-manual">
+                    Número de seguimiento (opcional)
+                  </label>
+                  <Input
+                    id="seguimiento-manual"
+                    value={seguimientoManual}
+                    onChange={(e) => setSeguimientoManual(e.target.value)}
+                    placeholder="Dejar en blanco si no hay número"
+                    className="h-8 text-xs"
+                    autoComplete="off"
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => setConfirmAction(null)}>
               Cancelar
