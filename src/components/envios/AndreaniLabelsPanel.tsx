@@ -1,13 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import type { Order } from '@/lib/types';
+import { useAuth } from '@/lib/hooks/useAuth';
+import type { Order, OrderItem, SaleState } from '@/lib/types';
 import {
   andreaniAssignCandidatesFromOrders,
   assignAndreaniEtiquetaToOrder,
+  deleteAndreaniEtiqueta,
   downloadAndreaniEtiquetaPdf,
   downloadMergedAndreaniEtiquetasPdfs,
+  liberarAndreaniEtiqueta,
   listAndreaniEtiquetas,
   type AndreaniEtiquetaRow,
 } from '@/lib/supabase/services/andreaniEtiquetas.service';
@@ -20,7 +32,20 @@ import {
 } from '@/lib/andreaniWorkerJob';
 import { normalizePhoneDigits } from '@/lib/utils/shippingNormalization';
 import { isEtiquetaActivaEnTabla } from '@/lib/utils/andreaniPortalEstado';
-import { Download, Loader2, RefreshCw } from 'lucide-react';
+import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
+import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
+import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Loader2,
+  MoreHorizontal,
+  RefreshCw,
+  Trash2,
+  Unlink,
+} from 'lucide-react';
 
 type SyncResponse = {
   status?: string;
@@ -40,6 +65,10 @@ type SyncTrackingResponse = {
   notFound?: number;
 };
 
+type ConfirmAction =
+  | { kind: 'liberar'; row: AndreaniEtiquetaRow }
+  | { kind: 'eliminar'; row: AndreaniEtiquetaRow };
+
 /** Ícono WhatsApp (marca registrada Meta); solo UI. */
 function WhatsappLogo({ className }: { className?: string }) {
   return (
@@ -49,14 +78,46 @@ function WhatsappLogo({ className }: { className?: string }) {
   );
 }
 
+function itemPreviewUrl(item: OrderItem): string | null {
+  return item.files?.vectorPreviewUrl || item.files?.baseUrl || item.files?.vectorUrl || null;
+}
+
+function orderItemsDesignLabel(order: Order | undefined, fallback: string | null): string {
+  if (!order?.items?.length) return fallback || '—';
+  return order.items.map((item) => getOrderItemDisplayName(item)).join(', ');
+}
+
+function downloadedStorageKey(userId: string) {
+  return `andreani-etiquetas-downloaded:${userId}`;
+}
+
+function readDownloadedIds(userId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(downloadedStorageKey(userId));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((id): id is string => typeof id === 'string'));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDownloadedIds(userId: string, ids: Set<string>) {
+  localStorage.setItem(downloadedStorageKey(userId), JSON.stringify([...ids]));
+}
+
 export function AndreaniLabelsPanel({
   orders,
   onAssigned,
+  onUpdateOrder,
 }: {
   orders: Order[];
   onAssigned?: () => void;
+  onUpdateOrder?: (orderId: string, updates: Partial<Order>) => Promise<unknown>;
 }) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [rows, setRows] = useState<AndreaniEtiquetaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -66,6 +127,13 @@ export function AndreaniLabelsPanel({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [workerJob, setWorkerJob] = useState<AndreaniWorkerJob | null>(null);
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [downloadedIds, setDownloadedIds] = useState<Set<string>>(() => new Set());
+  const [ventaBusyId, setVentaBusyId] = useState<string | null>(null);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -88,6 +156,14 @@ export function AndreaniLabelsPanel({
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setDownloadedIds(new Set());
+      return;
+    }
+    setDownloadedIds(readDownloadedIds(user.id));
+  }, [user?.id]);
+
   // Poll del estado del worker mientras haya job activo (o al montar).
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +182,12 @@ export function AndreaniLabelsPanel({
   }, []);
 
   const jobActive = isAndreaniJobActive(workerJob);
+
+  const ordersById = useMemo(() => {
+    const map = new Map<string, Order>();
+    for (const order of orders) map.set(order.id, order);
+    return map;
+  }, [orders]);
 
   const candidates = useMemo(() => andreaniAssignCandidatesFromOrders(orders), [orders]);
 
@@ -138,6 +220,19 @@ export function AndreaniLabelsPanel({
     [assigned],
   );
   const pendingCount = assigned.length - downloadable.length;
+
+  const markDownloaded = useCallback(
+    (etiquetaIds: string[]) => {
+      if (!user?.id || etiquetaIds.length === 0) return;
+      setDownloadedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of etiquetaIds) next.add(id);
+        writeDownloadedIds(user.id, next);
+        return next;
+      });
+    },
+    [user?.id],
+  );
 
   const resolvePhoneDigits = (row: AndreaniEtiquetaRow): string => {
     const fromCliente = normalizePhoneDigits(row.clienteTelefono || '');
@@ -301,6 +396,7 @@ export function AndreaniLabelsPanel({
     setDownloadingId(row.id);
     try {
       await downloadAndreaniEtiquetaPdf(row.pdfPath);
+      markDownloaded([row.id]);
     } catch (error) {
       toast({
         title: 'No se pudo descargar',
@@ -313,7 +409,8 @@ export function AndreaniLabelsPanel({
   };
 
   const handleDownloadAll = async () => {
-    const paths = downloadable.map((r) => r.pdfPath).filter((p): p is string => Boolean(p));
+    const ready = downloadable.filter((r) => Boolean(r.pdfPath));
+    const paths = ready.map((r) => r.pdfPath).filter((p): p is string => Boolean(p));
     if (paths.length === 0) {
       toast({
         title: 'Nada para descargar',
@@ -325,6 +422,7 @@ export function AndreaniLabelsPanel({
     setDownloadingAll(true);
     try {
       await downloadMergedAndreaniEtiquetasPdfs(paths);
+      markDownloaded(ready.map((r) => r.id));
       toast({
         title: 'PDF listo',
         description: `${paths.length} etiqueta${paths.length === 1 ? '' : 's'} en un solo archivo (100×152).`,
@@ -367,6 +465,162 @@ export function AndreaniLabelsPanel({
     );
   };
 
+  const handleVentaChange = async (row: AndreaniEtiquetaRow, value: 'pendiente' | 'transferido') => {
+    if (!row.ordenId || !onUpdateOrder) return;
+    const order = ordersById.get(row.ordenId);
+    if (!order?.items.length) {
+      toast({
+        title: 'Pedido no encontrado',
+        description: 'Recargá la lista de pedidos e intentá de nuevo.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const saleState: SaleState = value === 'transferido' ? 'TRANSFERIDO' : 'FOTO_ENVIADA';
+    setVentaBusyId(row.id);
+    try {
+      await onUpdateOrder(order.id, {
+        items: order.items.map((item) => ({ id: item.id, saleState })) as unknown as Order['items'],
+      });
+      setRows((prev) =>
+        prev.map((r) => (r.id === row.id ? { ...r, saleTransferred: value === 'transferido' } : r)),
+      );
+      onAssigned?.();
+      toast({
+        title: value === 'transferido' ? 'Venta Transferido' : 'Venta Pendiente',
+        description: order.customer.firstName,
+      });
+    } catch (error) {
+      toast({
+        title: 'No se pudo actualizar la venta',
+        description: error instanceof Error ? error.message : 'Error al guardar',
+        variant: 'destructive',
+      });
+    } finally {
+      setVentaBusyId(null);
+    }
+  };
+
+  const runConfirmAction = async () => {
+    if (!confirmAction) return;
+    const { kind, row } = confirmAction;
+    setActionBusyId(row.id);
+    setMenuOpenId(null);
+    try {
+      if (kind === 'liberar') {
+        await liberarAndreaniEtiqueta(row.id);
+        toast({ title: 'PDF liberado', description: 'Quedó como huérfano.' });
+      } else {
+        await deleteAndreaniEtiqueta(row.id);
+        toast({ title: 'PDF eliminado' });
+      }
+      setConfirmAction(null);
+      await refresh();
+      onAssigned?.();
+    } catch (error) {
+      toast({
+        title: kind === 'liberar' ? 'No se pudo liberar' : 'No se pudo eliminar',
+        description: error instanceof Error ? error.message : 'Error',
+        variant: 'destructive',
+      });
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const openPreview = async (url: string, mockupSolicitudId?: string | null) => {
+    try {
+      const src = await resolveStorageDisplayUrl(url, mockupSolicitudId);
+      setPreviewUrl(src);
+    } catch {
+      setPreviewUrl(url);
+    }
+  };
+
+  const renderFilesCell = (order: Order | undefined) => {
+    if (!order?.items?.length) {
+      return <span className="text-muted-foreground">—</span>;
+    }
+    const previews = order.items
+      .map((item) => ({ item, url: itemPreviewUrl(item) }))
+      .filter((x): x is { item: OrderItem; url: string } => Boolean(x.url));
+    if (!previews.length) {
+      return <span className="text-muted-foreground">—</span>;
+    }
+    return (
+      <div className="flex flex-wrap items-center gap-1">
+        {previews.map(({ item, url }) => (
+          <button
+            key={item.id}
+            type="button"
+            title={getOrderItemDisplayName(item)}
+            className="block h-9 w-9 cursor-zoom-in rounded border bg-white p-0.5"
+            onClick={() => void openPreview(url, item.mockupSolicitudId)}
+          >
+            <StorageUrlImage
+              url={url}
+              alt={getOrderItemDisplayName(item)}
+              mockupSolicitudId={item.mockupSolicitudId}
+              className="h-full w-full"
+              imgClassName="h-full w-full object-contain"
+              fallbackClassName="flex h-full w-full items-center justify-center bg-muted/40 text-[9px] text-muted-foreground"
+            />
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  const renderActionsMenu = (row: AndreaniEtiquetaRow, opts: { canLiberar: boolean }) => (
+    <Popover
+      open={menuOpenId === row.id}
+      onOpenChange={(open) => setMenuOpenId(open ? row.id : null)}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 px-2"
+          disabled={actionBusyId === row.id}
+          title="Más acciones"
+        >
+          {actionBusyId === row.id ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-1" align="end">
+        {opts.canLiberar ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted"
+            onClick={() => {
+              setMenuOpenId(null);
+              setConfirmAction({ kind: 'liberar', row });
+            }}
+          >
+            <Unlink className="h-3.5 w-3.5" />
+            Liberar a huérfano
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+          onClick={() => {
+            setMenuOpenId(null);
+            setConfirmAction({ kind: 'eliminar', row });
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Eliminar PDF
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+
   return (
     <div className="rounded-xl border bg-card shadow-sm p-4 space-y-4">
       {(jobActive || workerJob?.phase === 'done' || workerJob?.phase === 'error') && workerJob ? (
@@ -393,12 +647,22 @@ export function AndreaniLabelsPanel({
           ) : null}
         </div>
       ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold">Envíos Andreani (etiquetas)</h2>
-          <p className="text-xs text-muted-foreground">
-            Traé las etiquetas pagadas del portal. El PDF de despacho se habilita cuando la venta está Transferido.
-          </p>
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="inline-flex items-center gap-1 text-sm font-semibold text-foreground"
+          >
+            {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+            Envíos Andreani (etiquetas)
+          </button>
+          {isExpanded ? (
+            <p className="mt-0.5 text-xs text-muted-foreground pl-5">
+              Traé las etiquetas pagadas del portal. El PDF de despacho se habilita cuando la venta está Transferido.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-[11px] tabular-nums text-muted-foreground">
@@ -408,205 +672,322 @@ export function AndreaniLabelsPanel({
             <span className="rounded-md border px-1.5 py-0.5">
               {pendingCount} pendiente{pendingCount === 1 ? '' : 's'}
             </span>
+            <span className="rounded-md border px-1.5 py-0.5">{assigned.length} activas</span>
           </div>
-          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => void refresh()} disabled={loading || syncing || updatingTracking}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void handleUpdateTracking()}
-            disabled={updatingTracking || syncing || jobActive}
-            title="Consulta el portal Andreani y marca Despachado si ya no están pendientes de ingreso"
-          >
-            {updatingTracking || (jobActive && workerJob?.kind === 'sync-tracking') ? (
-              <>
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                Actualizando…
-              </>
-            ) : (
-              'Actualizar seguimientos'
-            )}
-          </Button>
-          <Button type="button" size="sm" onClick={() => void handleSync()} disabled={syncing || updatingTracking || jobActive}>
-            {syncing || (jobActive && workerJob?.kind === 'sync-labels') ? (
-              <>
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                Trayendo…
-              </>
-            ) : (
-              'Traer etiquetas'
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={downloadable.length === 0 || downloadingAll || syncing || updatingTracking}
-            title="Descarga todas las etiquetas Transferido en un PDF (hojas 100×152)"
-            onClick={() => void handleDownloadAll()}
-          >
-            {downloadingAll ? (
-              <>
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                Uniendo…
-              </>
-            ) : (
-              <>
-                <Download className="mr-1.5 h-3.5 w-3.5" />
-                Descargar todas ({downloadable.length})
-              </>
-            )}
-          </Button>
+          {isExpanded ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => void refresh()}
+                disabled={loading || syncing || updatingTracking}
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleUpdateTracking()}
+                disabled={updatingTracking || syncing || jobActive}
+                title="Consulta el portal Andreani y marca Despachado si ya no están pendientes de ingreso"
+              >
+                {updatingTracking || (jobActive && workerJob?.kind === 'sync-tracking') ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Actualizando…
+                  </>
+                ) : (
+                  'Actualizar seguimientos'
+                )}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void handleSync()}
+                disabled={syncing || updatingTracking || jobActive}
+              >
+                {syncing || (jobActive && workerJob?.kind === 'sync-labels') ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Trayendo…
+                  </>
+                ) : (
+                  'Traer etiquetas'
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={downloadable.length === 0 || downloadingAll || syncing || updatingTracking}
+                title="Descarga todas las etiquetas Transferido en un PDF (hojas 100×152)"
+                onClick={() => void handleDownloadAll()}
+              >
+                {downloadingAll ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Uniendo…
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    Descargar todas ({downloadable.length})
+                  </>
+                )}
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
 
-      <div className="overflow-auto max-h-[min(40vh,360px)] rounded-lg border">
-        <table className="w-full text-xs">
-          <thead className="bg-muted/50 text-left sticky top-0">
-            <tr>
-              <th className="px-2 py-1.5 font-medium">Pedido</th>
-              <th className="px-2 py-1.5 font-medium">Diseño</th>
-              <th className="px-2 py-1.5 font-medium">Seguimiento</th>
-              <th className="px-2 py-1.5 font-medium">Operación</th>
-              <th className="px-2 py-1.5 font-medium">Venta</th>
-              <th className="px-2 py-1.5 font-medium">Estado Andreani</th>
-              <th className="px-2 py-1.5 font-medium text-right">PDF</th>
-            </tr>
-          </thead>
-          <tbody>
-            {assigned.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-2 py-4 text-center text-muted-foreground">
-                  Todavía no hay etiquetas asignadas a pedidos.
-                </td>
-              </tr>
-            ) : (
-              assigned.map((row) => {
-                const canDownload = Boolean(row.pdfPath) && row.saleTransferred;
-                const phoneDigits = resolvePhoneDigits(row);
-                return (
-                  <tr key={row.id} className="border-t">
-                    <td className="px-2 py-1.5">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="truncate">{row.clienteNombre || '—'}</span>
-                        <button
-                          type="button"
-                          title={phoneDigits ? 'Copiar número al portapapeles' : 'Sin teléfono en la orden'}
-                          disabled={!phoneDigits}
-                          onClick={() => handleCopyPhone(row)}
-                          className={`inline-flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                            phoneDigits
-                              ? 'border-green-600/35 bg-green-500/15 text-green-700 hover:bg-green-500/25 dark:border-green-400/35 dark:text-green-400'
-                              : 'cursor-not-allowed border-muted text-muted-foreground opacity-40'
-                          }`}
-                        >
-                          <WhatsappLogo className="size-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-2 py-1.5">{row.disenoNombre || '—'}</td>
-                    <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
-                    <td className="px-2 py-1.5 font-mono tabular-nums">{row.nroOperacion || '—'}</td>
-                    <td className="px-2 py-1.5">{row.saleTransferred ? 'Transferido' : 'Pendiente'}</td>
-                    <td className="px-2 py-1.5 text-muted-foreground">{row.estadoPortal || '—'}</td>
-                    <td className="px-2 py-1.5 text-right">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2"
-                        disabled={!canDownload || downloadingId === row.id || downloadingAll}
-                        title={
-                          row.saleTransferred
-                            ? 'Descargar etiqueta 100×152'
-                            : 'Disponible cuando la venta esté Transferido'
-                        }
-                        onClick={() => void handleDownload(row)}
-                      >
-                        {downloadingId === row.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Download className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Huérfanos ({orphans.length})
-        </h3>
-        <p className="text-[11px] text-muted-foreground">
-          Envíos pagados en Andreani sin un único pedido con link asignado. Asignalos a mano.
-        </p>
-        <div className="overflow-auto max-h-[min(36vh,280px)] rounded-lg border">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/50 text-left sticky top-0">
-              <tr>
-                <th className="px-2 py-1.5 font-medium">Destinatario</th>
-                <th className="px-2 py-1.5 font-medium">Seguimiento</th>
-                <th className="px-2 py-1.5 font-medium">Pedido</th>
-                <th className="px-2 py-1.5 font-medium text-right"> </th>
-              </tr>
-            </thead>
-            <tbody>
-              {orphans.length === 0 ? (
+      {isExpanded ? (
+        <>
+          <div className="overflow-auto max-h-[min(40vh,360px)] rounded-lg border">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 text-left sticky top-0">
                 <tr>
-                  <td colSpan={4} className="px-2 py-4 text-center text-muted-foreground">
-                    No hay huérfanos.
-                  </td>
+                  <th className="px-2 py-1.5 font-medium">Pedido</th>
+                  <th className="px-2 py-1.5 font-medium text-center w-10">WA</th>
+                  <th className="px-2 py-1.5 font-medium">Diseño</th>
+                  <th className="px-2 py-1.5 font-medium">Base / Vector</th>
+                  <th className="px-2 py-1.5 font-medium">Seguimiento</th>
+                  <th className="px-2 py-1.5 font-medium">Operación</th>
+                  <th className="px-2 py-1.5 font-medium">Venta</th>
+                  <th className="px-2 py-1.5 font-medium">Estado Andreani</th>
+                  <th className="px-2 py-1.5 font-medium text-right">PDF</th>
+                  <th className="px-2 py-1.5 font-medium text-center w-16">Desc.</th>
+                  <th className="px-2 py-1.5 font-medium text-right w-10"> </th>
                 </tr>
-              ) : (
-                orphans.map((row) => (
-                  <tr key={row.id} className="border-t">
-                    <td className="px-2 py-1.5">
-                      <div>{row.destinatario || '—'}</div>
-                      <div className="text-[10px] text-muted-foreground">{row.destino}</div>
-                    </td>
-                    <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
-                    <td className="px-2 py-1.5 min-w-[180px]">
-                      <Select
-                        value={assignPick[row.id] || ''}
-                        onValueChange={(value) => setAssignPick((prev) => ({ ...prev, [row.id]: value }))}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Elegir pedido…" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {candidates.map((c) => (
-                            <SelectItem key={c.id} value={c.id} className="text-xs">
-                              {c.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="px-2 py-1.5 text-right">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-7"
-                        disabled={!assignPick[row.id] || assigningId === row.id}
-                        onClick={() => void handleAssign(row.id)}
-                      >
-                        {assigningId === row.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Asignar'}
-                      </Button>
+              </thead>
+              <tbody>
+                {assigned.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-2 py-4 text-center text-muted-foreground">
+                      Todavía no hay etiquetas asignadas a pedidos.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                ) : (
+                  assigned.map((row) => {
+                    const canDownload = Boolean(row.pdfPath) && row.saleTransferred;
+                    const phoneDigits = resolvePhoneDigits(row);
+                    const order = row.ordenId ? ordersById.get(row.ordenId) : undefined;
+                    const designLabel = orderItemsDesignLabel(order, row.disenoNombre);
+                    const wasDownloaded = downloadedIds.has(row.id);
+                    return (
+                      <tr key={row.id} className="border-t">
+                        <td className="px-2 py-1.5">
+                          <span className="truncate block max-w-[9rem]" title={row.clienteNombre || undefined}>
+                            {row.clienteNombre || '—'}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          <button
+                            type="button"
+                            title={phoneDigits ? 'Copiar número al portapapeles' : 'Sin teléfono en la orden'}
+                            disabled={!phoneDigits}
+                            onClick={() => handleCopyPhone(row)}
+                            className={`inline-flex size-6 items-center justify-center rounded-full border transition-colors ${
+                              phoneDigits
+                                ? 'border-border bg-background text-foreground hover:bg-muted'
+                                : 'cursor-not-allowed border-muted text-muted-foreground opacity-40'
+                            }`}
+                          >
+                            <WhatsappLogo className="size-3.5" />
+                          </button>
+                        </td>
+                        <td className="px-2 py-1.5 max-w-[12rem]">
+                          <span className="line-clamp-2" title={designLabel}>
+                            {designLabel}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1.5">{renderFilesCell(order)}</td>
+                        <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
+                        <td className="px-2 py-1.5 font-mono tabular-nums">{row.nroOperacion || '—'}</td>
+                        <td className="px-2 py-1.5 min-w-[7.5rem]">
+                          {row.ordenId && onUpdateOrder ? (
+                            <Select
+                              value={row.saleTransferred ? 'transferido' : 'pendiente'}
+                              onValueChange={(value) =>
+                                void handleVentaChange(row, value as 'pendiente' | 'transferido')
+                              }
+                              disabled={ventaBusyId === row.id}
+                            >
+                              <SelectTrigger className="h-7 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pendiente" className="text-xs">
+                                  Pendiente
+                                </SelectItem>
+                                <SelectItem value="transferido" className="text-xs">
+                                  Transferido
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span>{row.saleTransferred ? 'Transferido' : 'Pendiente'}</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5 text-muted-foreground">{row.estadoPortal || '—'}</td>
+                        <td className="px-2 py-1.5 text-right">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            disabled={!canDownload || downloadingId === row.id || downloadingAll}
+                            title={
+                              row.saleTransferred
+                                ? 'Descargar etiqueta 100×152'
+                                : 'Disponible cuando la venta esté Transferido'
+                            }
+                            onClick={() => void handleDownload(row)}
+                          >
+                            {downloadingId === row.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Download className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          {wasDownloaded ? (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400"
+                              title="Ya descargaste este PDF"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Sí
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">No</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          {renderActionsMenu(row, { canLiberar: true })}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Huérfanos ({orphans.length})
+            </h3>
+            <p className="text-[11px] text-muted-foreground">
+              Envíos pagados en Andreani sin un único pedido con link asignado. Asignalos a mano o eliminá el PDF.
+            </p>
+            <div className="overflow-auto max-h-[min(36vh,280px)] rounded-lg border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50 text-left sticky top-0">
+                  <tr>
+                    <th className="px-2 py-1.5 font-medium">Destinatario</th>
+                    <th className="px-2 py-1.5 font-medium">Seguimiento</th>
+                    <th className="px-2 py-1.5 font-medium">Pedido</th>
+                    <th className="px-2 py-1.5 font-medium text-right"> </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orphans.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-2 py-4 text-center text-muted-foreground">
+                        No hay huérfanos.
+                      </td>
+                    </tr>
+                  ) : (
+                    orphans.map((row) => (
+                      <tr key={row.id} className="border-t">
+                        <td className="px-2 py-1.5">
+                          <div>{row.destinatario || '—'}</div>
+                          <div className="text-[10px] text-muted-foreground">{row.destino}</div>
+                        </td>
+                        <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
+                        <td className="px-2 py-1.5 min-w-[180px]">
+                          <Select
+                            value={assignPick[row.id] || ''}
+                            onValueChange={(value) => setAssignPick((prev) => ({ ...prev, [row.id]: value }))}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Elegir pedido…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {candidates.map((c) => (
+                                <SelectItem key={c.id} value={c.id} className="text-xs">
+                                  {c.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7"
+                              disabled={!assignPick[row.id] || assigningId === row.id}
+                              onClick={() => void handleAssign(row.id)}
+                            >
+                              {assigningId === row.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Asignar'}
+                            </Button>
+                            {renderActionsMenu(row, { canLiberar: false })}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      <Dialog open={Boolean(confirmAction)} onOpenChange={(open) => !open && setConfirmAction(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {confirmAction?.kind === 'liberar' ? 'Liberar PDF a huérfano' : 'Eliminar PDF'}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmAction?.kind === 'liberar'
+                ? `Se desvincula el seguimiento ${confirmAction.row.tracking} del pedido. El PDF queda disponible como huérfano.`
+                : `Se elimina permanentemente la etiqueta ${confirmAction?.row.tracking ?? ''}${
+                    confirmAction?.row.estado === 'asignada' ? ' y se limpia el seguimiento del pedido' : ''
+                  }.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setConfirmAction(null)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant={confirmAction?.kind === 'eliminar' ? 'destructive' : 'default'}
+              disabled={Boolean(actionBusyId)}
+              onClick={() => void runConfirmAction()}
+            >
+              {actionBusyId ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              {confirmAction?.kind === 'liberar' ? 'Liberar' : 'Eliminar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(previewUrl)} onOpenChange={(open) => !open && setPreviewUrl(null)}>
+        <DialogContent className="sm:max-w-lg p-2">
+          {previewUrl ? (
+            <img src={previewUrl} alt="Preview archivo" className="max-h-[70vh] w-full object-contain" />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

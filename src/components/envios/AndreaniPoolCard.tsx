@@ -27,6 +27,7 @@ export function AndreaniPoolCard() {
   const [pasteUrls, setPasteUrls] = useState('');
   const [busy, setBusy] = useState(false);
   const [workerJob, setWorkerJob] = useState<AndreaniWorkerJob | null>(null);
+  const [showPaste, setShowPaste] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -84,6 +85,7 @@ export function AndreaniPoolCard() {
     try {
       const n = await insertAndreaniLinksDisponibles(urls);
       setPasteUrls('');
+      setShowPaste(false);
       toast({ title: 'Links agregados', description: `${n} link(s) disponibles en el pool` });
       await refresh();
     } catch (error) {
@@ -163,96 +165,103 @@ export function AndreaniPoolCard() {
   };
 
   return (
-    <div className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
+    <div className="rounded-lg border bg-card px-3 py-2 space-y-1.5">
       {(jobActive || workerJob?.phase === 'done' || workerJob?.phase === 'error') && workerJob ? (
         <div
           className={
             workerJob.phase === 'error'
-              ? 'rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs'
+              ? 'rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-[11px]'
               : workerJob.phase === 'done'
-                ? 'rounded-lg border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-xs'
-                : 'rounded-lg border border-amber-600/30 bg-amber-500/10 px-3 py-2 text-xs'
+                ? 'rounded border border-emerald-600/30 bg-emerald-500/10 px-2 py-1 text-[11px]'
+                : 'rounded border border-amber-600/30 bg-amber-500/10 px-2 py-1 text-[11px]'
           }
         >
-          <div className="flex items-center gap-2 font-medium">
-            {jobActive ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : null}
-            <span>
-              {jobActive ? 'Worker en curso' : workerJob.phase === 'error' ? 'Worker: error' : 'Worker: listo'}
+          <div className="flex items-center gap-1.5 font-medium">
+            {jobActive ? <Loader2 className="h-3 w-3 animate-spin shrink-0" /> : null}
+            <span className="truncate">
+              {jobActive ? 'Worker' : workerJob.phase === 'error' ? 'Error' : 'Listo'}
               {workerJob.kind ? ` · ${andreaniJobKindLabel(workerJob.kind)}` : ''}
               {workerJob.queueDepth > 0 ? ` · cola ${workerJob.queueDepth}` : ''}
+              {workerJob.detail ? ` · ${workerJob.detail}` : ''}
             </span>
           </div>
-          <p className="mt-0.5 text-muted-foreground">{workerJob.detail}</p>
-          {workerJob.lastMessage && !jobActive ? (
-            <p className="mt-0.5 text-muted-foreground">{workerJob.lastMessage}</p>
-          ) : null}
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold">Pool links Andreani</h2>
-          <p className="text-xs text-muted-foreground">
-            Links de pago listos para asignar a pedidos
-          </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <span className="text-xs font-semibold shrink-0">Pool Andreani</span>
+        <div className="flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">
+          <span>
+            <span className="font-semibold text-foreground">{counts.disponible}</span> disp.
+          </span>
+          <span>
+            <span className="font-semibold text-foreground">{counts.asignado}</span> asig.
+          </span>
+          <span>
+            <span className="font-semibold text-foreground">{counts.descartado}</span> desc.
+          </span>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => void refresh()}
-          disabled={loading || busy}
-          title="Actualizar"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-        </Button>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => void refresh()}
+            disabled={loading || busy}
+            title="Actualizar"
+          >
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => setShowPaste((prev) => !prev)}
+            disabled={busy || jobActive}
+          >
+            {showPaste ? 'Cerrar' : 'Pegar links'}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => void handleGenerate()}
+            disabled={busy || jobActive}
+          >
+            {busy || (jobActive && workerJob?.kind === 'generate') ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                Generando…
+              </>
+            ) : (
+              'Generar más'
+            )}
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-lg bg-muted/50 px-2 py-2">
-          <div className="text-lg font-semibold tabular-nums">{counts.disponible}</div>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Disponibles</div>
+      {showPaste ? (
+        <div className="flex flex-wrap items-end gap-2 pt-0.5">
+          <Textarea
+            value={pasteUrls}
+            onChange={(e) => setPasteUrls(e.target.value)}
+            placeholder="Pegá links (uno por línea)…"
+            className="min-h-[40px] h-10 flex-1 text-xs py-1.5"
+            disabled={busy || jobActive}
+          />
+          <Button
+            type="button"
+            size="sm"
+            className="h-7 text-xs shrink-0"
+            onClick={() => void handleInsertPaste()}
+            disabled={busy || jobActive || !pasteUrls.trim()}
+          >
+            Agregar
+          </Button>
         </div>
-        <div className="rounded-lg bg-muted/50 px-2 py-2">
-          <div className="text-lg font-semibold tabular-nums">{counts.asignado}</div>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Asignados</div>
-        </div>
-        <div className="rounded-lg bg-muted/50 px-2 py-2">
-          <div className="text-lg font-semibold tabular-nums">{counts.descartado}</div>
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Descartados</div>
-        </div>
-      </div>
-
-      <Textarea
-        value={pasteUrls}
-        onChange={(e) => setPasteUrls(e.target.value)}
-        placeholder="Pegá links acá (uno por línea)…"
-        className="min-h-[72px] text-xs"
-        disabled={busy || jobActive}
-      />
-
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" onClick={() => void handleInsertPaste()} disabled={busy || jobActive}>
-          Agregar al pool
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => void handleGenerate()}
-          disabled={busy || jobActive}
-        >
-          {busy || (jobActive && workerJob?.kind === 'generate') ? (
-            <>
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              Generando…
-            </>
-          ) : (
-            'Generar más'
-          )}
-        </Button>
-      </div>
+      ) : null}
     </div>
   );
 }

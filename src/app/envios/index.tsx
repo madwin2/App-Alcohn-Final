@@ -1613,6 +1613,7 @@ export default function EnviosPage() {
           <AndreaniPoolCard />
           <AndreaniLabelsPanel
             orders={orders}
+            onUpdateOrder={updateOrder}
             onAssigned={() => {
               void fetchOrders({ silent: true });
             }}

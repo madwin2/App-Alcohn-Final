@@ -1,6 +1,7 @@
 import { PDFDocument } from 'pdf-lib';
 import { supabase } from '../client';
 import type { Order } from '@/lib/types';
+import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 
 export type AndreaniEtiquetaEstado = 'asignada' | 'huerfano';
 
@@ -54,13 +55,27 @@ const mapListRow = (row: {
         estado_orden: string | null;
         estado_envio: string | null;
         clientes: ClienteJoin | ClienteJoin[] | null;
-        sellos: { diseno: string | null; estado_venta: string | null }[] | null;
+        sellos:
+          | {
+              diseno: string | null;
+              estado_venta: string | null;
+              item_type: string | null;
+              item_config: Record<string, unknown> | null;
+            }[]
+          | null;
       }
     | {
         estado_orden: string | null;
         estado_envio: string | null;
         clientes: ClienteJoin | ClienteJoin[] | null;
-        sellos: { diseno: string | null; estado_venta: string | null }[] | null;
+        sellos:
+          | {
+              diseno: string | null;
+              estado_venta: string | null;
+              item_type: string | null;
+              item_config: Record<string, unknown> | null;
+            }[]
+          | null;
       }[]
     | null;
 }): AndreaniEtiquetaRow => {
@@ -73,7 +88,15 @@ const mapListRow = (row: {
     sellos.length > 0
       ? sellos.every((s) => s.estado_venta === 'Transferido')
       : orden?.estado_orden === 'Transferido';
-  const designNames = sellos.map((s) => s.diseno?.trim()).filter((name): name is string => Boolean(name));
+  const designNames = sellos
+    .map((s) =>
+      getOrderItemDisplayName({
+        designName: s.diseno || '',
+        itemType: (s.item_type as Order['items'][number]['itemType']) || 'SELLO',
+        itemConfig: s.item_config as Order['items'][number]['itemConfig'],
+      }),
+    )
+    .filter((name) => Boolean(name));
   const disenoNombre =
     designNames.length === 0 ? null : designNames.length === 1 ? designNames[0] : designNames.join(', ');
 
@@ -110,7 +133,7 @@ export const listAndreaniEtiquetas = async (): Promise<AndreaniEtiquetaRow[]> =>
         estado_orden,
         estado_envio,
         clientes ( nombre, apellido, telefono ),
-        sellos ( diseno, estado_venta )
+        sellos ( diseno, estado_venta, item_type, item_config )
       )
     `,
     )
@@ -126,6 +149,31 @@ export const assignAndreaniEtiquetaToOrder = async (etiquetaId: string, ordenId:
     p_orden_id: ordenId,
   });
   if (error) throw error;
+};
+
+const removeEtiquetaPdfFromStorage = async (pdfPath: string | null | undefined): Promise<void> => {
+  if (!pdfPath) return;
+  const { error } = await supabase.storage.from('etiquetas-andreani').remove([pdfPath]);
+  if (error) {
+    console.warn('No se pudo borrar PDF de storage:', error.message);
+  }
+};
+
+/** Quita la etiqueta del pedido y la deja huérfana (PDF se conserva). */
+export const liberarAndreaniEtiqueta = async (etiquetaId: string): Promise<void> => {
+  const { error } = await supabase.rpc('liberar_etiqueta_andreani', {
+    p_etiqueta_id: etiquetaId,
+  });
+  if (error) throw error;
+};
+
+/** Elimina la etiqueta (fila + PDF). Si estaba asignada, limpia el seguimiento del pedido. */
+export const deleteAndreaniEtiqueta = async (etiquetaId: string): Promise<void> => {
+  const { data: pdfPath, error } = await supabase.rpc('eliminar_etiqueta_andreani', {
+    p_etiqueta_id: etiquetaId,
+  });
+  if (error) throw error;
+  await removeEtiquetaPdfFromStorage(typeof pdfPath === 'string' ? pdfPath : null);
 };
 
 const fetchAndreaniEtiquetaPdfBytes = async (pdfPath: string): Promise<Uint8Array> => {
@@ -192,8 +240,14 @@ export const downloadMergedAndreaniEtiquetasPdfs = async (pdfPaths: string[]): P
 export const andreaniAssignCandidatesFromOrders = (orders: Order[]): Array<{ id: string; label: string }> =>
   orders
     .filter((order) => Boolean(order.andreaniLinkUrl) && !order.shipping?.trackingNumber)
-    .map((order) => ({
-      id: order.id,
-      label: `${order.customer.firstName} ${order.customer.lastName} · ${order.items[0]?.designName ?? order.id.slice(0, 8)}`,
-    }))
+    .map((order) => {
+      const itemsLabel =
+        order.items.length > 0
+          ? order.items.map((item) => getOrderItemDisplayName(item)).join(', ')
+          : order.id.slice(0, 8);
+      return {
+        id: order.id,
+        label: `${order.customer.firstName} ${order.customer.lastName} · ${itemsLabel}`,
+      };
+    })
     .sort((a, b) => a.label.localeCompare(b.label, 'es'));
