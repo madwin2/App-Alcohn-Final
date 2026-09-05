@@ -91,12 +91,22 @@ async function persistPage(
   for (const ship of shipments) {
     const pageBytes = resolvePageForTracking(pages, ship.tracking, usedPages);
     if (!pageBytes) {
-      console.warn(
-        `[andreani] PDF descartado: no contiene tracking ${ship.tracking} (hojas=${pages.length}). ` +
-          'Evita guardar etiqueta de otro envío bajo este número.',
-      );
-      continue;
+      // Misma política que downloadLabelByTracking: 1 hoja sin texto legible → aceptar.
+      if (pages.length === 1 && shipments.length === 1 && !usedPages.has(0)) {
+        console.warn(
+          `[andreani] ${ship.tracking}: tracking no legible en PDF (1 hoja) — se acepta`,
+        );
+        usedPages.add(0);
+        // fall through with pages[0]
+      } else {
+        console.warn(
+          `[andreani] PDF descartado: no contiene tracking ${ship.tracking} (hojas=${pages.length}). ` +
+            'Evita guardar etiqueta de otro envío bajo este número.',
+        );
+        continue;
+      }
     }
+    const resolvedPage = pageBytes ?? pages[0];
 
     const alreadyStored = await trackingAlreadyStored(ship.tracking);
 
@@ -120,7 +130,7 @@ async function persistPage(
         nota = 'ambiguous';
       }
 
-      const enrichedNew = await enrichZebraLabelPdf(pageBytes, ship.tracking, enrichInput, logoPath);
+      const enrichedNew = await enrichZebraLabelPdf(resolvedPage, ship.tracking, enrichInput, logoPath);
       let pdfPath: string | null = null;
       try {
         pdfPath = await uploadEtiquetaPdf(ship.tracking, enrichedNew);
@@ -152,7 +162,7 @@ async function persistPage(
       continue;
     }
 
-    const enriched = await enrichZebraLabelPdf(pageBytes, ship.tracking, enrichInput, logoPath);
+    const enriched = await enrichZebraLabelPdf(resolvedPage, ship.tracking, enrichInput, logoPath);
     try {
       const pdfPath = await uploadEtiquetaPdf(ship.tracking, enriched);
       await updateEtiquetaPdfPath(ship.tracking, pdfPath);

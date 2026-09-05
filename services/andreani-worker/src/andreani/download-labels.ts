@@ -1026,17 +1026,27 @@ export async function downloadLabelByTracking(
     // Si el portal mandó varias hojas o la hoja equivocada, no devolver basura.
     const pages = await splitPdfPages(new Uint8Array(pdf));
     const idx = indexOfPdfPageWithTracking(pages, tracking);
-    if (idx < 0) {
+    if (idx >= 0) {
+      if (pages.length === 1) return pdf;
       console.warn(
-        `[andreani] ${tracking}: PDF descargado (${pages.length} hoja(s)) no contiene ese tracking — descartado`,
+        `[andreani] ${tracking}: PDF tenía ${pages.length} hojas; se usa la hoja ${idx + 1} que contiene el tracking`,
       );
-      return null;
+      return Buffer.from(pages[idx]);
     }
-    if (pages.length === 1) return pdf;
+
+    // Zebra crudo a veces no trae el tracking como texto extraíble (solo vector/imagen).
+    // Si hay UNA sola hoja y pedimos un solo envío, confiar en la selección del portal.
+    if (pages.length === 1) {
+      console.warn(
+        `[andreani] ${tracking}: tracking no legible en PDF (1 hoja) — se acepta por selección única`,
+      );
+      return pdf;
+    }
+
     console.warn(
-      `[andreani] ${tracking}: PDF tenía ${pages.length} hojas; se usa la hoja ${idx + 1} que contiene el tracking`,
+      `[andreani] ${tracking}: PDF descargado (${pages.length} hoja(s)) no contiene ese tracking — descartado`,
     );
-    return Buffer.from(pages[idx]);
+    return null;
   } catch (error) {
     await restorePaidListView(page);
     await saveArtifacts(page, config.artifactsDir, 'print-zebra-error').catch(() => undefined);
