@@ -17,6 +17,7 @@ export default function ProgramasPage() {
     loading,
     error,
     fetchPrograms,
+    createProgram,
     updateProgram,
     deleteProgram,
     addStamps,
@@ -56,7 +57,7 @@ export default function ProgramasPage() {
         ) : (
           <ProgramsGrid
             programs={programs}
-            onRefresh={fetchPrograms}
+            onRefresh={() => fetchPrograms({ silent: true })}
             onAddStamps={async (programId, stampIds) => {
               await addStamps(programId, stampIds);
             }}
@@ -85,7 +86,8 @@ export default function ProgramasPage() {
       <NewProgramDialog
         open={showNewProgram}
         onOpenChange={setShowNewProgram}
-        onCreated={fetchPrograms}
+        onCreated={() => void fetchPrograms({ silent: true })}
+        createProgram={createProgram}
       />
       <ProgramsFiltersDialog open={showFilters} onOpenChange={setShowFilters} />
       <ProgramsSorterDialog open={showSorter} onOpenChange={setShowSorter} />

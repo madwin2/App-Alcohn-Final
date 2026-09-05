@@ -103,13 +103,19 @@ export function ProgramCard({
     try {
       await fn();
       if (successMsg) toast({ title: successMsg });
-      await onRefresh();
+      // Las mutaciones ya actualizan el estado local / silent refresh; no forzar loading full-page
     } catch (e) {
       toast({
         title: 'Error',
         description: e instanceof ProgramServiceError || e instanceof Error ? e.message : 'Operación fallida',
         variant: 'destructive',
       });
+      // Ante error, pedir un refresh silencioso por si el estado local quedó desfasado
+      try {
+        await onRefresh();
+      } catch {
+        /* ignore */
+      }
     } finally {
       setBusy(false);
     }

@@ -10,11 +10,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/use-toast';
-import { ProgramMachineType, ProgramStamp } from '@/lib/types/index';
+import { Program, ProgramMachineType, ProgramStamp } from '@/lib/types/index';
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
 import { Plus } from 'lucide-react';
 import { DatePicker } from '@/components/ui/date-picker';
-import { createProgram, ProgramServiceError } from '@/lib/supabase/services/programs.service';
+import { ProgramServiceError } from '@/lib/supabase/services/programs.service';
 import { formatLengthByPlanchuela, accumulateLengthByPlanchuela, DEFAULT_PERDIDA_CORTE_CM } from '@/lib/programas/material';
 
 const programSchema = z.object({
@@ -31,6 +31,7 @@ type ProgramFormData = z.infer<typeof programSchema>;
 interface NewProgramFormProps {
   onSuccess: () => void;
   onCancel?: () => void;
+  createProgram: (program: Partial<Program>) => Promise<Program>;
 }
 
 const generateProgramName = (
@@ -45,7 +46,7 @@ const generateProgramName = (
   return `${day} ${month} x${stampCount} y${machineLabel}`;
 };
 
-export function NewProgramForm({ onSuccess, onCancel }: NewProgramFormProps) {
+export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgramFormProps) {
   const [showStampsDialog, setShowStampsDialog] = useState(false);
   const [selectedStamps, setSelectedStamps] = useState<ProgramStamp[]>([]);
   const [isNameManuallyEdited, setIsNameManuallyEdited] = useState(false);
