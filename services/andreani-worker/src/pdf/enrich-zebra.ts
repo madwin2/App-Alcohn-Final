@@ -71,6 +71,26 @@ function pdfSearchableText(pdfBytes: Uint8Array): string {
   return chunks.join('\n');
 }
 
+/** True si el PDF (o una hoja) contiene el número de seguimiento en texto/streams. */
+export function pdfContainsTracking(pdfBytes: Uint8Array, tracking: string): boolean {
+  const t = tracking.trim();
+  if (!t || t.length < 8) return false;
+  return pdfSearchableText(pdfBytes).includes(t);
+}
+
+/**
+ * Elige la hoja cuyo contenido incluye el tracking.
+ * Evita guardar página i como tracking j cuando el portal devuelve un PDF multi-hoja.
+ */
+export function indexOfPdfPageWithTracking(pages: Uint8Array[], tracking: string): number {
+  const t = tracking.trim();
+  if (!t || t.length < 8) return -1;
+  for (let i = 0; i < pages.length; i += 1) {
+    if (pdfContainsTracking(pages[i], t)) return i;
+  }
+  return -1;
+}
+
 /**
  * Si ya enriquecimos este PDF, recortar pies Pedido viejos (a veces 2–3 apilados + hueco).
  * Zebra crudo del portal no tiene "Pedido:" → 0.

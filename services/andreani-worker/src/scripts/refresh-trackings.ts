@@ -13,7 +13,7 @@ import {
   goToPaidShipments,
   scrapeCurrentPage,
 } from '../andreani/download-labels.js';
-import { enrichZebraLabelPdf, splitPdfPages } from '../pdf/enrich-zebra.js';
+import { enrichZebraLabelPdf, pdfContainsTracking, splitPdfPages } from '../pdf/enrich-zebra.js';
 import {
   loadEnrichInputByTracking,
   updateEtiquetaPdfPath,
@@ -64,9 +64,22 @@ try {
         console.warn('  sin PDF');
       } else {
         const pages = await splitPdfPages(new Uint8Array(pdf));
-        const n = Math.min(pages.length, onPage.length);
-        for (let i = 0; i < n; i += 1) {
-          const tracking = onPage[i].tracking;
+        const usedPages = new Set<number>();
+        for (const row of onPage) {
+          const tracking = row.tracking;
+          let pageIdx = -1;
+          for (let i = 0; i < pages.length; i += 1) {
+            if (usedPages.has(i)) continue;
+            if (pdfContainsTracking(pages[i], tracking)) {
+              pageIdx = i;
+              break;
+            }
+          }
+          if (pageIdx < 0) {
+            console.warn(`  SKIP ${tracking}: PDF no contiene ese tracking`);
+            continue;
+          }
+          usedPages.add(pageIdx);
           const order = await loadEnrichInputByTracking(tracking);
           const enrichInput = order
             ? {
@@ -76,9 +89,8 @@ try {
                 imageUrls: order.imageUrls,
               }
             : undefined;
-          // Original Andreani (vector) → enrich sin discard
           const enriched = await enrichZebraLabelPdf(
-            pages[i],
+            pages[pageIdx],
             tracking,
             enrichInput,
             config.logoPath,
@@ -87,7 +99,7 @@ try {
           writeFileSync(`${outDir}/${tracking}.pdf`, Buffer.from(enriched));
           const pdfPath = await uploadEtiquetaPdf(tracking, enriched);
           await updateEtiquetaPdfPath(tracking, pdfPath);
-          console.log(`  OK ${tracking} bytes=${enriched.length}`);
+          console.log(`  OK ${tracking} hoja=${pageIdx + 1} bytes=${enriched.length}`);
           want.delete(tracking);
         }
       }

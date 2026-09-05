@@ -11,7 +11,12 @@ import {
 } from './andreani/download-labels.js';
 import { saveArtifacts } from './browser-helpers.js';
 import { setJobDetail } from './job-status.js';
-import { enrichZebraLabelPdf, splitPdfPages } from './pdf/enrich-zebra.js';
+import {
+  enrichZebraLabelPdf,
+  indexOfPdfPageWithTracking,
+  pdfContainsTracking,
+  splitPdfPages,
+} from './pdf/enrich-zebra.js';
 import { isPendienteIngreso } from './map-andreani-portal-estado.js';
 import { matchDestinatario, type MatchCandidate } from './match-names.js';
 import {
@@ -46,6 +51,29 @@ function toEnrichInput(order: LabelMatchCandidate) {
   };
 }
 
+/** Hoja del PDF que contiene ese tracking (no usar índice i = envío i). */
+function resolvePageForTracking(
+  pages: Uint8Array[],
+  tracking: string,
+  usedPages: Set<number>,
+): Uint8Array | null {
+  // Preferir hojas libres que contengan el tracking.
+  for (let i = 0; i < pages.length; i += 1) {
+    if (usedPages.has(i)) continue;
+    if (pdfContainsTracking(pages[i], tracking)) {
+      usedPages.add(i);
+      return pages[i];
+    }
+  }
+  // Si todas las que matchean ya se usaron, cualquier hoja con el tracking.
+  const any = indexOfPdfPageWithTracking(pages, tracking);
+  if (any >= 0) {
+    usedPages.add(any);
+    return pages[any];
+  }
+  return null;
+}
+
 async function persistPage(
   shipments: PortalShipment[],
   pdfBytes: Buffer,
@@ -54,13 +82,22 @@ async function persistPage(
   logoPath: string,
 ): Promise<{ assigned: number; orphans: number; downloaded: number; refreshed: number }> {
   const pages = await splitPdfPages(new Uint8Array(pdfBytes));
-  const n = Math.min(pages.length, shipments.length);
+  const usedPages = new Set<number>();
   let assigned = 0;
   let orphans = 0;
   let refreshed = 0;
+  let downloaded = 0;
 
-  for (let i = 0; i < n; i += 1) {
-    const ship = shipments[i];
+  for (const ship of shipments) {
+    const pageBytes = resolvePageForTracking(pages, ship.tracking, usedPages);
+    if (!pageBytes) {
+      console.warn(
+        `[andreani] PDF descartado: no contiene tracking ${ship.tracking} (hojas=${pages.length}). ` +
+          'Evita guardar etiqueta de otro envío bajo este número.',
+      );
+      continue;
+    }
+
     const alreadyStored = await trackingAlreadyStored(ship.tracking);
 
     let enrichInput: ReturnType<typeof toEnrichInput> | undefined;
@@ -83,7 +120,7 @@ async function persistPage(
         nota = 'ambiguous';
       }
 
-      const enrichedNew = await enrichZebraLabelPdf(pages[i], ship.tracking, enrichInput, logoPath);
+      const enrichedNew = await enrichZebraLabelPdf(pageBytes, ship.tracking, enrichInput, logoPath);
       let pdfPath: string | null = null;
       try {
         pdfPath = await uploadEtiquetaPdf(ship.tracking, enrichedNew);
@@ -104,6 +141,7 @@ async function persistPage(
         nota,
       });
 
+      downloaded += 1;
       if (ordenId) {
         await applyTrackingToOrder(ordenId, ship.tracking);
         usedOrdenIds.add(ordenId);
@@ -114,17 +152,18 @@ async function persistPage(
       continue;
     }
 
-    const enriched = await enrichZebraLabelPdf(pages[i], ship.tracking, enrichInput, logoPath);
+    const enriched = await enrichZebraLabelPdf(pageBytes, ship.tracking, enrichInput, logoPath);
     try {
       const pdfPath = await uploadEtiquetaPdf(ship.tracking, enriched);
       await updateEtiquetaPdfPath(ship.tracking, pdfPath);
+      downloaded += 1;
       refreshed += 1;
     } catch (error) {
       console.warn('[andreani] refresh PDF falló', ship.tracking, error);
     }
   }
 
-  return { assigned, orphans, downloaded: n, refreshed };
+  return { assigned, orphans, downloaded, refreshed };
 }
 
 type PageWork = {

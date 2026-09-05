@@ -110,6 +110,7 @@ export async function listAssignedLinkCandidates(): Promise<LabelMatchCandidate[
       ordenes (
         id,
         seguimiento,
+        estado_envio,
         direccion_id,
         clientes ( nombre, apellido ),
         sellos ( diseno, archivo_base, archivo_vector_preview, item_type )
@@ -123,6 +124,7 @@ export async function listAssignedLinkCandidates(): Promise<LabelMatchCandidate[
   type OrdenLite = {
     id: string;
     seguimiento: string | null;
+    estado_envio: string | null;
     direccion_id: string | null;
     clientes: { nombre: string | null; apellido: string | null } | { nombre: string | null; apellido: string | null }[] | null;
     sellos: SelloLite[] | null;
@@ -133,6 +135,8 @@ export async function listAssignedLinkCandidates(): Promise<LabelMatchCandidate[
     const ordenRaw = (row as { ordenes?: unknown }).ordenes;
     const orden = (Array.isArray(ordenRaw) ? ordenRaw[0] : ordenRaw) as OrdenLite | null;
     if (!orden?.id) continue;
+    // Ya avisados / cerrados: no volver a matchear etiquetas (aunque seguimiento esté vacío).
+    if (orden.estado_envio === 'Seguimiento Enviado') continue;
     if (orden.seguimiento && orden.seguimiento.trim()) continue;
     ordenes.push(orden);
     if (orden.direccion_id) direccionIds.add(orden.direccion_id);

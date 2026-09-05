@@ -1,6 +1,7 @@
 import type { Page } from 'playwright';
 import type { WorkerConfig } from '../config.js';
 import { saveArtifacts } from '../browser-helpers.js';
+import { indexOfPdfPageWithTracking, splitPdfPages } from '../pdf/enrich-zebra.js';
 
 export type PortalShipment = {
   tracking: string;
@@ -938,7 +939,21 @@ export async function downloadLabelByTracking(
   try {
     const pdf = await printZebraAndDownload(page, config.andreani.timeoutMs);
     await restorePaidListView(page);
-    return pdf;
+
+    // Si el portal mandó varias hojas o la hoja equivocada, no devolver basura.
+    const pages = await splitPdfPages(new Uint8Array(pdf));
+    const idx = indexOfPdfPageWithTracking(pages, tracking);
+    if (idx < 0) {
+      console.warn(
+        `[andreani] ${tracking}: PDF descargado (${pages.length} hoja(s)) no contiene ese tracking — descartado`,
+      );
+      return null;
+    }
+    if (pages.length === 1) return pdf;
+    console.warn(
+      `[andreani] ${tracking}: PDF tenía ${pages.length} hojas; se usa la hoja ${idx + 1} que contiene el tracking`,
+    );
+    return Buffer.from(pages[idx]);
   } catch (error) {
     await restorePaidListView(page);
     await saveArtifacts(page, config.artifactsDir, 'print-zebra-error').catch(() => undefined);
