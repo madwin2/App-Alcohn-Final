@@ -756,8 +756,26 @@ export type ProgramBaseMachine = 'C' | 'G' | 'XL';
 export type ProgramBaseFileInfo = {
   maquina: ProgramBaseMachine;
   archivo_base_url: string;
+  archivo_gadget_url?: string | null;
   updated_at: string;
 };
+
+/** Nombre del gadget .lua por máquina (archivos en aspire-gadgets/). */
+export const PROGRAM_GADGET_FILENAME: Record<ProgramBaseMachine, string> = {
+  C: 'ArmarPrograma_Chica.lua',
+  G: 'ArmarPrograma_Grande.lua',
+  XL: 'ArmarPrograma_XL.lua',
+};
+
+function publicProgramasBaseUrl(path: string): string {
+  const { data } = supabase.storage.from('programas-base').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function isCrv3dUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return /\.crv3d($|\?)/i.test(url) || /\.crv($|\?)/i.test(url);
+}
 
 export const getBaseFileUrl = async (machine: ProgramMachineType): Promise<string | null> => {
   if (machine === 'ABC') return null;
@@ -767,13 +785,29 @@ export const getBaseFileUrl = async (machine: ProgramMachineType): Promise<strin
     .eq('maquina', machine)
     .maybeSingle();
   if (error) throw error;
-  return data?.archivo_base_url || null;
+  const url = data?.archivo_base_url || null;
+  // Ignorar placeholders (p.ej. URL de gadget) que no son .crv3d
+  return isCrv3dUrl(url) ? url : null;
+};
+
+export const getGadgetFileUrl = async (machine: ProgramMachineType): Promise<string | null> => {
+  if (machine === 'ABC') return null;
+  const code = machine as ProgramBaseMachine;
+  const { data, error } = await supabase
+    .from('programa_archivos_base')
+    .select('archivo_gadget_url')
+    .eq('maquina', code)
+    .maybeSingle();
+  if (error) throw error;
+  if (data?.archivo_gadget_url) return data.archivo_gadget_url;
+  // Fallback al path canónico en Storage (aunque la fila aún no tenga la columna)
+  return publicProgramasBaseUrl(`${code}/${PROGRAM_GADGET_FILENAME[code]}`);
 };
 
 export const listProgramBaseFiles = async (): Promise<ProgramBaseFileInfo[]> => {
   const { data, error } = await supabase
     .from('programa_archivos_base')
-    .select('maquina, archivo_base_url, updated_at')
+    .select('maquina, archivo_base_url, archivo_gadget_url, updated_at')
     .order('maquina');
   if (error) throw error;
   return (data || []) as ProgramBaseFileInfo[];
@@ -804,21 +838,92 @@ export const uploadProgramBaseFile = async (
     throw new ProgramServiceError(`No se pudo subir el archivo: ${uploadError.message}`);
   }
 
-  const { data: publicData } = supabase.storage.from('programas-base').getPublicUrl(path);
-  const archivo_base_url = publicData.publicUrl;
+  const archivo_base_url = publicProgramasBaseUrl(path);
   const updated_at = new Date().toISOString();
+  const gadgetFallback = publicProgramasBaseUrl(`${machine}/${PROGRAM_GADGET_FILENAME[machine]}`);
+
+  const { data: existing } = await supabase
+    .from('programa_archivos_base')
+    .select('archivo_gadget_url')
+    .eq('maquina', machine)
+    .maybeSingle();
 
   const { data, error } = await supabase
     .from('programa_archivos_base')
     .upsert(
-      { maquina: machine, archivo_base_url, updated_at } as any,
+      {
+        maquina: machine,
+        archivo_base_url,
+        archivo_gadget_url: (existing as any)?.archivo_gadget_url || gadgetFallback,
+        updated_at,
+      } as any,
       { onConflict: 'maquina' },
     )
-    .select('maquina, archivo_base_url, updated_at')
+    .select('maquina, archivo_base_url, archivo_gadget_url, updated_at')
     .single();
 
   if (error) {
     throw new ProgramServiceError(`Archivo subido pero no se pudo registrar: ${error.message}`);
+  }
+
+  return data as ProgramBaseFileInfo;
+};
+
+/** Sube/reemplaza el gadget .lua de una máquina y lo registra en programa_archivos_base. */
+export const uploadProgramGadgetFile = async (
+  machine: ProgramBaseMachine,
+  file: File,
+): Promise<ProgramBaseFileInfo> => {
+  const ext = (file.name.split('.').pop() || 'lua').toLowerCase();
+  if (ext !== 'lua') {
+    throw new ProgramServiceError('Formato no válido. Usá un archivo .lua');
+  }
+
+  const filename = PROGRAM_GADGET_FILENAME[machine];
+  const path = `${machine}/${filename}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('programas-base')
+    .upload(path, file, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: 'text/x-lua',
+    });
+
+  if (uploadError) {
+    throw new ProgramServiceError(`No se pudo subir el gadget: ${uploadError.message}`);
+  }
+
+  const archivo_gadget_url = publicProgramasBaseUrl(path);
+  const updated_at = new Date().toISOString();
+
+  const { data: existing } = await supabase
+    .from('programa_archivos_base')
+    .select('archivo_base_url')
+    .eq('maquina', machine)
+    .maybeSingle();
+
+  const archivo_base_url =
+    isCrv3dUrl((existing as any)?.archivo_base_url)
+      ? (existing as any).archivo_base_url
+      : archivo_gadget_url;
+
+  const { data, error } = await supabase
+    .from('programa_archivos_base')
+    .upsert(
+      {
+        maquina: machine,
+        archivo_base_url,
+        archivo_gadget_url,
+        updated_at,
+      } as any,
+      { onConflict: 'maquina' },
+    )
+    .select('maquina, archivo_base_url, archivo_gadget_url, updated_at')
+    .single();
+
+  if (error) {
+    throw new ProgramServiceError(`Gadget subido pero no se pudo registrar: ${error.message}`);
   }
 
   return data as ProgramBaseFileInfo;

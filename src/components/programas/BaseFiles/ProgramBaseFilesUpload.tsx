@@ -89,7 +89,7 @@ export function ProgramBaseFilesUpload() {
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span className="text-muted-foreground mr-1 flex items-center gap-1.5">
         <Upload className="h-3.5 w-3.5" />
-        Aspire base:
+        Aspire .crv3d:
       </span>
 
       {MACHINES.map(({ id, label }) => {

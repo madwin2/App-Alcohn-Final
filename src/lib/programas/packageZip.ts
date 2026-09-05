@@ -3,8 +3,11 @@ import { supabase } from '@/lib/supabase/client';
 import {
   canDownloadPackage,
   getBaseFileUrl,
+  getGadgetFileUrl,
   getProgramById,
   markProgramPackageReady,
+  PROGRAM_GADGET_FILENAME,
+  ProgramBaseMachine,
   ProgramServiceError,
 } from '@/lib/supabase/services/programs.service';
 import { vectorUrlFromPreview } from '@/lib/utils/vectorUrlFromPreview';
@@ -89,11 +92,11 @@ function triggerBrowserDownload(blob: Blob, filename: string) {
 }
 
 /**
- * Genera el paquete ZIP del programa (vectores + manifest + .crv3d base si existe),
+ * Genera el paquete ZIP del programa (vectores + manifest + .crv3d base + gadget .lua),
  * lo sube a Storage, marca el programa LISTO y dispara la descarga en el navegador.
  *
  * Nota: por ahora se incluyen los vectores en el formato disponible (EPS/preview).
- * La conversión a DXF y el Gadget de Aspire se suman en una etapa posterior.
+ * La conversión a DXF hace falta para que el gadget importe sin intervención manual.
  */
 export async function generateAndDownloadProgramPackage(programId: string): Promise<Program> {
   const program = await getProgramById(programId);
@@ -155,9 +158,23 @@ export async function generateAndDownloadProgramPackage(programId: string): Prom
     zip.file(
       'LEEME.txt',
       'No hay .crv3d base registrado para esta máquina en programa_archivos_base.\n'
-        + 'Subí el archivo base y registralo para incluirlo en futuros paquetes.\n'
-        + 'Por ahora el ZIP trae vectores + manifest.lua para armar a mano / con el Gadget.\n',
+        + 'Subí el archivo base desde la UI de Programas para incluirlo en futuros paquetes.\n'
+        + 'Por ahora el ZIP trae vectores + manifest.lua + gadget.\n',
     );
+  }
+
+  const machine = program.machine as ProgramBaseMachine;
+  const gadgetUrl = await getGadgetFileUrl(machine);
+  const gadgetName = PROGRAM_GADGET_FILENAME[machine];
+  if (gadgetUrl) {
+    try {
+      const gadgetBytes = await fetchBinary(gadgetUrl);
+      zip.file(gadgetName, gadgetBytes);
+    } catch (e) {
+      failures.push(
+        `Gadget ${gadgetName}: ${e instanceof Error ? e.message : 'no se pudo descargar'}`,
+      );
+    }
   }
 
   if (failures.length) {
@@ -173,7 +190,6 @@ export async function generateAndDownloadProgramPackage(programId: string): Prom
     .upload(storagePath, blob, { contentType: 'application/zip', upsert: true });
 
   if (uploadError) {
-    // Si falla el upload, igual permitir descarga local sin marcar LISTO a medias
     triggerBrowserDownload(blob, filename);
     throw new ProgramServiceError(
       `El ZIP se descargó localmente pero no se pudo guardar en Storage: ${uploadError.message}`,

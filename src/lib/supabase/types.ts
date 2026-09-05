@@ -223,11 +223,13 @@ export interface Database {
         Row: {
           maquina: 'C' | 'G' | 'XL';
           archivo_base_url: string;
+          archivo_gadget_url?: string | null;
           updated_at: string;
         };
         Insert: {
           maquina: 'C' | 'G' | 'XL';
           archivo_base_url: string;
+          archivo_gadget_url?: string | null;
           updated_at?: string;
         };
         Update: Partial<Database['public']['Tables']['programa_archivos_base']['Insert']>;
