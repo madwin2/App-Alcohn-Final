@@ -50,13 +50,14 @@ function SidebarInner() {
   const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
-  const { pedidosBadge, comercialBadge } = useSidebarNotifications();
+  const { pedidosBadge, comercialBadge, programasBadge } = useSidebarNotifications();
 
   const isExpanded = sidebarExpanded || sidebarHovered;
 
   const badgeForPath = (path: string): number => {
     if (path === '/pedidos') return pedidosBadge;
     if (path === '/comercial') return comercialBadge;
+    if (path === '/programas') return programasBadge;
     return 0;
   };
 

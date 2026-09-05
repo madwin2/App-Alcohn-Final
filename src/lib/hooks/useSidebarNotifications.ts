@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import {
   fetchComercialPagosNuevosBadgeCount,
   fetchPedidosMissingFilesBadgeCount,
+  fetchProgramasUrgentesSinProgramarBadgeCount,
   markComercialPagosAsSeen,
 } from '@/lib/supabase/services/sidebarNotifications.service';
 
@@ -12,6 +13,7 @@ export function useSidebarNotifications() {
   const location = useLocation();
   const [pedidosBadge, setPedidosBadge] = useState(0);
   const [comercialBadge, setComercialBadge] = useState(0);
+  const [programasBadge, setProgramasBadge] = useState(0);
 
   const refreshPedidos = useCallback(async () => {
     try {
@@ -36,29 +38,41 @@ export function useSidebarNotifications() {
     }
   }, [location.pathname]);
 
+  const refreshProgramas = useCallback(async () => {
+    try {
+      const count = await fetchProgramasUrgentesSinProgramarBadgeCount();
+      setProgramasBadge(count);
+    } catch (err) {
+      console.warn('[sidebar] programas badge:', err);
+    }
+  }, []);
+
   useEffect(() => {
     void refreshPedidos();
     void refreshComercial();
-  }, [refreshPedidos, refreshComercial]);
+    void refreshProgramas();
+  }, [refreshPedidos, refreshComercial, refreshProgramas]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
       void refreshPedidos();
       void refreshComercial();
+      void refreshProgramas();
     }, POLL_MS);
     return () => window.clearInterval(id);
-  }, [refreshPedidos, refreshComercial]);
+  }, [refreshPedidos, refreshComercial, refreshProgramas]);
 
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         void refreshPedidos();
         void refreshComercial();
+        void refreshProgramas();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [refreshPedidos, refreshComercial]);
+  }, [refreshPedidos, refreshComercial, refreshProgramas]);
 
-  return { pedidosBadge, comercialBadge };
+  return { pedidosBadge, comercialBadge, programasBadge };
 }

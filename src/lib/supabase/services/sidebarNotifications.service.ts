@@ -52,6 +52,32 @@ export async function fetchPedidosMissingFilesBadgeCount(
   return ordenIds.filter((id) => flagged.has(id)).length;
 }
 
+/** Umbral de fecha límite para considerar un sello "urgente" sin programar (días). */
+export const URGENTE_DIAS_FECHA_LIMITE = 3;
+
+/**
+ * Sellos elegibles para programa que son prioritarios o tienen fecha límite
+ * dentro de URGENTE_DIAS_FECHA_LIMITE días — y todavía no están en ningún programa.
+ */
+export async function fetchProgramasUrgentesSinProgramarBadgeCount(): Promise<number> {
+  const limiteFecha = new Date();
+  limiteFecha.setDate(limiteFecha.getDate() + URGENTE_DIAS_FECHA_LIMITE);
+  const limiteFechaStr = limiteFecha.toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from('sellos')
+    .select('id, es_prioritario, fecha_limite')
+    .is('programa_id', null)
+    .eq('item_type', 'SELLO')
+    .eq('estado_vectorizacion', 'VECTORIZADO')
+    .not('archivo_vector_preview', 'is', null)
+    .in('estado_fabricacion', ['Sin Hacer', 'Prioridad', 'Rehacer'])
+    .or(`es_prioritario.eq.true,fecha_limite.lte.${limiteFechaStr}`);
+
+  if (error) throw new Error(error.message);
+  return data?.length ?? 0;
+}
+
 /** IDs de órdenes web con pago pendiente (para badge "nuevos"). */
 export async function fetchPendingPagoWebOrdenIds(): Promise<string[]> {
   const { data, error } = await supabase

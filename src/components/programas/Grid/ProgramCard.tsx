@@ -383,6 +383,7 @@ export function ProgramCard({
         programId={program.id}
         machine={program.machine}
         excludeStampIds={program.stamps.map((s) => s.id)}
+        initialLengthByPlanchuela={program.lengthByPlanchuela}
       />
 
       <RemoveStampDialog

@@ -3,10 +3,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Plus, Clock, AlertCircle, Calendar, Loader2 } from 'lucide-react';
-import { ProgramMachineType, ProgramStamp, StampType } from '@/lib/types/index';
+import { Search, Plus, Clock, AlertCircle, Calendar, Loader2, Sparkles } from 'lucide-react';
+import {
+  ProgramLengthByPlanchuela,
+  ProgramMachineType,
+  ProgramStamp,
+  StampType,
+} from '@/lib/types/index';
 import { StampTypeIcon } from '@/components/ui/StampTypeIcon';
 import { getEligibleStamps } from '@/lib/supabase/services/programs.service';
+import {
+  resolvePlanchuelaRef,
+  stampLengthAlongMm,
+  validatePlanchuelaLengthLimit,
+} from '@/lib/programas/material';
+import { toast } from '@/components/ui/use-toast';
 
 interface StampsSelectionDialogProps {
   isOpen: boolean;
@@ -15,6 +26,8 @@ interface StampsSelectionDialogProps {
   programId: string;
   machine: ProgramMachineType;
   excludeStampIds?: string[];
+  /** Largo ya usado en el programa (mm por planchuela). Default {}. */
+  initialLengthByPlanchuela?: ProgramLengthByPlanchuela;
 }
 
 const formatDeadline = (deadlineAt: string): string => {
@@ -37,6 +50,72 @@ const formatCreatedAt = (createdAt: string): string => {
   });
 };
 
+function StampThumb({ stamp }: { stamp: ProgramStamp }) {
+  const [failed, setFailed] = useState(false);
+  const src = stamp.vectorPreviewUrl || stamp.previewUrl;
+
+  if (!src || failed) {
+    return (
+      <div className="w-16 h-16 border border-border rounded bg-muted/30 flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="text-[10px] text-muted-foreground text-center px-1">
+          {Math.round(stamp.widthMm)}×{Math.round(stamp.heightMm)}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-16 h-16 border border-border rounded bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
+      <img
+        src={src}
+        alt={`Diseño de ${stamp.designName}`}
+        className="w-full h-full object-contain"
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+}
+
+/** Recorre candidatos (ya ordenados) y arma una selección que respete el largo máximo. */
+export function suggestStampSelection(
+  candidates: ProgramStamp[],
+  machine: ProgramMachineType,
+  initialLengths: ProgramLengthByPlanchuela = {},
+): string[] {
+  const acc: ProgramLengthByPlanchuela = { ...initialLengths };
+  const selected: string[] = [];
+
+  for (const stamp of candidates) {
+    const dims = {
+      anchoRealCm: stamp.anchoRealCm,
+      largoRealCm: stamp.largoRealCm,
+      tipoPlanchuela: stamp.tipoPlanchuela,
+    };
+    const ref = resolvePlanchuelaRef(dims);
+    const extraMm = stampLengthAlongMm(dims);
+
+    if (!ref || extraMm <= 0) {
+      selected.push(stamp.id);
+      continue;
+    }
+
+    const err = validatePlanchuelaLengthLimit({
+      machine,
+      tipoPlanchuela: ref,
+      currentMm: acc[ref] || 0,
+      extraMm,
+    });
+
+    if (err) continue;
+
+    acc[ref] = (acc[ref] || 0) + extraMm;
+    selected.push(stamp.id);
+  }
+
+  return selected;
+}
+
 export function StampsSelectionDialog({
   isOpen,
   onClose,
@@ -44,6 +123,7 @@ export function StampsSelectionDialog({
   programId: _programId,
   machine,
   excludeStampIds = [],
+  initialLengthByPlanchuela = {},
 }: StampsSelectionDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStamps, setSelectedStamps] = useState<string[]>([]);
@@ -51,6 +131,7 @@ export function StampsSelectionDialog({
   const [availableStamps, setAvailableStamps] = useState<ProgramStamp[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [suggestHint, setSuggestHint] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen || !machine) return;
@@ -59,6 +140,7 @@ export function StampsSelectionDialog({
     const load = async () => {
       setLoading(true);
       setLoadError(null);
+      setSuggestHint(null);
       try {
         const stamps = await getEligibleStamps({ machine, excludeStampIds });
         if (!cancelled) setAvailableStamps(stamps);
@@ -83,7 +165,26 @@ export function StampsSelectionDialog({
     return matchesSearch && matchesType;
   });
 
+  const canSuggest =
+    machine !== 'ABC' && !loading && availableStamps.length > 0 && !loadError;
+
+  const handleSuggest = () => {
+    const ids = suggestStampSelection(availableStamps, machine, initialLengthByPlanchuela);
+    if (ids.length === 0) {
+      toast({
+        title: 'Sin espacio',
+        description: 'No hay más sellos que entren en el largo disponible para esta máquina.',
+      });
+      return;
+    }
+    setSelectedStamps(ids);
+    setSuggestHint(
+      `Se preseleccionaron ${ids.length} sello${ids.length !== 1 ? 's' : ''} según prioridad y largo disponible. Revisá y confirmá.`,
+    );
+  };
+
   const handleStampToggle = (stampId: string) => {
+    setSuggestHint(null);
     setSelectedStamps((prev) =>
       prev.includes(stampId) ? prev.filter((id) => id !== stampId) : [...prev, stampId],
     );
@@ -93,6 +194,7 @@ export function StampsSelectionDialog({
     const stampsToAdd = availableStamps.filter((stamp) => selectedStamps.includes(stamp.id));
     onAddStamps(stampsToAdd);
     setSelectedStamps([]);
+    setSuggestHint(null);
     onClose();
   };
 
@@ -100,6 +202,7 @@ export function StampsSelectionDialog({
     setSelectedStamps([]);
     setSearchQuery('');
     setFilterType('ALL');
+    setSuggestHint(null);
     onClose();
   };
 
@@ -125,6 +228,19 @@ export function StampsSelectionDialog({
               />
             </div>
 
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="text-xs gap-1.5"
+              disabled={!canSuggest}
+              onClick={handleSuggest}
+              title="Reemplaza la selección actual con sellos sugeridos por prioridad y largo de planchuela"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Sugerir armado
+            </Button>
+
             <div className="flex gap-2 flex-wrap">
               {(['ALL', 'CLASICO', '3MM', 'ALIMENTO', 'ABC', 'LACRE'] as const).map((type) => (
                 <Button
@@ -139,6 +255,10 @@ export function StampsSelectionDialog({
               ))}
             </div>
           </div>
+
+          {suggestHint && (
+            <p className="text-xs text-muted-foreground -mt-2">{suggestHint}</p>
+          )}
 
           <div className="flex-1 overflow-y-auto min-h-[200px]">
             {loading ? (
@@ -175,19 +295,7 @@ export function StampsSelectionDialog({
                         onClick={(e) => e.stopPropagation()}
                       />
 
-                      <div className="w-16 h-16 border border-border rounded bg-muted/30 flex items-center justify-center overflow-hidden flex-shrink-0">
-                        {stamp.previewUrl ? (
-                          <img
-                            src={stamp.previewUrl}
-                            alt={`Diseño de ${stamp.designName}`}
-                            className="w-full h-full object-contain"
-                          />
-                        ) : (
-                          <div className="text-xs text-muted-foreground text-center">
-                            {Math.round(stamp.widthMm)}×{Math.round(stamp.heightMm)}mm
-                          </div>
-                        )}
-                      </div>
+                      <StampThumb stamp={stamp} />
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-1">
