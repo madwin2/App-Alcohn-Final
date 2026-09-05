@@ -392,6 +392,74 @@ async function restorePaidListView(page: Page): Promise<void> {
   }
 }
 
+/** True si la grilla Pagados ya tiene filas / paginación con total. */
+async function hasShipmentRows(page: Page): Promise<boolean> {
+  const pag = await readTablePagination(page);
+  if (pag && pag.total > 0) return true;
+  const rows = await scrapeCurrentPage(page);
+  return rows.length > 0;
+}
+
+async function clickPagadosTab(page: Page): Promise<void> {
+  const pagados = page
+    .getByRole('tab', { name: /^pagados$/i })
+    .or(page.getByRole('button', { name: /^pagados$/i }))
+    .or(page.locator('[role="tab"], button, a').filter({ hasText: /^pagados$/i }))
+    .first();
+  if (await pagados.isVisible({ timeout: 4000 }).catch(() => false)) {
+    await pagados.click();
+    await page.waitForTimeout(1000);
+  }
+}
+
+async function waitForShipmentRows(page: Page, timeoutMs = 12_000): Promise<void> {
+  await Promise.race([
+    page.waitForSelector('table tbody tr', { timeout: timeoutMs }),
+    page.waitForSelector('[role="row"]', { timeout: timeoutMs }),
+    page.waitForFunction(
+      () => /\b36\d{12,}\b/.test(document.body?.innerText || ''),
+      { timeout: timeoutMs },
+    ),
+    page.waitForFunction(
+      () => /(\d+)\s*[-–]\s*(\d+)\s+de\s+(\d+)/i.test(document.body?.innerText || ''),
+      { timeout: timeoutMs },
+    ),
+  ]).catch(() => undefined);
+  await page.waitForTimeout(800);
+}
+
+/**
+ * A veces al pasar de "Últimos 7" → "30 días" el portal queda en vacío
+ * ("No encontramos resultados") aunque haya envíos. Recuperar sin perder el rango.
+ */
+async function recoverEmptyPaidList(page: Page, config: WorkerConfig): Promise<void> {
+  console.warn('[andreani] grilla Pagados vacía — recuperando filtros…');
+
+  const clearBtn = page.getByRole('button', { name: /limpiar filtros/i }).first();
+  if (await clearBtn.isVisible({ timeout: 1200 }).catch(() => false)) {
+    await clearBtn.click();
+    await page.waitForTimeout(1500);
+  }
+
+  await restorePaidListView(page);
+  await clickPagadosTab(page);
+  await ensureLast30DaysFilter(page);
+  await waitForShipmentRows(page, Math.min(config.andreani.timeoutMs, 15_000));
+
+  if (await hasShipmentRows(page)) return;
+
+  console.warn('[andreani] grilla sigue vacía — reload /ver-envios…');
+  await page.goto('https://pymes.andreani.com/ver-envios', {
+    waitUntil: 'domcontentloaded',
+    timeout: config.andreani.timeoutMs,
+  });
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
+  await page.waitForTimeout(1500);
+  await clickPagadosTab(page);
+  await ensureLast30DaysFilter(page);
+  await waitForShipmentRows(page, Math.min(config.andreani.timeoutMs, 15_000));
+}
+
 /** Fuerza el filtro de fechas a "Últimos 30 días" (nunca menos). */
 async function ensureLast30DaysFilter(page: Page): Promise<string> {
   const rangeBtn = page
@@ -446,9 +514,10 @@ async function ensureLast30DaysFilter(page: Page): Promise<string> {
     return current;
   }
 
-  await page.waitForTimeout(1200);
+  // El portal a veces pinta vacío unos segundos al cambiar el rango.
+  await page.waitForTimeout(2500);
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
-  await page.waitForSelector('table tbody tr, [role="row"]', { timeout: 12_000 }).catch(() => undefined);
+  await waitForShipmentRows(page, 12_000);
 
   const after = await readLabel();
   if (!/[uú]ltimos\s*30\s*d[ií]as/i.test(after)) {
@@ -716,18 +785,9 @@ async function ensurePaidShipmentsGrid(
   }
 
   await ensureLast30DaysFilter(page);
+  await waitForShipmentRows(page, 12_000);
 
-  await Promise.race([
-    page.waitForSelector('table tbody tr', { timeout: 12_000 }),
-    page.waitForSelector('[role="row"]', { timeout: 12_000 }),
-    page.waitForFunction(
-      () => /\b36\d{12,}\b/.test(document.body?.innerText || ''),
-      { timeout: 12_000 },
-    ),
-  ]).catch(() => undefined);
-  await page.waitForTimeout(600);
-
-  const ok = !!(await readTablePagination(page));
+  const ok = !!(await readTablePagination(page)) || (await hasShipmentRows(page));
   if (!ok) console.warn('[andreani] ensurePaidShipmentsGrid: grilla sin paginación');
   return ok;
 }
@@ -770,28 +830,22 @@ export async function goToPaidShipments(page: Page, config: WorkerConfig): Promi
   });
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
 
-  const pagados = page
-    .getByRole('tab', { name: /^pagados$/i })
-    .or(page.getByRole('button', { name: /^pagados$/i }))
-    .or(page.locator('[role="tab"], button, a').filter({ hasText: /^pagados$/i }))
-    .first();
-  if (await pagados.isVisible({ timeout: 4000 }).catch(() => false)) {
-    await pagados.click();
-    await page.waitForTimeout(1000);
+  await clickPagadosTab(page);
+  await ensureLast30DaysFilter(page);
+  await waitForShipmentRows(page, 12_000);
+
+  // Race: al cambiar a 30 días el portal a veces deja "sin resultados" aunque haya envíos.
+  if (!(await hasShipmentRows(page))) {
+    await page.waitForTimeout(3000);
+    await waitForShipmentRows(page, 10_000);
+  }
+  if (!(await hasShipmentRows(page))) {
+    await recoverEmptyPaidList(page, config);
   }
 
-  await ensureLast30DaysFilter(page);
-
-  // Esperar filas / trackings
-  await Promise.race([
-    page.waitForSelector('table tbody tr', { timeout: 12_000 }),
-    page.waitForSelector('[role="row"]', { timeout: 12_000 }),
-    page.waitForFunction(
-      () => /\b36\d{12,}\b/.test(document.body?.innerText || ''),
-      { timeout: 12_000 },
-    ),
-  ]).catch(() => undefined);
-  await page.waitForTimeout(800);
+  if (!(await hasShipmentRows(page))) {
+    console.warn('[andreani] goToPaidShipments: grilla vacía tras reintentos');
+  }
 }
 
 export async function downloadNewLabelsFromCurrentPage(
