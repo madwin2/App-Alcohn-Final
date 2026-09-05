@@ -714,8 +714,9 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
           fileUrls.vectorUrl = result.originalUrl;
           fileUrls.vectorPreviewUrl = result.previewUrl;
         } else {
-          // Para otros formatos, subir normalmente
+          // SVG/PDF/AI: la URL del archivo se guarda en archivo_vector_preview
           fileUrls.vectorUrl = await uploadFile('vector', formData.files.vector, filePath);
+          fileUrls.vectorPreviewUrl = fileUrls.vectorUrl;
         }
       } catch (error) {
         console.error('Error uploading vector file:', error);
@@ -738,7 +739,9 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
       const updateData: any = {};
       if (fileUrls.baseUrl) updateData.archivo_base = fileUrls.baseUrl;
       if (fileUrls.photoUrl) updateData.foto_sello = fileUrls.photoUrl;
-      if (fileUrls.vectorPreviewUrl) updateData.archivo_vector_preview = fileUrls.vectorPreviewUrl;
+      if (fileUrls.vectorPreviewUrl || fileUrls.vectorUrl) {
+        updateData.archivo_vector_preview = fileUrls.vectorPreviewUrl || fileUrls.vectorUrl;
+      }
       
       // Si se subió un vector, setear estado_vectorizacion = 'VECTORIZADO'
       // Si solo hay base: EN_PROCESO solo si la vectorización automática está activa.
@@ -957,25 +960,12 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
             selloData.estado_venta = 'Foto';
           }
         }
-        // El vector se maneja a través de vectorPreviewUrl (archivo_vector_preview en BD)
-        // Si se elimina vectorUrl o vectorPreviewUrl, eliminamos el preview
+        // El vector se persiste en archivo_vector_preview (preview PNG de EPS, o el propio SVG/PDF/AI)
         if (item.files && ('vectorUrl' in item.files || 'vectorPreviewUrl' in item.files)) {
-          // Si vectorPreviewUrl está presente (incluso si es undefined), actualizar
-          if ('vectorPreviewUrl' in item.files) {
-            selloData.archivo_vector_preview = item.files.vectorPreviewUrl || null;
-            // Actualizar estado de vectorización: si hay vector, poner VECTORIZADO, si no, BASE
-            selloData.estado_vectorizacion = item.files.vectorPreviewUrl ? 'VECTORIZADO' : 'BASE';
-          } else if ('vectorUrl' in item.files) {
-            // Si vectorUrl se actualiza, también actualizar el estado
-            if (item.files.vectorUrl) {
-              // Si hay vectorUrl, poner VECTORIZADO
-              selloData.estado_vectorizacion = 'VECTORIZADO';
-            } else {
-              // Si se elimina vectorUrl, también eliminar el preview y poner BASE
-              selloData.archivo_vector_preview = null;
-              selloData.estado_vectorizacion = 'BASE';
-            }
-          }
+          const storedUrl =
+            item.files.vectorPreviewUrl || item.files.vectorUrl || null;
+          selloData.archivo_vector_preview = storedUrl;
+          selloData.estado_vectorizacion = storedUrl ? 'VECTORIZADO' : 'BASE';
         }
         if (item.requestedWidthMm !== undefined) {
           selloData.ancho_real = item.requestedWidthMm ? (item.requestedWidthMm / 10).toString() : null;
@@ -1174,7 +1164,9 @@ export const addStampToOrder = async (orderId: string, item: Partial<OrderItem>,
           fileUrls.vectorUrl = result.originalUrl;
           fileUrls.vectorPreviewUrl = result.previewUrl;
         } else {
+          // SVG/PDF/AI: la URL del archivo se guarda en archivo_vector_preview
           fileUrls.vectorUrl = await uploadFile('vector', files.vector, filePath);
+          fileUrls.vectorPreviewUrl = fileUrls.vectorUrl;
         }
       } catch (error) {
         console.error('Error uploading vector file:', error);
@@ -1195,7 +1187,9 @@ export const addStampToOrder = async (orderId: string, item: Partial<OrderItem>,
       const updateData: any = {};
       if (fileUrls.baseUrl) updateData.archivo_base = fileUrls.baseUrl;
       if (fileUrls.photoUrl) updateData.foto_sello = fileUrls.photoUrl;
-      if (fileUrls.vectorPreviewUrl) updateData.archivo_vector_preview = fileUrls.vectorPreviewUrl;
+      if (fileUrls.vectorPreviewUrl || fileUrls.vectorUrl) {
+        updateData.archivo_vector_preview = fileUrls.vectorPreviewUrl || fileUrls.vectorUrl;
+      }
       
       // Si se subió un vector, setear estado_vectorizacion = 'VECTORIZADO'
       if (fileUrls.vectorUrl || fileUrls.vectorPreviewUrl) {

@@ -24,11 +24,22 @@ export function CellVector({ item }: CellVectorProps) {
   const isEps = vectorFileKind === 'eps';
   const isPdf = vectorFileKind === 'pdf';
   const isAi = vectorFileKind === 'ai';
-  const epsSinPreview = Boolean(isEps && hasFile && !previewUrl);
+  const previewKind =
+    previewUrl && typeof previewUrl === 'string' ? storageFileKindFromUrl(previewUrl) : null;
+  const previewUsableAsImage =
+    Boolean(previewUrl) &&
+    previewKind !== 'eps' &&
+    previewKind !== 'pdf' &&
+    previewKind !== 'ai';
+  const epsSinPreview = Boolean(isEps && hasFile && !previewUsableAsImage);
   const archivoVectorSinMiniatura = epsSinPreview || isPdf || isAi;
   const displayUrl = archivoVectorSinMiniatura
     ? undefined
-    : previewUrl || (!isEps && !isPdf && !isAi ? hasFile : undefined);
+    : previewUsableAsImage
+      ? previewUrl
+      : !isEps && !isPdf && !isAi
+        ? hasFile
+        : undefined;
 
   const handleDownloadVector = async (e: React.MouseEvent) => {
     e.stopPropagation();

@@ -39,13 +39,20 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   const isEps = vectorFileKind === 'eps';
   const isPdf = vectorFileKind === 'pdf';
   const isAi = vectorFileKind === 'ai';
-  const epsSinPreview = isEps && hasFile && !previewUrl;
+  const previewKind =
+    previewUrl && typeof previewUrl === 'string' ? storageFileKindFromUrl(previewUrl) : null;
+  const previewUsableAsImage =
+    Boolean(previewUrl) &&
+    previewKind !== 'eps' &&
+    previewKind !== 'pdf' &&
+    previewKind !== 'ai';
+  const epsSinPreview = Boolean(isEps && hasFile && !previewUsableAsImage);
   const archivoVectorSinMiniatura = epsSinPreview || isPdf || isAi;
   const displayUrl = archivoVectorSinMiniatura
     ? undefined
-    : isEps && previewUrl
+    : previewUsableAsImage
       ? previewUrl
-      : !isPdf && !isAi
+      : !isPdf && !isAi && !isEps
         ? hasFile
         : undefined;
   
@@ -104,9 +111,9 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
           });
         }
       } else {
-        // Para otros formatos, subir normalmente
+        // SVG/PDF/AI: no hay preview aparte; la misma URL se guarda en archivo_vector_preview
         const fileUrl = await uploadFile('vector', file, filePath);
-        result = { originalUrl: fileUrl };
+        result = { originalUrl: fileUrl, previewUrl: fileUrl };
       }
 
       // Actualizar la orden con la nueva URL y preview si existe
@@ -117,7 +124,7 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
               files: { 
                 ...i.files, 
                 vectorUrl: result.originalUrl,
-                vectorPreviewUrl: result.previewUrl 
+                vectorPreviewUrl: result.previewUrl ?? result.originalUrl,
               } 
             }
           : i
@@ -373,13 +380,13 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
                   <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
               )}
-              <div className={`h-full w-full ${isEps && previewUrl ? 'bg-white' : ''}`}>
+              <div className={`h-full w-full ${previewUsableAsImage && isEps ? 'bg-white' : ''}`}>
                 {displayUrl ? (
                   <>
                     <img
                       src={displayUrl}
                       alt={isEps ? 'Vector EPS Preview' : 'Vector'}
-                      className={`h-full w-full ${isEps && previewUrl ? 'object-contain' : 'object-cover'}`}
+                      className={`h-full w-full ${previewUsableAsImage && isEps ? 'object-contain' : 'object-cover'}`}
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';
                         const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
