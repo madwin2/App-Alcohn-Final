@@ -528,15 +528,23 @@ async function ensureLast30DaysFilter(page: Page): Promise<string> {
   return after || String(clicked);
 }
 
+/** Destilda TODOS los checkboxes del DOM (también filas ocultas por búsqueda). */
 async function uncheckVisible(page: Page): Promise<void> {
-  const boxes = page.locator('table tbody tr input[type="checkbox"]');
-  const n = await boxes.count();
-  for (let i = 0; i < n; i += 1) {
-    const box = boxes.nth(i);
-    if (await box.isChecked().catch(() => false)) {
-      await box.uncheck({ force: true }).catch(() => undefined);
+  await page.evaluate(`(() => {
+    const boxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+    for (const box of boxes) {
+      if (box.disabled) continue;
+      if (box.checked) {
+        box.click();
+        if (box.checked) {
+          box.checked = false;
+          box.dispatchEvent(new Event('change', { bubbles: true }));
+          box.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
     }
-  }
+  })()`);
+  await page.waitForTimeout(200);
 }
 
 async function checkTracking(
@@ -975,8 +983,14 @@ export async function downloadLabelByTracking(
 ): Promise<Buffer | null> {
   await ensurePaidShipmentsGrid(page, config);
 
+  // Importante: destildar en la grilla completa ANTES de filtrar por búsqueda.
+  // Si no, quedan checkboxes ocultos tildados y el PDF sale multi-hoja cruzado.
+  await restorePaidListView(page);
+  await uncheckVisible(page);
+
   if (!(await searchTracking(page, tracking))) {
     console.warn(`[andreani] ${tracking}: no apareció en la búsqueda del portal`);
+    await restorePaidListView(page);
     return null;
   }
 
@@ -989,10 +1003,25 @@ export async function downloadLabelByTracking(
     return null;
   }
 
+  const checkedCount = await page.evaluate(`(() => {
+    return Array.from(document.querySelectorAll('input[type="checkbox"]')).filter((b) => b.checked && !b.disabled).length;
+  })()`);
+  if (typeof checkedCount === 'number' && checkedCount > 1) {
+    console.warn(
+      `[andreani] ${tracking}: ${checkedCount} checkboxes tildados — se reintenta destildar y marcar solo este`,
+    );
+    await uncheckVisible(page);
+    if (!(await checkTracking(page, tracking, { allowSearch: false }))) {
+      await restorePaidListView(page);
+      return null;
+    }
+  }
+
   console.log(`[andreani] imprimiendo etiqueta ${tracking}`);
   try {
     const pdf = await printZebraAndDownload(page, config.andreani.timeoutMs);
     await restorePaidListView(page);
+    await uncheckVisible(page);
 
     // Si el portal mandó varias hojas o la hoja equivocada, no devolver basura.
     const pages = await splitPdfPages(new Uint8Array(pdf));

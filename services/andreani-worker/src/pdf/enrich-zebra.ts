@@ -75,7 +75,15 @@ function pdfSearchableText(pdfBytes: Uint8Array): string {
 export function pdfContainsTracking(pdfBytes: Uint8Array, tracking: string): boolean {
   const t = tracking.trim();
   if (!t || t.length < 8) return false;
-  return pdfSearchableText(pdfBytes).includes(t);
+  const text = pdfSearchableText(pdfBytes);
+  if (text.includes(t)) return true;
+  // Andreani suele emitir dígitos sueltos `(3) Tj (6) Tj…` → no quedan contiguos en el stream.
+  const onlyDigits = text.replace(/\D+/g, '');
+  if (onlyDigits.includes(t)) return true;
+  // Hex ASCII del tracking (a veces en streams).
+  const hex = Buffer.from(t, 'ascii').toString('hex');
+  if (hex && text.toLowerCase().includes(hex.toLowerCase())) return true;
+  return false;
 }
 
 /**
