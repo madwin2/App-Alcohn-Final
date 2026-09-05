@@ -1019,13 +1019,12 @@ export async function downloadLabelByTracking(
 
   console.log(`[andreani] imprimiendo etiqueta ${tracking}`);
   try {
-    const pdf = await printZebraAndDownload(page, config.andreani.timeoutMs);
+    let pdf = await printZebraAndDownload(page, config.andreani.timeoutMs);
     await restorePaidListView(page);
     await uncheckVisible(page);
 
-    // Si el portal mandó varias hojas o la hoja equivocada, no devolver basura.
-    const pages = await splitPdfPages(new Uint8Array(pdf));
-    const idx = indexOfPdfPageWithTracking(pages, tracking);
+    let pages = await splitPdfPages(new Uint8Array(pdf));
+    let idx = indexOfPdfPageWithTracking(pages, tracking);
     if (idx >= 0) {
       if (pages.length === 1) return pdf;
       console.warn(
@@ -1034,11 +1033,37 @@ export async function downloadLabelByTracking(
       return Buffer.from(pages[idx]);
     }
 
-    // Zebra crudo a veces no trae el tracking como texto extraíble (solo vector/imagen).
-    // Si hay UNA sola hoja y pedimos un solo envío, confiar en la selección del portal.
     if (pages.length === 1) {
       console.warn(
         `[andreani] ${tracking}: tracking no legible en PDF (1 hoja) — se acepta por selección única`,
+      );
+      return pdf;
+    }
+
+    // Reintento: multi-hoja suele ser checkboxes viejos; limpiar grilla y bajar de nuevo.
+    console.warn(
+      `[andreani] ${tracking}: PDF multi-hoja (${pages.length}) sin tracking legible — reintento limpio`,
+    );
+    await restorePaidListView(page);
+    await uncheckVisible(page);
+    if (!(await searchTracking(page, tracking))) {
+      await restorePaidListView(page);
+      return null;
+    }
+    await uncheckVisible(page);
+    if (!(await checkTracking(page, tracking, { allowSearch: false }))) {
+      await restorePaidListView(page);
+      return null;
+    }
+    pdf = await printZebraAndDownload(page, config.andreani.timeoutMs);
+    await restorePaidListView(page);
+    await uncheckVisible(page);
+    pages = await splitPdfPages(new Uint8Array(pdf));
+    idx = indexOfPdfPageWithTracking(pages, tracking);
+    if (idx >= 0) return pages.length === 1 ? pdf : Buffer.from(pages[idx]);
+    if (pages.length === 1) {
+      console.warn(
+        `[andreani] ${tracking}: reintento 1 hoja sin texto — se acepta`,
       );
       return pdf;
     }
