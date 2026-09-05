@@ -155,7 +155,7 @@ export function CellFabricacionAspire({ item, onFabricacionChange, onAspireChang
   ];
 
   return (
-    <div className="w-full h-12 flex items-center justify-center">
+    <div className="w-full h-12 flex items-center justify-center" title="Para tandas usá la pestaña Programas. Este menú es atajo para una pieza suelta.">
       <Select value={displayState} onValueChange={handleValueChange}>
         <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center justify-center [&:hover]:bg-transparent">
           <SelectValue>

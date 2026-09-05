@@ -328,12 +328,18 @@ export const updateProductionItem = async (
     if (updates.aspireState !== undefined) {
       (updateData as any).estado_aspire = updates.aspireState || null;
       // Regla de negocio: si hay estado Aspire, el estado de fabricación debe ser "Programado".
-      // Si se limpia Aspire (y no se está seteando explícitamente productionState), volver a "Sin Hacer"
-      // para evitar que quede "Programado" sin Aspire asociado.
+      // Si se limpia Aspire: no pisar Programado si el sello sigue en un programa (programa_id).
       if (updates.aspireState) {
         updateData.estado_fabricacion = 'Programado' as any;
       } else if (!updates.productionState) {
-        updateData.estado_fabricacion = 'Sin Hacer' as any;
+        const { data: current } = await supabase
+          .from('sellos')
+          .select('programa_id')
+          .eq('id', itemId)
+          .maybeSingle();
+        if (!current?.programa_id) {
+          updateData.estado_fabricacion = 'Sin Hacer' as any;
+        }
       }
     }
 

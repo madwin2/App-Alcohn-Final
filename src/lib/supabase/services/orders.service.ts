@@ -1337,6 +1337,15 @@ export const deleteTask = async (taskId: string): Promise<void> => {
 //
 export const deleteStamp = async (stampId: string): Promise<void> => {
   try {
+    // Liberar del programa antes del DELETE (el trigger marca dirty, pero
+    // releaseStamp restaura estado previo de forma explícita).
+    try {
+      const { releaseStampFromAnyProgram } = await import('./programs.service');
+      await releaseStampFromAnyProgram(stampId);
+    } catch (e) {
+      console.warn('No se pudo liberar sello del programa antes de eliminar:', e);
+    }
+
     const { error } = await supabase
       .from('sellos')
       .delete()

@@ -109,6 +109,7 @@ export interface Database {
           id: string;
           orden_id: string;
           programa_id: string | null;
+          programa_nombre?: string | null;
           fecha: string | null;
           tipo: 'Clasico' | '3mm' | 'Lacre' | 'Alimento' | 'ABC' | null;
           senia: number | null;
@@ -119,7 +120,8 @@ export interface Database {
           costo_fabricacion: number | null;
           margen_fabricacion: number | null;
           restante: number | null;
-          estado_fabricacion: 'Sin Hacer' | 'Haciendo' | 'Hecho' | 'Rehacer' | 'Retocar' | 'Prioridad' | 'Verificar' | null;
+          estado_fabricacion: 'Sin Hacer' | 'Haciendo' | 'Hecho' | 'Rehacer' | 'Retocar' | 'Prioridad' | 'Verificar' | 'Programado' | null;
+          estado_fabricacion_previo?: string | null;
           estado_venta: 'Señado' | 'Foto' | 'Transferido' | null;
           archivo_base: string | null;
           foto_sello: string | null;
@@ -134,6 +136,7 @@ export interface Database {
           item_config: Record<string, any> | null;
           largo_real: number | null;
           ancho_real: number | null;
+          es_prioritario?: boolean | null;
           /** Solicitud de mockup web asociada (cuando el sello viene del wizard). */
           mockup_solicitud_id?: string | null;
           created_at: string | null;
@@ -202,11 +205,32 @@ export interface Database {
           largo_usado_19: number | null;
           largo_usado_12: number | null;
           verificado: boolean | null;
+          bloqueado?: boolean | null;
+          bloqueado_at?: string | null;
+          bloqueado_por?: string | null;
+          descripcion?: string | null;
+          archivo_zip_url?: string | null;
+          archivo_zip_generado_at?: string | null;
+          dirty?: boolean | null;
+          estado_programa?: 'BORRADOR' | 'LISTO' | 'BLOQUEADO' | 'EN_FABRICACION' | 'FINALIZADO' | null;
           created_at: string | null;
           updated_at: string | null;
         };
         Insert: Omit<Database['public']['Tables']['programa']['Row'], 'id' | 'created_at' | 'updated_at' | 'cantidad_sellos'>;
         Update: Partial<Database['public']['Tables']['programa']['Insert']>;
+      };
+      programa_archivos_base: {
+        Row: {
+          maquina: 'C' | 'G' | 'XL';
+          archivo_base_url: string;
+          updated_at: string;
+        };
+        Insert: {
+          maquina: 'C' | 'G' | 'XL';
+          archivo_base_url: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['programa_archivos_base']['Insert']>;
       };
       costos_de_envio: {
         Row: {

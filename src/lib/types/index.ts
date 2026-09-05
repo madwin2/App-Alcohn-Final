@@ -242,7 +242,9 @@ export interface ProductionItem {
 export type ProgramStatus = 'active' | 'inactive';
 export type ProgramCategory = 'PRODUCTION' | 'DESIGN' | 'ADMINISTRATION' | 'QUALITY' | 'OTHER';
 export type ProgramMachineType = 'C' | 'G' | 'XL' | 'ABC'; // Para programas (incluye ABC)
+export type ProgramLifecycleState = 'BORRADOR' | 'LISTO' | 'BLOQUEADO' | 'EN_FABRICACION' | 'FINALIZADO';
 export type StampSize = 63 | 38 | 25 | 19 | 12;
+export type PlanchuelaSize = 12 | 19 | 25 | 38 | 63;
 
 export interface ProgramStamp {
   id: string;
@@ -251,10 +253,20 @@ export interface ProgramStamp {
   heightMm: number;
   stampType: StampType;
   previewUrl?: string;
+  vectorPreviewUrl?: string;
   isPriority?: boolean;
   deadlineAt?: string;
   createdAt?: string;
+  tipoPlanchuela?: PlanchuelaSize | null;
+  anchoRealCm?: number | null;
+  largoRealCm?: number | null;
+  fabricationState?: FabricationState;
+  previousFabricationState?: FabricationState | null;
+  machine?: ProgramMachineType | null;
+  lengthAlongMm?: number;
 }
+
+export type ProgramLengthByPlanchuela = Partial<Record<PlanchuelaSize, number>>;
 
 export interface Program {
   id: string;
@@ -263,7 +275,7 @@ export interface Program {
   version: string;
   status: ProgramStatus;
   category: ProgramCategory;
-  machine: MachineType;
+  machine: ProgramMachineType;
   stampCount: number;
   productionDate: string; // Fecha en que se hace
   notes?: string;
@@ -271,6 +283,13 @@ export interface Program {
   isVerified: boolean;
   stamps: ProgramStamp[];
   lengthUsed: StampSize;
+  /** Largo usado por tipo de planchuela, en mm (incluye pérdida de corte). */
+  lengthByPlanchuela: ProgramLengthByPlanchuela;
+  estadoPrograma: ProgramLifecycleState;
+  bloqueado: boolean;
+  dirty: boolean;
+  archivoZipUrl?: string | null;
+  archivoZipGeneradoAt?: string | null;
   createdAt: string;
   lastUpdated: string;
   createdBy: string;

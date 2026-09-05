@@ -1,11 +1,10 @@
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { useProgramsStore } from '@/lib/state/programs.store';
-import { MachineType, FabricationState } from '@/lib/types/index';
+import { ProgramMachineType } from '@/lib/types/index';
 
 interface ProgramsFiltersFormProps {
   onApply: () => void;
@@ -62,7 +61,7 @@ export function ProgramsFiltersForm({ onApply }: ProgramsFiltersFormProps) {
         {/* Filtro por tipo de máquina */}
         <div className="space-y-2">
           <Label htmlFor="machine">Tipo de Máquina</Label>
-          <Select value={selectedMachine} onValueChange={setSelectedMachine}>
+          <Select value={selectedMachine} onValueChange={(v) => setSelectedMachine(v as ProgramMachineType | 'ALL')}>
             <SelectTrigger>
               <SelectValue placeholder="Todas las máquinas" />
             </SelectTrigger>

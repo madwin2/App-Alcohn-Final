@@ -1,8 +1,16 @@
 import { Program } from '@/lib/types/index';
 
+const withProgramDefaults = (partial: Omit<Program, 'lengthByPlanchuela' | 'estadoPrograma' | 'bloqueado' | 'dirty'> & Partial<Program>): Program => ({
+  lengthByPlanchuela: {},
+  estadoPrograma: 'BORRADOR',
+  bloqueado: false,
+  dirty: true,
+  ...partial,
+});
+
 // Datos mock para la página de Programas
 export const mockPrograms: Program[] = [
-  {
+  withProgramDefaults({
     id: '1',
     name: '15 ENE x12 yC',
     description: 'Programa para sellos de cuero con diseño personalizado',
@@ -22,7 +30,7 @@ export const mockPrograms: Program[] = [
         widthMm: 25,
         heightMm: 25,
         stampType: 'CLASICO',
-        previewUrl: '/preview/stamp1.jpg'
+        previewUrl: '/preview/stamp1.jpg',
       },
       {
         id: 's2',
@@ -30,16 +38,18 @@ export const mockPrograms: Program[] = [
         widthMm: 38,
         heightMm: 12,
         stampType: 'ABC',
-        previewUrl: '/preview/stamp2.jpg'
-      }
+        previewUrl: '/preview/stamp2.jpg',
+      },
     ],
     lengthUsed: 63,
+    lengthByPlanchuela: { 25: 60, 38: 120 },
+    estadoPrograma: 'EN_FABRICACION',
     createdAt: '2024-01-15T10:00:00Z',
     lastUpdated: '2024-01-20T14:30:00Z',
     createdBy: 'admin',
-    tags: ['cuero', 'premium', 'personalizado']
-  },
-  {
+    tags: ['cuero', 'premium', 'personalizado'],
+  }),
+  withProgramDefaults({
     id: '2',
     name: '20 ENE x8 yG',
     description: 'Programa para sellos de madera con grabado profundo',
@@ -59,16 +69,18 @@ export const mockPrograms: Program[] = [
         widthMm: 19,
         heightMm: 19,
         stampType: '3MM',
-        previewUrl: '/preview/stamp3.jpg'
-      }
+        previewUrl: '/preview/stamp3.jpg',
+      },
     ],
     lengthUsed: 38,
+    estadoPrograma: 'LISTO',
+    dirty: false,
     createdAt: '2024-01-20T09:00:00Z',
     lastUpdated: '2024-01-22T16:45:00Z',
     createdBy: 'production',
-    tags: ['madera', 'grabado', 'profundo']
-  },
-  {
+    tags: ['madera', 'grabado', 'profundo'],
+  }),
+  withProgramDefaults({
     id: '3',
     name: '25 ENE x15 yXL',
     description: 'Programa para sellos grandes de metal',
@@ -88,16 +100,16 @@ export const mockPrograms: Program[] = [
         widthMm: 63,
         heightMm: 25,
         stampType: 'LACRE',
-        previewUrl: '/preview/stamp4.jpg'
-      }
+        previewUrl: '/preview/stamp4.jpg',
+      },
     ],
     lengthUsed: 63,
     createdAt: '2024-01-25T11:30:00Z',
     lastUpdated: '2024-01-25T12:20:00Z',
     createdBy: 'production',
-    tags: ['metal', 'grande', 'corporativo']
-  },
-  {
+    tags: ['metal', 'grande', 'corporativo'],
+  }),
+  withProgramDefaults({
     id: '4',
     name: '28 ENE x6 yABC',
     description: 'Programa para sellos pequeños de precisión',
@@ -117,16 +129,18 @@ export const mockPrograms: Program[] = [
         widthMm: 12,
         heightMm: 12,
         stampType: 'ABC',
-        previewUrl: '/preview/stamp5.jpg'
-      }
+        previewUrl: '/preview/stamp5.jpg',
+      },
     ],
     lengthUsed: 12,
+    estadoPrograma: 'FINALIZADO',
+    dirty: false,
     createdAt: '2024-01-28T08:00:00Z',
     lastUpdated: '2024-01-30T10:15:00Z',
     createdBy: 'production',
-    tags: ['pequeño', 'precisión', 'qr']
-  },
-  {
+    tags: ['pequeño', 'precisión', 'qr'],
+  }),
+  withProgramDefaults({
     id: '5',
     name: '30 ENE x4 yC',
     description: 'Programa para sellos de prueba',
@@ -146,16 +160,16 @@ export const mockPrograms: Program[] = [
         widthMm: 25,
         heightMm: 25,
         stampType: 'CLASICO',
-        previewUrl: '/preview/stamp6.jpg'
-      }
+        previewUrl: '/preview/stamp6.jpg',
+      },
     ],
     lengthUsed: 25,
     createdAt: '2024-01-30T14:00:00Z',
     lastUpdated: '2024-01-30T15:30:00Z',
     createdBy: 'test',
-    tags: ['prueba', 'test', 'no-entregar']
-  },
-  {
+    tags: ['prueba', 'test', 'no-entregar'],
+  }),
+  withProgramDefaults({
     id: '6',
     name: '02 FEB x20 yG',
     description: 'Programa para sellos de lote grande',
@@ -175,13 +189,13 @@ export const mockPrograms: Program[] = [
         widthMm: 38,
         heightMm: 19,
         stampType: 'ALIMENTO',
-        previewUrl: '/preview/stamp7.jpg'
-      }
+        previewUrl: '/preview/stamp7.jpg',
+      },
     ],
     lengthUsed: 38,
     createdAt: '2024-02-02T13:45:00Z',
     lastUpdated: '2024-02-03T15:10:00Z',
     createdBy: 'production',
-    tags: ['lote', 'grande', 'optimización']
-  }
+    tags: ['lote', 'grande', 'optimización'],
+  }),
 ];

@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import { Program, MachineType, FabricationState } from '@/lib/types/index';
+import { Program, FabricationState, ProgramMachineType } from '@/lib/types/index';
 
 interface ProgramsState {
   // Estado de la UI
   searchQuery: string;
-  selectedMachine: MachineType | 'ALL';
+  selectedMachine: ProgramMachineType | 'ALL';
   selectedFabricationState: FabricationState | 'ALL';
   viewMode: 'grid' | 'list';
   
@@ -28,7 +28,7 @@ interface ProgramsState {
   
   // Acciones
   setSearchQuery: (query: string) => void;
-  setSelectedMachine: (machine: MachineType | 'ALL') => void;
+  setSelectedMachine: (machine: ProgramMachineType | 'ALL') => void;
   setSelectedFabricationState: (state: FabricationState | 'ALL') => void;
   setViewMode: (mode: 'grid' | 'list') => void;
   setShowFilters: (show: boolean) => void;
@@ -101,7 +101,7 @@ export const useProgramsStore = create<ProgramsState>((set, get) => ({
     if (state.searchQuery) {
       filtered = filtered.filter(program => 
         program.name.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-        program.description.toLowerCase().includes(state.searchQuery.toLowerCase())
+        (program.description || '').toLowerCase().includes(state.searchQuery.toLowerCase())
       );
     }
     

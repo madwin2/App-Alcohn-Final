@@ -2,113 +2,167 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Check, X, ChevronDown, ChevronUp, Lock, Unlock, Trash2, Plus, Download } from 'lucide-react';
-import { Program, FabricationState, ProgramStamp } from '@/lib/types/index';
-import { getFabricationChipVisual, getFabricationLabel } from '@/lib/utils/format';
+import { Check, X, ChevronDown, ChevronUp, Lock, Unlock, Trash2, Plus, Download, AlertTriangle } from 'lucide-react';
+import { Program, ProgramLifecycleState, ProgramStamp } from '@/lib/types/index';
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
+import { RemoveStampDialog, RemoveStampChoice } from '../RemoveStamp/RemoveStampDialog';
+import { formatLengthByPlanchuela } from '@/lib/programas/material';
+import { canDownloadPackage, ProgramServiceError } from '@/lib/supabase/services/programs.service';
+import { toast } from '@/components/ui/use-toast';
 
 interface ProgramCardProps {
   program: Program;
+  onRefresh: () => Promise<void> | void;
+  onAddStamps: (programId: string, stampIds: string[]) => Promise<void>;
+  onRemoveStamp: (
+    programId: string,
+    stampId: string,
+    choice: RemoveStampChoice,
+  ) => Promise<void>;
+  onDelete: (programId: string, choice: RemoveStampChoice) => Promise<void>;
+  onLock: (programId: string) => Promise<void>;
+  onUnlock: (programId: string) => Promise<void>;
+  onDownload: (programId: string) => Promise<void>;
+  onToggleVerified: (programId: string, verified: boolean) => Promise<void>;
 }
 
-// Función para obtener el color del estado de fabricación
-const fabricationLabels: Record<FabricationState, string> = {
-  'SIN_HACER': 'Sin Hacer',
-  'HACIENDO': 'Haciendo',
-  'VERIFICAR': 'Verificar',
-  'HECHO': 'Hecho',
-  'REHACER': 'Rehacer',
-  'RETOCAR': 'Retocar'
+const lifecycleLabel = (estado: ProgramLifecycleState, dirty: boolean): string => {
+  if (estado === 'LISTO' && dirty) return 'Editado, falta regenerar';
+  const map: Record<ProgramLifecycleState, string> = {
+    BORRADOR: 'Borrador',
+    LISTO: 'Listo',
+    BLOQUEADO: 'Bloqueado',
+    EN_FABRICACION: 'En fabricación',
+    FINALIZADO: 'Finalizado',
+  };
+  return map[estado] || estado;
 };
 
-// Función para obtener el texto y color del indicador de máquina
-const getMachineInfo = (machine: string) => {
-  switch (machine) {
-    case 'C':
-      return { text: 'Maquina Chica', color: 'bg-purple-600 text-white' };
-    case 'G':
-      return { text: 'Maquina Grande', color: 'bg-blue-600 text-white' };
-    case 'XL':
-      return { text: 'Maquina XL', color: 'bg-green-600 text-white' };
-    case 'ABC':
-      return { text: 'Maquina ABC', color: 'bg-orange-600 text-white' };
+const lifecycleBadgeClass = (estado: ProgramLifecycleState, dirty: boolean): string => {
+  if (dirty && (estado === 'LISTO' || estado === 'BORRADOR')) {
+    return 'bg-amber-100 text-amber-900 border-amber-300';
+  }
+  switch (estado) {
+    case 'LISTO':
+      return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+    case 'BLOQUEADO':
+      return 'bg-red-100 text-red-800 border-red-300';
+    case 'EN_FABRICACION':
+      return 'bg-blue-100 text-blue-800 border-blue-300';
+    case 'FINALIZADO':
+      return 'bg-slate-100 text-slate-700 border-slate-300';
     default:
-      return { text: 'Maquina', color: 'bg-gray-600 text-white' };
+      return 'bg-muted text-muted-foreground border-border';
   }
 };
 
-// Tarjeta individual para mostrar información de un programa con versión contraída y expandida
-export function ProgramCard({ program }: ProgramCardProps) {
+const getMachineInfo = (machine: string) => {
+  switch (machine) {
+    case 'C':
+      return { text: 'Máquina Chica', color: 'bg-purple-600 text-white' };
+    case 'G':
+      return { text: 'Máquina Grande', color: 'bg-blue-600 text-white' };
+    case 'XL':
+      return { text: 'Máquina XL', color: 'bg-green-600 text-white' };
+    case 'ABC':
+      return { text: 'Máquina ABC', color: 'bg-orange-600 text-white' };
+    default:
+      return { text: 'Máquina', color: 'bg-gray-600 text-white' };
+  }
+};
+
+const isLockedState = (program: Program) =>
+  program.bloqueado
+  || program.estadoPrograma === 'BLOQUEADO'
+  || program.estadoPrograma === 'EN_FABRICACION';
+
+export function ProgramCard({
+  program,
+  onRefresh,
+  onAddStamps,
+  onRemoveStamp,
+  onDelete,
+  onLock,
+  onUnlock,
+  onDownload,
+  onToggleVerified,
+}: ProgramCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isVerified, setIsVerified] = useState(program.isVerified);
-  const [fabricationState, setFabricationState] = useState(program.fabricationState);
-  const [isLocked, setIsLocked] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [showStampsDialog, setShowStampsDialog] = useState(false);
-  const [programStamps, setProgramStamps] = useState<ProgramStamp[]>(program.stamps);
+  const [stampToRemove, setStampToRemove] = useState<ProgramStamp | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const toggleExpanded = () => {
-    console.log(`Toggling card ${program.id}, current state: ${isExpanded}`);
-    setIsExpanded(!isExpanded);
-  };
+  const locked = isLockedState(program);
+  const lengthLines = formatLengthByPlanchuela(program.lengthByPlanchuela);
+  const showStaleZip = Boolean(program.archivoZipUrl) && program.dirty;
 
-  const handleVerificationClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!isLocked) {
-      setIsVerified(!isVerified);
+  const run = async (fn: () => Promise<void>, successMsg?: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      if (successMsg) toast({ title: successMsg });
+      await onRefresh();
+    } catch (e) {
+      toast({
+        title: 'Error',
+        description: e instanceof ProgramServiceError || e instanceof Error ? e.message : 'Operación fallida',
+        variant: 'destructive',
+      });
+    } finally {
+      setBusy(false);
     }
   };
 
   const handleLockClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsLocked(!isLocked);
+    if (locked && program.bloqueado) {
+      if (!window.confirm('¿Desbloquear el programa? Podrá editarse de nuevo.')) return;
+      void run(() => onUnlock(program.id), 'Programa desbloqueado');
+    } else if (!locked) {
+      void run(() => onLock(program.id), 'Programa bloqueado');
+    }
   };
 
-  const handleStateChange = (value: FabricationState) => {
-    if (!isLocked) {
-      setFabricationState(value);
-    }
+  const handleVerificationClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (locked) return;
+    void run(() => onToggleVerified(program.id, !program.isVerified));
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isLocked) {
-      setShowContextMenu(true);
-    }
+    setShowContextMenu(true);
   };
 
-  const handleDelete = () => {
-    console.log('Eliminar programa:', program.id);
-    setShowContextMenu(false);
-  };
-
-  const handleAddStamps = () => {
-    console.log('Agregar sellos al programa:', program.id);
-    setShowContextMenu(false);
-    setShowStampsDialog(true);
-  };
-
-  const handleAddStampsToProgram = (selectedStamps: ProgramStamp[]) => {
-    console.log('Agregando sellos al programa:', program.id, selectedStamps);
-    setProgramStamps(prev => [...prev, ...selectedStamps]);
+  const handleAddStampsToProgram = (selected: ProgramStamp[]) => {
+    void run(
+      () => onAddStamps(program.id, selected.map((s) => s.id)),
+      `${selected.length} sello(s) agregados`,
+    );
     setShowStampsDialog(false);
   };
 
-  const handleDownload = () => {
-    console.log('Descargar programa:', program.id);
-    setShowContextMenu(false);
+  const handleRemoveConfirm = (choice: RemoveStampChoice) => {
+    if (!stampToRemove) return;
+    void run(
+      () => onRemoveStamp(program.id, stampToRemove.id, choice),
+      'Sello quitado del programa',
+    );
+    setStampToRemove(null);
   };
 
-  // Cerrar menú contextual al hacer click fuera
+  const handleDeleteConfirm = (choice: RemoveStampChoice) => {
+    void run(() => onDelete(program.id, choice), 'Programa eliminado');
+    setShowDeleteDialog(false);
+  };
+
   useEffect(() => {
     const handleClickOutside = () => {
-      if (showContextMenu) {
-        setShowContextMenu(false);
-      }
+      if (showContextMenu) setShowContextMenu(false);
     };
-
     if (showContextMenu) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
@@ -116,259 +170,237 @@ export function ProgramCard({ program }: ProgramCardProps) {
   }, [showContextMenu]);
 
   return (
-    <Card 
+    <Card
       id={`program-card-${program.id}`}
       className={`hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer relative overflow-hidden ${
         isExpanded ? 'shadow-lg' : 'shadow-md'
-      } ${isLocked ? 'opacity-75 bg-muted/20' : ''}`}
+      } ${locked ? 'opacity-90 bg-muted/20' : ''}`}
       onClick={(e) => {
         e.stopPropagation();
-        if (!isLocked) {
-          toggleExpanded();
-        }
+        setIsExpanded((v) => !v);
       }}
       onContextMenu={handleContextMenu}
     >
-      {/* Cuarto de círculo verde en esquina inferior derecha */}
-      {isVerified && (
-        <div className="absolute -bottom-16 -right-16 w-40 h-40 bg-gradient-to-br from-green-400/20 to-green-600/40 rounded-full blur-2xl"></div>
+      {program.isVerified && (
+        <div className="absolute -bottom-16 -right-16 w-40 h-40 bg-gradient-to-br from-green-400/20 to-green-600/40 rounded-full blur-2xl" />
       )}
+
       <CardHeader className="pb-3">
         <div className="space-y-3">
-          {/* Fila superior: Indicador de máquina y botones */}
-          <div className="flex items-center justify-between">
-            {/* Indicador de máquina - ARRIBA IZQUIERDA */}
+          <div className="flex items-center justify-between gap-2">
             <div className={`px-3 py-1 rounded text-xs font-medium w-fit ${getMachineInfo(program.machine).color}`}>
               {getMachineInfo(program.machine).text}
             </div>
-            
-            {/* Botones de la derecha */}
+
             <div className="flex items-center gap-1">
-              {/* Botón de candado */}
               <Button
                 variant="ghost"
                 size="sm"
                 className="p-1 h-6 w-6"
                 onClick={handleLockClick}
-                title={isLocked ? "Desbloquear programa" : "Bloquear programa"}
+                disabled={busy || (locked && !program.bloqueado)}
+                title={
+                  locked && !program.bloqueado
+                    ? 'Bloqueado por fabricación en curso'
+                    : locked
+                      ? 'Desbloquear programa'
+                      : 'Bloquear programa'
+                }
               >
-                {isLocked ? (
+                {locked ? (
                   <Lock className="h-4 w-4 text-red-500" />
                 ) : (
                   <Unlock className="h-4 w-4 text-muted-foreground" />
                 )}
               </Button>
-              
-              {/* Botón de expandir/contraer */}
+
               <Button
                 variant="ghost"
                 size="sm"
                 className="p-1 h-6 w-6"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!isLocked) {
-                    toggleExpanded();
-                  }
+                  setIsExpanded((v) => !v);
                 }}
-                disabled={isLocked}
               >
-                {isExpanded ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
+                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </Button>
             </div>
           </div>
-        
-          {/* Información principal */}
+
           <div>
-            <h3 className="text-xl font-bold text-foreground truncate">
-              {program.name}
-            </h3>
-            
-            {/* Fecha y cantidad en la misma línea */}
+            <div className="flex items-start gap-2 flex-wrap">
+              <h3 className="text-xl font-bold text-foreground truncate flex-1 min-w-0">
+                {program.name}
+              </h3>
+              <Badge
+                variant="outline"
+                className={`text-[10px] ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
+              >
+                {lifecycleLabel(program.estadoPrograma, program.dirty)}
+              </Badge>
+            </div>
+
             <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
               <span>{program.productionDate}</span>
               <span>{program.stampCount} Sellos</span>
             </div>
-            
-            {/* Nota del programa */}
-            {program.notes && (
-              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                {program.notes}
-              </p>
+
+            {showStaleZip && (
+              <div className="flex items-center gap-1.5 text-xs text-amber-700 mt-2">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Desactualizado desde la última descarga
+              </div>
+            )}
+
+            {program.description && (
+              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{program.description}</p>
             )}
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent className="pt-0">
-        {/* Contenido expandible en el medio */}
-        <div className={`overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-          isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
-        }`}>
+        <div
+          className={`overflow-hidden transition-all duration-500 ${
+            isExpanded ? 'max-h-[28rem] opacity-100' : 'max-h-0 opacity-0'
+          }`}
+        >
           <div className="space-y-4 pt-3 border-t border-border/50">
             <div className="space-y-2">
               <h4 className="text-sm font-medium text-foreground">Sellos:</h4>
               <div className="flex gap-2 flex-wrap">
-                {programStamps.map((stamp, index) => (
-                  <div 
-                    key={stamp.id} 
-                    className={`w-8 h-8 bg-white rounded border border-gray-200 flex items-center justify-center text-xs font-medium text-gray-700 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-                      isExpanded ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95'
-                    }`}
-                    style={{ 
-                      transitionDelay: isExpanded ? `${index * 150}ms` : '0ms'
+                {program.stamps.map((stamp) => (
+                  <button
+                    key={stamp.id}
+                    type="button"
+                    className="w-9 h-9 bg-white rounded border border-gray-200 flex items-center justify-center text-[10px] font-medium text-gray-700 hover:border-destructive hover:text-destructive"
+                    title={`${stamp.designName} — click para quitar`}
+                    disabled={locked || busy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (locked) return;
+                      setStampToRemove(stamp);
                     }}
-                    title={`${stamp.designName} - ${stamp.stampType}`}
                   >
-                    {stamp.widthMm}x{stamp.heightMm}
-                  </div>
+                    {Math.round(stamp.widthMm)}×{Math.round(stamp.heightMm)}
+                  </button>
                 ))}
+                {program.stamps.length === 0 && (
+                  <span className="text-xs text-muted-foreground">Sin sellos</span>
+                )}
               </div>
             </div>
-            
-            {/* Largo utilizado */}
-            <div className={`space-y-1 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-              isExpanded ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95'
-            }`}
-            style={{ 
-              transitionDelay: isExpanded ? `${programStamps.length * 150 + 300}ms` : '0ms'
-            }}>
+
+            <div className="space-y-1">
               <span className="text-sm text-muted-foreground">Largo utilizado:</span>
               <div className="text-sm text-foreground">
-                <div>38mm: 60mm</div>
-                <div>25mm: 120mm</div>
+                {lengthLines.length > 0 ? (
+                  lengthLines.map((line) => <div key={line}>{line}</div>)
+                ) : (
+                  <div className="text-muted-foreground">—</div>
+                )}
               </div>
             </div>
           </div>
         </div>
-        
-        {/* Estado de fabricación y verificación (siempre al final) */}
+
         <div className="flex justify-between items-end mt-3">
-          <div>
-            {/* Select de estado de fabricación - Alineado exactamente con el inicio del nombre */}
-            <Select value={fabricationState} onValueChange={handleStateChange} disabled={isLocked}>
-              <SelectTrigger 
-                className={`w-fit h-8 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-2 overflow-visible flex items-center [&:hover]:bg-transparent ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                     <SelectValue>
-                       {(() => {
-                         const visual = getFabricationChipVisual(fabricationState);
-                         return (
-                           <span
-                             className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
-                             style={{ 
-                               backgroundImage: visual.backgroundImage, 
-                               backgroundColor: visual.backgroundColor, 
-                               boxShadow: visual.boxShadow, 
-                               borderColor: visual.borderColor, 
-                               backdropFilter: 'saturate(140%) blur(3px)', 
-                               color: visual.textColor, 
-                               width: visual.width 
-                             }}
-                           >
-                             {getFabricationLabel(fabricationState)}
-                           </span>
-                         );
-                       })()}
-                     </SelectValue>
-                   </SelectTrigger>
-                   <SelectContent>
-                     {Object.entries(fabricationLabels).map(([value, label]) => (
-                       <SelectItem 
-                         key={value} 
-                         value={value} 
-                         className="text-xs"
-                       >
-                         {(() => {
-                           const visual = getFabricationChipVisual(value);
-                           return (
-                             <span
-                               className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
-                               style={{ 
-                                 backgroundImage: visual.backgroundImage, 
-                                 backgroundColor: visual.backgroundColor, 
-                                 boxShadow: visual.boxShadow, 
-                                 borderColor: visual.borderColor, 
-                                 backdropFilter: 'saturate(140%) blur(3px)', 
-                                 color: visual.textColor, 
-                                 width: visual.width 
-                               }}
-                             >
-                               {getFabricationLabel(value)}
-                             </span>
-                           );
-                         })()}
-                       </SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-               </div>
-          
-               {/* Botón de verificación (esquina inferior derecha) */}
-               <Button
-                 size="sm"
-                 className={`h-8 w-8 p-0 rounded-full transition-all duration-200 hover:scale-105 border ${
-                   isVerified 
-                     ? 'bg-green-500 text-white border-green-500 shadow-lg shadow-green-500/25' 
-                     : 'bg-muted/30 text-muted-foreground border-border/40 hover:bg-muted/50'
-                 } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                 onClick={handleVerificationClick}
-                 disabled={isLocked}
-               >
-                 {isVerified ? (
-                   <Check className="h-4 w-4" />
-                 ) : (
-                   <X className="h-4 w-4" />
-                 )}
-               </Button>
+          <Badge variant="outline" className="text-xs font-normal">
+            {lifecycleLabel(program.estadoPrograma, program.dirty)}
+          </Badge>
+
+          <Button
+            size="sm"
+            className={`h-8 w-8 p-0 rounded-full transition-all duration-200 hover:scale-105 border ${
+              program.isVerified
+                ? 'bg-green-500 text-white border-green-500 shadow-lg shadow-green-500/25'
+                : 'bg-muted/30 text-muted-foreground border-border/40 hover:bg-muted/50'
+            } ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={handleVerificationClick}
+            disabled={locked || busy}
+          >
+            {program.isVerified ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+          </Button>
         </div>
       </CardContent>
-      
-      {/* Menú contextual */}
+
       {showContextMenu && (
-        <div className="absolute top-2 right-2 z-50 bg-background border border-border rounded-md shadow-lg p-1 w-[160px]">
+        <div
+          className="absolute top-2 right-2 z-50 bg-background border border-border rounded-md shadow-lg p-1 w-[180px]"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Button
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 h-8 text-xs"
-            onClick={handleDelete}
+            disabled={locked || busy}
+            onClick={() => {
+              setShowContextMenu(false);
+              setShowDeleteDialog(true);
+            }}
           >
             <Trash2 className="h-3 w-3" />
             Eliminar programa
           </Button>
-          
+
           <Button
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-2 text-primary hover:text-primary hover:bg-primary/10 h-8 text-xs"
-            onClick={handleAddStamps}
+            disabled={locked || busy}
+            onClick={() => {
+              setShowContextMenu(false);
+              setShowStampsDialog(true);
+            }}
           >
             <Plus className="h-3 w-3" />
             Agregar sellos
           </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950 h-8 text-xs"
-            onClick={handleDownload}
-          >
-            <Download className="h-3 w-3" />
-            Descargar programa
-          </Button>
+
+          {canDownloadPackage(program.machine) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start gap-2 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950 h-8 text-xs"
+              disabled={busy || program.stamps.length === 0}
+              onClick={() => {
+                setShowContextMenu(false);
+                void run(() => onDownload(program.id), 'Paquete descargado');
+              }}
+            >
+              <Download className="h-3 w-3" />
+              Descargar programa
+            </Button>
+          )}
         </div>
       )}
 
-      {/* Modal de selección de sellos */}
       <StampsSelectionDialog
         isOpen={showStampsDialog}
         onClose={() => setShowStampsDialog(false)}
         onAddStamps={handleAddStampsToProgram}
         programId={program.id}
+        machine={program.machine}
+        excludeStampIds={program.stamps.map((s) => s.id)}
+      />
+
+      <RemoveStampDialog
+        open={Boolean(stampToRemove)}
+        onOpenChange={(open) => {
+          if (!open) setStampToRemove(null);
+        }}
+        stamp={stampToRemove}
+        onConfirm={handleRemoveConfirm}
+      />
+
+      <RemoveStampDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        bulkCount={program.stamps.length || 1}
+        title="Eliminar programa"
+        confirmLabel="Eliminar"
+        onConfirm={handleDeleteConfirm}
       />
     </Card>
   );
