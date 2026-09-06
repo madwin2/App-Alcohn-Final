@@ -1,5 +1,5 @@
 import { ProgramCard } from './ProgramCard';
-import { Program } from '@/lib/types/index';
+import { Program, FabricationState } from '@/lib/types/index';
 import { useProgramsStore } from '@/lib/state/programs.store';
 import { RemoveStampChoice } from '../RemoveStamp/RemoveStampDialog';
 
@@ -17,6 +17,7 @@ interface ProgramsGridProps {
   onUnlock: (programId: string) => Promise<void>;
   onDownload: (programId: string) => Promise<void>;
   onToggleVerified: (programId: string, verified: boolean) => Promise<void>;
+  onSetFabricationState: (programId: string, state: FabricationState) => Promise<void>;
 }
 
 export function ProgramsGrid({
@@ -29,6 +30,7 @@ export function ProgramsGrid({
   onUnlock,
   onDownload,
   onToggleVerified,
+  onSetFabricationState,
 }: ProgramsGridProps) {
   const { getFilteredPrograms, viewMode } = useProgramsStore();
   const filteredPrograms = getFilteredPrograms(programs);
@@ -42,6 +44,7 @@ export function ProgramsGrid({
     onUnlock,
     onDownload,
     onToggleVerified,
+    onSetFabricationState,
   };
 
   if (filteredPrograms.length === 0) {

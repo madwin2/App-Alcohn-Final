@@ -9,6 +9,13 @@ export const LARGO_MAXIMO_PLANCHUELA_MM: Record<'C' | 'G' | 'XL', number> = {
 
 export const DEFAULT_PERDIDA_CORTE_CM = 0.8;
 
+/** Tamaños de planchuela que cada máquina puede fabricar (C y G hasta 38; XL solo 63). */
+export const MACHINE_SIZE_ELIGIBILITY: Record<'C' | 'G' | 'XL', PlanchuelaSize[]> = {
+  C: [12, 19, 25, 38],
+  G: [12, 19, 25, 38],
+  XL: [63],
+};
+
 export type StampDimsForMaterial = {
   anchoRealCm?: number | null;
   largoRealCm?: number | null;
@@ -32,6 +39,17 @@ export function resolvePlanchuelaRef(stamp: StampDimsForMaterial): PlanchuelaSiz
   if (minorCm <= 2.5) return 25;
   if (minorCm <= 4.0) return 38;
   return 63;
+}
+
+/** Si el sello entra en el rango de tamaños de la máquina (ABC admite cualquiera). */
+export function isPlanchuelaEligibleForMachine(
+  machine: ProgramMachineType,
+  stamp: StampDimsForMaterial,
+): boolean {
+  if (machine === 'ABC') return true;
+  const ref = resolvePlanchuelaRef(stamp);
+  if (!ref) return false;
+  return MACHINE_SIZE_ELIGIBILITY[machine].includes(ref);
 }
 
 /** Largo a lo largo de la planchuela + pérdida de corte, en mm. */

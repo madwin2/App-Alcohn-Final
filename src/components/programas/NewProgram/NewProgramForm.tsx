@@ -43,7 +43,7 @@ const generateProgramName = (
   const day = format(date, 'd', { locale: es });
   const month = format(date, 'MMM', { locale: es }).toUpperCase();
   const machineLabel = machine === 'XL' ? 'XL' : machine;
-  return `${day} ${month} x${stampCount} y${machineLabel}`;
+  return `${day} ${month} x${stampCount} ${machineLabel}`;
 };
 
 export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgramFormProps) {

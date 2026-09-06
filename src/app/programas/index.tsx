@@ -19,6 +19,7 @@ export default function ProgramasPage() {
     fetchPrograms,
     createProgram,
     updateProgram,
+    setFabricationStateForProgram,
     deleteProgram,
     addStamps,
     removeStamp,
@@ -78,6 +79,9 @@ export default function ProgramasPage() {
             }}
             onToggleVerified={async (programId, verified) => {
               await updateProgram(programId, { isVerified: verified });
+            }}
+            onSetFabricationState={async (programId, state) => {
+              await setFabricationStateForProgram(programId, state);
             }}
           />
         )}

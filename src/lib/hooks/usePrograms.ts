@@ -84,6 +84,15 @@ export const usePrograms = () => {
     return updatedProgram;
   };
 
+  const setFabricationStateForProgram = async (
+    programId: string,
+    state: FabricationState,
+  ): Promise<Program> => {
+    const updated = await programsService.setFabricationStateForProgram(programId, state);
+    setPrograms((prev) => prev.map((p) => (p.id === programId ? updated : p)));
+    return updated;
+  };
+
   const deleteProgram = async (
     programId: string,
     options?: {
@@ -156,6 +165,7 @@ export const usePrograms = () => {
     fetchPrograms,
     createProgram,
     updateProgram,
+    setFabricationStateForProgram,
     deleteProgram,
     addStamps,
     removeStamp,

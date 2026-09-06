@@ -11,6 +11,7 @@ import {
   StampType,
 } from '@/lib/types/index';
 import { StampTypeIcon } from '@/components/ui/StampTypeIcon';
+import { StampThumb } from '../StampThumb';
 import { getEligibleStamps } from '@/lib/supabase/services/programs.service';
 import {
   resolvePlanchuelaRef,
@@ -49,33 +50,6 @@ const formatCreatedAt = (createdAt: string): string => {
     year: 'numeric',
   });
 };
-
-function StampThumb({ stamp }: { stamp: ProgramStamp }) {
-  const [failed, setFailed] = useState(false);
-  const src = stamp.vectorPreviewUrl || stamp.previewUrl;
-
-  if (!src || failed) {
-    return (
-      <div className="w-16 h-16 border border-border rounded bg-muted/30 flex items-center justify-center overflow-hidden flex-shrink-0">
-        <div className="text-[10px] text-muted-foreground text-center px-1">
-          {Math.round(stamp.widthMm)}×{Math.round(stamp.heightMm)}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-16 h-16 border border-border rounded bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
-      <img
-        src={src}
-        alt={`Diseño de ${stamp.designName}`}
-        className="w-full h-full object-contain"
-        loading="lazy"
-        onError={() => setFailed(true)}
-      />
-    </div>
-  );
-}
 
 /** Recorre candidatos (ya ordenados) y arma una selección que respete el largo máximo. */
 export function suggestStampSelection(

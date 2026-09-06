@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Check, X, ChevronDown, ChevronUp, Lock, Unlock, Trash2, Plus, Download, AlertTriangle } from 'lucide-react';
-import { Program, ProgramLifecycleState, ProgramStamp } from '@/lib/types/index';
+import { Check, X, ChevronDown, ChevronUp, Lock, Unlock, Trash2, Plus, Download, AlertTriangle, Factory } from 'lucide-react';
+import { Program, ProgramLifecycleState, ProgramStamp, FabricationState } from '@/lib/types/index';
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
 import { RemoveStampDialog, RemoveStampChoice } from '../RemoveStamp/RemoveStampDialog';
 import { formatLengthByPlanchuela } from '@/lib/programas/material';
+import { StampThumb } from '../StampThumb';
 import { canDownloadPackage, ProgramServiceError } from '@/lib/supabase/services/programs.service';
 import { toast } from '@/components/ui/use-toast';
+import { getFabricationLabel } from '@/lib/utils/format';
 
 interface ProgramCardProps {
   program: Program;
@@ -24,6 +26,7 @@ interface ProgramCardProps {
   onUnlock: (programId: string) => Promise<void>;
   onDownload: (programId: string) => Promise<void>;
   onToggleVerified: (programId: string, verified: boolean) => Promise<void>;
+  onSetFabricationState: (programId: string, state: FabricationState) => Promise<void>;
 }
 
 const lifecycleLabel = (estado: ProgramLifecycleState, dirty: boolean): string => {
@@ -76,6 +79,15 @@ const isLockedState = (program: Program) =>
   || program.estadoPrograma === 'BLOQUEADO'
   || program.estadoPrograma === 'EN_FABRICACION';
 
+const PROGRAM_FAB_OPTIONS: FabricationState[] = [
+  'SIN_HACER',
+  'HACIENDO',
+  'REHACER',
+  'RETOCAR',
+  'VERIFICAR',
+  'HECHO',
+];
+
 export function ProgramCard({
   program,
   onRefresh,
@@ -86,9 +98,11 @@ export function ProgramCard({
   onUnlock,
   onDownload,
   onToggleVerified,
+  onSetFabricationState,
 }: ProgramCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [showFabMenu, setShowFabMenu] = useState(false);
   const [showStampsDialog, setShowStampsDialog] = useState(false);
   const [stampToRemove, setStampToRemove] = useState<ProgramStamp | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -137,6 +151,22 @@ export function ProgramCard({
     void run(() => onToggleVerified(program.id, !program.isVerified));
   };
 
+  const handleSetFabricationState = (state: FabricationState) => {
+    if (busy || program.stamps.length === 0) return;
+    const label = getFabricationLabel(state);
+    const count = program.stamps.length;
+    if (
+      !window.confirm(
+        `¿Cambiar el estado de fabricación de ${count} sello${count === 1 ? '' : 's'} a "${label}"?`,
+      )
+    ) {
+      return;
+    }
+    setShowFabMenu(false);
+    setShowContextMenu(false);
+    void run(() => onSetFabricationState(program.id, state), `Sellos marcados como ${label}`);
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -168,17 +198,20 @@ export function ProgramCard({
   useEffect(() => {
     const handleClickOutside = () => {
       if (showContextMenu) setShowContextMenu(false);
+      if (showFabMenu) setShowFabMenu(false);
     };
-    if (showContextMenu) {
+    if (showContextMenu || showFabMenu) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [showContextMenu]);
+  }, [showContextMenu, showFabMenu]);
 
   return (
     <Card
       id={`program-card-${program.id}`}
-      className={`hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer relative overflow-hidden ${
+      className={`hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer relative ${
+        showFabMenu || showContextMenu ? 'overflow-visible z-20' : 'overflow-hidden'
+      } ${
         isExpanded ? 'shadow-lg' : 'shadow-md'
       } ${locked ? 'opacity-90 bg-muted/20' : ''}`}
       onClick={(e) => {
@@ -235,16 +268,62 @@ export function ProgramCard({
           </div>
 
           <div>
-            <div className="flex items-start gap-2 flex-wrap">
+            <div className="flex items-start gap-2 flex-wrap relative">
               <h3 className="text-xl font-bold text-foreground truncate flex-1 min-w-0">
                 {program.name}
               </h3>
-              <Badge
-                variant="outline"
-                className={`text-[10px] ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
-              >
-                {lifecycleLabel(program.estadoPrograma, program.dirty)}
-              </Badge>
+              {program.stamps.length > 0 ? (
+                <button
+                  type="button"
+                  className="shrink-0"
+                  disabled={busy}
+                  title="Cambiar estado de fabricación de todos los sellos"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (busy) return;
+                    setShowContextMenu(false);
+                    setShowFabMenu((v) => !v);
+                  }}
+                >
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] cursor-pointer ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
+                  >
+                    {lifecycleLabel(program.estadoPrograma, program.dirty)}
+                    <ChevronDown className="h-3 w-3 ml-0.5 inline-block align-middle" />
+                  </Badge>
+                </button>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
+                >
+                  {lifecycleLabel(program.estadoPrograma, program.dirty)}
+                </Badge>
+              )}
+
+              {showFabMenu && (
+                <div
+                  className="absolute top-full right-0 z-50 mt-1 bg-background border border-border rounded-md shadow-lg p-1 w-[180px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
+                    Cambiar estado de fabricación
+                  </div>
+                  {PROGRAM_FAB_OPTIONS.map((state) => (
+                    <Button
+                      key={state}
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start h-8 text-xs"
+                      disabled={busy}
+                      onClick={() => handleSetFabricationState(state)}
+                    >
+                      {getFabricationLabel(state)}
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
@@ -280,7 +359,7 @@ export function ProgramCard({
                   <button
                     key={stamp.id}
                     type="button"
-                    className="w-9 h-9 bg-white rounded border border-gray-200 flex items-center justify-center text-[10px] font-medium text-gray-700 hover:border-destructive hover:text-destructive"
+                    className="rounded hover:ring-2 hover:ring-destructive/60 disabled:hover:ring-0"
                     title={`${stamp.designName} — click para quitar`}
                     disabled={locked || busy}
                     onClick={(e) => {
@@ -289,7 +368,7 @@ export function ProgramCard({
                       setStampToRemove(stamp);
                     }}
                   >
-                    {Math.round(stamp.widthMm)}×{Math.round(stamp.heightMm)}
+                    <StampThumb stamp={stamp} className="w-14 h-14" />
                   </button>
                 ))}
                 {program.stamps.length === 0 && (
@@ -311,11 +390,7 @@ export function ProgramCard({
           </div>
         </div>
 
-        <div className="flex justify-between items-end mt-3">
-          <Badge variant="outline" className="text-xs font-normal">
-            {lifecycleLabel(program.estadoPrograma, program.dirty)}
-          </Badge>
-
+        <div className="flex justify-end items-end mt-3">
           <Button
             size="sm"
             className={`h-8 w-8 p-0 rounded-full transition-all duration-200 hover:scale-105 border ${
@@ -333,9 +408,23 @@ export function ProgramCard({
 
       {showContextMenu && (
         <div
-          className="absolute top-2 right-2 z-50 bg-background border border-border rounded-md shadow-lg p-1 w-[180px]"
+          className="absolute top-2 right-2 z-50 bg-background border border-border rounded-md shadow-lg p-1 w-[210px]"
           onClick={(e) => e.stopPropagation()}
         >
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 text-foreground hover:bg-muted h-8 text-xs"
+            disabled={busy || program.stamps.length === 0}
+            onClick={() => {
+              setShowContextMenu(false);
+              setShowFabMenu(true);
+            }}
+          >
+            <Factory className="h-3 w-3" />
+            Cambiar estado de fabricación
+          </Button>
+
           <Button
             variant="ghost"
             size="sm"

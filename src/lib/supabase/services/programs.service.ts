@@ -14,6 +14,7 @@ import {
   accumulateLengthByPlanchuela,
   DEFAULT_PERDIDA_CORTE_CM,
   getMaxLengthMmForMachine,
+  isPlanchuelaEligibleForMachine,
   LARGO_MAXIMO_PLANCHUELA_MM,
   resolvePlanchuelaRef,
   stampLengthAlongMm,
@@ -454,6 +455,26 @@ export const updateProgram = async (
   return result;
 };
 
+/** Cambia el estado de fabricación de todos los sellos del programa (cascada). Disponible aunque el programa esté bloqueado o en fabricación. */
+export const setFabricationStateForProgram = async (
+  programId: string,
+  state: FabricationState,
+): Promise<Program> => {
+  const { error } = await supabase
+    .from('sellos')
+    .update({
+      estado_fabricacion: mapFabricationStateToDB(state),
+      updated_at: new Date().toISOString(),
+    } as any)
+    .eq('programa_id', programId);
+
+  if (error) throw error;
+
+  const result = await getProgramById(programId);
+  if (!result) throw new ProgramServiceError('Programa no encontrado');
+  return result;
+};
+
 export type RemoveStampRestoreMode = 'PREVIOUS' | 'NEW';
 
 export const deleteProgram = async (
@@ -521,7 +542,12 @@ export const getEligibleStamps = async (opts: {
       if (opts.machine === 'ABC') {
         return s.maquina == null || s.tipo === 'ABC';
       }
-      return s.maquina == null || s.maquina === opts.machine;
+      if (s.maquina) return s.maquina === opts.machine;
+      return isPlanchuelaEligibleForMachine(opts.machine, {
+        anchoRealCm: s.ancho_real != null ? Number(s.ancho_real) : null,
+        largoRealCm: s.largo_real != null ? Number(s.largo_real) : null,
+        tipoPlanchuela: s.tipo_planchuela as PlanchuelaSize | null,
+      });
     })
     .map((s) => mapSelloToProgramStamp(s, perdidaCorteCm));
 
