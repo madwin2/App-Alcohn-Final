@@ -107,9 +107,8 @@ export const usePrograms = () => {
   const addStamps = async (
     programId: string,
     stampIds: string[],
-    options?: { confirmMachineOverride?: boolean },
   ): Promise<Program> => {
-    const updated = await programsService.addStampsToProgram(programId, stampIds, options);
+    const updated = await programsService.addStampsToProgram(programId, stampIds);
     setPrograms((prev) => prev.map((p) => (p.id === programId ? updated : p)));
     return updated;
   };

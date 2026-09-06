@@ -23,7 +23,6 @@ interface ProductionTableProps {
   onVectorizadoChange?: (itemId: string, newState: VectorizationState) => void;
   onProgramaChange?: (itemId: string, newProgram: string) => void;
   onAspireChange?: (itemId: string, newState: any) => void;
-  onMaquinaChange?: (itemId: string, newMachine: any) => void;
   onDateChange?: (itemId: string, newDate: Date) => void;
   onDeadlineChange?: (itemId: string, deadline: Date | null) => void;
   onTaskCreate?: (itemId: string, title: string, description?: string, dueDate?: Date) => void;
@@ -39,7 +38,6 @@ export const createProductionColumns = ({
   onVectorizadoChange,
   onProgramaChange,
   onAspireChange,
-  onMaquinaChange,
   onDateChange,
   onDeadlineChange,
   onTaskCreate,
@@ -163,7 +161,7 @@ export const createProductionColumns = ({
     id: 'maquina',
     header: 'Máquina',
     cell: ({ row }) => (
-      <CellMaquina item={row.original} onMaquinaChange={onMaquinaChange} />
+      <CellMaquina item={row.original} />
     ),
     size: 80,
     meta: { align: 'center' }

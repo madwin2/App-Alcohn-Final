@@ -14,12 +14,14 @@ import {
   accumulateLengthByPlanchuela,
   DEFAULT_PERDIDA_CORTE_CM,
   getMaxLengthMmForMachine,
-  isPlanchuelaEligibleForMachine,
   LARGO_MAXIMO_PLANCHUELA_MM,
   resolvePlanchuelaRef,
   stampLengthAlongMm,
   validatePlanchuelaLengthLimit,
 } from '../../programas/material';
+import { deriveLifecycleFromStamps } from '../../programas/lifecycle';
+import { nextAutoProgramName } from '../../programas/programName';
+import { ELIGIBLE_FAB_STATES, isEligibleStampForMachine } from '../../programas/eligibility';
 import { fetchLatestFabricacionParams } from './fabricacionParametros.service';
 
 type ProgramaRow = Database['public']['Tables']['programa']['Row'];
@@ -91,9 +93,6 @@ const aspireForMachine = (
   return null;
 };
 
-const LOCKED_STATES: ProgramLifecycleState[] = ['BLOQUEADO', 'EN_FABRICACION'];
-const ELIGIBLE_FAB_STATES = new Set(['Sin Hacer', 'Prioridad', 'Rehacer']);
-
 async function loadMaterialParams(): Promise<{
   perdidaCorteCm: number;
   maxMm: Partial<Record<'C' | 'G' | 'XL', number>>;
@@ -156,26 +155,95 @@ function mapSelloToProgramStamp(sello: SelloRow, perdidaCorteCm: number): Progra
   };
 }
 
-function deriveLifecycleFromStamps(
-  base: ProgramLifecycleState,
-  bloqueado: boolean,
-  stamps: ProgramStamp[],
-): ProgramLifecycleState {
-  if (bloqueado || base === 'BLOQUEADO') return 'BLOQUEADO';
-  if (stamps.length === 0) return base === 'LISTO' ? 'LISTO' : 'BORRADOR';
+export type ProgramEventTipo =
+  | 'CREADO'
+  | 'BLOQUEADO'
+  | 'DESBLOQUEADO'
+  | 'VERIFICADO'
+  | 'DESVERIFICADO'
+  | 'DESCARGADO'
+  | 'ESTADO_CAMBIADO'
+  | 'SELLO_AGREGADO'
+  | 'SELLO_QUITADO';
 
-  const allDone = stamps.every(
-    (s) => s.fabricationState === 'HECHO' || s.fabricationState === 'VERIFICAR',
-  );
-  if (allDone) return 'FINALIZADO';
+export type ProgramEvent = {
+  id: string;
+  programaId: string;
+  tipo: ProgramEventTipo;
+  detalle: Record<string, unknown> | null;
+  usuarioEmail: string | null;
+  createdAt: string;
+};
 
-  const anyDoing = stamps.some(
-    (s) => s.fabricationState === 'HACIENDO' || s.fabricationState === 'RETOCAR',
-  );
-  if (anyDoing) return 'EN_FABRICACION';
-
-  return base;
+async function currentUserEmail(): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getUser();
+    return data.user?.email ?? null;
+  } catch {
+    return null;
+  }
 }
+
+async function logProgramEvent(
+  programId: string,
+  tipo: ProgramEventTipo,
+  detalle?: Record<string, unknown> | null,
+): Promise<void> {
+  try {
+    const usuario_email = await currentUserEmail();
+    const { error } = await supabase.from('programa_eventos').insert({
+      programa_id: programId,
+      tipo,
+      detalle: detalle ?? null,
+      usuario_email,
+    } as any);
+    if (error) {
+      console.error('[programa_eventos] no se pudo registrar', { programId, tipo, error });
+    }
+  } catch (e) {
+    console.error('[programa_eventos] no se pudo registrar', { programId, tipo, e });
+  }
+}
+
+async function maybeRenameProgram(
+  programId: string,
+  nombre: string | null | undefined,
+  fecha: string | null | undefined,
+  maquina: string | null | undefined,
+  stampCount: number,
+): Promise<void> {
+  if (!fecha) return;
+  const next = nextAutoProgramName(nombre, {
+    date: fecha,
+    machine: mapMachine(maquina),
+    stampCount,
+  });
+  if (!next || next === nombre) return;
+  const { error } = await supabase.from('programa').update({ nombre: next } as any).eq('id', programId);
+  if (error) console.error('[programas] no se pudo actualizar el nombre', { programId, error });
+}
+
+export const getProgramEvents = async (programId: string): Promise<ProgramEvent[]> => {
+  const { data, error } = await supabase
+    .from('programa_eventos')
+    .select('id, programa_id, tipo, detalle, usuario_email, created_at')
+    .eq('programa_id', programId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('[programa_eventos] no se pudo leer', { programId, error });
+    return [];
+  }
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    programaId: row.programa_id,
+    tipo: row.tipo as ProgramEventTipo,
+    detalle: (row.detalle as Record<string, unknown> | null) ?? null,
+    usuarioEmail: row.usuario_email ?? null,
+    createdAt: row.created_at,
+  }));
+};
 
 function pickPrimaryLength(lengths: Program['lengthByPlanchuela']): StampSize {
   const order: StampSize[] = [63, 38, 25, 19, 12];
@@ -247,12 +315,11 @@ async function assertProgramEditable(programId: string): Promise<ProgramaRow> {
   const { data, error } = await supabase.from('programa').select('*').eq('id', programId).single();
   if (error || !data) throw new ProgramServiceError('Programa no encontrado');
 
-  const estado = ((data as any).estado_programa || 'BORRADOR') as ProgramLifecycleState;
   const bloqueado = Boolean((data as any).bloqueado);
 
-  if (bloqueado || LOCKED_STATES.includes(estado)) {
+  if (bloqueado) {
     throw new ProgramServiceError(
-      'El programa está bloqueado o en fabricación. Desbloquealo antes de editarlo.',
+      'El programa está bloqueado. Desbloquealo antes de editarlo.',
     );
   }
 
@@ -331,25 +398,42 @@ export const getPrograms = async (): Promise<Program[]> => {
     sellosPorPrograma.set(sello.programa_id, lista);
   });
 
-  return validPrograms.map((programa) => {
-    const program = mapProgramaToProgram(
+  const programs = validPrograms.map((programa) =>
+    mapProgramaToProgram(
       programa,
       sellosPorPrograma.get(programa.id) || [],
       perdidaCorteCm,
-    );
-    const stored = ((programa as any).estado_programa || 'BORRADOR') as ProgramLifecycleState;
+    ),
+  );
+
+  const persistTasks = programs.flatMap((program, index) => {
+    const stored = ((validPrograms[index] as any).estado_programa || 'BORRADOR') as ProgramLifecycleState;
     if (
       program.estadoPrograma !== stored
       && (program.estadoPrograma === 'EN_FABRICACION' || program.estadoPrograma === 'FINALIZADO')
       && stored !== 'BLOQUEADO'
     ) {
-      void supabase
-        .from('programa')
-        .update({ estado_programa: program.estadoPrograma } as any)
-        .eq('id', programa.id);
+      return [
+        supabase
+          .from('programa')
+          .update({ estado_programa: program.estadoPrograma } as any)
+          .eq('id', program.id)
+          .then(({ error }) => {
+            if (error) {
+              console.error('[programas] no se pudo persistir estado_programa', {
+                id: program.id,
+                estado: program.estadoPrograma,
+                error,
+              });
+            }
+          }),
+      ];
     }
-    return program;
+    return [];
   });
+
+  await Promise.allSettled(persistTasks);
+  return programs;
 };
 
 export const getProgramById = async (programId: string): Promise<Program | null> => {
@@ -423,6 +507,12 @@ export const createProgram = async (program: Partial<Program>): Promise<Program>
 
   if (error) throw error;
 
+  await logProgramEvent(nuevoPrograma.id, 'CREADO', {
+    nombre: nuevoPrograma.nombre,
+    maquina: machine,
+    sellos: stampIds.length,
+  });
+
   if (stampIds.length > 0) {
     await addStampsToProgram(nuevoPrograma.id, stampIds, { skipEditableCheck: true });
   }
@@ -450,6 +540,10 @@ export const updateProgram = async (
   const { error } = await supabase.from('programa').update(updateData as any).eq('id', programId);
   if (error) throw error;
 
+  if (updates.isVerified !== undefined) {
+    await logProgramEvent(programId, updates.isVerified ? 'VERIFICADO' : 'DESVERIFICADO');
+  }
+
   const result = await getProgramById(programId);
   if (!result) throw new ProgramServiceError('Programa no encontrado tras actualizar');
   return result;
@@ -470,6 +564,8 @@ export const setFabricationStateForProgram = async (
 
   if (error) throw error;
 
+  await logProgramEvent(programId, 'ESTADO_CAMBIADO', { estado: state });
+
   const result = await getProgramById(programId);
   if (!result) throw new ProgramServiceError('Programa no encontrado');
   return result;
@@ -487,7 +583,7 @@ export const deleteProgram = async (
   const program = await getProgramById(programId);
   if (!program) throw new ProgramServiceError('Programa no encontrado');
 
-  if (program.bloqueado || LOCKED_STATES.includes(program.estadoPrograma)) {
+  if (program.bloqueado) {
     throw new ProgramServiceError('Desbloqueá el programa antes de borrarlo.');
   }
 
@@ -536,19 +632,7 @@ export const getEligibleStamps = async (opts: {
   const exclude = new Set(opts.excludeStampIds || []);
 
   const filtered = (data || [])
-    .filter((s) => {
-      if (exclude.has(s.id)) return false;
-      if (!ELIGIBLE_FAB_STATES.has(s.estado_fabricacion || '')) return false;
-      if (opts.machine === 'ABC') {
-        return s.maquina == null || s.tipo === 'ABC';
-      }
-      if (s.maquina) return s.maquina === opts.machine;
-      return isPlanchuelaEligibleForMachine(opts.machine, {
-        anchoRealCm: s.ancho_real != null ? Number(s.ancho_real) : null,
-        largoRealCm: s.largo_real != null ? Number(s.largo_real) : null,
-        tipoPlanchuela: s.tipo_planchuela as PlanchuelaSize | null,
-      });
-    })
+    .filter((s) => isEligibleStampForMachine(s, opts.machine, exclude))
     .map((s) => mapSelloToProgramStamp(s, perdidaCorteCm));
 
   filtered.sort((a, b) => {
@@ -567,7 +651,7 @@ export const getEligibleStamps = async (opts: {
 export const addStampsToProgram = async (
   programId: string,
   stampIds: string[],
-  options?: { skipEditableCheck?: boolean; confirmMachineOverride?: boolean },
+  options?: { skipEditableCheck?: boolean },
 ): Promise<Program> => {
   if (!stampIds.length) {
     const p = await getProgramById(programId);
@@ -616,12 +700,10 @@ export const addStampsToProgram = async (
         `El sello "${sello.diseno || sello.id}" no está en un estado elegible (Sin Hacer / Rehacer).`,
       );
     }
-    if (sello.maquina && mapMachine(sello.maquina) !== machine && machine !== 'ABC') {
-      if (!options?.confirmMachineOverride) {
-        throw new ProgramServiceError(
-          `El sello "${sello.diseno || sello.id}" tiene máquina ${sello.maquina}, distinta a ${machine}. Confirmá el cambio de máquina.`,
-        );
-      }
+    if (!isEligibleStampForMachine(sello, machine)) {
+      throw new ProgramServiceError(
+        `El sello "${sello.diseno || sello.id}" no entra en la máquina ${machine} por tamaño.`,
+      );
     }
 
     const dims = {
@@ -651,11 +733,9 @@ export const addStampsToProgram = async (
       programa_id: programId,
       estado_fabricacion_previo: sello.estado_fabricacion,
       estado_fabricacion: 'Programado',
+      maquina: machine === 'ABC' ? null : machine,
       updated_at: new Date().toISOString(),
     };
-    if (!sello.maquina || options?.confirmMachineOverride) {
-      if (machine !== 'ABC') updatePayload.maquina = machine;
-    }
     if (aspire) updatePayload.estado_aspire = aspire;
 
     const { error } = await supabase.from('sellos').update(updatePayload as any).eq('id', sello.id);
@@ -666,10 +746,11 @@ export const addStampsToProgram = async (
   await markProgramDirtyAfterEdit(programId, Boolean((programa as any).archivo_zip_url));
 
   const total = (existingSellos?.length || 0) + newSellos.length;
-  if (programa.nombre && /x\d+/.test(programa.nombre)) {
-    const newName = programa.nombre.replace(/x\d+/, `x${total}`);
-    await supabase.from('programa').update({ nombre: newName } as any).eq('id', programId);
-  }
+  await maybeRenameProgram(programId, programa.nombre, programa.fecha, programa.maquina, total);
+  await logProgramEvent(programId, 'SELLO_AGREGADO', {
+    count: newSellos.length,
+    stampIds,
+  });
 
   const result = await getProgramById(programId);
   if (!result) throw new ProgramServiceError('Programa no encontrado');
@@ -713,6 +794,7 @@ export const removeStampFromProgram = async (
       estado_fabricacion_previo: null,
       estado_fabricacion: nextState,
       estado_aspire: null,
+      maquina: null,
       updated_at: new Date().toISOString(),
     } as any)
     .eq('id', stampId);
@@ -725,16 +807,20 @@ export const removeStampFromProgram = async (
   if (!options.skipDirty) {
     const { data: programa } = await supabase
       .from('programa')
-      .select('archivo_zip_url, nombre, cantidad_sellos')
+      .select('archivo_zip_url, nombre, cantidad_sellos, fecha, maquina')
       .eq('id', programId)
       .maybeSingle();
     await markProgramDirtyAfterEdit(programId, Boolean((programa as any)?.archivo_zip_url));
 
-    if (programa?.nombre && /x\d+/.test(programa.nombre)) {
-      const remaining = Math.max(0, (programa.cantidad_sellos || 1) - 1);
-      const newName = programa.nombre.replace(/x\d+/, `x${remaining}`);
-      await supabase.from('programa').update({ nombre: newName } as any).eq('id', programId);
-    }
+    const remaining = Math.max(0, (programa?.cantidad_sellos || 1) - 1);
+    await maybeRenameProgram(
+      programId,
+      programa?.nombre,
+      (programa as any)?.fecha,
+      (programa as any)?.maquina,
+      remaining,
+    );
+    await logProgramEvent(programId, 'SELLO_QUITADO', { stampId });
   }
 
   return getProgramById(programId);
@@ -753,6 +839,7 @@ export const lockProgram = async (programId: string, userId?: string): Promise<P
     .eq('id', programId);
 
   if (error) throw error;
+  await logProgramEvent(programId, 'BLOQUEADO');
   const result = await getProgramById(programId);
   if (!result) throw new ProgramServiceError('Programa no encontrado');
   return result;
@@ -772,6 +859,7 @@ export const unlockProgram = async (programId: string): Promise<Program> => {
     .eq('id', programId);
 
   if (error) throw error;
+  await logProgramEvent(programId, 'DESBLOQUEADO');
   const result = await getProgramById(programId);
   if (!result) throw new ProgramServiceError('Programa no encontrado');
   return result;
@@ -971,6 +1059,7 @@ export const markProgramPackageReady = async (
     .eq('id', programId);
 
   if (error) throw error;
+  await logProgramEvent(programId, 'DESCARGADO', { zipUrl });
   const result = await getProgramById(programId);
   if (!result) throw new ProgramServiceError('Programa no encontrado');
   return result;
@@ -995,6 +1084,7 @@ export const releaseStampFromAnyProgram = async (stampId: string): Promise<void>
       estado_fabricacion_previo: null,
       estado_fabricacion: prev,
       estado_aspire: null,
+      maquina: null,
     } as any)
     .eq('id', stampId);
 
@@ -1016,6 +1106,7 @@ export const releaseStampFromAnyProgram = async (stampId: string): Promise<void>
   };
   if (estado === 'LISTO') update.estado_programa = 'BORRADOR';
   await supabase.from('programa').update(update as any).eq('id', programId);
+  await logProgramEvent(programId, 'SELLO_QUITADO', { stampId, source: 'release' });
 };
 
 export const canDownloadPackage = (machine: ProgramMachineType): boolean => machine !== 'ABC';

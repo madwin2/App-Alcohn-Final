@@ -2,16 +2,16 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Check, X, ChevronDown, ChevronUp, Lock, Unlock, Trash2, Plus, Download, AlertTriangle, Factory } from 'lucide-react';
+import { Check, X, ChevronDown, ChevronUp, Lock, Unlock, Trash2, Plus, Download, AlertTriangle, Factory, History } from 'lucide-react';
 import { Program, ProgramLifecycleState, ProgramStamp, FabricationState } from '@/lib/types/index';
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
 import { RemoveStampDialog, RemoveStampChoice } from '../RemoveStamp/RemoveStampDialog';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { formatLengthByPlanchuela } from '@/lib/programas/material';
 import { StampThumb } from '../StampThumb';
-import { canDownloadPackage, ProgramServiceError } from '@/lib/supabase/services/programs.service';
+import { canDownloadPackage, ProgramServiceError, getProgramEvents, ProgramEvent } from '@/lib/supabase/services/programs.service';
 import { toast } from '@/components/ui/use-toast';
-import { getFabricationLabel } from '@/lib/utils/format';
+import { getFabricationLabel, formatDateTime } from '@/lib/utils/format';
 
 interface ProgramCardProps {
   program: Program;
@@ -75,10 +75,7 @@ const getMachineInfo = (machine: string) => {
   }
 };
 
-const isLockedState = (program: Program) =>
-  program.bloqueado
-  || program.estadoPrograma === 'BLOQUEADO'
-  || program.estadoPrograma === 'EN_FABRICACION';
+const isLockedState = (program: Program) => Boolean(program.bloqueado);
 
 const PROGRAM_FAB_OPTIONS: FabricationState[] = [
   'SIN_HACER',
@@ -88,6 +85,33 @@ const PROGRAM_FAB_OPTIONS: FabricationState[] = [
   'VERIFICAR',
   'HECHO',
 ];
+
+const eventLabel = (ev: ProgramEvent): string => {
+  switch (ev.tipo) {
+    case 'CREADO':
+      return 'Programa creado';
+    case 'BLOQUEADO':
+      return 'Bloqueado';
+    case 'DESBLOQUEADO':
+      return 'Desbloqueado';
+    case 'VERIFICADO':
+      return 'Marcado como verificado';
+    case 'DESVERIFICADO':
+      return 'Verificación quitada';
+    case 'DESCARGADO':
+      return 'Paquete descargado';
+    case 'ESTADO_CAMBIADO':
+      return ev.detalle?.estado
+        ? `Estado de fabricación: ${getFabricationLabel(String(ev.detalle.estado))}`
+        : 'Estado de fabricación cambiado';
+    case 'SELLO_AGREGADO':
+      return `Se agregaron ${ev.detalle?.count ?? ''} sello(s)`;
+    case 'SELLO_QUITADO':
+      return 'Sello quitado';
+    default:
+      return ev.tipo;
+  }
+};
 
 export function ProgramCard({
   program,
@@ -109,6 +133,9 @@ export function ProgramCard({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [pendingFabState, setPendingFabState] = useState<FabricationState | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [events, setEvents] = useState<ProgramEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const locked = isLockedState(program);
@@ -140,9 +167,9 @@ export function ProgramCard({
 
   const handleLockClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (locked && program.bloqueado) {
+    if (program.bloqueado) {
       setShowUnlockDialog(true);
-    } else if (!locked) {
+    } else {
       void run(() => onLock(program.id), 'Programa bloqueado');
     }
   };
@@ -199,6 +226,22 @@ export function ProgramCard({
     }
   }, [showContextMenu, showFabMenu]);
 
+  useEffect(() => {
+    if (!showHistory) return;
+    let cancelled = false;
+    setEventsLoading(true);
+    void getProgramEvents(program.id)
+      .then((data) => {
+        if (!cancelled) setEvents(data);
+      })
+      .finally(() => {
+        if (!cancelled) setEventsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showHistory, program.id, program.lastUpdated]);
+
   return (
     <Card
       id={`program-card-${program.id}`}
@@ -230,14 +273,8 @@ export function ProgramCard({
                 size="sm"
                 className="p-1 h-6 w-6"
                 onClick={handleLockClick}
-                disabled={busy || (locked && !program.bloqueado)}
-                title={
-                  locked && !program.bloqueado
-                    ? 'Bloqueado por fabricación en curso'
-                    : locked
-                      ? 'Desbloquear programa'
-                      : 'Bloquear programa'
-                }
+                disabled={busy}
+                title={program.bloqueado ? 'Desbloquear programa' : 'Bloquear programa'}
               >
                 {locked ? (
                   <Lock className="h-4 w-4 text-red-500" />
@@ -261,62 +298,10 @@ export function ProgramCard({
           </div>
 
           <div>
-            <div className="flex items-start gap-2 flex-wrap relative">
+            <div className="flex items-start gap-2 flex-wrap">
               <h3 className="text-xl font-bold text-foreground truncate flex-1 min-w-0">
                 {program.name}
               </h3>
-              {program.stamps.length > 0 ? (
-                <button
-                  type="button"
-                  className="shrink-0"
-                  disabled={busy}
-                  title="Cambiar estado de fabricación de todos los sellos"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (busy) return;
-                    setShowContextMenu(false);
-                    setShowFabMenu((v) => !v);
-                  }}
-                >
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] cursor-pointer ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
-                  >
-                    {lifecycleLabel(program.estadoPrograma, program.dirty)}
-                    <ChevronDown className="h-3 w-3 ml-0.5 inline-block align-middle" />
-                  </Badge>
-                </button>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
-                >
-                  {lifecycleLabel(program.estadoPrograma, program.dirty)}
-                </Badge>
-              )}
-
-              {showFabMenu && (
-                <div
-                  className="absolute top-full right-0 z-50 mt-1 bg-background border border-border rounded-md shadow-lg p-1 w-[180px]"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
-                    Cambiar estado de fabricación
-                  </div>
-                  {PROGRAM_FAB_OPTIONS.map((state) => (
-                    <Button
-                      key={state}
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-start h-8 text-xs"
-                      disabled={busy}
-                      onClick={() => handleSetFabricationState(state)}
-                    >
-                      {getFabricationLabel(state)}
-                    </Button>
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
@@ -341,7 +326,7 @@ export function ProgramCard({
       <CardContent className="pt-0">
         <div
           className={`overflow-hidden transition-all duration-500 ${
-            isExpanded ? 'max-h-[28rem] opacity-100' : 'max-h-0 opacity-0'
+            isExpanded ? 'max-h-[40rem] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0'
           }`}
         >
           <div className="space-y-4 pt-3 border-t border-border/50">
@@ -380,10 +365,95 @@ export function ProgramCard({
                 )}
               </div>
             </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowHistory((v) => !v);
+                }}
+              >
+                <History className="h-3.5 w-3.5" />
+                {showHistory ? 'Ocultar historial' : 'Ver historial'}
+              </button>
+              {showHistory && (
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1" onClick={(e) => e.stopPropagation()}>
+                  {eventsLoading ? (
+                    <p className="text-xs text-muted-foreground">Cargando…</p>
+                  ) : events.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Todavía no hay eventos.</p>
+                  ) : (
+                    events.map((ev) => (
+                      <div key={ev.id} className="text-xs leading-snug">
+                        <div className="text-foreground">{eventLabel(ev)}</div>
+                        <div className="text-muted-foreground">
+                          {formatDateTime(ev.createdAt)}
+                          {ev.usuarioEmail ? ` · ${ev.usuarioEmail}` : ''}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end items-end mt-3">
+        <div className="flex justify-between items-end mt-3 relative">
+          {program.stamps.length > 0 ? (
+            <button
+              type="button"
+              className="shrink-0"
+              disabled={busy}
+              title="Cambiar estado de fabricación de todos los sellos"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (busy) return;
+                setShowContextMenu(false);
+                setShowFabMenu((v) => !v);
+              }}
+            >
+              <Badge
+                variant="outline"
+                className={`text-[10px] cursor-pointer ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
+              >
+                {lifecycleLabel(program.estadoPrograma, program.dirty)}
+                <ChevronDown className="h-3 w-3 ml-0.5 inline-block align-middle" />
+              </Badge>
+            </button>
+          ) : (
+            <Badge
+              variant="outline"
+              className={`text-[10px] ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
+            >
+              {lifecycleLabel(program.estadoPrograma, program.dirty)}
+            </Badge>
+          )}
+
+          {showFabMenu && (
+            <div
+              className="absolute bottom-full left-0 z-50 mb-1 bg-background border border-border rounded-md shadow-lg p-1 w-[180px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-2 py-1.5 text-[10px] font-medium text-muted-foreground">
+                Cambiar estado de fabricación
+              </div>
+              {PROGRAM_FAB_OPTIONS.map((state) => (
+                <Button
+                  key={state}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start h-8 text-xs"
+                  disabled={busy}
+                  onClick={() => handleSetFabricationState(state)}
+                >
+                  {getFabricationLabel(state)}
+                </Button>
+              ))}
+            </div>
+          )}
           <Button
             size="sm"
             className={`h-8 w-8 p-0 rounded-full transition-all duration-200 hover:scale-105 border ${

@@ -3,7 +3,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,6 +14,7 @@ import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog'
 import { Plus } from 'lucide-react';
 import { DatePicker } from '@/components/ui/date-picker';
 import { ProgramServiceError } from '@/lib/supabase/services/programs.service';
+import { generateProgramName } from '@/lib/programas/programName';
 import { formatLengthByPlanchuela, accumulateLengthByPlanchuela, DEFAULT_PERDIDA_CORTE_CM } from '@/lib/programas/material';
 
 const programSchema = z.object({
@@ -34,16 +34,13 @@ interface NewProgramFormProps {
   createProgram: (program: Partial<Program>) => Promise<Program>;
 }
 
-const generateProgramName = (
+const generateName = (
   date: Date,
   machine: ProgramMachineType | undefined,
   stampCount: number,
 ): string => {
   if (!date || !machine) return '';
-  const day = format(date, 'd', { locale: es });
-  const month = format(date, 'MMM', { locale: es }).toUpperCase();
-  const machineLabel = machine === 'XL' ? 'XL' : machine;
-  return `${day} ${month} x${stampCount} ${machineLabel}`;
+  return generateProgramName({ date, machine, stampCount });
 };
 
 export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgramFormProps) {
@@ -71,7 +68,7 @@ export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgra
 
   useEffect(() => {
     if (!isNameManuallyEdited && productionDate && machine) {
-      const generatedName = generateProgramName(productionDate, machine, selectedStamps.length);
+      const generatedName = generateName(productionDate, machine, selectedStamps.length);
       if (generatedName && generatedName !== name) {
         setValue('name', generatedName, { shouldValidate: false });
       }

@@ -326,29 +326,6 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
     }
   }, [selectedRows, updateItem, toast]);
 
-  const handleMaquinaChange = useCallback(async (itemId: string, newMachine: any) => {
-    try {
-      // Si hay filas seleccionadas, aplicar a todas las seleccionadas
-      // Si no hay filas seleccionadas, aplicar solo a la fila clickeada
-      const itemsToUpdate = selectedRows.size > 0
-        ? Array.from(selectedRows)
-        : [itemId];
-
-      // Actualizar todas las filas seleccionadas
-      await Promise.all(
-        itemsToUpdate.map(id => updateItem(id, { machine: newMachine }))
-      );
-
-      const count = itemsToUpdate.length;
-      toast({ 
-        title: 'Máquina actualizada', 
-        description: `Máquina cambiada para ${count} item${count > 1 ? 's' : ''}` 
-      });
-    } catch (error) {
-      toast({ title: 'Error', description: 'No se pudo actualizar la máquina', variant: 'destructive' });
-    }
-  }, [selectedRows, updateItem, toast]);
-
   const handleDeadlineChange = useCallback(async (itemId: string, deadline: Date | null) => {
     try {
       // Si hay filas seleccionadas, aplicar a todas las seleccionadas
@@ -574,7 +551,6 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
       onVectorizadoChange: handleVectorizadoChange,
       onProgramaChange: handleProgramaChange,
       onAspireChange: handleAspireChange,
-      onMaquinaChange: handleMaquinaChange,
       onDateChange: handleDateChange,
       onDeadlineChange: handleDeadlineChange,
       onTaskCreate: handleTaskCreate,
@@ -583,7 +559,7 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
       editingRowId,
       onUpdate,
     });
-  }, [editingRowId, handleFabricacionChange, handleVectorizadoChange, handleProgramaChange, handleAspireChange, handleMaquinaChange, handleDeadlineChange]);
+  }, [editingRowId, handleFabricacionChange, handleVectorizadoChange, handleProgramaChange, handleAspireChange, handleDeadlineChange]);
 
   // Sistema unificado de columnas con redimensionamiento y reordenamiento
   const sortedColumns = useMemo(() => {
