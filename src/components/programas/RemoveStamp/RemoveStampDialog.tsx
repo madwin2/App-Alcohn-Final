@@ -28,7 +28,9 @@ interface RemoveStampDialogProps {
   bulkCount?: number;
   onConfirm: (choice: RemoveStampChoice) => void;
   title?: string;
+  description?: string;
   confirmLabel?: string;
+  confirmVariant?: 'default' | 'destructive';
 }
 
 export function RemoveStampDialog({
@@ -38,7 +40,9 @@ export function RemoveStampDialog({
   bulkCount,
   onConfirm,
   title,
+  description,
   confirmLabel = 'Confirmar',
+  confirmVariant = 'default',
 }: RemoveStampDialogProps) {
   const [mode, setMode] = useState<'PREVIOUS' | 'NEW'>('PREVIOUS');
   const [newState, setNewState] = useState<FabricationState>('SIN_HACER');
@@ -67,7 +71,8 @@ export function RemoveStampDialog({
 
         <div className="space-y-4 py-2">
           <p className="text-sm text-muted-foreground">
-            Elegí qué estado de fabricación dejar en el sello al sacarlo del programa.
+            {description
+              || 'Elegí qué estado de fabricación dejar en el sello al sacarlo del programa.'}
           </p>
 
           <div className="space-y-2">
@@ -126,7 +131,7 @@ export function RemoveStampDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button onClick={handleConfirm}>{confirmLabel}</Button>
+          <Button variant={confirmVariant} onClick={handleConfirm}>{confirmLabel}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

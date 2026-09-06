@@ -6,6 +6,7 @@ import { Check, X, ChevronDown, ChevronUp, Lock, Unlock, Trash2, Plus, Download,
 import { Program, ProgramLifecycleState, ProgramStamp, FabricationState } from '@/lib/types/index';
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
 import { RemoveStampDialog, RemoveStampChoice } from '../RemoveStamp/RemoveStampDialog';
+import { ConfirmDialog } from '../ConfirmDialog';
 import { formatLengthByPlanchuela } from '@/lib/programas/material';
 import { StampThumb } from '../StampThumb';
 import { canDownloadPackage, ProgramServiceError } from '@/lib/supabase/services/programs.service';
@@ -106,6 +107,8 @@ export function ProgramCard({
   const [showStampsDialog, setShowStampsDialog] = useState(false);
   const [stampToRemove, setStampToRemove] = useState<ProgramStamp | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [pendingFabState, setPendingFabState] = useState<FabricationState | null>(null);
   const [busy, setBusy] = useState(false);
 
   const locked = isLockedState(program);
@@ -138,8 +141,7 @@ export function ProgramCard({
   const handleLockClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (locked && program.bloqueado) {
-      if (!window.confirm('¿Desbloquear el programa? Podrá editarse de nuevo.')) return;
-      void run(() => onUnlock(program.id), 'Programa desbloqueado');
+      setShowUnlockDialog(true);
     } else if (!locked) {
       void run(() => onLock(program.id), 'Programa bloqueado');
     }
@@ -153,18 +155,9 @@ export function ProgramCard({
 
   const handleSetFabricationState = (state: FabricationState) => {
     if (busy || program.stamps.length === 0) return;
-    const label = getFabricationLabel(state);
-    const count = program.stamps.length;
-    if (
-      !window.confirm(
-        `¿Cambiar el estado de fabricación de ${count} sello${count === 1 ? '' : 's'} a "${label}"?`,
-      )
-    ) {
-      return;
-    }
     setShowFabMenu(false);
     setShowContextMenu(false);
-    void run(() => onSetFabricationState(program.id, state), `Sellos marcados como ${label}`);
+    setPendingFabState(state);
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -495,8 +488,44 @@ export function ProgramCard({
         onOpenChange={setShowDeleteDialog}
         bulkCount={program.stamps.length || 1}
         title="Eliminar programa"
+        description={
+          program.stamps.length === 0
+            ? `¿Eliminar «${program.name}»? Esta acción no se puede deshacer.`
+            : `¿Eliminar «${program.name}»? Se liberarán ${program.stamps.length} sello${program.stamps.length === 1 ? '' : 's'}. Elegí qué estado de fabricación dejar en cada uno.`
+        }
         confirmLabel="Eliminar"
+        confirmVariant="destructive"
         onConfirm={handleDeleteConfirm}
+      />
+
+      <ConfirmDialog
+        open={showUnlockDialog}
+        onOpenChange={setShowUnlockDialog}
+        title="Desbloquear programa"
+        description="¿Desbloquear el programa? Podrá editarse de nuevo."
+        confirmLabel="Desbloquear"
+        onConfirm={() => void run(() => onUnlock(program.id), 'Programa desbloqueado')}
+      />
+
+      <ConfirmDialog
+        open={pendingFabState != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingFabState(null);
+        }}
+        title="Cambiar estado de fabricación"
+        description={
+          pendingFabState
+            ? `¿Cambiar el estado de ${program.stamps.length} sello${program.stamps.length === 1 ? '' : 's'} de «${program.name}» a "${getFabricationLabel(pendingFabState)}"?`
+            : ''
+        }
+        confirmLabel="Cambiar"
+        onConfirm={() => {
+          if (!pendingFabState) return;
+          const state = pendingFabState;
+          const label = getFabricationLabel(state);
+          setPendingFabState(null);
+          void run(() => onSetFabricationState(program.id, state), `Sellos marcados como ${label}`);
+        }}
       />
     </Card>
   );
