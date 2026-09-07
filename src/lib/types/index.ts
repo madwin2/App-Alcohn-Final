@@ -254,6 +254,10 @@ export interface ProgramStamp {
   stampType: StampType;
   previewUrl?: string;
   vectorPreviewUrl?: string;
+  /** Foto del sello (fallback visual si el vector no es imagen). */
+  photoUrl?: string;
+  /** Nota del pedido/sello (texto completo). */
+  notes?: string | null;
   isPriority?: boolean;
   deadlineAt?: string;
   createdAt?: string;

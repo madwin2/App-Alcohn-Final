@@ -134,7 +134,11 @@ export function StampsSelectionDialog({
   }, [isOpen, machine, excludeStampIds.join(',')]);
 
   const filteredStamps = availableStamps.filter((stamp) => {
-    const matchesSearch = stamp.designName.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      stamp.designName.toLowerCase().includes(q) ||
+      (stamp.notes || '').toLowerCase().includes(q);
     const matchesType = filterType === 'ALL' || stamp.stampType === filterType;
     return matchesSearch && matchesType;
   });
@@ -269,7 +273,7 @@ export function StampsSelectionDialog({
                         onClick={(e) => e.stopPropagation()}
                       />
 
-                      <StampThumb stamp={stamp} />
+                      <StampThumb stamp={stamp} className="w-20 h-20" />
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-1">
@@ -288,8 +292,14 @@ export function StampsSelectionDialog({
                           {stamp.tipoPlanchuela ? ` · P${stamp.tipoPlanchuela}` : ''}
                         </div>
 
+                        {stamp.notes?.trim() ? (
+                          <p className="text-xs text-blue-400 whitespace-pre-wrap break-words mb-1.5">
+                            {stamp.notes.trim()}
+                          </p>
+                        ) : null}
+
                         {stamp.createdAt && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
                             <Calendar className="w-3 h-3" />
                             <span>{formatCreatedAt(stamp.createdAt)}</span>
                           </div>

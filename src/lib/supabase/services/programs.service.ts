@@ -140,6 +140,8 @@ function mapSelloToProgramStamp(sello: SelloRow, perdidaCorteCm: number): Progra
     stampType: mapStampType(sello.tipo),
     previewUrl: sello.archivo_vector_preview || sello.foto_sello || undefined,
     vectorPreviewUrl: sello.archivo_vector_preview || undefined,
+    photoUrl: sello.foto_sello || undefined,
+    notes: sello.nota || null,
     isPriority: Boolean((sello as any).es_prioritario) || sello.estado_fabricacion === 'Prioridad',
     deadlineAt: sello.fecha_limite || undefined,
     createdAt: sello.created_at || undefined,

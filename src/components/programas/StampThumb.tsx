@@ -1,16 +1,40 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ProgramStamp } from '@/lib/types/index';
 import { cn } from '@/lib/utils';
+import { storageFileKindFromUrl } from '@/lib/utils/storageFileKind';
 
 interface StampThumbProps {
   stamp: ProgramStamp;
   className?: string;
 }
 
+/** Elige la primera URL que el navegador pueda mostrar en <img>. */
+function pickThumbSrc(stamp: ProgramStamp): string | undefined {
+  const candidates = [stamp.vectorPreviewUrl, stamp.previewUrl, stamp.photoUrl].filter(
+    (u): u is string => Boolean(u && u.trim()),
+  );
+
+  for (const url of candidates) {
+    const kind = storageFileKindFromUrl(url);
+    if (kind === 'image' || kind === 'svg') return url;
+  }
+
+  for (const url of candidates) {
+    const kind = storageFileKindFromUrl(url);
+    if (kind !== 'eps' && kind !== 'pdf' && kind !== 'ai') return url;
+  }
+
+  return undefined;
+}
+
 export function StampThumb({ stamp, className }: StampThumbProps) {
+  const src = pickThumbSrc(stamp);
   const [failed, setFailed] = useState(false);
-  const src = stamp.vectorPreviewUrl || stamp.previewUrl;
   const dim = `${Math.round(stamp.widthMm)}×${Math.round(stamp.heightMm)}`;
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src, stamp.id]);
 
   return (
     <div
@@ -28,7 +52,7 @@ export function StampThumb({ stamp, className }: StampThumbProps) {
           onError={() => setFailed(true)}
         />
       ) : (
-        <div className="text-[10px] text-muted-foreground text-center px-1">{dim}</div>
+        <div className="text-[10px] text-muted-foreground text-center px-1 leading-tight">{dim}mm</div>
       )}
     </div>
   );
