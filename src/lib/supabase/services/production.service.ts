@@ -323,6 +323,16 @@ export const updateProductionItem = async (
       if (updates.files.photoUrl !== undefined) {
         updateData.foto_sello = updates.files.photoUrl || null;
       }
+      if ('vectorPreviewUrl' in updates.files || 'vectorUrl' in updates.files) {
+        const storedVectorUrl =
+          updates.files.vectorPreviewUrl || updates.files.vectorUrl || null;
+        (updateData as any).archivo_vector_preview = storedVectorUrl;
+        if (storedVectorUrl && updates.vectorizationState === undefined) {
+          (updateData as any).estado_vectorizacion = 'VECTORIZADO';
+        } else if (!storedVectorUrl && updates.vectorizationState === undefined) {
+          (updateData as any).estado_vectorizacion = 'BASE';
+        }
+      }
     }
 
     if (updates.aspireState !== undefined) {

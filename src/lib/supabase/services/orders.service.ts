@@ -22,6 +22,7 @@ import { getSixMonthsCutoffDate } from '../../utils/orderLifecycle';
 import { todayArgentinaDateKey } from '../../utils/argentinaDate';
 import { isVectorAutoEnabled, vectorizationStateAfterBaseUpload } from '../../config/vectorAuto';
 import { enqueueVectorization } from '../../utils/vectorizeWorker';
+import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
 import {
   normalizeEmailCliente,
   normalizePhoneDigitsCliente,
@@ -1418,11 +1419,13 @@ export interface AvailableStampForPhoto {
 
 export const getAvailableStampsForPhoto = async (): Promise<AvailableStampForPhoto[]> => {
   try {
+    const stampSelect = 'id, diseno, orden_id, item_type, item_config';
+
     // Obtener sellos con estado_fabricacion = 'Hecho', estado_venta = 'Señado' (o NULL, que se mapea a 'Señado') y sin foto_sello
     // Primero los que tienen estado_venta = 'Señado' explícitamente
     const { data: sellosSeñado, error: sellosSeñadoError } = await supabase
       .from('sellos')
-      .select('id, diseno, orden_id')
+      .select(stampSelect)
       .eq('estado_fabricacion', 'Hecho')
       .eq('estado_venta', 'Señado')
       .is('foto_sello', null);
@@ -1430,7 +1433,7 @@ export const getAvailableStampsForPhoto = async (): Promise<AvailableStampForPho
     // Los que tienen estado_venta = 'Señado' y foto_sello vacío
     const { data: sellosSeñadoVacio, error: sellosSeñadoVacioError } = await supabase
       .from('sellos')
-      .select('id, diseno, orden_id')
+      .select(stampSelect)
       .eq('estado_fabricacion', 'Hecho')
       .eq('estado_venta', 'Señado')
       .eq('foto_sello', '');
@@ -1438,7 +1441,7 @@ export const getAvailableStampsForPhoto = async (): Promise<AvailableStampForPho
     // Los que tienen estado_venta IS NULL (que se mapean a 'Señado' por defecto)
     const { data: sellosNull, error: sellosNullError } = await supabase
       .from('sellos')
-      .select('id, diseno, orden_id')
+      .select(stampSelect)
       .eq('estado_fabricacion', 'Hecho')
       .is('estado_venta', null)
       .is('foto_sello', null);
@@ -1446,7 +1449,7 @@ export const getAvailableStampsForPhoto = async (): Promise<AvailableStampForPho
     // Los que tienen estado_venta IS NULL y foto_sello vacío
     const { data: sellosNullVacio, error: sellosNullVacioError } = await supabase
       .from('sellos')
-      .select('id, diseno, orden_id')
+      .select(stampSelect)
       .eq('estado_fabricacion', 'Hecho')
       .is('estado_venta', null)
       .eq('foto_sello', '');
@@ -1490,7 +1493,11 @@ export const getAvailableStampsForPhoto = async (): Promise<AvailableStampForPho
 
       return {
         id: sello.id,
-        designName: sello.diseno || 'Sin diseño',
+        designName: getOrderItemDisplayName({
+          designName: sello.diseno || undefined,
+          itemType: sello.item_type || 'SELLO',
+          itemConfig: sello.item_config || undefined,
+        }),
         orderId: sello.orden_id,
         orderDate: orden?.fecha || new Date().toISOString(),
         customerName: cliente 

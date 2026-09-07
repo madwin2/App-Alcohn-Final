@@ -30,6 +30,7 @@ interface ProductionTableProps {
   onTaskDelete?: (taskId: string) => void;
   editingRowId?: string | null;
   onUpdate?: (itemId: string, patch: any) => void;
+  onUpdateItem?: (itemId: string, updates: Partial<ProductionItem>) => Promise<ProductionItem>;
 }
 
 export const createProductionColumns = ({
@@ -45,6 +46,7 @@ export const createProductionColumns = ({
   onTaskDelete,
   editingRowId,
   onUpdate,
+  onUpdateItem,
 }: ProductionTableProps): ColumnDef<ProductionItem>[] => [
   {
     id: 'tarea',
@@ -176,7 +178,7 @@ export const createProductionColumns = ({
   {
     id: 'vector',
     header: 'VECTOR',
-    cell: ({ row }) => <CellVector item={row.original} />,
+    cell: ({ row }) => <CellVector item={row.original} onUpdateItem={onUpdateItem} />,
     size: 60,
     meta: { align: 'center' }
   },

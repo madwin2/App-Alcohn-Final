@@ -558,8 +558,9 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
       onTaskDelete: handleTaskDelete,
       editingRowId,
       onUpdate,
+      onUpdateItem: updateItem,
     });
-  }, [editingRowId, handleFabricacionChange, handleVectorizadoChange, handleProgramaChange, handleAspireChange, handleDeadlineChange]);
+  }, [editingRowId, handleFabricacionChange, handleVectorizadoChange, handleProgramaChange, handleAspireChange, handleDeadlineChange, updateItem]);
 
   // Sistema unificado de columnas con redimensionamiento y reordenamiento
   const sortedColumns = useMemo(() => {
