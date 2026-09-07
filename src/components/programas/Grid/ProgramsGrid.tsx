@@ -16,7 +16,7 @@ interface ProgramsGridProps {
   onLock: (programId: string) => Promise<void>;
   onUnlock: (programId: string) => Promise<void>;
   onDownload: (programId: string) => Promise<void>;
-  onToggleVerified: (programId: string, verified: boolean) => Promise<void>;
+  onUpdateProgram: (programId: string, updates: Partial<Program>) => Promise<void>;
   onSetFabricationState: (programId: string, state: FabricationState) => Promise<void>;
   onSetStampFabricationStates: (
     programId: string,
@@ -33,7 +33,7 @@ export function ProgramsGrid({
   onLock,
   onUnlock,
   onDownload,
-  onToggleVerified,
+  onUpdateProgram,
   onSetFabricationState,
   onSetStampFabricationStates,
 }: ProgramsGridProps) {
@@ -48,7 +48,7 @@ export function ProgramsGrid({
     onLock,
     onUnlock,
     onDownload,
-    onToggleVerified,
+    onUpdateProgram,
     onSetFabricationState,
     onSetStampFabricationStates,
   };

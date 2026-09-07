@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Check, X, ChevronDown, ChevronUp, Lock, Unlock, Trash2, Plus, Download, AlertTriangle, Factory, History } from 'lucide-react';
+import {
+  X,
+  ChevronDown,
+  ChevronUp,
+  Lock,
+  Unlock,
+  Plus,
+  Download,
+  AlertTriangle,
+  History,
+} from 'lucide-react';
 import { Program, ProgramLifecycleState, ProgramStamp, FabricationState } from '@/lib/types/index';
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
 import { RemoveStampDialog, RemoveStampChoice } from '../RemoveStamp/RemoveStampDialog';
@@ -10,9 +21,15 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { DoneReviewDialog } from '../DoneReview/DoneReviewDialog';
 import { formatLengthByPlanchuela } from '@/lib/programas/material';
 import { StampThumb } from '../StampThumb';
-import { canDownloadPackage, ProgramServiceError, getProgramEvents, ProgramEvent } from '@/lib/supabase/services/programs.service';
+import {
+  canDownloadPackage,
+  ProgramServiceError,
+  getProgramEvents,
+  ProgramEvent,
+} from '@/lib/supabase/services/programs.service';
 import { toast } from '@/components/ui/use-toast';
-import { getFabricationLabel, formatDateTime } from '@/lib/utils/format';
+import { getFabricationLabel, formatDateTime, parseOrderDateLocal } from '@/lib/utils/format';
+import { DatePicker } from '@/components/ui/date-picker';
 
 interface ProgramCardProps {
   program: Program;
@@ -27,7 +44,7 @@ interface ProgramCardProps {
   onLock: (programId: string) => Promise<void>;
   onUnlock: (programId: string) => Promise<void>;
   onDownload: (programId: string) => Promise<void>;
-  onToggleVerified: (programId: string, verified: boolean) => Promise<void>;
+  onUpdateProgram: (programId: string, updates: Partial<Program>) => Promise<void>;
   onSetFabricationState: (programId: string, state: FabricationState) => Promise<void>;
   onSetStampFabricationStates: (
     programId: string,
@@ -127,12 +144,11 @@ export function ProgramCard({
   onLock,
   onUnlock,
   onDownload,
-  onToggleVerified,
+  onUpdateProgram,
   onSetFabricationState,
   onSetStampFabricationStates,
 }: ProgramCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [showContextMenu, setShowContextMenu] = useState(false);
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [showStampsDialog, setShowStampsDialog] = useState(false);
   const [stampToRemove, setStampToRemove] = useState<ProgramStamp | null>(null);
@@ -150,20 +166,21 @@ export function ProgramCard({
   const locked = isLockedState(program);
   const lengthLines = formatLengthByPlanchuela(program.lengthByPlanchuela);
   const showStaleZip = Boolean(program.archivoZipUrl) && program.dirty;
+  const canDownload = canDownloadPackage(program.machine) && program.stamps.length > 0;
+  const productionDateObj = parseOrderDateLocal(program.productionDate);
 
   const run = async (fn: () => Promise<void>, successMsg?: string) => {
     setBusy(true);
     try {
       await fn();
       if (successMsg) toast({ title: successMsg });
-      // Las mutaciones ya actualizan el estado local / silent refresh; no forzar loading full-page
     } catch (e) {
       toast({
         title: 'Error',
-        description: e instanceof ProgramServiceError || e instanceof Error ? e.message : 'Operación fallida',
+        description:
+          e instanceof ProgramServiceError || e instanceof Error ? e.message : 'Operación fallida',
         variant: 'destructive',
       });
-      // Ante error, pedir un refresh silencioso por si el estado local quedó desfasado
       try {
         await onRefresh();
       } catch {
@@ -183,27 +200,21 @@ export function ProgramCard({
     }
   };
 
-  const handleVerificationClick = (e: React.MouseEvent) => {
+  const openDeleteDialog = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (locked) return;
-    void run(() => onToggleVerified(program.id, !program.isVerified));
+    if (locked || busy) return;
+    if (program.stamps.length === 0) setShowDeleteEmptyDialog(true);
+    else setShowDeleteDialog(true);
   };
 
   const handleSetFabricationState = (state: FabricationState) => {
     if (busy || program.stamps.length === 0) return;
     setShowFabMenu(false);
-    setShowContextMenu(false);
     if (state === 'HECHO') {
       setShowDoneAskDialog(true);
       return;
     }
     setPendingFabState(state);
-  };
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setShowContextMenu(true);
   };
 
   const handleAddStampsToProgram = (selected: ProgramStamp[]) => {
@@ -233,16 +244,25 @@ export function ProgramCard({
     setShowDeleteEmptyDialog(false);
   };
 
+  const handleDateChange = (date: Date | undefined) => {
+    if (!date || locked || busy) return;
+    const next = format(date, 'yyyy-MM-dd');
+    if (next === program.productionDate) return;
+    void run(
+      () => onUpdateProgram(program.id, { productionDate: next }),
+      'Fecha actualizada',
+    );
+  };
+
   useEffect(() => {
     const handleClickOutside = () => {
-      if (showContextMenu) setShowContextMenu(false);
       if (showFabMenu) setShowFabMenu(false);
     };
-    if (showContextMenu || showFabMenu) {
+    if (showFabMenu) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [showContextMenu, showFabMenu]);
+  }, [showFabMenu]);
 
   useEffect(() => {
     if (!showHistory) return;
@@ -263,29 +283,37 @@ export function ProgramCard({
   return (
     <Card
       id={`program-card-${program.id}`}
-      className={`hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer relative ${
-        showFabMenu || showContextMenu ? 'overflow-visible z-20' : 'overflow-hidden'
-      } ${
-        isExpanded ? 'shadow-lg' : 'shadow-md'
-      } ${locked ? 'opacity-90 bg-muted/20' : ''}`}
+      className={`group hover:shadow-xl hover:scale-[1.02] hover:-translate-y-1 transition-all duration-300 ease-out cursor-pointer relative ${
+        showFabMenu ? 'overflow-visible z-20' : 'overflow-hidden'
+      } ${isExpanded ? 'shadow-lg' : 'shadow-md'} ${locked ? 'opacity-90 bg-muted/20' : ''}`}
       onClick={(e) => {
         e.stopPropagation();
         setIsExpanded((v) => !v);
       }}
-      onContextMenu={handleContextMenu}
     >
-      {program.isVerified && (
-        <div className="absolute -bottom-16 -right-16 w-40 h-40 bg-gradient-to-br from-green-400/20 to-green-600/40 rounded-full blur-2xl" />
-      )}
-
       <CardHeader className="pb-3">
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <div className={`px-3 py-1 rounded text-xs font-medium w-fit ${getMachineInfo(program.machine).color}`}>
+            <div
+              className={`px-3 py-1 rounded text-xs font-medium w-fit ${getMachineInfo(program.machine).color}`}
+            >
               {getMachineInfo(program.machine).text}
             </div>
 
             <div className="flex items-center gap-1">
+              {!locked && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="p-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={openDeleteDialog}
+                  disabled={busy}
+                  title="Eliminar programa"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+
               <Button
                 variant="ghost"
                 size="sm"
@@ -316,15 +344,23 @@ export function ProgramCard({
           </div>
 
           <div>
-            <div className="flex items-start gap-2 flex-wrap">
-              <h3 className="text-xl font-bold text-foreground truncate flex-1 min-w-0">
-                {program.name}
-              </h3>
-            </div>
+            <h3 className="text-xl font-bold text-foreground truncate">{program.name}</h3>
 
             <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
-              <span>{program.productionDate}</span>
-              <span>{program.stampCount} Sellos</span>
+              <div
+                onClick={(e) => e.stopPropagation()}
+                title={locked ? 'Desbloqueá para cambiar la fecha' : 'Cambiar fecha de fabricación'}
+              >
+                <DatePicker
+                  date={Number.isNaN(productionDateObj.getTime()) ? undefined : productionDateObj}
+                  onDateChange={handleDateChange}
+                  disabled={locked || busy}
+                  className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                />
+              </div>
+              <span>
+                {program.stampCount} Sello{program.stampCount === 1 ? '' : 's'}
+              </span>
             </div>
 
             {showStaleZip && (
@@ -350,11 +386,11 @@ export function ProgramCard({
           <div className="space-y-4 pt-3 border-t border-border/50">
             <div className="space-y-2">
               <h4 className="text-sm font-medium text-foreground">Sellos:</h4>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-center">
                 {program.stamps.map((stamp) => (
                   <div
                     key={stamp.id}
-                    className="group relative"
+                    className="group/stamp relative"
                     title={
                       stamp.notes?.trim()
                         ? `${stamp.designName} — ${stamp.notes.trim()}`
@@ -367,7 +403,7 @@ export function ProgramCard({
                       <button
                         type="button"
                         aria-label={`Quitar ${stamp.designName}`}
-                        className="absolute -top-1.5 -left-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm disabled:hidden"
+                        className="absolute -top-1.5 -left-1.5 hidden group-hover/stamp:flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm disabled:hidden"
                         disabled={busy}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -379,7 +415,23 @@ export function ProgramCard({
                     )}
                   </div>
                 ))}
-                {program.stamps.length === 0 && (
+
+                {!locked && (
+                  <button
+                    type="button"
+                    title="Agregar sellos"
+                    disabled={busy}
+                    className="w-14 h-14 rounded border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/60 hover:bg-muted/40 transition-colors disabled:opacity-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowStampsDialog(true);
+                    }}
+                  >
+                    <Plus className="h-5 w-5" />
+                  </button>
+                )}
+
+                {program.stamps.length === 0 && locked && (
                   <span className="text-xs text-muted-foreground">Sin sellos</span>
                 )}
               </div>
@@ -409,7 +461,10 @@ export function ProgramCard({
                 {showHistory ? 'Ocultar historial' : 'Ver historial'}
               </button>
               {showHistory && (
-                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="max-h-36 overflow-y-auto space-y-1.5 pr-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {eventsLoading ? (
                     <p className="text-xs text-muted-foreground">Cargando…</p>
                   ) : events.length === 0 ? (
@@ -441,7 +496,6 @@ export function ProgramCard({
               onClick={(e) => {
                 e.stopPropagation();
                 if (busy) return;
-                setShowContextMenu(false);
                 setShowFabMenu((v) => !v);
               }}
             >
@@ -484,89 +538,28 @@ export function ProgramCard({
               ))}
             </div>
           )}
+
           <Button
             size="sm"
-            className={`h-8 w-8 p-0 rounded-full transition-all duration-200 hover:scale-105 border ${
-              program.isVerified
-                ? 'bg-green-500 text-white border-green-500 shadow-lg shadow-green-500/25'
-                : 'bg-muted/30 text-muted-foreground border-border/40 hover:bg-muted/50'
-            } ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={handleVerificationClick}
-            disabled={locked || busy}
+            className="h-8 w-8 p-0 rounded-full transition-all duration-200 hover:scale-105 border bg-muted/30 text-muted-foreground border-border/40 hover:bg-green-50 hover:text-green-700 hover:border-green-500/50 dark:hover:bg-green-950"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!canDownload) return;
+              void run(() => onDownload(program.id), 'Paquete descargado');
+            }}
+            disabled={!canDownload || busy}
+            title={
+              !canDownloadPackage(program.machine)
+                ? 'ABC no genera paquete ZIP'
+                : program.stamps.length === 0
+                  ? 'Agregá sellos para descargar'
+                  : 'Descargar programa'
+            }
           >
-            {program.isVerified ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+            <Download className="h-4 w-4" />
           </Button>
         </div>
       </CardContent>
-
-      {showContextMenu && (
-        <div
-          className="absolute top-2 right-2 z-50 bg-background border border-border rounded-md shadow-lg p-1 w-[210px]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-foreground hover:bg-muted h-8 text-xs"
-            disabled={busy || program.stamps.length === 0}
-            onClick={() => {
-              setShowContextMenu(false);
-              setShowFabMenu(true);
-            }}
-          >
-            <Factory className="h-3 w-3" />
-            Cambiar estado de fabricación
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-destructive hover:text-destructive hover:bg-destructive/10 h-8 text-xs"
-            disabled={locked || busy}
-            onClick={() => {
-              setShowContextMenu(false);
-              if (program.stamps.length === 0) {
-                setShowDeleteEmptyDialog(true);
-              } else {
-                setShowDeleteDialog(true);
-              }
-            }}
-          >
-            <Trash2 className="h-3 w-3" />
-            Eliminar programa
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-2 text-primary hover:text-primary hover:bg-primary/10 h-8 text-xs"
-            disabled={locked || busy}
-            onClick={() => {
-              setShowContextMenu(false);
-              setShowStampsDialog(true);
-            }}
-          >
-            <Plus className="h-3 w-3" />
-            Agregar sellos
-          </Button>
-
-          {canDownloadPackage(program.machine) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start gap-2 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950 h-8 text-xs"
-              disabled={busy || program.stamps.length === 0}
-              onClick={() => {
-                setShowContextMenu(false);
-                void run(() => onDownload(program.id), 'Paquete descargado');
-              }}
-            >
-              <Download className="h-3 w-3" />
-              Descargar programa
-            </Button>
-          )}
-        </div>
-      )}
 
       <StampsSelectionDialog
         isOpen={showStampsDialog}

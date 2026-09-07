@@ -546,6 +546,25 @@ export const updateProgram = async (
     await logProgramEvent(programId, updates.isVerified ? 'VERIFICADO' : 'DESVERIFICADO');
   }
 
+  if (updates.productionDate !== undefined) {
+    const { data: prog } = await supabase
+      .from('programa')
+      .select('nombre, fecha, maquina, cantidad_sellos, archivo_zip_url')
+      .eq('id', programId)
+      .maybeSingle();
+
+    if (prog) {
+      await maybeRenameProgram(
+        programId,
+        prog.nombre,
+        (prog as any).fecha,
+        (prog as any).maquina,
+        prog.cantidad_sellos || 0,
+      );
+      await markProgramDirtyAfterEdit(programId, Boolean((prog as any).archivo_zip_url));
+    }
+  }
+
   const result = await getProgramById(programId);
   if (!result) throw new ProgramServiceError('Programa no encontrado tras actualizar');
   return result;

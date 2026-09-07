@@ -78,8 +78,8 @@ export default function ProgramasPage() {
             onDownload={async (programId) => {
               await downloadPackage(programId);
             }}
-            onToggleVerified={async (programId, verified) => {
-              await updateProgram(programId, { isVerified: verified });
+            onUpdateProgram={async (programId, updates) => {
+              await updateProgram(programId, updates);
             }}
             onSetFabricationState={async (programId, state) => {
               await setFabricationStateForProgram(programId, state);
