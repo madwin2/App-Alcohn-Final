@@ -23,6 +23,9 @@ export function FabricationSizeDialogHost() {
           tipoPlanchuela: null,
           maxUsableMm: null,
           needsReview: true,
+          reviewReason: 'exceeds_tope',
+          measuredWidthMm: null,
+          measuredHeightMm: null,
         }
       }
       svgAspectRatio={payload?.svgAspectRatio ?? null}

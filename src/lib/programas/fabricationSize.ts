@@ -3,9 +3,8 @@ import { resolvePlanchuelaRef } from './material';
 
 /**
  * Tope máximo real de fabricación (mm) por planchuela — NO es un margen a restar siempre, es un
- * límite que la medida real puede no alcanzar sin problema. Valores confirmados a mano — ver
- * ANALISIS_MEDIDA_REAL_SELLOS.md sección 3. 63 queda afuera a propósito: no hay un tope
- * confirmado todavía. Planchuela 25: tope 24mm (25×25 → 24×24; 40×25 → proporcional ×24).
+ * límite que la medida real puede no alcanzar sin problema. 63 queda afuera a propósito.
+ * Planchuela 25: tope 24mm.
  */
 export const KNOWN_MAX_FABRICATION_MM: Partial<Record<PlanchuelaSize, number>> = {
   12: 11.5,
@@ -14,22 +13,54 @@ export const KNOWN_MAX_FABRICATION_MM: Partial<Record<PlanchuelaSize, number>> =
   38: 36.5,
 };
 
+/** Si el SVG se desvía ≥ este valor (mm) en cualquier eje respecto a lo pedido, hay que revisar. */
+export const LARGE_SIZE_DIFF_MM = 6;
+
+export type FabricationReviewReason = 'exceeds_tope' | 'large_diff';
+
 export interface FabricationSizeResolution {
   widthMm: number;
   heightMm: number;
   tipoPlanchuela: PlanchuelaSize | null;
   maxUsableMm: number | null;
-  /** true = la medida natural superaba el tope de la planchuela y hubo que recortarla — hace
-   *  falta que alguien lo confirme en el popup. false = ya entraba bien, se guarda directo. */
+  /** true = hace falta confirmar en el popup. false = se guarda directo. */
   needsReview: boolean;
+  reviewReason: FabricationReviewReason | null;
+  measuredWidthMm: number | null;
+  measuredHeightMm: number | null;
+}
+
+/** Sugiere la medida pedida; si el menor pedido supera el tope, lo recorta al tope manteniendo proporción. */
+function suggestionFromRequested(
+  requestedWidthMm: number,
+  requestedHeightMm: number,
+  maxUsableMm: number | null,
+): { widthMm: number; heightMm: number } {
+  let widthMm = requestedWidthMm;
+  let heightMm = requestedHeightMm;
+  if (maxUsableMm == null || widthMm <= 0 || heightMm <= 0) {
+    return { widthMm, heightMm };
+  }
+  const requestedMinor = Math.min(widthMm, heightMm);
+  if (requestedMinor <= maxUsableMm + 0.05) {
+    return { widthMm, heightMm };
+  }
+  const ratio = widthMm / heightMm;
+  if (widthMm <= heightMm) {
+    widthMm = maxUsableMm;
+    heightMm = widthMm / ratio;
+  } else {
+    heightMm = maxUsableMm;
+    widthMm = heightMm * ratio;
+  }
+  return { widthMm, heightMm };
 }
 
 /**
- * Resuelve la medida de fabricación: si la medida "natural" (la medida real del SVG si se pudo
- * medir, si no la medida pedida) ya entra dentro del tope de la planchuela que le corresponde por
- * la medida pedida, se acepta tal cual (needsReview: false). Si lo supera, se recorta el lado
- * menor al tope y se recalcula el lado mayor con la proporción real del SVG para no deformar el
- * diseño (needsReview: true, hay que confirmarlo a mano).
+ * Resuelve la medida de fabricación a partir de lo pedido y lo medido del SVG.
+ * - Si el SVG ya entra en el tope y no se desvía ≥6mm de lo pedido → guarda lo medido, sin popup.
+ * - Si supera el tope o hay diferencia grande → popup, sugerencia = medida pedida
+ *   (recortada al tope solo si lo pedido también lo supera).
  */
 export function resolveFabricationSize(
   requestedWidthMm: number,
@@ -44,32 +75,56 @@ export function resolveFabricationSize(
 
   const naturalWidth = measured?.widthMm ?? requestedWidthMm;
   const naturalHeight = measured?.heightMm ?? requestedHeightMm;
+  const measuredWidthMm = measured?.widthMm ?? null;
+  const measuredHeightMm = measured?.heightMm ?? null;
 
   if (naturalWidth <= 0 || naturalHeight <= 0) {
-    return { widthMm: requestedWidthMm, heightMm: requestedHeightMm, tipoPlanchuela, maxUsableMm, needsReview: false };
+    return {
+      widthMm: requestedWidthMm,
+      heightMm: requestedHeightMm,
+      tipoPlanchuela,
+      maxUsableMm,
+      needsReview: false,
+      reviewReason: null,
+      measuredWidthMm,
+      measuredHeightMm,
+    };
   }
 
   const naturalMinor = Math.min(naturalWidth, naturalHeight);
+  const exceedsTope = maxUsableMm != null && naturalMinor > maxUsableMm + 0.05;
+  const largeDiff =
+    measured != null &&
+    (Math.abs(naturalWidth - requestedWidthMm) >= LARGE_SIZE_DIFF_MM ||
+      Math.abs(naturalHeight - requestedHeightMm) >= LARGE_SIZE_DIFF_MM);
 
-  // Sin tope conocido, o la medida natural ya entra (con un margen chico de tolerancia por
-  // redondeo de la medición, no de negocio): se acepta tal cual, sin popup.
-  if (maxUsableMm == null || naturalMinor <= maxUsableMm + 0.05) {
-    return { widthMm: naturalWidth, heightMm: naturalHeight, tipoPlanchuela, maxUsableMm, needsReview: false };
+  if (!exceedsTope && !largeDiff) {
+    return {
+      widthMm: naturalWidth,
+      heightMm: naturalHeight,
+      tipoPlanchuela,
+      maxUsableMm,
+      needsReview: false,
+      reviewReason: null,
+      measuredWidthMm,
+      measuredHeightMm,
+    };
   }
 
-  // Supera el tope: recortar el eje menor al máximo y recalcular el mayor con la proporción real.
-  const ratio = naturalWidth / naturalHeight;
-  const widthIsMinor = naturalWidth <= naturalHeight;
-  if (widthIsMinor) {
-    const widthMm = maxUsableMm;
-    return { widthMm, heightMm: widthMm / ratio, tipoPlanchuela, maxUsableMm, needsReview: true };
-  }
-  const heightMm = maxUsableMm;
-  return { widthMm: heightMm * ratio, heightMm, tipoPlanchuela, maxUsableMm, needsReview: true };
+  const suggested = suggestionFromRequested(requestedWidthMm, requestedHeightMm, maxUsableMm);
+  return {
+    widthMm: suggested.widthMm,
+    heightMm: suggested.heightMm,
+    tipoPlanchuela,
+    maxUsableMm,
+    needsReview: true,
+    reviewReason: exceedsTope ? 'exceeds_tope' : 'large_diff',
+    measuredWidthMm,
+    measuredHeightMm,
+  };
 }
 
-/** Recalcula el eje libre a partir del que el usuario tocó a mano en el popup, respetando la
- *  proporción dada (width/height). Se usa solo cuando el popup está abierto. */
+/** Recalcula el eje libre a partir del que el usuario tocó a mano en el popup. */
 export function applyAspectRatioLock(
   changedAxis: 'width' | 'height',
   newValue: number,

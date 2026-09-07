@@ -35,8 +35,8 @@ export function VectorSizeConfirmDialog({
   const [locked, setLocked] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Ratio para el bloqueo: preferí la del SVG medido; si no hay, la de la sugerencia ya resuelta.
-  const lockRatio = svgAspectRatio ?? (resolution.heightMm > 0 ? resolution.widthMm / resolution.heightMm : 1);
+  // Bloquear proporción según la sugerencia (medida pedida / recorte), no según el SVG crudo.
+  const lockRatio = resolution.heightMm > 0 ? resolution.widthMm / resolution.heightMm : 1;
 
   useEffect(() => {
     if (open) {
@@ -101,16 +101,36 @@ export function VectorSizeConfirmDialog({
             <span className="font-medium text-foreground">
               {requestedWidthMm.toFixed(1)} × {requestedHeightMm.toFixed(1)} mm
             </span>
+            {resolution.measuredWidthMm != null && resolution.measuredHeightMm != null && (
+              <>
+                {' · '}Vector medido:{' '}
+                <span className="font-medium text-foreground">
+                  {resolution.measuredWidthMm.toFixed(1)} × {resolution.measuredHeightMm.toFixed(1)} mm
+                </span>
+              </>
+            )}
           </div>
 
-          <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
-            El vector mide más que el máximo de la planchuela {resolution.tipoPlanchuela}mm
-            ({resolution.maxUsableMm}mm) — se recortó al tope. Revisá si el resultado te sirve.
-          </div>
+          {resolution.reviewReason === 'large_diff' ? (
+            <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
+              El vector se desvía ≥6mm de la medida pedida — revisá la medida de fabricación.
+              Se sugiere la medida que pidió el cliente.
+            </div>
+          ) : (
+            <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
+              El vector supera el máximo de la planchuela {resolution.tipoPlanchuela}mm
+              ({resolution.maxUsableMm}mm). Se sugiere la medida pedida
+              {resolution.maxUsableMm != null &&
+              Math.min(requestedWidthMm, requestedHeightMm) > resolution.maxUsableMm + 0.05
+                ? ' recortada al tope'
+                : ''}
+              .
+            </div>
+          )}
 
           {svgAspectRatio == null && (
             <div className="text-xs rounded bg-muted px-3 py-2 text-muted-foreground">
-              No se pudo medir la proporción del SVG automáticamente; se usa la del pedido.
+              No se pudo medir el SVG automáticamente; se usa la medida pedida.
             </div>
           )}
 
