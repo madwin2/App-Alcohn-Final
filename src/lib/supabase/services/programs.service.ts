@@ -166,7 +166,8 @@ export type ProgramEventTipo =
   | 'DESCARGADO'
   | 'ESTADO_CAMBIADO'
   | 'SELLO_AGREGADO'
-  | 'SELLO_QUITADO';
+  | 'SELLO_QUITADO'
+  | 'ASPIRE_SUBIDO';
 
 export type ProgramEvent = {
   id: string;
@@ -305,6 +306,9 @@ function mapProgramaToProgram(
     dirty: Boolean((programa as any).dirty ?? true),
     archivoZipUrl: (programa as any).archivo_zip_url ?? null,
     archivoZipGeneradoAt: (programa as any).archivo_zip_generado_at ?? null,
+    archivoAspireUrl: (programa as any).archivo_aspire_url ?? null,
+    archivoAspireNombre: (programa as any).archivo_aspire_nombre ?? null,
+    archivoAspireSubidoAt: (programa as any).archivo_aspire_subido_at ?? null,
     createdAt: programa.created_at || new Date().toISOString(),
     lastUpdated: programa.updated_at || new Date().toISOString(),
     createdBy: 'system',
@@ -951,6 +955,91 @@ export const unlockProgram = async (programId: string): Promise<Program> => {
   await logProgramEvent(programId, 'DESBLOQUEADO');
   const result = await getProgramById(programId);
   if (!result) throw new ProgramServiceError('Programa no encontrado');
+  return result;
+};
+
+function safeAspireFilename(name: string): string {
+  const cleaned = name
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+  return cleaned || 'programa-verificado.crv3d';
+}
+
+/**
+ * Sube el .crv3d Aspire ya chequeado: marca el programa como verificado y bloqueado.
+ */
+export const uploadVerifiedAspire = async (
+  programId: string,
+  file: File,
+  userId?: string,
+): Promise<Program> => {
+  const program = await getProgramById(programId);
+  if (!program) throw new ProgramServiceError('Programa no encontrado');
+
+  const lower = file.name.toLowerCase();
+  if (!lower.endsWith('.crv3d') && !lower.endsWith('.crv') && !lower.endsWith('.zip')) {
+    throw new ProgramServiceError('Subí un archivo Aspire (.crv3d) o un ZIP.');
+  }
+
+  const safeName = safeAspireFilename(file.name);
+  const path = `${programId}/${Date.now()}-${safeName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('programas-aspire')
+    .upload(path, file, {
+      contentType: file.type || 'application/octet-stream',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw new ProgramServiceError(`No se pudo subir el Aspire: ${uploadError.message}`);
+  }
+
+  const { data: publicData } = supabase.storage.from('programas-aspire').getPublicUrl(path);
+  const url = publicData.publicUrl;
+  const now = new Date().toISOString();
+
+  // Borrar archivo anterior si existía (best effort)
+  if (program.archivoAspireUrl) {
+    try {
+      const match = program.archivoAspireUrl.match(/programas-aspire\/(.+)$/);
+      if (match?.[1]) {
+        await supabase.storage.from('programas-aspire').remove([decodeURIComponent(match[1])]);
+      }
+    } catch (e) {
+      console.warn('No se pudo borrar Aspire anterior:', e);
+    }
+  }
+
+  const { error } = await supabase
+    .from('programa')
+    .update({
+      archivo_aspire_url: url,
+      archivo_aspire_nombre: file.name,
+      archivo_aspire_subido_at: now,
+      verificado: true,
+      bloqueado: true,
+      bloqueado_at: now,
+      bloqueado_por: userId || null,
+      estado_programa: 'BLOQUEADO',
+      dirty: false,
+      updated_at: now,
+    } as any)
+    .eq('id', programId);
+
+  if (error) throw error;
+
+  await logProgramEvent(programId, 'ASPIRE_SUBIDO', {
+    nombre: file.name,
+    url,
+  });
+  await logProgramEvent(programId, 'VERIFICADO');
+  await logProgramEvent(programId, 'BLOQUEADO');
+
+  const result = await getProgramById(programId);
+  if (!result) throw new ProgramServiceError('Programa no encontrado tras subir Aspire');
   return result;
 };
 

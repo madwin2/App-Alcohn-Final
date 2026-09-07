@@ -148,6 +148,12 @@ export const usePrograms = () => {
     setPrograms((prev) => prev.map((p) => (p.id === programId ? updated : p)));
   };
 
+  const uploadVerifiedAspire = async (programId: string, file: File): Promise<Program> => {
+    const updated = await programsService.uploadVerifiedAspire(programId, file);
+    setPrograms((prev) => prev.map((p) => (p.id === programId ? updated : p)));
+    return updated;
+  };
+
   const downloadPackage = async (programId: string): Promise<void> => {
     await generateAndDownloadProgramPackage(programId);
     try {
@@ -180,6 +186,7 @@ export const usePrograms = () => {
     removeStamp,
     lockProgram,
     unlockProgram,
+    uploadVerifiedAspire,
     downloadPackage,
     getEligibleStamps,
   };

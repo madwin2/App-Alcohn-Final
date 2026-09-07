@@ -26,6 +26,7 @@ export default function ProgramasPage() {
     removeStamp,
     lockProgram,
     unlockProgram,
+    uploadVerifiedAspire,
     downloadPackage,
   } = usePrograms();
   const [showNewProgram, setShowNewProgram] = useState(false);
@@ -80,6 +81,9 @@ export default function ProgramasPage() {
             }}
             onUpdateProgram={async (programId, updates) => {
               await updateProgram(programId, updates);
+            }}
+            onUploadVerifiedAspire={async (programId, file) => {
+              await uploadVerifiedAspire(programId, file);
             }}
             onSetFabricationState={async (programId, state) => {
               await setFabricationStateForProgram(programId, state);

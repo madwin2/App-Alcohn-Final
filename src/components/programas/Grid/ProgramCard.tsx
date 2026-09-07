@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,9 @@ import {
   Download,
   AlertTriangle,
   History,
+  Upload,
+  FileCheck2,
+  Loader2,
 } from 'lucide-react';
 import { Program, ProgramLifecycleState, ProgramStamp, FabricationState } from '@/lib/types/index';
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
@@ -45,6 +48,7 @@ interface ProgramCardProps {
   onUnlock: (programId: string) => Promise<void>;
   onDownload: (programId: string) => Promise<void>;
   onUpdateProgram: (programId: string, updates: Partial<Program>) => Promise<void>;
+  onUploadVerifiedAspire: (programId: string, file: File) => Promise<void>;
   onSetFabricationState: (programId: string, state: FabricationState) => Promise<void>;
   onSetStampFabricationStates: (
     programId: string,
@@ -130,6 +134,10 @@ const eventLabel = (ev: ProgramEvent): string => {
       return `Se agregaron ${ev.detalle?.count ?? ''} sello(s)`;
     case 'SELLO_QUITADO':
       return 'Sello quitado';
+    case 'ASPIRE_SUBIDO':
+      return ev.detalle?.nombre
+        ? `Aspire verificado subido: ${String(ev.detalle.nombre)}`
+        : 'Aspire verificado subido';
     default:
       return ev.tipo;
   }
@@ -145,6 +153,7 @@ export function ProgramCard({
   onUnlock,
   onDownload,
   onUpdateProgram,
+  onUploadVerifiedAspire,
   onSetFabricationState,
   onSetStampFabricationStates,
 }: ProgramCardProps) {
@@ -162,6 +171,8 @@ export function ProgramCard({
   const [events, setEvents] = useState<ProgramEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [uploadingAspire, setUploadingAspire] = useState(false);
+  const aspireInputRef = useRef<HTMLInputElement | null>(null);
 
   const locked = isLockedState(program);
   const lengthLines = formatLengthByPlanchuela(program.lengthByPlanchuela);
@@ -252,6 +263,21 @@ export function ProgramCard({
       () => onUpdateProgram(program.id, { productionDate: next }),
       'Fecha actualizada',
     );
+  };
+
+  const handleAspireFile = async (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    setUploadingAspire(true);
+    try {
+      await run(
+        () => onUploadVerifiedAspire(program.id, file),
+        'Aspire verificado subido — programa bloqueado',
+      );
+    } finally {
+      setUploadingAspire(false);
+      if (aspireInputRef.current) aspireInputRef.current.value = '';
+    }
   };
 
   useEffect(() => {
@@ -370,6 +396,23 @@ export function ProgramCard({
               </div>
             )}
 
+            {program.archivoAspireUrl && (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-600 mt-2">
+                <FileCheck2 className="h-3.5 w-3.5 flex-shrink-0" />
+                <a
+                  href={program.archivoAspireUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate underline-offset-2 hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                  title={program.archivoAspireNombre || 'Aspire verificado'}
+                >
+                  Aspire verificado
+                  {program.archivoAspireNombre ? `: ${program.archivoAspireNombre}` : ''}
+                </a>
+              </div>
+            )}
+
             {program.description && (
               <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{program.description}</p>
             )}
@@ -446,6 +489,71 @@ export function ProgramCard({
                   <div className="text-muted-foreground">—</div>
                 )}
               </div>
+            </div>
+
+            <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+              <div className="text-sm font-medium text-foreground">Aspire verificado</div>
+              {program.archivoAspireUrl ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  >
+                    <FileCheck2 className="h-3 w-3 mr-1" />
+                    Subido
+                  </Badge>
+                  <a
+                    href={program.archivoAspireUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-emerald-600 underline truncate max-w-[220px]"
+                    title={program.archivoAspireNombre || undefined}
+                  >
+                    {program.archivoAspireNombre || 'Descargar Aspire'}
+                  </a>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    disabled={busy || uploadingAspire}
+                    onClick={() => aspireInputRef.current?.click()}
+                  >
+                    {uploadingAspire ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                    Reemplazar
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  disabled={busy || uploadingAspire}
+                  onClick={() => aspireInputRef.current?.click()}
+                >
+                  {uploadingAspire ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" />
+                  )}
+                  Subir Aspire chequeado
+                </Button>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                Al subir el .crv3d el programa queda verificado y bloqueado.
+              </p>
+              <input
+                ref={aspireInputRef}
+                type="file"
+                accept=".crv3d,.crv,.zip,application/octet-stream"
+                className="hidden"
+                onChange={(e) => handleAspireFile(e.target.files)}
+              />
             </div>
 
             <div className="space-y-2">

@@ -211,6 +211,9 @@ export interface Database {
           descripcion?: string | null;
           archivo_zip_url?: string | null;
           archivo_zip_generado_at?: string | null;
+          archivo_aspire_url?: string | null;
+          archivo_aspire_nombre?: string | null;
+          archivo_aspire_subido_at?: string | null;
           dirty?: boolean | null;
           estado_programa?: 'BORRADOR' | 'LISTO' | 'BLOQUEADO' | 'EN_FABRICACION' | 'FINALIZADO' | null;
           created_at: string | null;

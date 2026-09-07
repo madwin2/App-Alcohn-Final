@@ -294,6 +294,10 @@ export interface Program {
   dirty: boolean;
   archivoZipUrl?: string | null;
   archivoZipGeneradoAt?: string | null;
+  /** Aspire .crv3d chequeado/verificado subido al programa. */
+  archivoAspireUrl?: string | null;
+  archivoAspireNombre?: string | null;
+  archivoAspireSubidoAt?: string | null;
   createdAt: string;
   lastUpdated: string;
   createdBy: string;

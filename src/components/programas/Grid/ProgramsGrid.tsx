@@ -17,6 +17,7 @@ interface ProgramsGridProps {
   onUnlock: (programId: string) => Promise<void>;
   onDownload: (programId: string) => Promise<void>;
   onUpdateProgram: (programId: string, updates: Partial<Program>) => Promise<void>;
+  onUploadVerifiedAspire: (programId: string, file: File) => Promise<void>;
   onSetFabricationState: (programId: string, state: FabricationState) => Promise<void>;
   onSetStampFabricationStates: (
     programId: string,
@@ -34,6 +35,7 @@ export function ProgramsGrid({
   onUnlock,
   onDownload,
   onUpdateProgram,
+  onUploadVerifiedAspire,
   onSetFabricationState,
   onSetStampFabricationStates,
 }: ProgramsGridProps) {
@@ -49,6 +51,7 @@ export function ProgramsGrid({
     onUnlock,
     onDownload,
     onUpdateProgram,
+    onUploadVerifiedAspire,
     onSetFabricationState,
     onSetStampFabricationStates,
   };
