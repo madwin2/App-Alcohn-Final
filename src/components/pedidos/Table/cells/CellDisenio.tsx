@@ -1,4 +1,4 @@
-import { formatDimensions } from '@/lib/utils/format';
+import { formatDimensions, truncateToWords } from '@/lib/utils/format';
 import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
 
@@ -102,13 +102,13 @@ export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, o
       </p>
       {/* Solo mostrar medidas y notas si NO hay múltiples items */}
       {!hasMultipleItems && (
-        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground min-w-0">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
           {secondary && <span className="shrink-0">{secondary}</span>}
-          {showNotes && item.notes?.trim() ? (
-            <p className="text-blue-400 whitespace-pre-wrap break-words leading-snug">
-              {item.notes.trim()}
-            </p>
-          ) : null}
+          {showNotes && item.notes && (
+            <span className="text-blue-400 truncate min-w-0" title={item.notes}>
+              • {truncateToWords(item.notes, 5)}
+            </span>
+          )}
         </div>
       )}
     </div>

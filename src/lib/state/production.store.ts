@@ -110,7 +110,7 @@ const initialColumns: ProductionColumnState[] = [
   { id: 'tipo', size: 50, order: 4 },
   { id: 'disenio', size: 150, order: 5 },
   { id: 'medida', size: 80, order: 6 },
-  { id: 'notas', size: 100, order: 7 },
+  { id: 'notas', size: 220, order: 7 },
   { id: 'prioridad', size: 28, order: 8 },
   { id: 'fabricacion', size: 20, order: 9 },
   { id: 'vectorizado', size: 20, order: 10 },

@@ -118,7 +118,7 @@ export const createProductionColumns = ({
     id: 'notas',
     header: 'Notas',
     cell: ({ row }) => <CellNotas item={row.original} />,
-    size: 100,
+    size: 220,
     meta: { align: 'left' }
   },
   {

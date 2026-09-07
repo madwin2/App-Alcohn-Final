@@ -5,16 +5,13 @@ interface CellNotasProps {
 }
 
 export function CellNotas({ item }: CellNotasProps) {
-  if (!item.notes) {
+  if (!item.notes?.trim()) {
     return <div className="text-sm text-muted-foreground">-</div>;
   }
 
   return (
-    <div
-      className="text-sm text-gray-400 leading-tight line-clamp-3 break-words min-w-0 max-w-[220px] overflow-hidden"
-      title={item.notes}
-    >
-      {item.notes}
+    <div className="text-sm text-muted-foreground leading-snug whitespace-pre-wrap break-words min-w-0 py-1">
+      {item.notes.trim()}
     </div>
   );
 }
