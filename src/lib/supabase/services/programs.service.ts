@@ -588,6 +588,8 @@ export const deleteProgram = async (
   }
 
   const restoreMode = options?.restoreMode || 'PREVIOUS';
+  const releasedStampIds: string[] = [];
+
   for (const stamp of program.stamps) {
     await removeStampFromProgram(programId, stamp.id, {
       restoreMode,
@@ -595,6 +597,38 @@ export const deleteProgram = async (
       skipEditableCheck: true,
       skipDirty: true,
     });
+    releasedStampIds.push(stamp.id);
+  }
+
+  // Cascada: ningún sello liberado debe conservar la máquina del programa (C/G/XL).
+  if (releasedStampIds.length > 0) {
+    const { error: clearMachineErr } = await supabase
+      .from('sellos')
+      .update({
+        maquina: null,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .in('id', releasedStampIds)
+      .is('programa_id', null);
+
+    if (clearMachineErr) {
+      console.warn('No se pudo forzar limpieza de máquina al borrar programa:', clearMachineErr);
+    }
+  }
+
+  // Por si quedó algún vínculo (carrera / fallo parcial)
+  const { error: leftoverErr } = await supabase
+    .from('sellos')
+    .update({
+      programa_id: null,
+      maquina: null,
+      estado_aspire: null,
+      updated_at: new Date().toISOString(),
+    } as any)
+    .eq('programa_id', programId);
+
+  if (leftoverErr) {
+    console.warn('No se pudieron liberar sellos residuales del programa:', leftoverErr);
   }
 
   if (program.archivoZipUrl) {

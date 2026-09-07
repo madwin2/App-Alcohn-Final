@@ -131,6 +131,7 @@ export function ProgramCard({
   const [showStampsDialog, setShowStampsDialog] = useState(false);
   const [stampToRemove, setStampToRemove] = useState<ProgramStamp | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showDeleteEmptyDialog, setShowDeleteEmptyDialog] = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [pendingFabState, setPendingFabState] = useState<FabricationState | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -213,6 +214,11 @@ export function ProgramCard({
   const handleDeleteConfirm = (choice: RemoveStampChoice) => {
     void run(() => onDelete(program.id, choice), 'Programa eliminado');
     setShowDeleteDialog(false);
+  };
+
+  const handleDeleteEmptyConfirm = () => {
+    void run(() => onDelete(program.id, { mode: 'PREVIOUS' }), 'Programa eliminado');
+    setShowDeleteEmptyDialog(false);
   };
 
   useEffect(() => {
@@ -495,7 +501,11 @@ export function ProgramCard({
             disabled={locked || busy}
             onClick={() => {
               setShowContextMenu(false);
-              setShowDeleteDialog(true);
+              if (program.stamps.length === 0) {
+                setShowDeleteEmptyDialog(true);
+              } else {
+                setShowDeleteDialog(true);
+              }
             }}
           >
             <Trash2 className="h-3 w-3" />
@@ -558,14 +568,20 @@ export function ProgramCard({
         onOpenChange={setShowDeleteDialog}
         bulkCount={program.stamps.length || 1}
         title="Eliminar programa"
-        description={
-          program.stamps.length === 0
-            ? `¿Eliminar «${program.name}»? Esta acción no se puede deshacer.`
-            : `¿Eliminar «${program.name}»? Se liberarán ${program.stamps.length} sello${program.stamps.length === 1 ? '' : 's'}. Elegí qué estado de fabricación dejar en cada uno.`
-        }
+        description={`¿Eliminar «${program.name}»? Se liberarán ${program.stamps.length} sello${program.stamps.length === 1 ? '' : 's'} y se quitará la máquina asignada. Elegí qué estado de fabricación dejar en cada uno.`}
         confirmLabel="Eliminar"
         confirmVariant="destructive"
         onConfirm={handleDeleteConfirm}
+      />
+
+      <ConfirmDialog
+        open={showDeleteEmptyDialog}
+        onOpenChange={setShowDeleteEmptyDialog}
+        title="Eliminar programa"
+        description={`¿Eliminar «${program.name}»? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        variant="destructive"
+        onConfirm={handleDeleteEmptyConfirm}
       />
 
       <ConfirmDialog
