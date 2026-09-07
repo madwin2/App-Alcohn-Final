@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/components/ui/use-toast';
 import { Program, ProgramMachineType, ProgramStamp } from '@/lib/types/index';
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
-import { Plus } from 'lucide-react';
+import { StampThumb } from '../StampThumb';
+import { Plus, X } from 'lucide-react';
 import { DatePicker } from '@/components/ui/date-picker';
 import { ProgramServiceError } from '@/lib/supabase/services/programs.service';
 import { generateProgramName } from '@/lib/programas/programName';
@@ -86,12 +87,28 @@ export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgra
     ),
   );
 
+  const openStampsDialog = () => {
+    if (!machine) {
+      toast({
+        title: 'Elegí una máquina',
+        description: 'Primero seleccioná la máquina del programa.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setShowStampsDialog(true);
+  };
+
   const handleAddStamps = (stamps: ProgramStamp[]) => {
     setSelectedStamps((prev) => {
       const ids = new Set(prev.map((s) => s.id));
       return [...prev, ...stamps.filter((s) => !ids.has(s.id))];
     });
     setShowStampsDialog(false);
+  };
+
+  const handleRemoveStamp = (stampId: string) => {
+    setSelectedStamps((prev) => prev.filter((s) => s.id !== stampId));
   };
 
   const onSubmit = async (data: ProgramFormData) => {
@@ -149,7 +166,10 @@ export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgra
           <Label htmlFor="machine">Máquina</Label>
           <Select
             value={watch('machine')}
-            onValueChange={(value) => setValue('machine', value as ProgramMachineType, { shouldValidate: true })}
+            onValueChange={(value) => {
+              setValue('machine', value as ProgramMachineType, { shouldValidate: true });
+              setSelectedStamps([]);
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="Selecciona la máquina" />
@@ -190,28 +210,44 @@ export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgra
 
         <div className="space-y-2">
           <Label>Sellos</Label>
+
+          {selectedStamps.length > 0 && (
+            <div className="flex flex-wrap gap-2 rounded-md border border-border p-2">
+              {selectedStamps.map((stamp) => (
+                <div
+                  key={stamp.id}
+                  className="group relative"
+                  title={
+                    stamp.notes?.trim()
+                      ? `${stamp.designName} — ${stamp.notes.trim()}`
+                      : stamp.designName
+                  }
+                >
+                  <StampThumb stamp={stamp} className="w-14 h-14" />
+                  <button
+                    type="button"
+                    aria-label={`Quitar ${stamp.designName}`}
+                    className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
+                    onClick={() => handleRemoveStamp(stamp.id)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              if (!machine) {
-                toast({
-                  title: 'Elegí una máquina',
-                  description: 'Primero seleccioná la máquina del programa.',
-                  variant: 'destructive',
-                });
-                return;
-              }
-              setShowStampsDialog(true);
-            }}
+            onClick={openStampsDialog}
             className="w-full justify-start"
             disabled={!machine}
           >
             <Plus className="h-4 w-4 mr-2" />
-            {selectedStamps.length > 0
-              ? `${selectedStamps.length} sello${selectedStamps.length !== 1 ? 's' : ''} seleccionado${selectedStamps.length !== 1 ? 's' : ''}`
-              : 'Agregar sellos al programa'}
+            {selectedStamps.length > 0 ? 'Agregar otros sellos' : 'Agregar sellos al programa'}
           </Button>
+
           {selectedStamps.length > 0 && (
             <button
               type="button"
@@ -221,6 +257,7 @@ export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgra
               Limpiar selección
             </button>
           )}
+
           {materialPreview.length > 0 && (
             <div className="text-xs text-muted-foreground space-y-0.5 pt-1">
               <div className="font-medium text-foreground">Largo estimado:</div>
@@ -249,6 +286,14 @@ export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgra
           programId="new"
           machine={machine}
           excludeStampIds={selectedStamps.map((s) => s.id)}
+          initialLengthByPlanchuela={accumulateLengthByPlanchuela(
+            selectedStamps.map((s) => ({
+              anchoRealCm: s.anchoRealCm,
+              largoRealCm: s.largoRealCm,
+              tipoPlanchuela: s.tipoPlanchuela,
+            })),
+            DEFAULT_PERDIDA_CORTE_CM,
+          )}
         />
       )}
     </form>
