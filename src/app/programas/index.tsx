@@ -20,6 +20,7 @@ export default function ProgramasPage() {
     createProgram,
     updateProgram,
     setFabricationStateForProgram,
+    setStampFabricationStates,
     deleteProgram,
     addStamps,
     removeStamp,
@@ -82,6 +83,9 @@ export default function ProgramasPage() {
             }}
             onSetFabricationState={async (programId, state) => {
               await setFabricationStateForProgram(programId, state);
+            }}
+            onSetStampFabricationStates={async (programId, assignments) => {
+              await setStampFabricationStates(programId, assignments);
             }}
           />
         )}

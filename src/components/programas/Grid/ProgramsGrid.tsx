@@ -18,6 +18,10 @@ interface ProgramsGridProps {
   onDownload: (programId: string) => Promise<void>;
   onToggleVerified: (programId: string, verified: boolean) => Promise<void>;
   onSetFabricationState: (programId: string, state: FabricationState) => Promise<void>;
+  onSetStampFabricationStates: (
+    programId: string,
+    assignments: { stampId: string; state: FabricationState }[],
+  ) => Promise<void>;
 }
 
 export function ProgramsGrid({
@@ -31,6 +35,7 @@ export function ProgramsGrid({
   onDownload,
   onToggleVerified,
   onSetFabricationState,
+  onSetStampFabricationStates,
 }: ProgramsGridProps) {
   const { getFilteredPrograms, viewMode } = useProgramsStore();
   const filteredPrograms = getFilteredPrograms(programs);
@@ -45,6 +50,7 @@ export function ProgramsGrid({
     onDownload,
     onToggleVerified,
     onSetFabricationState,
+    onSetStampFabricationStates,
   };
 
   if (filteredPrograms.length === 0) {

@@ -17,6 +17,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   variant?: 'default' | 'destructive';
   onConfirm: () => void;
+  /** Si se pasa, el botón cancelar ejecuta esta acción (además de cerrar). */
+  onCancel?: () => void;
 }
 
 export function ConfirmDialog({
@@ -28,6 +30,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancelar',
   variant = 'default',
   onConfirm,
+  onCancel,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -37,7 +40,13 @@ export function ConfirmDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (onCancel) onCancel();
+              else onOpenChange(false);
+            }}
+          >
             {cancelLabel}
           </Button>
           <Button

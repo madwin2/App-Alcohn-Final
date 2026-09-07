@@ -573,6 +573,40 @@ export const setFabricationStateForProgram = async (
   return result;
 };
 
+/** Asigna estado de fabricación por sello (p.ej. Hecho + algunos Rehacer/Retocar). */
+export const setStampFabricationStates = async (
+  programId: string,
+  assignments: { stampId: string; state: FabricationState }[],
+): Promise<Program> => {
+  if (!assignments.length) {
+    const p = await getProgramById(programId);
+    if (!p) throw new ProgramServiceError('Programa no encontrado');
+    return p;
+  }
+
+  const now = new Date().toISOString();
+  for (const { stampId, state } of assignments) {
+    const { error } = await supabase
+      .from('sellos')
+      .update({
+        estado_fabricacion: mapFabricationStateToDB(state),
+        updated_at: now,
+      } as any)
+      .eq('id', stampId)
+      .eq('programa_id', programId);
+
+    if (error) throw error;
+  }
+
+  await logProgramEvent(programId, 'ESTADO_CAMBIADO', {
+    porSello: assignments.map((a) => ({ stampId: a.stampId, estado: a.state })),
+  });
+
+  const result = await getProgramById(programId);
+  if (!result) throw new ProgramServiceError('Programa no encontrado');
+  return result;
+};
+
 export type RemoveStampRestoreMode = 'PREVIOUS' | 'NEW';
 
 export const deleteProgram = async (

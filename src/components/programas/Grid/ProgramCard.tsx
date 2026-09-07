@@ -7,6 +7,7 @@ import { Program, ProgramLifecycleState, ProgramStamp, FabricationState } from '
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
 import { RemoveStampDialog, RemoveStampChoice } from '../RemoveStamp/RemoveStampDialog';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { DoneReviewDialog } from '../DoneReview/DoneReviewDialog';
 import { formatLengthByPlanchuela } from '@/lib/programas/material';
 import { StampThumb } from '../StampThumb';
 import { canDownloadPackage, ProgramServiceError, getProgramEvents, ProgramEvent } from '@/lib/supabase/services/programs.service';
@@ -28,6 +29,10 @@ interface ProgramCardProps {
   onDownload: (programId: string) => Promise<void>;
   onToggleVerified: (programId: string, verified: boolean) => Promise<void>;
   onSetFabricationState: (programId: string, state: FabricationState) => Promise<void>;
+  onSetStampFabricationStates: (
+    programId: string,
+    assignments: { stampId: string; state: FabricationState }[],
+  ) => Promise<void>;
 }
 
 const lifecycleLabel = (estado: ProgramLifecycleState, dirty: boolean): string => {
@@ -124,6 +129,7 @@ export function ProgramCard({
   onDownload,
   onToggleVerified,
   onSetFabricationState,
+  onSetStampFabricationStates,
 }: ProgramCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -134,6 +140,8 @@ export function ProgramCard({
   const [showDeleteEmptyDialog, setShowDeleteEmptyDialog] = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [pendingFabState, setPendingFabState] = useState<FabricationState | null>(null);
+  const [showDoneAskDialog, setShowDoneAskDialog] = useState(false);
+  const [showDoneReviewDialog, setShowDoneReviewDialog] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [events, setEvents] = useState<ProgramEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
@@ -185,6 +193,10 @@ export function ProgramCard({
     if (busy || program.stamps.length === 0) return;
     setShowFabMenu(false);
     setShowContextMenu(false);
+    if (state === 'HECHO') {
+      setShowDoneAskDialog(true);
+      return;
+    }
     setPendingFabState(state);
   };
 
@@ -340,20 +352,32 @@ export function ProgramCard({
               <h4 className="text-sm font-medium text-foreground">Sellos:</h4>
               <div className="flex gap-2 flex-wrap">
                 {program.stamps.map((stamp) => (
-                  <button
+                  <div
                     key={stamp.id}
-                    type="button"
-                    className="rounded hover:ring-2 hover:ring-destructive/60 disabled:hover:ring-0"
-                    title={`${stamp.designName} — click para quitar`}
-                    disabled={locked || busy}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (locked) return;
-                      setStampToRemove(stamp);
-                    }}
+                    className="group relative"
+                    title={
+                      stamp.notes?.trim()
+                        ? `${stamp.designName} — ${stamp.notes.trim()}`
+                        : stamp.designName
+                    }
+                    onClick={(e) => e.stopPropagation()}
                   >
                     <StampThumb stamp={stamp} className="w-14 h-14" />
-                  </button>
+                    {!locked && (
+                      <button
+                        type="button"
+                        aria-label={`Quitar ${stamp.designName}`}
+                        className="absolute -top-1.5 -left-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm disabled:hidden"
+                        disabled={busy}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStampToRemove(stamp);
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 ))}
                 {program.stamps.length === 0 && (
                   <span className="text-xs text-muted-foreground">Sin sellos</span>
@@ -591,6 +615,39 @@ export function ProgramCard({
         description="¿Desbloquear el programa? Podrá editarse de nuevo."
         confirmLabel="Desbloquear"
         onConfirm={() => void run(() => onUnlock(program.id), 'Programa desbloqueado')}
+      />
+
+      <ConfirmDialog
+        open={showDoneAskDialog}
+        onOpenChange={setShowDoneAskDialog}
+        title="¿Algún sello salió mal?"
+        description="¿Hay que rehacer o retocar alguno de este programa?"
+        confirmLabel="Sí"
+        cancelLabel="No"
+        onConfirm={() => {
+          setShowDoneAskDialog(false);
+          setShowDoneReviewDialog(true);
+        }}
+        onCancel={() => {
+          setShowDoneAskDialog(false);
+          void run(
+            () => onSetFabricationState(program.id, 'HECHO'),
+            'Sellos marcados como Hecho',
+          );
+        }}
+      />
+
+      <DoneReviewDialog
+        open={showDoneReviewDialog}
+        onOpenChange={setShowDoneReviewDialog}
+        stamps={program.stamps}
+        programName={program.name}
+        onConfirm={(assignments) => {
+          void run(
+            () => onSetStampFabricationStates(program.id, assignments),
+            'Estados de fabricación actualizados',
+          );
+        }}
       />
 
       <ConfirmDialog

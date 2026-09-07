@@ -23,6 +23,16 @@ function slugifyProgramName(name: string): string {
     .slice(0, 60) || 'programa';
 }
 
+/** Nombre de archivo seguro para el ZIP / .crv3d (conserva el nombre del programa). */
+function safeDownloadBasename(name: string): string {
+  const cleaned = name
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+  return cleaned || 'programa';
+}
+
 function stampLayer(stamp: ProgramStamp): string {
   return stamp.stampType || 'CLASICO';
 }
@@ -144,11 +154,18 @@ export async function generateAndDownloadProgramPackage(programId: string): Prom
 
   zip.file('manifest.lua', buildManifestLua(program, vectorMeta));
 
+  const downloadBase = safeDownloadBasename(program.name);
+  const crv3dName = `${downloadBase}.crv3d`;
+
   const baseUrl = await getBaseFileUrl(program.machine);
   if (baseUrl) {
     try {
       const baseBytes = await fetchBinary(baseUrl);
-      zip.file('programa.crv3d', baseBytes);
+      // Nombre del programa (para Aspire) + alias fijo por compatibilidad con gadgets/docs.
+      zip.file(crv3dName, baseBytes);
+      if (crv3dName !== 'programa.crv3d') {
+        zip.file('programa.crv3d', baseBytes);
+      }
     } catch (e) {
       failures.push(
         `Archivo base .crv3d: ${e instanceof Error ? e.message : 'no se pudo descargar'}`,
@@ -182,8 +199,8 @@ export async function generateAndDownloadProgramPackage(programId: string): Prom
   }
 
   const blob = await zip.generateAsync({ type: 'blob' });
-  const filename = `programa-${slugifyProgramName(program.name)}.zip`;
-  const storagePath = `${program.id}/${Date.now()}.zip`;
+  const filename = `${downloadBase}.zip`;
+  const storagePath = `${program.id}/${slugifyProgramName(program.name)}-${Date.now()}.zip`;
 
   const { error: uploadError } = await supabase.storage
     .from('programas-zip')
