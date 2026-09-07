@@ -16,7 +16,7 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, C
 import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
 import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
 import { measureSvgFile } from '@/lib/utils/svgBoundingBox';
-import { suggestFabricationSize } from '@/lib/programas/fabricationSize';
+import { resolveFabricationSize } from '@/lib/programas/fabricationSize';
 import { useFabricationSizeDialogStore } from '@/lib/state/fabricationSizeDialog.store';
 
 interface CellVectorProps {
@@ -145,27 +145,42 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
 
       if (fileExtension === '.svg') {
         const measurement = await measureSvgFile(file);
-        const suggestion = suggestFabricationSize(
+        const resolution = resolveFabricationSize(
           item.requestedWidthMm,
           item.requestedHeightMm,
-          measurement?.aspectRatio ?? null,
+          measurement ? { widthMm: measurement.widthMm, heightMm: measurement.heightMm } : null,
         );
         const orderId = order.id;
         const itemId = item.id;
-        openFabricationSizeDialog({
-          fileName: file.name,
-          previewUrl: result.previewUrl ?? result.originalUrl,
-          requestedWidthMm: item.requestedWidthMm,
-          requestedHeightMm: item.requestedHeightMm,
-          suggestion,
-          svgAspectRatio: measurement?.aspectRatio ?? null,
-          onConfirm: async ({ widthMm, heightMm }) => {
-            if (!onUpdate) return;
-            await onUpdate(orderId, {
-              items: [{ id: itemId, fabricationWidthMm: widthMm, fabricationHeightMm: heightMm }],
-            });
-          },
-        });
+
+        if (!resolution.needsReview) {
+          await onUpdate(orderId, {
+            items: [{
+              id: itemId,
+              fabricationWidthMm: resolution.widthMm,
+              fabricationHeightMm: resolution.heightMm,
+            }],
+          });
+          toast({
+            title: 'Medida OK',
+            description: 'No hace falta ajustar — el vector ya entra bien en la planchuela.',
+          });
+        } else {
+          openFabricationSizeDialog({
+            fileName: file.name,
+            previewUrl: result.previewUrl ?? result.originalUrl,
+            requestedWidthMm: item.requestedWidthMm,
+            requestedHeightMm: item.requestedHeightMm,
+            resolution,
+            svgAspectRatio: measurement?.aspectRatio ?? null,
+            onConfirm: async ({ widthMm, heightMm }) => {
+              if (!onUpdate) return;
+              await onUpdate(orderId, {
+                items: [{ id: itemId, fabricationWidthMm: widthMm, fabricationHeightMm: heightMm }],
+              });
+            },
+          });
+        }
       }
     } catch (error) {
       console.error('Error uploading file:', error);

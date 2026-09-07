@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { applyAspectRatioLock } from '@/lib/programas/fabricationSize';
-import type { FabricationSizeSuggestion } from '@/lib/programas/fabricationSize';
+import type { FabricationSizeResolution } from '@/lib/programas/fabricationSize';
 
 interface VectorSizeConfirmDialogProps {
   open: boolean;
@@ -14,7 +14,7 @@ interface VectorSizeConfirmDialogProps {
   previewUrl?: string | null;
   requestedWidthMm: number;
   requestedHeightMm: number;
-  suggestion: FabricationSizeSuggestion;
+  resolution: FabricationSizeResolution; // ya viene con needsReview: true
   svgAspectRatio: number | null;
   onConfirm: (result: { widthMm: number; heightMm: number }) => void | Promise<void>;
 }
@@ -26,26 +26,25 @@ export function VectorSizeConfirmDialog({
   previewUrl,
   requestedWidthMm,
   requestedHeightMm,
-  suggestion,
+  resolution,
   svgAspectRatio,
   onConfirm,
 }: VectorSizeConfirmDialogProps) {
-  const [widthMm, setWidthMm] = useState(suggestion.widthMm);
-  const [heightMm, setHeightMm] = useState(suggestion.heightMm);
+  const [widthMm, setWidthMm] = useState(resolution.widthMm);
+  const [heightMm, setHeightMm] = useState(resolution.heightMm);
   const [locked, setLocked] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Ratio que se usa para el bloqueo: preferí la del SVG medido; si no hay, la de la sugerencia
-  // (que en el peor caso ya cae en la del pedido).
-  const lockRatio = svgAspectRatio ?? (suggestion.heightMm > 0 ? suggestion.widthMm / suggestion.heightMm : 1);
+  // Ratio para el bloqueo: preferí la del SVG medido; si no hay, la de la sugerencia ya resuelta.
+  const lockRatio = svgAspectRatio ?? (resolution.heightMm > 0 ? resolution.widthMm / resolution.heightMm : 1);
 
   useEffect(() => {
     if (open) {
-      setWidthMm(suggestion.widthMm);
-      setHeightMm(suggestion.heightMm);
+      setWidthMm(resolution.widthMm);
+      setHeightMm(resolution.heightMm);
       setLocked(true);
     }
-  }, [open, suggestion.widthMm, suggestion.heightMm]);
+  }, [open, resolution.widthMm, resolution.heightMm]);
 
   const handleWidthChange = (value: number) => {
     if (locked) {
@@ -104,17 +103,10 @@ export function VectorSizeConfirmDialog({
             </span>
           </div>
 
-          {suggestion.marginAppliedMm != null ? (
-            <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
-              Sugerido según planchuela {suggestion.tipoPlanchuela}mm: se descontó {suggestion.marginAppliedMm}mm de margen.
-            </div>
-          ) : (
-            <div className="text-xs rounded bg-muted px-3 py-2 text-muted-foreground">
-              {suggestion.tipoPlanchuela
-                ? `Sin margen conocido para planchuela ${suggestion.tipoPlanchuela}mm — revisá la medida a mano.`
-                : 'No se pudo determinar la planchuela — revisá la medida a mano.'}
-            </div>
-          )}
+          <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
+            El vector mide más que el máximo de la planchuela {resolution.tipoPlanchuela}mm
+            ({resolution.maxUsableMm}mm) — se recortó al tope. Revisá si el resultado te sirve.
+          </div>
 
           {svgAspectRatio == null && (
             <div className="text-xs rounded bg-muted px-3 py-2 text-muted-foreground">

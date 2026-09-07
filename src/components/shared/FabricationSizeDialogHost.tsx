@@ -16,12 +16,13 @@ export function FabricationSizeDialogHost() {
       previewUrl={payload?.previewUrl}
       requestedWidthMm={payload?.requestedWidthMm ?? 0}
       requestedHeightMm={payload?.requestedHeightMm ?? 0}
-      suggestion={
-        payload?.suggestion ?? {
+      resolution={
+        payload?.resolution ?? {
           widthMm: 0,
           heightMm: 0,
           tipoPlanchuela: null,
-          marginAppliedMm: null,
+          maxUsableMm: null,
+          needsReview: true,
         }
       }
       svgAspectRatio={payload?.svgAspectRatio ?? null}

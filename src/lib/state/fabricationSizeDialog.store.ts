@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import type { FabricationSizeSuggestion } from '@/lib/programas/fabricationSize';
+import type { FabricationSizeResolution } from '@/lib/programas/fabricationSize';
 
 export interface FabricationSizeDialogPayload {
   fileName: string;
   previewUrl?: string;
   requestedWidthMm: number;
   requestedHeightMm: number;
-  suggestion: FabricationSizeSuggestion;
+  resolution: FabricationSizeResolution;
   svgAspectRatio: number | null;
   onConfirm: (result: { widthMm: number; heightMm: number }) => void | Promise<void>;
 }

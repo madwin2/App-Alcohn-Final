@@ -1,8 +1,9 @@
 # Plan de implementación: popup de medida de fabricación al subir el SVG
 
 > Contexto y justificación completa en [`ANALISIS_MEDIDA_REAL_SELLOS.md`](ANALISIS_MEDIDA_REAL_SELLOS.md)
-> (léelo primero si no lo leíste — este documento asume la Opción C de ahí: campo nuevo
-> `ancho_fabricacion_mm`/`largo_fabricacion_mm`, sugerido automáticamente y confirmado a mano).
+> (léelo primero si no lo leíste). Este documento reemplaza una versión anterior del plan que tenía
+> mal el modelo de la corrección — ver la nota de la sección 2 antes de implementar si ya se llegó
+> a armar algo con la versión vieja.
 
 Este documento es una guía de implementación paso a paso, con rutas de archivo, líneas y código
 concreto, para que se ejecute directamente (por ejemplo con Cursor) sin tener que rediscutir el
@@ -16,37 +17,69 @@ browser) en la celda de vector de un sello, tanto en **Pedidos**
 (`src/components/produccion/Table/cells/CellVector.tsx`):
 
 1. Se sube el archivo igual que hoy (sin cambios en esa parte).
-2. Se mide el bounding box real del SVG en el navegador (ancho/alto en mm y su proporción).
-3. Se abre un popup que:
-   - Muestra el vector y la medida pedida (la que cargó el pedido, de referencia).
-   - Sugiere una medida de fabricación: si la planchuela que le corresponde a ese sello tiene un
-     margen conocido (12, 19 o 38 — ver tabla en `ANALISIS_MEDIDA_REAL_SELLOS.md`), recorta el eje
-     que queda contra el ancho fijo de la planchuela por ese margen, y calcula el otro eje a partir
-     de la **proporción real del SVG medido** (así el sello no queda deformado). Si no hay margen
-     conocido (planchuela 25/63, o no se pudo determinar planchuela), sugiere la medida pedida tal
-     cual.
-   - Tiene dos campos editables, Ancho (mm) y Alto (mm), con la proporción bloqueada: cambiar uno
-     recalcula el otro automáticamente usando la proporción del SVG.
-   - Al confirmar, guarda `ancho_fabricacion_mm`/`largo_fabricacion_mm` en el sello. Al cancelar,
-     no se guarda nada (el sello sigue usando la medida pedida como fallback, comportamiento
-     actual sin cambios).
-4. `packageZip.ts` (el que arma el manifest para el Lua de Aspire) empieza a preferir
+2. Se mide el bounding box real del SVG en el navegador (ancho y alto en mm, tal cual quedó
+   dibujado — no solo la proporción).
+3. Se decide si la medida real del vector ya entra dentro de lo que permite la planchuela que le
+   corresponde a ese sello (ver sección 2 — es un **tope máximo**, no un descuento fijo):
+   - **Si ya entra sin problema** (o no hay tope conocido para esa planchuela): no se abre ningún
+     popup. Se guarda esa medida directamente como `ancho_fabricacion_mm`/`largo_fabricacion_mm` y
+     aparece un toast chico abajo a la derecha (el mismo componente de toasts que ya usa el resto
+     de la app) diciendo algo como *"Medida OK — no hace falta ajustar"*. Cero pasos extra para el
+     caso común.
+   - **Si excede el tope de la planchuela**: recién ahí se abre un popup, prellenado con la medida
+     recortada al tope (calculando el otro eje con la proporción real del SVG para no deformar el
+     diseño), con dos campos editables (Ancho/Alto en mm) con la proporción bloqueada — cambiar uno
+     recalcula el otro. El usuario puede aceptar la sugerencia, editarla a mano (con opción de
+     desbloquear la proporción), o usar la medida pedida tal cual.
+4. Al confirmar (ya sea el guardado automático o el popup), se guarda
+   `ancho_fabricacion_mm`/`largo_fabricacion_mm` en el sello. Si el popup se cancela, no se guarda
+   nada (el sello sigue usando la medida pedida como fallback, comportamiento actual sin cambios).
+5. `packageZip.ts` (el que arma el manifest para el Lua de Aspire) empieza a preferir
    `ancho_fabricacion_mm`/`largo_fabricacion_mm` sobre `ancho_real`/`largo_real` cuando existan.
 
 **El Lua (`aspire-gadgets/ArmarPrograma_*.lua`) no se toca.** Sigue leyendo `ancho_mm`/`largo_mm`
 del manifest tal cual — solo cambia qué campo de la base alimenta esos dos números.
 
-## 2. Diseño de la sugerencia automática (por qué así)
+## 2. Diseño de la corrección (importante — modelo correcto)
 
-Del análisis: 40×40 (planchuela 38) pasa a 36.5×36.5 — **ambos** ejes se recortan por igual porque
-el diseño es cuadrado. 50×20 (planchuela 19) pasa a 50×18 — solo el eje menor (20, el que queda
-contra el ancho fijo de la plancha) se recorta; el eje mayor (50, el largo a lo largo de la barra)
-queda igual. Esto significa que el margen conocido no se resta simétricamente a ambos ejes: se
-resta al eje que coincide con el **lado menor** (`min(ancho, largo)`, el mismo criterio que ya usa
-`resolvePlanchuelaRef` en `src/lib/programas/material.ts`), y el otro eje se recalcula a partir de
-la proporción real del vector para no deformar el diseño. Por eso la sugerencia automática y el
-bloqueo de proporción del popup son, en el fondo, la misma función aplicada dos veces (una al
-abrir el popup con el valor sugerido, otra en vivo cuando el usuario edita a mano).
+**Esto no es un margen fijo que se resta siempre.** Es un **tope máximo** por planchuela: la
+medida real de fabricación puede ser menor a ese tope sin ningún problema, y ahí no hay que tocar
+nada. Solo hace falta recortar cuando la medida real **superaría** el tope físico de la planchuela.
+
+Ejemplo del caso que motivó la corrección: un sello pedido como 50×10mm cuyo vector mide en
+realidad 50×8.8mm. La planchuela que le corresponde por la medida pedida (minor = 10) es la de
+12mm, cuyo tope real es 11.5mm (ver tabla abajo). Como 8.8mm ya está por debajo de 11.5mm, **no
+hace falta ajustar nada** — la medida del vector ya es válida tal cual. Antes el plan (mal) restaba
+un margen fijo de la medida pedida sin importar si hacía falta o no, lo que en este caso hubiese
+dado un resultado incorrecto.
+
+Topes conocidos (medida máxima real de fabricación, en mm, por planchuela — confirmados a mano por
+ahora, ver `ANALISIS_MEDIDA_REAL_SELLOS.md` sección 3):
+
+| `tipo_planchuela` | Tope máximo real (mm) |
+|---|---|
+| 12 | 11.5 |
+| 19 | 18 |
+| 38 | 36.5 |
+| 25 | sin confirmar — no se aplica tope, se sugiere la medida tal cual |
+| 63 | sin confirmar — no se aplica tope, se sugiere la medida tal cual |
+
+Algoritmo (reemplaza por completo al de la versión anterior de este plan):
+
+1. A partir de la medida **pedida**, determinar `tipo_planchuela` (igual que hoy,
+   `resolvePlanchuelaRef` en `src/lib/programas/material.ts` — usa el lado menor de la medida
+   pedida, eso no cambia).
+2. Buscar el tope conocido para esa planchuela (tabla arriba). Si no hay tope conocido → no hay
+   nada que chequear, se acepta la medida "natural" (ver punto 3) tal cual, sin popup.
+3. La medida "natural" es la que se **midió del SVG** si se pudo medir; si no se pudo medir (EPS
+   no aplica igual, pero un SVG raro que no se puede parsear sí puede pasar), la medida natural cae
+   de vuelta a la medida pedida.
+4. Si el lado menor de la medida natural es **menor o igual** al tope → esa es la medida de
+   fabricación, se guarda directo, sin popup, con el toast de "Medida OK".
+5. Si el lado menor de la medida natural **supera** el tope → hay que recortarlo al tope, y
+   recalcular el lado mayor usando la proporción real de la medida natural (para no deformar el
+   diseño). Recién en este caso se abre el popup, prellenado con ese resultado, para que alguien lo
+   confirme o lo ajuste a mano.
 
 ## 3. Paso 0 — Migración SQL
 
@@ -62,9 +95,9 @@ ALTER TABLE sellos ADD COLUMN IF NOT EXISTS ancho_fabricacion_mm DECIMAL(6,2);
 ALTER TABLE sellos ADD COLUMN IF NOT EXISTS largo_fabricacion_mm DECIMAL(6,2);
 
 COMMENT ON COLUMN sellos.ancho_fabricacion_mm IS
-  'Ancho real al que se corta el bronce, en MM (a diferencia de ancho_real que es la medida pedida, en CM). Se carga confirmando/editando la sugerencia del popup al subir el SVG. NULL = todavía no confirmado, se sigue usando ancho_real como fallback.';
+  'Ancho real al que se corta el bronce, en MM (a diferencia de ancho_real que es la medida pedida, en CM). Se guarda automático si el vector ya entra en la planchuela, o confirmando/editando el popup cuando hace falta recortarlo. NULL = todavía no confirmado, se sigue usando ancho_real como fallback.';
 COMMENT ON COLUMN sellos.largo_fabricacion_mm IS
-  'Largo real al que se corta el bronce, en MM (a diferencia de largo_real que es la medida pedida, en CM). Se carga confirmando/editando la sugerencia del popup al subir el SVG. NULL = todavía no confirmado, se sigue usando largo_real como fallback.';
+  'Largo real al que se corta el bronce, en MM (a diferencia de largo_real que es la medida pedida, en CM). Se guarda automático si el vector ya entra en la planchuela, o confirmando/editando el popup cuando hace falta recortarlo. NULL = todavía no confirmado, se sigue usando largo_real como fallback.';
 
 -- Extender el trigger de "programa dirty" (migration_programas_fase2_alertas.sql) para que
 -- confirmar/editar la medida de fabricación de un sello ya programado marque el programa como
@@ -81,9 +114,9 @@ CREATE TRIGGER trigger_mark_programa_dirty_on_sello_relevant_update
 ```
 
 **Ojo**: `ancho_real`/`largo_real` están en **CM**. Los campos nuevos quedan en **MM** a propósito
-(coincide con `ancho_mm`/`largo_mm` del manifest y con cómo se va a medir el SVG en el browser —
-mezclar unidades entre columnas hermanas es justo la clase de confusión que originó este problema,
-así que el nombre deja la unidad explícita: `_mm`).
+(coincide con `ancho_mm`/`largo_mm` del manifest y con cómo se mide el SVG en el browser — mezclar
+unidades entre columnas hermanas es justo la clase de confusión que originó este problema, así que
+el nombre deja la unidad explícita: `_mm`).
 
 Aplicar la migración con la MCP de Supabase (`apply_migration`) o pegándola en el SQL Editor —
 seguir la convención que ya use el resto del repo para migraciones nuevas.
@@ -120,11 +153,12 @@ Agregar los mismos dos campos opcionales a **los tres** tipos que hoy llevan
 - `ProductionItem` (cerca de la línea 212-213): mismos dos campos.
 - `ProgramStamp` (cerca de la línea 252-253, junto a `widthMm`/`heightMm`): mismos dos campos
   (útil para mostrar en la UI de Programas si hace falta más adelante, aunque el consumidor real
-  es `packageZip.ts` vía `widthMm`/`heightMm` — ver paso 6).
+  es `packageZip.ts` vía `widthMm`/`heightMm` — ver paso 8).
 
 ## 5. Paso 2 — Utilidad de medición del SVG
 
-Nuevo archivo `src/lib/utils/svgBoundingBox.ts`:
+Nuevo archivo `src/lib/utils/svgBoundingBox.ts`. Devuelve la medida real en mm (no solo la
+proporción) — la sección 2 la necesita completa, no solo el ratio.
 
 ```ts
 export interface SvgMeasurement {
@@ -239,10 +273,10 @@ export function measureSvgString(svgText: string): SvgMeasurement | null {
 con las unidades del documento en mm (que es justo lo que ya pide el header de
 `ArmarPrograma_Chica.lua` para que la validación de escala del Lua casi nunca tenga que corregir
 nada). Si el `width`/`height` del SVG viene sin unidad y sin `viewBox` coherente, el valor en mm
-puede salir mal — en ese caso el popup igual debe funcionar (cae a `svgAspectRatio: null`, ver
-paso 3) y el usuario carga la medida a mano.
+puede salir mal — en ese caso la medida "natural" cae a la medida pedida (ver sección 2, punto 3) y
+el flujo sigue funcionando igual, solo que sin el chequeo automático.
 
-## 6. Paso 3 — Tabla de márgenes conocidos + helper de sugerencia
+## 6. Paso 3 — Tope por planchuela + función de resolución
 
 Nuevo archivo `src/lib/programas/fabricationSize.ts`:
 
@@ -251,57 +285,73 @@ import type { PlanchuelaSize } from '@/lib/types/index';
 import { resolvePlanchuelaRef } from './material';
 
 /**
- * Margen conocido (mm) que se recorta al eje que queda contra el ancho fijo de la planchuela.
- * Valores confirmados a mano — ver ANALISIS_MEDIDA_REAL_SELLOS.md sección 3.
- * 25 y 63 quedan afuera a propósito: no hay un margen fijo confirmado, se decide caso a caso.
+ * Tope máximo real de fabricación (mm) por planchuela — NO es un margen a restar siempre, es un
+ * límite que la medida real puede no alcanzar sin problema. Valores confirmados a mano — ver
+ * ANALISIS_MEDIDA_REAL_SELLOS.md sección 3. 25 y 63 quedan afuera a propósito: no hay un tope
+ * confirmado todavía, así que no se aplica ningún chequeo/recorte para esas planchuelas.
  */
-export const KNOWN_FABRICATION_MARGIN_MM: Partial<Record<PlanchuelaSize, number>> = {
-  12: 0.5,
-  19: 2.0,
-  38: 3.5,
+export const KNOWN_MAX_FABRICATION_MM: Partial<Record<PlanchuelaSize, number>> = {
+  12: 11.5,
+  19: 18,
+  38: 36.5,
 };
 
-export interface FabricationSizeSuggestion {
+export interface FabricationSizeResolution {
   widthMm: number;
   heightMm: number;
   tipoPlanchuela: PlanchuelaSize | null;
-  marginAppliedMm: number | null; // null = no hay margen conocido, se sugiere la medida pedida tal cual
+  maxUsableMm: number | null;
+  /** true = la medida natural superaba el tope de la planchuela y hubo que recortarla — hace
+   *  falta que alguien lo confirme en el popup. false = ya entraba bien, se guarda directo. */
+  needsReview: boolean;
 }
 
 /**
- * Sugiere ancho/largo de fabricación a partir de la medida pedida y, si se pudo medir el SVG, su
- * proporción real. El eje menor (el que queda contra el ancho fijo de la planchuela) se recorta
- * por el margen conocido; el otro eje se deriva de la proporción del SVG para no deformar el
- * diseño. Sin margen conocido para esa planchuela, se sugiere la medida pedida sin tocar.
+ * Resuelve la medida de fabricación: si la medida "natural" (la medida real del SVG si se pudo
+ * medir, si no la medida pedida) ya entra dentro del tope de la planchuela que le corresponde por
+ * la medida pedida, se acepta tal cual (needsReview: false). Si lo supera, se recorta el lado
+ * menor al tope y se recalcula el lado mayor con la proporción real del SVG para no deformar el
+ * diseño (needsReview: true, hay que confirmarlo a mano).
  */
-export function suggestFabricationSize(
+export function resolveFabricationSize(
   requestedWidthMm: number,
   requestedHeightMm: number,
-  svgAspectRatio: number | null,
-): FabricationSizeSuggestion {
+  measured: { widthMm: number; heightMm: number } | null,
+): FabricationSizeResolution {
   const tipoPlanchuela = resolvePlanchuelaRef({
     anchoRealCm: requestedWidthMm / 10,
     largoRealCm: requestedHeightMm / 10,
   });
+  const maxUsableMm = tipoPlanchuela != null ? KNOWN_MAX_FABRICATION_MM[tipoPlanchuela] ?? null : null;
 
-  const margin = tipoPlanchuela != null ? KNOWN_FABRICATION_MARGIN_MM[tipoPlanchuela] ?? null : null;
+  const naturalWidth = measured?.widthMm ?? requestedWidthMm;
+  const naturalHeight = measured?.heightMm ?? requestedHeightMm;
 
-  if (margin == null || requestedWidthMm <= 0 || requestedHeightMm <= 0) {
-    return { widthMm: requestedWidthMm, heightMm: requestedHeightMm, tipoPlanchuela, marginAppliedMm: null };
+  if (naturalWidth <= 0 || naturalHeight <= 0) {
+    return { widthMm: requestedWidthMm, heightMm: requestedHeightMm, tipoPlanchuela, maxUsableMm, needsReview: false };
   }
 
-  const ratio = svgAspectRatio && svgAspectRatio > 0 ? svgAspectRatio : requestedWidthMm / requestedHeightMm;
-  const widthIsMinor = requestedWidthMm <= requestedHeightMm;
+  const naturalMinor = Math.min(naturalWidth, naturalHeight);
 
+  // Sin tope conocido, o la medida natural ya entra (con un margen chico de tolerancia por
+  // redondeo de la medición, no de negocio): se acepta tal cual, sin popup.
+  if (maxUsableMm == null || naturalMinor <= maxUsableMm + 0.05) {
+    return { widthMm: naturalWidth, heightMm: naturalHeight, tipoPlanchuela, maxUsableMm, needsReview: false };
+  }
+
+  // Supera el tope: recortar el eje menor al máximo y recalcular el mayor con la proporción real.
+  const ratio = naturalWidth / naturalHeight;
+  const widthIsMinor = naturalWidth <= naturalHeight;
   if (widthIsMinor) {
-    const widthMm = Math.max(requestedWidthMm - margin, 1);
-    return { widthMm, heightMm: widthMm / ratio, tipoPlanchuela, marginAppliedMm: margin };
+    const widthMm = maxUsableMm;
+    return { widthMm, heightMm: widthMm / ratio, tipoPlanchuela, maxUsableMm, needsReview: true };
   }
-  const heightMm = Math.max(requestedHeightMm - margin, 1);
-  return { widthMm: heightMm * ratio, heightMm, tipoPlanchuela, marginAppliedMm: margin };
+  const heightMm = maxUsableMm;
+  return { widthMm: heightMm * ratio, heightMm, tipoPlanchuela, maxUsableMm, needsReview: true };
 }
 
-/** Recalcula el eje libre a partir del que el usuario tocó, respetando la proporción dada (width/height). */
+/** Recalcula el eje libre a partir del que el usuario tocó a mano en el popup, respetando la
+ *  proporción dada (width/height). Se usa solo cuando el popup está abierto. */
 export function applyAspectRatioLock(
   changedAxis: 'width' | 'height',
   newValue: number,
@@ -317,18 +367,39 @@ export function applyAspectRatioLock(
 }
 ```
 
+**Nota defensiva opcional** (no indispensable, pero barata): si en algún momento se quiere blindar
+contra el mismo bug de unidades que la validación del Lua ya cubre del otro lado (ej. un SVG que
+por error queda exportado en pulgadas y mide varias veces el tamaño esperado), se puede forzar
+`needsReview: true` también cuando `naturalMinor` esté muy lejos del lado menor de la medida
+pedida (por ejemplo, menos de la mitad o más del doble), aunque no supere el tope de la planchuela
+— sería indicio de un archivo con problema, no de un recorte normal. No es necesario para esta
+primera versión porque el Lua ya tiene su propio chequeo de sanity al importar en Aspire
+(`SCALE_MIN_SANE`/`SCALE_MAX_SANE` en `ArmarPrograma_*.lua`), pero ahorraría descubrirlo recién en
+la máquina.
+
 Agregar un test en `src/lib/programas/material.test.ts` (o un archivo nuevo
-`fabricationSize.test.ts` al lado, siguiendo el mismo estilo) que cubra al menos los 4 casos del
-análisis: 40×40 planchuela 38 → ~36.5×36.5; 50×20 planchuela 19 → 50×18; 50×12 planchuela 12 →
-50×11.5; 22×21 planchuela 25 → sin margen, se sugiere 22×21 tal cual.
+`fabricationSize.test.ts` al lado, siguiendo el mismo estilo) que cubra al menos:
+- 50×10 pedido, medido 50×8.8 (planchuela 12, tope 11.5) → `needsReview: false`, se guarda 50×8.8
+  tal cual.
+- 40×40 pedido, medido ~40×40 sin ajustar en el SVG (planchuela 38, tope 36.5) → `needsReview: true`,
+  resultado ~36.5×36.5.
+- 50×20 pedido, medido 50×20 (planchuela 19, tope 18) → `needsReview: true`, resultado 50×18.
+- 22×21 pedido (planchuela 25, sin tope conocido) → `needsReview: false` siempre, sea lo que sea lo
+  medido.
+- Sin medición disponible (`measured: null`) y medida pedida que excede el tope de su planchuela →
+  igual dispara `needsReview: true` usando la proporción de la medida pedida como fallback.
 
 ## 7. Paso 4 — Popup compartido
 
-Nuevo archivo `src/components/shared/VectorSizeConfirmDialog.tsx`. Usa los primitivos de
-`src/components/ui/dialog.tsx` (patrón de `Dialog`/`DialogContent`/`DialogHeader`/`DialogTitle`,
-copiar el estilo de `src/components/pedidos/UploadPhotos/UploadPhotosDialog.tsx` — dialog
-controlado por `open`/`onOpenChange`, `DialogContent` con `max-w-*` moderado ya que este popup es
-más chico) y el `Input`/`Button` de `src/components/ui/`.
+Nuevo archivo `src/components/shared/VectorSizeConfirmDialog.tsx`. **Este popup solo se abre
+cuando `needsReview` ya es `true`** (ver sección 2) — no necesita manejar el caso "sin tope
+conocido" ni el caso "ya entraba bien", esos ya se resolvieron antes sin mostrar nada.
+
+Usa los primitivos de `src/components/ui/dialog.tsx` (patrón de
+`Dialog`/`DialogContent`/`DialogHeader`/`DialogTitle`, copiar el estilo de
+`src/components/pedidos/UploadPhotos/UploadPhotosDialog.tsx` — dialog controlado por
+`open`/`onOpenChange`, `DialogContent` con `max-w-*` moderado ya que este popup es más chico) y el
+`Input`/`Button` de `src/components/ui/`.
 
 ```tsx
 import { useEffect, useState } from 'react';
@@ -338,7 +409,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { applyAspectRatioLock } from '@/lib/programas/fabricationSize';
-import type { FabricationSizeSuggestion } from '@/lib/programas/fabricationSize';
+import type { FabricationSizeResolution } from '@/lib/programas/fabricationSize';
 
 interface VectorSizeConfirmDialogProps {
   open: boolean;
@@ -347,7 +418,7 @@ interface VectorSizeConfirmDialogProps {
   previewUrl?: string | null;
   requestedWidthMm: number;
   requestedHeightMm: number;
-  suggestion: FabricationSizeSuggestion;
+  resolution: FabricationSizeResolution; // ya viene con needsReview: true
   svgAspectRatio: number | null;
   onConfirm: (result: { widthMm: number; heightMm: number }) => void | Promise<void>;
 }
@@ -359,26 +430,25 @@ export function VectorSizeConfirmDialog({
   previewUrl,
   requestedWidthMm,
   requestedHeightMm,
-  suggestion,
+  resolution,
   svgAspectRatio,
   onConfirm,
 }: VectorSizeConfirmDialogProps) {
-  const [widthMm, setWidthMm] = useState(suggestion.widthMm);
-  const [heightMm, setHeightMm] = useState(suggestion.heightMm);
+  const [widthMm, setWidthMm] = useState(resolution.widthMm);
+  const [heightMm, setHeightMm] = useState(resolution.heightMm);
   const [locked, setLocked] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Ratio que se usa para el bloqueo: preferí la del SVG medido; si no hay, la de la sugerencia
-  // (que en el peor caso ya cae en la del pedido).
-  const lockRatio = svgAspectRatio ?? (suggestion.heightMm > 0 ? suggestion.widthMm / suggestion.heightMm : 1);
+  // Ratio para el bloqueo: preferí la del SVG medido; si no hay, la de la sugerencia ya resuelta.
+  const lockRatio = svgAspectRatio ?? (resolution.heightMm > 0 ? resolution.widthMm / resolution.heightMm : 1);
 
   useEffect(() => {
     if (open) {
-      setWidthMm(suggestion.widthMm);
-      setHeightMm(suggestion.heightMm);
+      setWidthMm(resolution.widthMm);
+      setHeightMm(resolution.heightMm);
       setLocked(true);
     }
-  }, [open, suggestion.widthMm, suggestion.heightMm]);
+  }, [open, resolution.widthMm, resolution.heightMm]);
 
   const handleWidthChange = (value: number) => {
     if (locked) {
@@ -434,17 +504,10 @@ export function VectorSizeConfirmDialog({
             Medida pedida: <span className="font-medium text-foreground">{requestedWidthMm.toFixed(1)} × {requestedHeightMm.toFixed(1)} mm</span>
           </div>
 
-          {suggestion.marginAppliedMm != null ? (
-            <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
-              Sugerido según planchuela {suggestion.tipoPlanchuela}mm: se descontó {suggestion.marginAppliedMm}mm de margen.
-            </div>
-          ) : (
-            <div className="text-xs rounded bg-muted px-3 py-2 text-muted-foreground">
-              {suggestion.tipoPlanchuela
-                ? `Sin margen conocido para planchuela ${suggestion.tipoPlanchuela}mm — revisá la medida a mano.`
-                : 'No se pudo determinar la planchuela — revisá la medida a mano.'}
-            </div>
-          )}
+          <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
+            El vector mide más que el máximo de la planchuela {resolution.tipoPlanchuela}mm
+            ({resolution.maxUsableMm}mm) — se recortó al tope. Revisá si el resultado te sirve.
+          </div>
 
           {svgAspectRatio == null && (
             <div className="text-xs rounded bg-muted px-3 py-2 text-muted-foreground">
@@ -516,12 +579,11 @@ Archivo: `src/components/pedidos/Table/cells/CellVector.tsx`.
 
 **Gotcha importante**: el componente hoy tiene varios `return` tempranos (línea ~64 caso
 `'summary'`, línea ~253 rama `!showPreviews`, línea ~313 rama sin `displayUrl`, y el `return` final
-línea ~337). El popup nuevo tiene que quedar montado sin importar por cuál rama se está
-renderizando en el momento en que se dispara (el usuario puede subir el archivo estando en
-cualquiera de esas variantes visuales). La forma más simple de no duplicar el `<VectorSizeConfirmDialog>`
-en las 4 ramas es refactorizar el cuerpo del componente para que cada rama arme un `content: JSX.Element`
-en vez de hacer `return` directo, y dejar un único `return` al final del componente que envuelve
-`content` junto con el diálogo:
+línea ~337). El popup nuevo (cuando corresponde abrirlo) tiene que quedar montado sin importar por
+cuál rama se está renderizando en el momento en que se dispara. La forma más simple de no
+duplicarlo en las 4 ramas es refactorizar el cuerpo del componente para que cada rama arme un
+`content: JSX.Element` en vez de hacer `return` directo, y dejar un único `return` al final del
+componente que envuelve `content` junto con el diálogo:
 
 ```tsx
 export function CellVector(...) {
@@ -542,17 +604,19 @@ export function CellVector(...) {
   return (
     <>
       {content}
-      <VectorSizeConfirmDialog
-        open={sizeDialogState != null}
-        onOpenChange={(next) => { if (!next) setSizeDialogState(null); }}
-        fileName={sizeDialogState?.fileName ?? ''}
-        previewUrl={sizeDialogState?.previewUrl}
-        requestedWidthMm={item.requestedWidthMm}
-        requestedHeightMm={item.requestedHeightMm}
-        suggestion={sizeDialogState?.suggestion ?? { widthMm: 0, heightMm: 0, tipoPlanchuela: null, marginAppliedMm: null }}
-        svgAspectRatio={sizeDialogState?.svgAspectRatio ?? null}
-        onConfirm={handleConfirmFabricationSize}
-      />
+      {sizeDialogState && (
+        <VectorSizeConfirmDialog
+          open
+          onOpenChange={(next) => { if (!next) setSizeDialogState(null); }}
+          fileName={sizeDialogState.fileName}
+          previewUrl={sizeDialogState.previewUrl}
+          requestedWidthMm={item.requestedWidthMm}
+          requestedHeightMm={item.requestedHeightMm}
+          resolution={sizeDialogState.resolution}
+          svgAspectRatio={sizeDialogState.svgAspectRatio}
+          onConfirm={handleConfirmFabricationSize}
+        />
+      )}
     </>
   );
 }
@@ -567,7 +631,7 @@ Agregar, junto a los imports existentes:
 
 ```tsx
 import { measureSvgFile } from '@/lib/utils/svgBoundingBox';
-import { suggestFabricationSize, type FabricationSizeSuggestion } from '@/lib/programas/fabricationSize';
+import { resolveFabricationSize, type FabricationSizeResolution } from '@/lib/programas/fabricationSize';
 import { VectorSizeConfirmDialog } from '@/components/shared/VectorSizeConfirmDialog';
 ```
 
@@ -577,33 +641,48 @@ Agregar estado nuevo (junto a `const [uploading, setUploading] = useState(false)
 interface SizeDialogState {
   fileName: string;
   previewUrl?: string;
-  suggestion: FabricationSizeSuggestion;
+  resolution: FabricationSizeResolution;
   svgAspectRatio: number | null;
 }
 const [sizeDialogState, setSizeDialogState] = useState<SizeDialogState | null>(null);
 ```
 
 Dentro de `handleFileSelect`, **después** de `await onUpdate(order.id, { items: updatedItems });`
-y del `toast(...)` de éxito, agregar (solo para SVG — `fileExtension === '.svg'`):
+y del `toast(...)` de éxito que ya existe, agregar (solo para SVG — `fileExtension === '.svg'`):
 
 ```tsx
 if (fileExtension === '.svg') {
   const measurement = await measureSvgFile(file);
-  const suggestion = suggestFabricationSize(
+  const resolution = resolveFabricationSize(
     item.requestedWidthMm,
     item.requestedHeightMm,
-    measurement?.aspectRatio ?? null,
+    measurement ? { widthMm: measurement.widthMm, heightMm: measurement.heightMm } : null,
   );
-  setSizeDialogState({
-    fileName: file.name,
-    previewUrl: result.previewUrl ?? result.originalUrl,
-    suggestion,
-    svgAspectRatio: measurement?.aspectRatio ?? null,
-  });
+
+  if (!resolution.needsReview) {
+    // Ya entra bien en la planchuela (o no hay tope conocido): se guarda directo, sin popup.
+    const withFabricationSize = order.items.map((i) =>
+      i.id === item.id
+        ? { ...i, fabricationWidthMm: resolution.widthMm, fabricationHeightMm: resolution.heightMm }
+        : i,
+    );
+    await onUpdate(order.id, { items: withFabricationSize });
+    toast({
+      title: 'Medida OK',
+      description: 'No hace falta ajustar — el vector ya entra bien en la planchuela.',
+    });
+  } else {
+    setSizeDialogState({
+      fileName: file.name,
+      previewUrl: result.previewUrl ?? result.originalUrl,
+      resolution,
+      svgAspectRatio: measurement?.aspectRatio ?? null,
+    });
+  }
 }
 ```
 
-Y el handler que persiste la confirmación:
+Y el handler que persiste la confirmación del popup (solo se usa cuando `needsReview` era `true`):
 
 ```tsx
 const handleConfirmFabricationSize = async ({ widthMm, heightMm }: { widthMm: number; heightMm: number }) => {
@@ -620,14 +699,18 @@ const handleConfirmFabricationSize = async ({ widthMm, heightMm }: { widthMm: nu
 Archivo: `src/components/produccion/Table/cells/CellVector.tsx`. Mismo patrón que el paso 5,
 adaptado a `ProductionItem`/`onUpdateItem`:
 
-- Mismo import nuevo de `measureSvgFile`, `suggestFabricationSize`, `VectorSizeConfirmDialog`.
+- Mismo import nuevo de `measureSvgFile`, `resolveFabricationSize`, `VectorSizeConfirmDialog`.
 - Mismo estado `sizeDialogState`.
 - En `handleFileSelect`, después de `await onUpdateItem(item.id, { files: {...}, vectorizationState: 'VECTORIZADO' });`,
-  el mismo bloque `if (fileExtension === '.svg') { ... }` usando `item.requestedWidthMm`/`requestedHeightMm`.
-- `handleConfirmFabricationSize` análogo, llamando a `onUpdateItem(item.id, { fabricationWidthMm: widthMm, fabricationHeightMm: heightMm })`.
+  el mismo bloque `if (fileExtension === '.svg') { ... }` de la sección 8, usando
+  `item.requestedWidthMm`/`requestedHeightMm` y, en la rama `!needsReview`, llamando a
+  `onUpdateItem(item.id, { fabricationWidthMm: resolution.widthMm, fabricationHeightMm: resolution.heightMm })`
+  directo (sin popup) más el mismo toast de "Medida OK".
+- `handleConfirmFabricationSize` análogo, llamando a
+  `onUpdateItem(item.id, { fabricationWidthMm: widthMm, fabricationHeightMm: heightMm })`.
 - Este archivo tiene menos ramas de `return` temprano que el de Pedidos (repasar el archivo al
   momento de implementar), pero aplica el mismo gotcha: el diálogo tiene que quedar montado sin
-  importar qué rama visual esté activa quan se dispara.
+  importar qué rama visual esté activa cuando se dispara.
 
 ## 10. Paso 7 — Servicios: persistir y leer el campo nuevo
 
@@ -663,8 +746,8 @@ regeneren los tipos de Supabase — una vez hecho el paso 4.1, se puede sacar el
   `largo_fabricacion_mm,` junto a las líneas 84-85 (`largo_real, ancho_real,`).
 - En los tres lugares donde se arma `requestedWidthMm`/`requestedHeightMm` a partir de
   `sello.ancho_real`/`largo_real` (líneas ~193-194/230-231, ~433-434/507-508), agregar al lado el
-  mapeo de `fabricationWidthMm`/`fabricationHeightMm` desde `sello.ancho_fabricacion_mm`/`largo_fabricacion_mm`
-  (`Number(...)` si no es null, si no `null`).
+  mapeo de `fabricationWidthMm`/`fabricationHeightMm` desde
+  `sello.ancho_fabricacion_mm`/`largo_fabricacion_mm` (`Number(...)` si no es null, si no `null`).
 - Al persistir updates de `ProductionItem` (buscar dónde este archivo arma el `update`/`insert`
   hacia `sellos` — patrón simétrico al de `orders.service.ts` en el paso 10.1), agregar el mismo
   mapeo `fabricationWidthMm → ancho_fabricacion_mm`, `fabricationHeightMm → largo_fabricacion_mm`.
@@ -718,26 +801,33 @@ simple — no agregar una columna nueva a la tabla salvo que se pida explícitam
 ## 13. Checklist de pruebas manuales
 
 1. Migración aplicada sin errores; `sellos` tiene las dos columnas nuevas, nullable.
-2. Subir un SVG en Pedidos a un sello sin `tipo_planchuela` conocido (ej. medida rarísima) → el
-   popup se abre, sugiere la medida pedida tal cual, muestra el aviso de "sin margen conocido".
-3. Subir un SVG a un sello de ~40×40mm → el popup sugiere ~36.5×36.5mm y lo indica.
-4. En el popup, cambiar el campo Ancho a mano → el campo Alto se recalcula solo, respetando la
-   proporción del SVG (no la del pedido). Repetir cambiando Alto.
-5. Tocar el botón de bloqueo (🔗) para desbloquear proporción → cambiar un campo ya NO mueve el
+2. Subir un SVG cuya medida real (o, si no se puede medir, la pedida) **ya entra** dentro del tope
+   de su planchuela (ej. pedido 50×10, vector realmente ~50×8.8) → **no se abre popup**, aparece el
+   toast "Medida OK" abajo a la derecha, y `ancho_fabricacion_mm`/`largo_fabricacion_mm` quedan
+   guardados con la medida real medida (8.8, no 10).
+3. Subir un SVG cuya medida real **supera** el tope de su planchuela (ej. pedido/vector ~40×40,
+   planchuela 38, tope 36.5) → se abre el popup, prellenado en ~36.5×36.5.
+4. Repetir con 50×20 (planchuela 19, tope 18) → popup prellenado en 50×18.
+5. Subir un SVG para un sello de planchuela 25 (ej. 22×21) → **nunca** debería abrir el popup por
+   más que la medida real sea la que sea, porque no hay tope confirmado para esa planchuela.
+6. En el popup (cuando aparece), cambiar el campo Ancho a mano → el campo Alto se recalcula solo,
+   respetando la proporción del SVG medido (no la del pedido). Repetir cambiando Alto.
+7. Tocar el botón de bloqueo (🔗) para desbloquear proporción → cambiar un campo ya NO mueve el
    otro. Volver a bloquear.
-6. Confirmar → el popup cierra, no hay error en consola, y (con Supabase MCP o el SQL editor)
+8. Confirmar el popup → cierra sin error, y (con Supabase MCP o el SQL editor)
    `sellos.ancho_fabricacion_mm`/`largo_fabricacion_mm` de ese sello quedan con el valor mostrado.
-7. Cancelar en vez de confirmar → los campos quedan `NULL` (o con el valor previo si ya había uno).
-8. Repetir 2-7 en Producción.
-9. Subir un EPS/PDF/AI (no SVG) → el popup **no** se abre, el resto del flujo de subida sigue
-   funcionando igual que antes.
-10. Armar un programa (`packageZip.ts` → `generateAndDownloadProgramPackage`) con un sello que
-    tiene `ancho_fabricacion_mm` confirmado → el `manifest.lua` generado adentro del ZIP trae
-    `ancho_mm`/`largo_mm` con el valor de fabricación, no el pedido.
-11. Armar un programa con un sello que **no** tiene el campo nuevo confirmado (flujo viejo,
-    sellos ya cargados antes de este cambio) → sigue funcionando igual que hoy (fallback a
+9. Cancelar el popup en vez de confirmar → los campos quedan como estaban antes (no se pisan).
+10. Repetir 2-9 en Producción.
+11. Subir un EPS/PDF/AI (no SVG) → no se abre popup ni aparece el toast de medida; el resto del
+    flujo de subida sigue funcionando igual que antes.
+12. Armar un programa (`packageZip.ts` → `generateAndDownloadProgramPackage`) con un sello que
+    tiene `ancho_fabricacion_mm` confirmado (por cualquiera de los dos caminos, automático o
+    popup) → el `manifest.lua` generado adentro del ZIP trae `ancho_mm`/`largo_mm` con ese valor,
+    no el pedido.
+13. Armar un programa con un sello que **no** tiene el campo nuevo confirmado (flujo viejo, sellos
+    ya cargados antes de este cambio) → sigue funcionando igual que hoy (fallback a
     `ancho_real`/`largo_real`), sin romper programas existentes.
-12. Editar la medida de fabricación de un sello que ya está en un programa `LISTO` → el programa
+14. Editar la medida de fabricación de un sello que ya está en un programa `LISTO` → el programa
     pasa a `BORRADOR`/`dirty` (por el trigger extendido del paso 0), igual que ya pasa hoy al tocar
     `ancho_real`.
 
@@ -745,8 +835,8 @@ simple — no agregar una columna nueva a la tabla salvo que se pida explícitam
 
 - No se toca `aspire-gadgets/ArmarPrograma_*.lua`.
 - No se resuelve automáticamente el caso de la planchuela 25/63 (a propósito — ver
-  `ANALISIS_MEDIDA_REAL_SELLOS.md` sección 3). Si en el futuro se confirma un margen estable para
-  esos casos, alcanza con agregarlo a `KNOWN_FABRICATION_MARGIN_MM`.
+  `ANALISIS_MEDIDA_REAL_SELLOS.md` sección 3). Si en el futuro se confirma un tope estable para
+  esos casos, alcanza con agregarlo a `KNOWN_MAX_FABRICATION_MM`.
 - No se migran/backfillean sellos ya cargados antes de este cambio — quedan con el campo nuevo en
   `NULL` y siguen usando el fallback a `ancho_real`/`largo_real`. Backfill masivo, si hiciera
   falta, es una tarea aparte (y probablemente manual, sello por sello, dado que es justo la clase
