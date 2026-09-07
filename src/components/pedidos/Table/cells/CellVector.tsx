@@ -16,8 +16,8 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, C
 import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
 import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
 import { measureSvgFile } from '@/lib/utils/svgBoundingBox';
-import { suggestFabricationSize, type FabricationSizeSuggestion } from '@/lib/programas/fabricationSize';
-import { VectorSizeConfirmDialog } from '@/components/shared/VectorSizeConfirmDialog';
+import { suggestFabricationSize } from '@/lib/programas/fabricationSize';
+import { useFabricationSizeDialogStore } from '@/lib/state/fabricationSizeDialog.store';
 
 interface CellVectorProps {
   order: Order;
@@ -25,19 +25,12 @@ interface CellVectorProps {
   editingRowId?: string | null;
 }
 
-interface SizeDialogState {
-  fileName: string;
-  previewUrl?: string;
-  suggestion: FabricationSizeSuggestion;
-  svgAspectRatio: number | null;
-}
-
 export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   const { showPreviews } = useOrdersStore();
   const { toast } = useToast();
   const { preview, openPreview, closePreview } = useImagePreviewLightbox();
   const [uploading, setUploading] = useState(false);
-  const [sizeDialogState, setSizeDialogState] = useState<SizeDialogState | null>(null);
+  const openFabricationSizeDialog = useFabricationSizeDialogStore((s) => s.open);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const item = order.items[0];
   
@@ -157,11 +150,21 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
           item.requestedHeightMm,
           measurement?.aspectRatio ?? null,
         );
-        setSizeDialogState({
+        const orderId = order.id;
+        const itemId = item.id;
+        openFabricationSizeDialog({
           fileName: file.name,
           previewUrl: result.previewUrl ?? result.originalUrl,
+          requestedWidthMm: item.requestedWidthMm,
+          requestedHeightMm: item.requestedHeightMm,
           suggestion,
           svgAspectRatio: measurement?.aspectRatio ?? null,
+          onConfirm: async ({ widthMm, heightMm }) => {
+            if (!onUpdate) return;
+            await onUpdate(orderId, {
+              items: [{ id: itemId, fabricationWidthMm: widthMm, fabricationHeightMm: heightMm }],
+            });
+          },
         });
       }
     } catch (error) {
@@ -178,20 +181,6 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
         fileInputRef.current.value = '';
       }
     }
-  };
-
-  const handleConfirmFabricationSize = async ({
-    widthMm,
-    heightMm,
-  }: {
-    widthMm: number;
-    heightMm: number;
-  }) => {
-    if (!onUpdate) return;
-    const updatedItems = order.items.map((i) =>
-      i.id === item.id ? { ...i, fabricationWidthMm: widthMm, fabricationHeightMm: heightMm } : i,
-    );
-    await onUpdate(order.id, { items: updatedItems });
   };
 
   const handleClick = () => {
@@ -479,29 +468,5 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
     );
   }
 
-  return (
-    <>
-      {content}
-      <VectorSizeConfirmDialog
-        open={sizeDialogState != null}
-        onOpenChange={(next) => {
-          if (!next) setSizeDialogState(null);
-        }}
-        fileName={sizeDialogState?.fileName ?? ''}
-        previewUrl={sizeDialogState?.previewUrl}
-        requestedWidthMm={item.requestedWidthMm}
-        requestedHeightMm={item.requestedHeightMm}
-        suggestion={
-          sizeDialogState?.suggestion ?? {
-            widthMm: 0,
-            heightMm: 0,
-            tipoPlanchuela: null,
-            marginAppliedMm: null,
-          }
-        }
-        svgAspectRatio={sizeDialogState?.svgAspectRatio ?? null}
-        onConfirm={handleConfirmFabricationSize}
-      />
-    </>
-  );
+  return <>{content}</>;
 }

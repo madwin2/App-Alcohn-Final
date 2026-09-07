@@ -16,12 +16,14 @@ import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
 import { OrdersScopeLayout } from './components/orders/OrdersScope'
+import { FabricationSizeDialogHost } from './components/shared/FabricationSizeDialogHost'
 
 function App() {
   return (
     <Router>
       <div className="min-h-screen bg-background">
         <OrderTasksOverlay />
+        <FabricationSizeDialogHost />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<AuthenticatedLayout />}>
