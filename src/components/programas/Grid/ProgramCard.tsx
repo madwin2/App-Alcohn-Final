@@ -446,7 +446,7 @@ export function ProgramCard({
                       <button
                         type="button"
                         aria-label={`Quitar ${stamp.designName}`}
-                        className="absolute -top-1.5 -left-1.5 hidden group-hover/stamp:flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm disabled:hidden"
+                        className="absolute -top-1.5 -right-1.5 hidden group-hover/stamp:flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground border border-border shadow-sm hover:bg-muted/80 disabled:hidden"
                         disabled={busy}
                         onClick={(e) => {
                           e.stopPropagation();

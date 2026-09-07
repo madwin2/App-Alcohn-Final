@@ -227,7 +227,7 @@ export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgra
                   <button
                     type="button"
                     aria-label={`Quitar ${stamp.designName}`}
-                    className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
+                    className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground border border-border shadow-sm hover:bg-muted/80"
                     onClick={() => handleRemoveStamp(stamp.id)}
                   >
                     <X className="h-3 w-3" />
