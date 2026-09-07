@@ -1,5 +1,5 @@
-import { Upload, FileType2, Download, Loader2, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Upload, FileType2, Download, Loader2, Trash2, Ruler } from 'lucide-react';
+import { useRef, useState, type ReactNode } from 'react';
 import { storageFileKindFromUrl, storageFileKindLabel } from '@/lib/utils/storageFileKind';
 import { ProductionItem } from '@/lib/types/index';
 import { useProductionStore } from '@/lib/state/production.store';
@@ -21,10 +21,20 @@ import {
 } from '@/components/ui/context-menu';
 import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
 import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
+import { measureSvgFile } from '@/lib/utils/svgBoundingBox';
+import { suggestFabricationSize, type FabricationSizeSuggestion } from '@/lib/programas/fabricationSize';
+import { VectorSizeConfirmDialog } from '@/components/shared/VectorSizeConfirmDialog';
 
 interface CellVectorProps {
   item: ProductionItem;
   onUpdateItem?: (itemId: string, updates: Partial<ProductionItem>) => Promise<ProductionItem>;
+}
+
+interface SizeDialogState {
+  fileName: string;
+  previewUrl?: string;
+  suggestion: FabricationSizeSuggestion;
+  svgAspectRatio: number | null;
 }
 
 export function CellVector({ item, onUpdateItem }: CellVectorProps) {
@@ -32,6 +42,7 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
   const { toast } = useToast();
   const { preview, openPreview, closePreview } = useImagePreviewLightbox();
   const [uploading, setUploading] = useState(false);
+  const [sizeDialogState, setSizeDialogState] = useState<SizeDialogState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasFile = item.files?.vectorUrl;
@@ -59,6 +70,17 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
         : undefined;
 
   const canUpload = Boolean(onUpdateItem);
+
+  const fabricationConfirmed =
+    item.fabricationWidthMm != null && item.fabricationHeightMm != null;
+  const fabricationBadge = fabricationConfirmed ? (
+    <span
+      className="absolute top-0.5 left-0.5 z-10 rounded-full bg-emerald-500 p-0.5 text-white shadow"
+      title={`Medida de fabricación confirmada: ${Number(item.fabricationWidthMm).toFixed(1)} × ${Number(item.fabricationHeightMm).toFixed(1)} mm`}
+    >
+      <Ruler className="size-2.5" aria-hidden />
+    </span>
+  ) : null;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -122,6 +144,21 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
               ? 'El EPS quedó guardado; si no ves miniatura, descargalo con el ícono.'
               : 'El archivo vector se subió correctamente',
       });
+
+      if (fileExtension === '.svg') {
+        const measurement = await measureSvgFile(file);
+        const suggestion = suggestFabricationSize(
+          item.requestedWidthMm,
+          item.requestedHeightMm,
+          measurement?.aspectRatio ?? null,
+        );
+        setSizeDialogState({
+          fileName: file.name,
+          previewUrl: result.previewUrl ?? result.originalUrl,
+          suggestion,
+          svgAspectRatio: measurement?.aspectRatio ?? null,
+        });
+      }
     } catch (error) {
       console.error('Error uploading file:', error);
       toast({
@@ -135,6 +172,20 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
         fileInputRef.current.value = '';
       }
     }
+  };
+
+  const handleConfirmFabricationSize = async ({
+    widthMm,
+    heightMm,
+  }: {
+    widthMm: number;
+    heightMm: number;
+  }) => {
+    if (!onUpdateItem) return;
+    await onUpdateItem(item.id, {
+      fabricationWidthMm: widthMm,
+      fabricationHeightMm: heightMm,
+    });
   };
 
   const handleClick = () => {
@@ -242,24 +293,89 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
     </div>
   );
 
+  let content: ReactNode;
+
   if (!showPreviews) {
-    if (!hasFile && !canUpload) return null;
-    const kindLabel = vectorFileKind ? storageFileKindLabel(vectorFileKind) : 'Archivo';
-    return (
+    if (!hasFile && !canUpload) {
+      content = null;
+    } else {
+      const kindLabel = vectorFileKind ? storageFileKindLabel(vectorFileKind) : 'Archivo';
+      content = (
+        <>
+          {uploadInput}
+          <div className="flex h-full w-full items-center justify-center">
+            {!hasFile ? (
+              emptyUploadSlot
+            ) : (
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <button
+                    type="button"
+                    title={
+                      canUpload
+                        ? `${kindLabel} cargado — clic para reemplazar; derecho para más opciones`
+                        : `${kindLabel} cargado — clic para descargar`
+                    }
+                    onClick={canUpload ? handleClick : (e) => void handleDownloadVector(e)}
+                    onContextMenu={(e) => e.stopPropagation()}
+                    className={`relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 ${
+                      uploading ? 'opacity-50' : ''
+                    }`}
+                  >
+                    {fabricationBadge}
+                    {uploading ? (
+                      <Loader2 className="size-4 animate-spin text-violet-700 dark:text-violet-300" />
+                    ) : (
+                      <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
+                    )}
+                    <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+                  {canUpload && (
+                    <ContextMenuItem onClick={handleClick}>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Reemplazar archivo
+                    </ContextMenuItem>
+                  )}
+                  <ContextMenuItem onClick={(e) => void handleDownloadVector(e)}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Descargar archivo
+                  </ContextMenuItem>
+                  {canUpload && (
+                    <>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Eliminar archivo
+                      </ContextMenuItem>
+                    </>
+                  )}
+                </ContextMenuContent>
+              </ContextMenu>
+            )}
+          </div>
+        </>
+      );
+    }
+  } else {
+    content = (
       <>
         {uploadInput}
-        <div className="flex h-full w-full items-center justify-center">
+        <div className="flex h-12 w-full items-center justify-center">
           {!hasFile ? (
             emptyUploadSlot
-          ) : (
+          ) : archivoVectorSinMiniatura ? (
             <ContextMenu>
               <ContextMenuTrigger asChild>
                 <button
                   type="button"
                   title={
-                    canUpload
-                      ? `${kindLabel} cargado — clic para reemplazar; derecho para más opciones`
-                      : `${kindLabel} cargado — clic para descargar`
+                    isPdf
+                      ? 'PDF — clic para otro archivo; derecho para descargar'
+                      : isAi
+                        ? 'AI — clic para otro archivo; derecho para descargar'
+                        : 'EPS — clic para otro archivo; derecho para descargar'
                   }
                   onClick={canUpload ? handleClick : (e) => void handleDownloadVector(e)}
                   onContextMenu={(e) => e.stopPropagation()}
@@ -267,11 +383,13 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
                     uploading ? 'opacity-50' : ''
                   }`}
                 >
-                  {uploading ? (
-                    <Loader2 className="size-4 animate-spin text-violet-700 dark:text-violet-300" />
-                  ) : (
-                    <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
+                  {fabricationBadge}
+                  {uploading && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center rounded bg-background/80">
+                      <Loader2 className="size-4 animate-spin" />
+                    </div>
                   )}
+                  <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
                   <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
                 </button>
               </ContextMenuTrigger>
@@ -284,7 +402,71 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
                 )}
                 <ContextMenuItem onClick={(e) => void handleDownloadVector(e)}>
                   <Download className="mr-2 h-4 w-4" />
-                  Descargar archivo
+                  {isPdf ? 'Descargar PDF' : 'Descargar EPS'}
+                </ContextMenuItem>
+                {canUpload && (
+                  <>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar archivo
+                    </ContextMenuItem>
+                  </>
+                )}
+              </ContextMenuContent>
+            </ContextMenu>
+          ) : (
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={`relative size-10 overflow-hidden rounded border p-0 cursor-pointer hover:opacity-80 transition-opacity ${
+                    uploading ? 'opacity-50' : ''
+                  }`}
+                  title="Vector"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (displayUrl) openPreview(displayUrl, 'Vector');
+                  }}
+                  onContextMenu={(e) => e.stopPropagation()}
+                >
+                  {fabricationBadge}
+                  {uploading && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    </div>
+                  )}
+                  {displayUrl ? (
+                    <>
+                      <img
+                        src={displayUrl}
+                        alt="Vector"
+                        className={`h-full w-full ${previewUrl ? 'object-contain' : 'object-cover'}`}
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                          if (fb) {
+                            fb.classList.remove('hidden');
+                          }
+                        }}
+                      />
+                      <div className="hidden absolute inset-0 flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
+                        <FileType2 className="size-6" aria-hidden />
+                      </div>
+                    </>
+                  ) : null}
+                </button>
+              </ContextMenuTrigger>
+              <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+                {canUpload && (
+                  <ContextMenuItem onClick={handleClick}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Reemplazar archivo
+                  </ContextMenuItem>
+                )}
+                <ContextMenuItem onClick={(e) => void handleDownloadVector(e)}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Descargar vector
                 </ContextMenuItem>
                 {canUpload && (
                   <>
@@ -299,134 +481,37 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
             </ContextMenu>
           )}
         </div>
+        <ImagePreviewLightbox
+          src={preview?.src ?? null}
+          alt={preview?.alt}
+          onClose={closePreview}
+        />
       </>
     );
   }
 
   return (
     <>
-      {uploadInput}
-      <div className="flex h-12 w-full items-center justify-center">
-        {!hasFile ? (
-          emptyUploadSlot
-        ) : archivoVectorSinMiniatura ? (
-          <ContextMenu>
-            <ContextMenuTrigger asChild>
-              <button
-                type="button"
-                title={
-                  isPdf
-                    ? 'PDF — clic para otro archivo; derecho para descargar'
-                    : isAi
-                      ? 'AI — clic para otro archivo; derecho para descargar'
-                      : 'EPS — clic para otro archivo; derecho para descargar'
-                }
-                onClick={canUpload ? handleClick : (e) => void handleDownloadVector(e)}
-                onContextMenu={(e) => e.stopPropagation()}
-                className={`relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 ${
-                  uploading ? 'opacity-50' : ''
-                }`}
-              >
-                {uploading && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded bg-background/80">
-                    <Loader2 className="size-4 animate-spin" />
-                  </div>
-                )}
-                <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
-                <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
-              </button>
-            </ContextMenuTrigger>
-            <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-              {canUpload && (
-                <ContextMenuItem onClick={handleClick}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Reemplazar archivo
-                </ContextMenuItem>
-              )}
-              <ContextMenuItem onClick={(e) => void handleDownloadVector(e)}>
-                <Download className="mr-2 h-4 w-4" />
-                {isPdf ? 'Descargar PDF' : 'Descargar EPS'}
-              </ContextMenuItem>
-              {canUpload && (
-                <>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Eliminar archivo
-                  </ContextMenuItem>
-                </>
-              )}
-            </ContextMenuContent>
-          </ContextMenu>
-        ) : (
-          <ContextMenu>
-            <ContextMenuTrigger asChild>
-              <button
-                type="button"
-                className={`relative size-10 overflow-hidden rounded border p-0 cursor-pointer hover:opacity-80 transition-opacity ${
-                  uploading ? 'opacity-50' : ''
-                }`}
-                title="Vector"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (displayUrl) openPreview(displayUrl, 'Vector');
-                }}
-                onContextMenu={(e) => e.stopPropagation()}
-              >
-                {uploading && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  </div>
-                )}
-                {displayUrl ? (
-                  <>
-                    <img
-                      src={displayUrl}
-                      alt="Vector"
-                      className={`h-full w-full ${previewUrl ? 'object-contain' : 'object-cover'}`}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
-                        if (fb) {
-                          fb.classList.remove('hidden');
-                        }
-                      }}
-                    />
-                    <div className="hidden absolute inset-0 flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
-                      <FileType2 className="size-6" aria-hidden />
-                    </div>
-                  </>
-                ) : null}
-              </button>
-            </ContextMenuTrigger>
-            <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-              {canUpload && (
-                <ContextMenuItem onClick={handleClick}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Reemplazar archivo
-                </ContextMenuItem>
-              )}
-              <ContextMenuItem onClick={(e) => void handleDownloadVector(e)}>
-                <Download className="mr-2 h-4 w-4" />
-                Descargar vector
-              </ContextMenuItem>
-              {canUpload && (
-                <>
-                  <ContextMenuSeparator />
-                  <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Eliminar archivo
-                  </ContextMenuItem>
-                </>
-              )}
-            </ContextMenuContent>
-          </ContextMenu>
-        )}
-      </div>
-      <ImagePreviewLightbox
-        src={preview?.src ?? null}
-        alt={preview?.alt}
-        onClose={closePreview}
+      {content}
+      <VectorSizeConfirmDialog
+        open={sizeDialogState != null}
+        onOpenChange={(next) => {
+          if (!next) setSizeDialogState(null);
+        }}
+        fileName={sizeDialogState?.fileName ?? ''}
+        previewUrl={sizeDialogState?.previewUrl}
+        requestedWidthMm={item.requestedWidthMm}
+        requestedHeightMm={item.requestedHeightMm}
+        suggestion={
+          sizeDialogState?.suggestion ?? {
+            widthMm: 0,
+            heightMm: 0,
+            tipoPlanchuela: null,
+            marginAppliedMm: null,
+          }
+        }
+        svgAspectRatio={sizeDialogState?.svgAspectRatio ?? null}
+        onConfirm={handleConfirmFabricationSize}
       />
     </>
   );

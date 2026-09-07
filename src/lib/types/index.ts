@@ -122,6 +122,9 @@ export interface OrderItem {
   designName: string;
   requestedWidthMm: number;
   requestedHeightMm: number;
+  /** Medida de fabricación confirmada al subir SVG (mm). Null = usar requested* como fallback. */
+  fabricationWidthMm?: number | null;
+  fabricationHeightMm?: number | null;
   itemType?: ItemType;
   stampType: StampType;
   itemConfig?: {
@@ -211,6 +214,9 @@ export interface ProductionItem {
   designName: string;
   requestedWidthMm: number;
   requestedHeightMm: number;
+  /** Medida de fabricación confirmada al subir SVG (mm). Null = usar requested* como fallback. */
+  fabricationWidthMm?: number | null;
+  fabricationHeightMm?: number | null;
   stampType: StampType;
   productionState: ProductionState;
   isPriority: boolean;
@@ -251,6 +257,9 @@ export interface ProgramStamp {
   designName: string;
   widthMm: number;
   heightMm: number;
+  /** Medida de fabricación confirmada (mm), si existe; widthMm/heightMm ya la priorizan. */
+  fabricationWidthMm?: number | null;
+  fabricationHeightMm?: number | null;
   stampType: StampType;
   previewUrl?: string;
   vectorPreviewUrl?: string;

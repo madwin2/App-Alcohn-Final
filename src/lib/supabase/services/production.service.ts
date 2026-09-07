@@ -83,6 +83,8 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         estado_aspire,
         largo_real,
         ancho_real,
+        largo_fabricacion_mm,
+        ancho_fabricacion_mm,
         created_at,
         updated_at,
         es_prioritario,
@@ -229,6 +231,8 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         itemConfig: ((sello as any).item_config as ProductionItem['itemConfig'] | null) || undefined,
         requestedWidthMm: widthMm,
         requestedHeightMm: heightMm,
+        fabricationWidthMm: (sello as any).ancho_fabricacion_mm != null ? Number((sello as any).ancho_fabricacion_mm) : null,
+        fabricationHeightMm: (sello as any).largo_fabricacion_mm != null ? Number((sello as any).largo_fabricacion_mm) : null,
         stampType,
         productionState: mapToProductionState(sello.estado_fabricacion),
         isPriority: (sello as any).es_prioritario === true || (sello as any).es_prioritario === 'true',
@@ -374,6 +378,13 @@ export const updateProductionItem = async (
     }
     // Esto asegura que el programa no cambie automáticamente
 
+    if (updates.fabricationWidthMm !== undefined) {
+      (updateData as any).ancho_fabricacion_mm = updates.fabricationWidthMm ?? null;
+    }
+    if (updates.fabricationHeightMm !== undefined) {
+      (updateData as any).largo_fabricacion_mm = updates.fabricationHeightMm ?? null;
+    }
+
     const { error } = await supabase
       .from('sellos')
       .update(updateData)
@@ -506,6 +517,8 @@ export const updateProductionItem = async (
       itemConfig: ((updatedSello as any).item_config as ProductionItem['itemConfig'] | null) || undefined,
       requestedWidthMm: widthMm,
       requestedHeightMm: heightMm,
+      fabricationWidthMm: (updatedSello as any).ancho_fabricacion_mm != null ? Number((updatedSello as any).ancho_fabricacion_mm) : null,
+      fabricationHeightMm: (updatedSello as any).largo_fabricacion_mm != null ? Number((updatedSello as any).largo_fabricacion_mm) : null,
       stampType,
       productionState: mapToProductionState(updatedSello.estado_fabricacion),
       isPriority: (updatedSello as any).es_prioritario === true || (updatedSello as any).es_prioritario === 'true',

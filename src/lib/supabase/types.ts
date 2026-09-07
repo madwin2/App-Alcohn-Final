@@ -136,6 +136,8 @@ export interface Database {
           item_config: Record<string, any> | null;
           largo_real: number | null;
           ancho_real: number | null;
+          largo_fabricacion_mm: number | null;
+          ancho_fabricacion_mm: number | null;
           es_prioritario?: boolean | null;
           /** Solicitud de mockup web asociada (cuando el sello viene del wizard). */
           mockup_solicitud_id?: string | null;

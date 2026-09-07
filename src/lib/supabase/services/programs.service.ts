@@ -126,6 +126,8 @@ async function loadMaterialParams(): Promise<{
 function mapSelloToProgramStamp(sello: SelloRow, perdidaCorteCm: number): ProgramStamp {
   const anchoCm = sello.ancho_real != null ? Number(sello.ancho_real) : null;
   const largoCm = sello.largo_real != null ? Number(sello.largo_real) : null;
+  const anchoFabricacionMm = sello.ancho_fabricacion_mm != null ? Number(sello.ancho_fabricacion_mm) : null;
+  const largoFabricacionMm = sello.largo_fabricacion_mm != null ? Number(sello.largo_fabricacion_mm) : null;
   const dims = {
     anchoRealCm: anchoCm,
     largoRealCm: largoCm,
@@ -135,8 +137,10 @@ function mapSelloToProgramStamp(sello: SelloRow, perdidaCorteCm: number): Progra
   return {
     id: sello.id,
     designName: sello.diseno || 'Sin diseño',
-    widthMm: anchoCm != null ? anchoCm * 10 : 50,
-    heightMm: largoCm != null ? largoCm * 10 : 30,
+    widthMm: anchoFabricacionMm ?? (anchoCm != null ? anchoCm * 10 : 50),
+    heightMm: largoFabricacionMm ?? (largoCm != null ? largoCm * 10 : 30),
+    fabricationWidthMm: anchoFabricacionMm,
+    fabricationHeightMm: largoFabricacionMm,
     stampType: mapStampType(sello.tipo),
     previewUrl: sello.archivo_vector_preview || sello.foto_sello || undefined,
     vectorPreviewUrl: sello.archivo_vector_preview || undefined,

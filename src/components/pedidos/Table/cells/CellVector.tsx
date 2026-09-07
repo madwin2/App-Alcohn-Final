@@ -1,8 +1,8 @@
-import { Upload, Loader2, Download, Trash2, FileType2 } from 'lucide-react';
+import { Upload, Loader2, Download, Trash2, FileType2, Ruler } from 'lucide-react';
 import { storageFileKindFromUrl, storageFileKindLabel } from '@/lib/utils/storageFileKind';
 import { Order } from '@/lib/types/index';
 import { useOrdersStore } from '@/lib/state/orders.store';
-import { useState, useRef } from 'react';
+import { useState, useRef, type ReactNode } from 'react';
 import {
   uploadFile,
   generateFilePath,
@@ -15,6 +15,9 @@ import { useToast } from '@/components/ui/use-toast';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { ImagePreviewLightbox } from '@/components/shared/ImagePreviewLightbox';
 import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
+import { measureSvgFile } from '@/lib/utils/svgBoundingBox';
+import { suggestFabricationSize, type FabricationSizeSuggestion } from '@/lib/programas/fabricationSize';
+import { VectorSizeConfirmDialog } from '@/components/shared/VectorSizeConfirmDialog';
 
 interface CellVectorProps {
   order: Order;
@@ -22,11 +25,19 @@ interface CellVectorProps {
   editingRowId?: string | null;
 }
 
+interface SizeDialogState {
+  fileName: string;
+  previewUrl?: string;
+  suggestion: FabricationSizeSuggestion;
+  svgAspectRatio: number | null;
+}
+
 export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   const { showPreviews } = useOrdersStore();
   const { toast } = useToast();
   const { preview, openPreview, closePreview } = useImagePreviewLightbox();
   const [uploading, setUploading] = useState(false);
+  const [sizeDialogState, setSizeDialogState] = useState<SizeDialogState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const item = order.items[0];
   
@@ -55,20 +66,17 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
       : !isPdf && !isAi && !isEps
         ? hasFile
         : undefined;
-  
-  // Si es un archivo resumido (para pedidos con múltiples items)
-  if (hasFile === 'summary') {
-    const totalItems = order.items.length;
-    const itemsWithFiles = order.items.filter(item => item.files?.vectorUrl).length;
-    
-    return (
-      <div className="flex items-center justify-center w-10 h-10 border-2 border-solid border-purple-500 rounded bg-purple-50 dark:bg-purple-900/20">
-        <span className="text-xs font-medium text-purple-600 dark:text-purple-400">
-          {itemsWithFiles}/{totalItems}
-        </span>
-      </div>
-    );
-  }
+
+  const fabricationConfirmed =
+    item.fabricationWidthMm != null && item.fabricationHeightMm != null;
+  const fabricationBadge = fabricationConfirmed ? (
+    <span
+      className="absolute top-0.5 left-0.5 z-10 rounded-full bg-emerald-500 p-0.5 text-white shadow"
+      title={`Medida de fabricación confirmada: ${Number(item.fabricationWidthMm).toFixed(1)} × ${Number(item.fabricationHeightMm).toFixed(1)} mm`}
+    >
+      <Ruler className="size-2.5" aria-hidden />
+    </span>
+  ) : null;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -141,6 +149,21 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
               ? 'El EPS quedó guardado; si no ves miniatura, descargalo con el ícono.'
               : 'El archivo vector se subió correctamente',
       });
+
+      if (fileExtension === '.svg') {
+        const measurement = await measureSvgFile(file);
+        const suggestion = suggestFabricationSize(
+          item.requestedWidthMm,
+          item.requestedHeightMm,
+          measurement?.aspectRatio ?? null,
+        );
+        setSizeDialogState({
+          fileName: file.name,
+          previewUrl: result.previewUrl ?? result.originalUrl,
+          suggestion,
+          svgAspectRatio: measurement?.aspectRatio ?? null,
+        });
+      }
     } catch (error) {
       console.error('Error uploading file:', error);
       toast({
@@ -155,6 +178,20 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
         fileInputRef.current.value = '';
       }
     }
+  };
+
+  const handleConfirmFabricationSize = async ({
+    widthMm,
+    heightMm,
+  }: {
+    widthMm: number;
+    heightMm: number;
+  }) => {
+    if (!onUpdate) return;
+    const updatedItems = order.items.map((i) =>
+      i.id === item.id ? { ...i, fabricationWidthMm: widthMm, fabricationHeightMm: heightMm } : i,
+    );
+    await onUpdate(order.id, { items: updatedItems });
   };
 
   const handleClick = () => {
@@ -248,9 +285,21 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
     }
   };
 
-  if (!showPreviews) {
+  let content: ReactNode;
+
+  if (hasFile === 'summary') {
+    const totalItems = order.items.length;
+    const itemsWithFiles = order.items.filter(orderItem => orderItem.files?.vectorUrl).length;
+    content = (
+      <div className="flex items-center justify-center w-10 h-10 border-2 border-solid border-purple-500 rounded bg-purple-50 dark:bg-purple-900/20">
+        <span className="text-xs font-medium text-purple-600 dark:text-purple-400">
+          {itemsWithFiles}/{totalItems}
+        </span>
+      </div>
+    );
+  } else if (!showPreviews) {
     const kindLabel = vectorFileKind ? storageFileKindLabel(vectorFileKind) : 'Archivo';
-    return (
+    content = (
       <>
         <input
           ref={fileInputRef}
@@ -280,6 +329,7 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
                 onContextMenu={(e) => e.stopPropagation()}
                 className={`relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 ${uploading ? 'opacity-50' : ''}`}
               >
+                {fabricationBadge}
                 {uploading ? (
                   <Loader2 className="size-4 animate-spin text-violet-700 dark:text-violet-300" />
                 ) : (
@@ -307,10 +357,8 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
         )}
       </>
     );
-  }
-
-  if (!displayUrl && !archivoVectorSinMiniatura) {
-    return (
+  } else if (!displayUrl && !archivoVectorSinMiniatura) {
+    content = (
       <>
         <input
           ref={fileInputRef}
@@ -331,100 +379,128 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
         </div>
       </>
     );
+  } else {
+    content = (
+      <>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".svg,.eps,.pdf,.ai,image/svg+xml,application/pdf,application/postscript,application/illustrator"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            {archivoVectorSinMiniatura ? (
+              <button
+                type="button"
+                title={
+                  isPdf
+                    ? 'PDF — clic para otro archivo; derecho para descargar'
+                    : isAi
+                      ? 'AI — clic para otro archivo; derecho para descargar'
+                      : 'EPS — clic para otro archivo; derecho para descargar'
+                }
+                onClick={handleClick}
+                onContextMenu={(e) => e.stopPropagation()}
+                className={`relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 ${uploading ? 'opacity-50' : ''}`}
+              >
+                {fabricationBadge}
+                {uploading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center rounded bg-background/80">
+                    <Loader2 className="size-4 animate-spin" />
+                  </div>
+                )}
+                <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
+                <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
+              </button>
+            ) : (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (displayUrl) openPreview(displayUrl, isEps ? 'Vector EPS' : 'Vector');
+                }}
+                onContextMenu={(e) => e.stopPropagation()}
+                className={`relative h-10 w-10 cursor-pointer overflow-hidden rounded border transition-opacity hover:opacity-80 ${uploading ? 'opacity-50' : ''}`}
+              >
+                {fabricationBadge}
+                {uploading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                )}
+                <div className={`h-full w-full ${previewUsableAsImage && isEps ? 'bg-white' : ''}`}>
+                  {displayUrl ? (
+                    <>
+                      <img
+                        src={displayUrl}
+                        alt={isEps ? 'Vector EPS Preview' : 'Vector'}
+                        className={`h-full w-full ${previewUsableAsImage && isEps ? 'object-contain' : 'object-cover'}`}
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                          if (fb) {
+                            fb.classList.remove('hidden');
+                            fb.classList.add('flex');
+                          }
+                        }}
+                      />
+                      <div className="hidden h-full w-full items-center justify-center bg-muted">
+                        <FileType2 className="h-5 w-5 text-muted-foreground" aria-hidden />
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            )}
+          </ContextMenuTrigger>
+          <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+            <ContextMenuItem onClick={handleClick}>
+              <Upload className="mr-2 h-4 w-4" />
+              Reemplazar archivo
+            </ContextMenuItem>
+            <ContextMenuItem onClick={(e) => void handleDownload(e)}>
+              <Download className="mr-2 h-4 w-4" />
+              Descargar archivo
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Eliminar archivo
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+        <ImagePreviewLightbox
+          src={preview?.src ?? null}
+          alt={preview?.alt}
+          onClose={closePreview}
+        />
+      </>
+    );
   }
 
   return (
     <>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".svg,.eps,.pdf,.ai,image/svg+xml,application/pdf,application/postscript,application/illustrator"
-        onChange={handleFileSelect}
-        className="hidden"
-      />
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          {archivoVectorSinMiniatura ? (
-            <button
-              type="button"
-              title={
-                isPdf
-                  ? 'PDF — clic para otro archivo; derecho para descargar'
-                  : isAi
-                    ? 'AI — clic para otro archivo; derecho para descargar'
-                    : 'EPS — clic para otro archivo; derecho para descargar'
-              }
-              onClick={handleClick}
-              onContextMenu={(e) => e.stopPropagation()}
-              className={`relative flex size-10 items-center justify-center rounded border border-violet-500/60 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/40 ${uploading ? 'opacity-50' : ''}`}
-            >
-              {uploading && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center rounded bg-background/80">
-                  <Loader2 className="size-4 animate-spin" />
-                </div>
-              )}
-              <FileType2 className="size-5 text-violet-700 dark:text-violet-300" />
-              <Download className="absolute bottom-0.5 right-0.5 size-3 text-violet-600" aria-hidden />
-            </button>
-          ) : (
-            <div
-              onClick={(e) => {
-                e.stopPropagation();
-                if (displayUrl) openPreview(displayUrl, isEps ? 'Vector EPS' : 'Vector');
-              }}
-              onContextMenu={(e) => e.stopPropagation()}
-              className={`relative h-10 w-10 cursor-pointer overflow-hidden rounded border transition-opacity hover:opacity-80 ${uploading ? 'opacity-50' : ''}`}
-            >
-              {uploading && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                </div>
-              )}
-              <div className={`h-full w-full ${previewUsableAsImage && isEps ? 'bg-white' : ''}`}>
-                {displayUrl ? (
-                  <>
-                    <img
-                      src={displayUrl}
-                      alt={isEps ? 'Vector EPS Preview' : 'Vector'}
-                      className={`h-full w-full ${previewUsableAsImage && isEps ? 'object-contain' : 'object-cover'}`}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
-                        if (fb) {
-                          fb.classList.remove('hidden');
-                          fb.classList.add('flex');
-                        }
-                      }}
-                    />
-                    <div className="hidden h-full w-full items-center justify-center bg-muted">
-                      <FileType2 className="h-5 w-5 text-muted-foreground" aria-hidden />
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          )}
-        </ContextMenuTrigger>
-        <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-          <ContextMenuItem onClick={handleClick}>
-            <Upload className="mr-2 h-4 w-4" />
-            Reemplazar archivo
-          </ContextMenuItem>
-          <ContextMenuItem onClick={(e) => void handleDownload(e)}>
-            <Download className="mr-2 h-4 w-4" />
-            Descargar archivo
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
-            <Trash2 className="mr-2 h-4 w-4" />
-            Eliminar archivo
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-      <ImagePreviewLightbox
-        src={preview?.src ?? null}
-        alt={preview?.alt}
-        onClose={closePreview}
+      {content}
+      <VectorSizeConfirmDialog
+        open={sizeDialogState != null}
+        onOpenChange={(next) => {
+          if (!next) setSizeDialogState(null);
+        }}
+        fileName={sizeDialogState?.fileName ?? ''}
+        previewUrl={sizeDialogState?.previewUrl}
+        requestedWidthMm={item.requestedWidthMm}
+        requestedHeightMm={item.requestedHeightMm}
+        suggestion={
+          sizeDialogState?.suggestion ?? {
+            widthMm: 0,
+            heightMm: 0,
+            tipoPlanchuela: null,
+            marginAppliedMm: null,
+          }
+        }
+        svgAspectRatio={sizeDialogState?.svgAspectRatio ?? null}
+        onConfirm={handleConfirmFabricationSize}
       />
     </>
   );

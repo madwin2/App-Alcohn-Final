@@ -974,6 +974,12 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
         if (item.requestedHeightMm !== undefined) {
           selloData.largo_real = item.requestedHeightMm ? (item.requestedHeightMm / 10).toString() : null;
         }
+        if (item.fabricationWidthMm !== undefined) {
+          selloData.ancho_fabricacion_mm = item.fabricationWidthMm ?? null;
+        }
+        if (item.fabricationHeightMm !== undefined) {
+          selloData.largo_fabricacion_mm = item.fabricationHeightMm ?? null;
+        }
 
         // Actualizar fecha_limite si viene en el item (aunque normalmente viene en deadlineAt de la orden)
         // Esto permite actualizar fecha_limite por item si es necesario

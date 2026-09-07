@@ -213,6 +213,8 @@ export const mapSelloToOrderItem = (sello: SelloRow, cliente: ClienteRow): Order
     designName: sello.diseno || 'Sin diseño',
     requestedWidthMm: widthMm,
     requestedHeightMm: heightMm,
+    fabricationWidthMm: sello.ancho_fabricacion_mm != null ? Number(sello.ancho_fabricacion_mm) : null,
+    fabricationHeightMm: sello.largo_fabricacion_mm != null ? Number(sello.largo_fabricacion_mm) : null,
     itemType: mapItemType((sello as any).item_type),
     stampType: mapStampType(sello.tipo),
     itemConfig: ((sello as any).item_config as Record<string, any> | null) || undefined,
@@ -377,6 +379,8 @@ export const mapOrderItemToSello = (
   foto_sello: item.files?.photoUrl || null,
   ancho_real: item.requestedWidthMm ? (item.requestedWidthMm / 10).toString() : null, // Convertir de mm a cm
   largo_real: item.requestedHeightMm ? (item.requestedHeightMm / 10).toString() : null,
+  ancho_fabricacion_mm: item.fabricationWidthMm ?? null,
+  largo_fabricacion_mm: item.fabricationHeightMm ?? null,
   fecha_limite: null, // Se puede agregar después
 });
 
