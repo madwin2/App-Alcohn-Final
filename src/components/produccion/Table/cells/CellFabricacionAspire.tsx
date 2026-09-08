@@ -34,6 +34,7 @@ const aspireOptions: { value: AspireState; label: string }[] = [
   { value: 'Aspire C', label: 'Aspire C' },
   { value: 'Aspire C Check', label: 'Aspire C Check' },
   { value: 'Aspire XL', label: 'Aspire XL' },
+  { value: 'Aspire XL Check', label: 'Aspire XL Check' },
 ];
 
 // Función para obtener el estilo visual del chip Aspire
@@ -99,6 +100,16 @@ const getAspireChipVisual = (state: AspireState | null) => {
         borderColor: `rgba(249,115,22,0.70)`,
         textClass: '',
         textColor: `rgba(249,115,22,0.82)`,
+        width: 'auto'
+      };
+    case 'Aspire XL Check':
+      return {
+        backgroundImage: `linear-gradient(60deg, rgba(34,197,94,0.05) 0%, rgba(34,197,94,0) 100%)`,
+        backgroundColor: `rgba(34,197,94,0.1)`,
+        boxShadow: 'none',
+        borderColor: `rgba(34,197,94,0.70)`,
+        textClass: '',
+        textColor: `rgba(34,197,94,0.82)`,
         width: 'auto'
       };
     default:

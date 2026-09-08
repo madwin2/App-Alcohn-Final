@@ -93,6 +93,31 @@ const aspireForMachine = (
   return null;
 };
 
+const aspireCheckForMachine = (
+  machine: ProgramMachineType,
+): 'Aspire C Check' | 'Aspire G Check' | 'Aspire XL Check' | null => {
+  if (machine === 'C') return 'Aspire C Check';
+  if (machine === 'G') return 'Aspire G Check';
+  if (machine === 'XL') return 'Aspire XL Check';
+  return null;
+};
+
+/** Actualiza estado_aspire de todos los sellos del programa (p. ej. al verificar / desverificar). */
+async function setAspireStateForProgramStamps(
+  programId: string,
+  estadoAspire: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('sellos')
+    .update({
+      estado_aspire: estadoAspire,
+      updated_at: new Date().toISOString(),
+    } as any)
+    .eq('programa_id', programId);
+
+  if (error) throw error;
+}
+
 async function loadMaterialParams(): Promise<{
   perdidaCorteCm: number;
   maxMm: Partial<Record<'C' | 'G' | 'XL', number>>;
@@ -551,6 +576,18 @@ export const updateProgram = async (
   if (error) throw error;
 
   if (updates.isVerified !== undefined) {
+    const { data: progForAspire } = await supabase
+      .from('programa')
+      .select('maquina')
+      .eq('id', programId)
+      .maybeSingle();
+    const machine = mapMachine((progForAspire as any)?.maquina) as ProgramMachineType;
+    const nextAspire = updates.isVerified
+      ? aspireCheckForMachine(machine)
+      : aspireForMachine(machine);
+    if (nextAspire) {
+      await setAspireStateForProgramStamps(programId, nextAspire);
+    }
     await logProgramEvent(programId, updates.isVerified ? 'VERIFICADO' : 'DESVERIFICADO');
   }
 
@@ -1034,6 +1071,12 @@ export const uploadVerifiedAspire = async (
     .eq('id', programId);
 
   if (error) throw error;
+
+  // Cascada: sellos pasan de Aspire C/G/XL → Aspire C/G/XL Check
+  const aspireCheck = aspireCheckForMachine(program.machine);
+  if (aspireCheck) {
+    await setAspireStateForProgramStamps(programId, aspireCheck);
+  }
 
   await logProgramEvent(programId, 'ASPIRE_SUBIDO', {
     nombre: file.name,

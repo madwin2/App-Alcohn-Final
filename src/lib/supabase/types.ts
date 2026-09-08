@@ -131,7 +131,7 @@ export interface Database {
           tipo_planchuela: 100 | 63 | 38 | 25 | 19 | 12 | null;
           tiempo: number | null;
           maquina: 'C' | 'G' | 'XL' | null;
-          estado_aspire: 'Aspire G' | 'Aspire G Check' | 'Aspire C' | 'Aspire C Check' | 'Aspire XL' | null;
+          estado_aspire: 'Aspire G' | 'Aspire G Check' | 'Aspire C' | 'Aspire C Check' | 'Aspire XL' | 'Aspire XL Check' | null;
           item_type: 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA' | null;
           item_config: Record<string, any> | null;
           largo_real: number | null;

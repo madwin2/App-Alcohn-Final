@@ -91,6 +91,7 @@ const initialSort: ProductionSortState = {
     'ASPIRE_Aspire_C',
     'ASPIRE_Aspire_C_Check',
     'ASPIRE_Aspire_XL',
+    'ASPIRE_Aspire_XL_Check',
     'HACIENDO',
     'REHACER',
     'RETOCAR',

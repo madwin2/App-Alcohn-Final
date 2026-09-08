@@ -24,14 +24,21 @@ export type StampType = '3MM' | 'ALIMENTO' | 'CLASICO' | 'ABC' | 'LACRE';
 export type ItemType = 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA';
 export type SoldadorPower = '100W' | '200W';
 export type AbecedarioCase = 'MAYUSCULA' | 'MINUSCULA' | 'AMBAS';
-export type AspireState = 'Aspire G' | 'Aspire G Check' | 'Aspire C' | 'Aspire C Check' | 'Aspire XL';
+export type AspireState =
+  | 'Aspire G'
+  | 'Aspire G Check'
+  | 'Aspire C'
+  | 'Aspire C Check'
+  | 'Aspire XL'
+  | 'Aspire XL Check';
 // Claves normalizadas para ordenar/filtrar cuando Aspire y Fabricación comparten columna en UI
 export type AspireSortKey =
   | 'ASPIRE_Aspire_G'
   | 'ASPIRE_Aspire_G_Check'
   | 'ASPIRE_Aspire_C'
   | 'ASPIRE_Aspire_C_Check'
-  | 'ASPIRE_Aspire_XL';
+  | 'ASPIRE_Aspire_XL'
+  | 'ASPIRE_Aspire_XL_Check';
 export type ProductionFabricacionAspireKey = FabricationState | AspireSortKey;
 export type MachineType = 'C' | 'G' | 'XL';
 export type ProgressStep = 
