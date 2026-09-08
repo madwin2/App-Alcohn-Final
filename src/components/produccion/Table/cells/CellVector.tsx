@@ -420,7 +420,7 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
               <ContextMenuTrigger asChild>
                 <button
                   type="button"
-                  className={`relative size-10 overflow-hidden rounded border p-0 cursor-pointer hover:opacity-80 transition-opacity ${
+                  className={`relative size-10 overflow-hidden rounded border bg-white p-0 cursor-pointer hover:opacity-80 transition-opacity ${
                     uploading ? 'opacity-50' : ''
                   }`}
                   title="Vector"
