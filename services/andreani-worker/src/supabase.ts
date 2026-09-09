@@ -76,28 +76,38 @@ type SelloLite = {
 
 function captionFromSellos(sellos: SelloLite[]): string {
   const bits: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string) => {
+    const t = raw.trim();
+    if (!t) return;
+    const k = t.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    bits.push(t);
+  };
   for (const s of sellos) {
     switch (s.item_type) {
       case 'MANGO_GOLPE':
-        bits.push('+ mango de golpe');
+        push('+ mango de golpe');
         break;
       case 'SOLDADOR':
-        bits.push('+ soldador');
+        push('+ soldador');
         break;
       case 'BASE_REMACHADORA':
-        bits.push('+ base remachadora');
+        push('+ base remachadora');
         break;
       case 'ABECEDARIO':
-        bits.push('abecedario');
+        push('abecedario');
         break;
       case 'SELLO':
-        if (s.diseno?.trim()) bits.push(s.diseno.trim().slice(0, 48));
+        push(s.diseno?.trim() ? s.diseno.trim().slice(0, 48) : 'sello');
         break;
       default:
+        if (s.diseno?.trim()) push(s.diseno.trim().slice(0, 48));
         break;
     }
   }
-  return [...new Set(bits)].join(' · ');
+  return bits.join(' · ');
 }
 
 export async function listAssignedLinkCandidates(): Promise<LabelMatchCandidate[]> {

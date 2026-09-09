@@ -391,7 +391,11 @@ export function AndreaniLabelsPanel({
     }
     setDownloadingId(row.id);
     try {
-      await downloadAndreaniEtiquetaPdf(row.pdfPath);
+      const order = row.ordenId ? orders.find((o) => o.id === row.ordenId) : undefined;
+      await downloadAndreaniEtiquetaPdf(row.pdfPath, {
+        tracking: row.tracking,
+        order: order ?? null,
+      });
       markDownloaded([{ id: row.id, ordenId: row.ordenId }]);
     } catch (error) {
       toast({
@@ -406,8 +410,7 @@ export function AndreaniLabelsPanel({
 
   const handleDownloadAll = async () => {
     const ready = downloadable.filter((r) => Boolean(r.pdfPath));
-    const paths = ready.map((r) => r.pdfPath).filter((p): p is string => Boolean(p));
-    if (paths.length === 0) {
+    if (ready.length === 0) {
       toast({
         title: 'Nada para descargar',
         description: 'No hay etiquetas con venta Transferido y PDF listo.',
@@ -417,11 +420,17 @@ export function AndreaniLabelsPanel({
     }
     setDownloadingAll(true);
     try {
-      await downloadMergedAndreaniEtiquetasPdfs(paths);
+      await downloadMergedAndreaniEtiquetasPdfs(
+        ready.map((r) => ({
+          pdfPath: r.pdfPath!,
+          tracking: r.tracking,
+          order: r.ordenId ? orders.find((o) => o.id === r.ordenId) ?? null : null,
+        })),
+      );
       markDownloaded(ready.map((r) => ({ id: r.id, ordenId: r.ordenId })));
       toast({
         title: 'PDF listo',
-        description: `${paths.length} etiqueta${paths.length === 1 ? '' : 's'} en un solo archivo (100×152).`,
+        description: `${ready.length} etiqueta${ready.length === 1 ? '' : 's'} en un solo archivo (100×152).`,
       });
     } catch (error) {
       toast({

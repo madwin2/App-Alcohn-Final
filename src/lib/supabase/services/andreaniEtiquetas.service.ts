@@ -2,6 +2,7 @@ import { PDFDocument } from 'pdf-lib';
 import { supabase } from '../client';
 import type { Order } from '@/lib/types';
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
+import { enrichAndreaniLabelsPdf } from '@/lib/utils/enrichAndreaniLabelsPdf';
 
 export type AndreaniEtiquetaEstado = 'asignada' | 'huerfano';
 
@@ -216,24 +217,50 @@ const triggerBrowserDownload = (href: string, filename: string) => {
   a.click();
 };
 
-export const downloadAndreaniEtiquetaPdf = async (pdfPath: string): Promise<void> => {
-  const { data, error } = await supabase.storage.from('etiquetas-andreani').createSignedUrl(pdfPath, 120);
-  if (error || !data?.signedUrl) {
-    throw new Error(error?.message || 'No se pudo firmar el PDF');
+export const downloadAndreaniEtiquetaPdf = async (
+  pdfPath: string,
+  options?: { tracking?: string; order?: Order | null },
+): Promise<void> => {
+  const bytes = await fetchAndreaniEtiquetaPdfBytes(pdfPath);
+  let out: Uint8Array = bytes;
+  if (options?.tracking && options.order) {
+    const map = new Map<string, Order>([[options.tracking, options.order]]);
+    const copy = new Uint8Array(bytes);
+    out = await enrichAndreaniLabelsPdf(copy.buffer, map);
   }
-  triggerBrowserDownload(data.signedUrl, pdfPath.split('/').pop() || 'etiqueta-andreani.pdf');
+  const blob = new Blob([out as BlobPart], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  triggerBrowserDownload(url, pdfPath.split('/').pop() || 'etiqueta-andreani.pdf');
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 };
 
-/** Une varios PDFs en uno solo, una hoja 100×152 mm por etiqueta (copia directa, sin reescalar). */
-export const downloadMergedAndreaniEtiquetasPdfs = async (pdfPaths: string[]): Promise<void> => {
-  if (pdfPaths.length === 0) {
+export type AndreaniDownloadItem = {
+  pdfPath: string;
+  tracking: string;
+  order?: Order | null;
+};
+
+/** Une varios PDFs en uno solo, re-enriqueciendo el pie con ítems del pedido (accesorios, multi-sello). */
+export const downloadMergedAndreaniEtiquetasPdfs = async (
+  items: AndreaniDownloadItem[] | string[],
+): Promise<void> => {
+  const normalized: AndreaniDownloadItem[] = items.map((item) =>
+    typeof item === 'string' ? { pdfPath: item, tracking: '' } : item,
+  );
+  if (normalized.length === 0) {
     throw new Error('No hay PDFs para descargar');
   }
 
   const outDoc = await PDFDocument.create();
 
-  for (const pdfPath of pdfPaths) {
-    const bytes = await fetchAndreaniEtiquetaPdfBytes(pdfPath);
+  for (const item of normalized) {
+    const raw = await fetchAndreaniEtiquetaPdfBytes(item.pdfPath);
+    let bytes: Uint8Array = raw;
+    if (item.tracking && item.order) {
+      const map = new Map<string, Order>([[item.tracking, item.order]]);
+      const copy = new Uint8Array(raw);
+      bytes = await enrichAndreaniLabelsPdf(copy.buffer, map);
+    }
     const src = await PDFDocument.load(bytes);
     const indices = src.getPageIndices();
     const copied = await outDoc.copyPages(src, indices);
@@ -258,7 +285,13 @@ export const downloadMergedAndreaniEtiquetasPdfs = async (pdfPaths: string[]): P
 
 export const andreaniAssignCandidatesFromOrders = (orders: Order[]): Array<{ id: string; label: string }> =>
   orders
-    .filter((order) => Boolean(order.andreaniLinkUrl) && !order.shipping?.trackingNumber)
+    .filter((order) => {
+      if (!order.andreaniLinkUrl) return false;
+      if (order.shipping?.trackingNumber) return false;
+      // Ya cerrados: no ofrecerlos para asignar huérfanos (aunque falte el TN en el pedido).
+      if (order.items.some((item) => item.shippingState === 'SEGUIMIENTO_ENVIADO')) return false;
+      return true;
+    })
     .map((order) => {
       const itemsLabel =
         order.items.length > 0

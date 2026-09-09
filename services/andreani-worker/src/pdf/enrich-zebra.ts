@@ -26,9 +26,10 @@ const MM_TO_PT = 72 / 25.4;
 const LABEL_W_PT = 100 * MM_TO_PT;
 const LABEL_H_PT = 152 * MM_TO_PT;
 
-/** Pie fino (~8 mm texto / ~11 mm con preview). */
+/** Pie fino (~8 mm texto / ~11 mm con preview / ~14 mm multi-ítem). */
 const FOOTER_H_TEXT_PT = 8 * MM_TO_PT;
 const FOOTER_H_PREVIEW_PT = 11 * MM_TO_PT;
+const FOOTER_H_MULTI_PT = 14 * MM_TO_PT;
 /** Aire claro entre stub (2 QR) y el pie Pedido. */
 const GAP_PT = 8 * MM_TO_PT;
 const TOP_MARGIN_PT = 0.5 * MM_TO_PT;
@@ -47,6 +48,27 @@ export type EnrichOrderInput = {
   caption: string;
   imageUrls: string[][];
 };
+
+/** Preferir caption (incluye accesorios); si no, designNames. */
+function footerDetailLines(order: EnrichOrderInput): string[] {
+  const fromCaption = (order.caption || '')
+    .split(/\s*·\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (fromCaption.length) return fromCaption;
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of order.designNames) {
+    const t = name.trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
 
 type CropBox = { x: number; y: number; width: number; height: number };
 
@@ -240,8 +262,14 @@ export async function enrichZebraLabelPdf(
     );
   }
 
+  const detailLines = order ? footerDetailLines(order) : [];
   const hasPreviews = (order?.imageUrls ?? []).some((u) => u.length > 0);
-  const bandH = hasPreviews ? FOOTER_H_PREVIEW_PT : FOOTER_H_TEXT_PT;
+  const multiItem = detailLines.length > 1;
+  const bandH = multiItem
+    ? FOOTER_H_MULTI_PT
+    : hasPreviews
+      ? FOOTER_H_PREVIEW_PT
+      : FOOTER_H_TEXT_PT;
   const footerY = BOTTOM_SAFE_PT;
   const andreaniBottom = footerY + bandH + GAP_PT;
   const availableH = Math.max(40, LABEL_H_PT - TOP_MARGIN_PT - andreaniBottom);
@@ -286,14 +314,8 @@ export async function enrichZebraLabelPdf(
   const lines: string[] = [];
   if (order) {
     lines.push(`Pedido: ${order.id.replace(/-/g, '').slice(0, 14)}`);
-    const seen = new Set<string>();
-    for (const name of order.designNames.slice(0, 2)) {
-      const t = name.trim();
-      if (!t) continue;
-      const k = t.toLowerCase();
-      if (seen.has(k)) continue;
-      seen.add(k);
-      lines.push(t.length > 34 ? `${t.slice(0, 31)}…` : t);
+    for (const detail of detailLines.slice(0, 3)) {
+      lines.push(detail.length > 36 ? `${detail.slice(0, 33)}…` : detail);
     }
   } else {
     lines.push(`Andreani ${tracking}`);
@@ -318,9 +340,10 @@ export async function enrichZebraLabelPdf(
     });
   }
 
-  const fontSize = Math.max(6, Math.min(7.2, bandH * 0.35));
+  const maxTextLines = multiItem ? 4 : 2;
+  const fontSize = Math.max(5.8, Math.min(7.2, bandH * (multiItem ? 0.28 : 0.35)));
   let y = contentTop - fontSize;
-  for (const line of lines.slice(0, 2)) {
+  for (const line of lines.slice(0, maxTextLines)) {
     page.drawText(line, {
       x: textX,
       y,
@@ -333,7 +356,7 @@ export async function enrichZebraLabelPdf(
     if (y < footerY + 1) break;
   }
 
-  const urls = (order?.imageUrls ?? []).slice(0, 2);
+  const urls = (order?.imageUrls ?? []).slice(0, 3);
   if (urls.length) {
     const gap = 2;
     const slot = Math.min(40, (rightW - pad - gap * (urls.length - 1)) / urls.length);

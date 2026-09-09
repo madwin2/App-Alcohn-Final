@@ -29,6 +29,7 @@ const LABEL_H_PT = LABEL_H_MM * MM_TO_PT;
 
 /** Alto del zócalo (pedido + logos), relativo al alto de página. */
 const FOOTER_FRAC_OF_PAGE = 0.14;
+const FOOTER_FRAC_MULTI = 0.17;
 const RENDER_SCALE = 2.5;
 const TRIM_WHITE_THRESHOLD = 250;
 const TRIM_PADDING_PX = 6;
@@ -42,8 +43,12 @@ const FIT_ZOOM = 1;
 const TOP_PRINT_MARGIN_PT = MM_TO_PT * 1.0;
 const BOTTOM_FOOTER_GAP_PT = MM_TO_PT * 0.8;
 const HORIZONTAL_NUDGE_PT = 0;
-/** Mantener stub inferior Andreani (tracking + QR); no descartar. */
+/** Mantener stub inferior Andreani (tracking + QR); no descartar en Zebra crudo. */
 const ZEBRA_BOTTOM_DISCARD_FRAC = 0;
+
+/** True si la hoja ya es nuestra salida 100×152 (re-enrich: hay que recortar el pie viejo). */
+const isOurEnrichedLabelPage = (widthPt: number, heightPt: number): boolean =>
+  Math.abs(widthPt - LABEL_W_PT) < 2 && Math.abs(heightPt - LABEL_H_PT) < 2;
 
 const itemTypeShortLabel = (item: OrderItem): string | null => {
   switch (item.itemType) {
@@ -211,24 +216,36 @@ const enrichZebraVector = async (
 
   for (let i = 0; i < embeddedPages.length; i += 1) {
     const embeddedPng = embeddedPages[i];
-    const labelPage = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
-    const bandH = LABEL_H_PT * FOOTER_FRAC_OF_PAGE;
+    const tn = trackingPerPage[i] ?? null;
+    const order = tn ? trackingToOrder.get(tn) : undefined;
+    const itemLineCount = order
+      ? order.items.reduce((n, item) => (itemTypeShortLabel(item) ? n + 1 : n), 0)
+      : 0;
+    const footerFrac = itemLineCount > 1 ? FOOTER_FRAC_MULTI : FOOTER_FRAC_OF_PAGE;
+    const bandH = LABEL_H_PT * footerFrac;
     const bandY = BOTTOM_FOOTER_GAP_PT * 0.4;
     const iw = embeddedPng.width;
     const ih = embeddedPng.height;
-    const contentH = ih * (1 - ZEBRA_BOTTOM_DISCARD_FRAC);
+    // Si ya es nuestra etiqueta 100×152, sacar el pie viejo antes de redibujar.
+    const discardFrac = isOurEnrichedLabelPage(iw, ih)
+      ? Math.min(0.28, footerFrac + 0.04)
+      : ZEBRA_BOTTOM_DISCARD_FRAC;
+    const contentH = ih * (1 - discardFrac);
     const availableH = Math.max(
       40,
       LABEL_H_PT - TOP_PRINT_MARGIN_PT - bandH - BOTTOM_FOOTER_GAP_PT,
     );
     const scale = Math.min(LABEL_W_PT / iw, availableH / contentH) * FIT_ZOOM;
     const dw = iw * scale;
+    const dhContent = contentH * scale;
     const dhFull = ih * scale;
     const xImg = (LABEL_W_PT - dw) / 2 + HORIZONTAL_NUDGE_PT;
     const yTop = LABEL_H_PT - TOP_PRINT_MARGIN_PT;
+    // Alinear el crop (sin pie viejo) arriba; el resto queda bajo el clip.
     const yImg = yTop - dhFull;
 
     const clipY = bandY + bandH;
+    const labelPage = outDoc.addPage([LABEL_W_PT, LABEL_H_PT]);
     labelPage.pushOperators(
       pushGraphicsState(),
       moveTo(0, clipY),
@@ -239,7 +256,23 @@ const enrichZebraVector = async (
       clip(),
       endPath(),
     );
-    labelPage.drawPage(embeddedPng, { x: xImg, y: yImg, width: dw, height: dhFull });
+    // Clip adicional del borde inferior del contenido (descarta pie viejo).
+    if (discardFrac > 0) {
+      labelPage.pushOperators(
+        pushGraphicsState(),
+        moveTo(xImg, yTop - dhContent),
+        lineTo(xImg + dw, yTop - dhContent),
+        lineTo(xImg + dw, yTop),
+        lineTo(xImg, yTop),
+        closePath(),
+        clip(),
+        endPath(),
+      );
+      labelPage.drawPage(embeddedPng, { x: xImg, y: yImg, width: dw, height: dhFull });
+      labelPage.pushOperators(popGraphicsState());
+    } else {
+      labelPage.drawPage(embeddedPng, { x: xImg, y: yImg, width: dw, height: dhFull });
+    }
     labelPage.pushOperators(popGraphicsState());
 
     const pad = Math.max(3, dw * 0.024);
@@ -252,8 +285,6 @@ const enrichZebraVector = async (
       borderWidth: 0,
     });
 
-    const tn = trackingPerPage[i] ?? null;
-    const order = tn ? trackingToOrder.get(tn) : undefined;
     const footerContent = order ? buildFooterContent(order) : null;
     const imageCandidates = footerContent?.imageCandidates ?? [];
     const centerLines = buildCenterFooterLines(order, tn);
@@ -286,9 +317,9 @@ const enrichZebraVector = async (
         : 0;
     const totalPrevW = maxPrev > 0 ? maxPrev * slotW + Math.max(0, maxPrev - 1) * gapPrev : 0;
 
-    const textLines = centerLines.slice(0, 3);
-    const textSize = Math.max(6.8, Math.min(8.5, bandH * 0.26));
-    const lineStep = textSize + 1.4;
+    const textLines = centerLines.slice(0, 4);
+    const textSize = Math.max(6.5, Math.min(8.5, bandH * 0.24));
+    const lineStep = textSize + 1.3;
     const textBlockH = textLines.length > 0 ? (textLines.length - 1) * lineStep + textSize : 0;
     let textBaseline = bandY + (bandH + textBlockH) / 2 - textSize * 0.15;
     for (const line of textLines) {
@@ -337,6 +368,18 @@ export const enrichAndreaniLabelsPdf = async (
 ): Promise<Uint8Array> => {
   const root = new Uint8Array(pdfBytes);
   const trackingPerPage = await listAndreaniTrackingNumbersByPage(root.slice());
+
+  // Descarga 1 etiqueta: si el parser no lee el TN, usar el único del mapa.
+  if (trackingToOrder.size === 1) {
+    const onlyTn = [...trackingToOrder.keys()][0];
+    if (trackingPerPage.length <= 1) {
+      trackingPerPage[0] = onlyTn;
+    } else {
+      for (let i = 0; i < trackingPerPage.length; i += 1) {
+        if (!trackingPerPage[i]) trackingPerPage[i] = onlyTn;
+      }
+    }
+  }
 
   const probe = await PDFDocument.load(root.slice());
   const probePage = probe.getPage(0);
