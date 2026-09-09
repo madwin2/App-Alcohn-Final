@@ -28,14 +28,16 @@ import {
   createOrderStickyTask,
   deleteOrderStickyTaskByTaskId,
 } from '@/lib/supabase/services/order-sticky-tasks.service';
+import { OrderInfoDialog } from '@/components/produccion/OrderInfoDialog';
 
 interface ProductionTableProps {
   items: ProductionItem[];
   onUpdateItem?: (itemId: string, updates: Partial<ProductionItem>) => Promise<ProductionItem>;
   onRefreshItems?: () => Promise<void>;
+  itemCountByOrderId?: Map<string, number>;
 }
 
-export function ProductionTable({ items, onUpdateItem, onRefreshItems }: ProductionTableProps) {
+export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCountByOrderId }: ProductionTableProps) {
   const { updateItem: defaultUpdateItem, fetchItems: defaultFetchItems } = useProduction();
   const updateItem = onUpdateItem || defaultUpdateItem;
   const fetchItems = onRefreshItems || defaultFetchItems;
@@ -59,8 +61,17 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState[]>([] as any);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [orderInfoItem, setOrderInfoItem] = useState<ProductionItem | null>(null);
   const { toast } = useToast();
 
+  const resolvedItemCountByOrderId = useMemo(() => {
+    if (itemCountByOrderId) return itemCountByOrderId;
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      counts.set(item.orderId, (counts.get(item.orderId) ?? 0) + 1);
+    }
+    return counts;
+  }, [itemCountByOrderId, items]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -559,8 +570,10 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
       editingRowId,
       onUpdate,
       onUpdateItem: updateItem,
+      onOpenOrderInfo: setOrderInfoItem,
+      itemCountByOrderId: resolvedItemCountByOrderId,
     });
-  }, [editingRowId, handleFabricacionChange, handleVectorizadoChange, handleProgramaChange, handleAspireChange, handleDeadlineChange, updateItem]);
+  }, [editingRowId, handleFabricacionChange, handleVectorizadoChange, handleProgramaChange, handleAspireChange, handleDeadlineChange, updateItem, resolvedItemCountByOrderId]);
 
   // Sistema unificado de columnas con redimensionamiento y reordenamiento
   const sortedColumns = useMemo(() => {
@@ -788,6 +801,15 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems }: Product
         </table>
       </div>
       </DndTableContainer>
+      <OrderInfoDialog
+        open={Boolean(orderInfoItem?.clienteId)}
+        onOpenChange={(open) => {
+          if (!open) setOrderInfoItem(null);
+        }}
+        clienteId={orderInfoItem?.clienteId ?? null}
+        orderId={orderInfoItem?.orderId ?? null}
+        fallbackName={orderInfoItem?.customerName ?? undefined}
+      />
     </div>
   );
 }

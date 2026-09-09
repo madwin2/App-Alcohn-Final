@@ -1,6 +1,5 @@
 import { supabase } from '../client';
 import { ProductionItem, ProductionTask } from '../../types/index';
-import { mapSelloToOrderItem, mapClienteToCustomer } from '../mappers';
 import { Database } from '../types';
 import { vectorUrlFromPreview } from '../../utils/vectorUrlFromPreview';
 
@@ -222,9 +221,15 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         ? (typeof sello.fecha === 'string' ? sello.fecha : (sello.fecha as any)?.toISOString?.()?.slice(0, 10) ?? null)
         : undefined;
 
+      const customerName = cliente
+        ? [cliente.nombre, cliente.apellido].filter(Boolean).join(' ').trim() || null
+        : null;
+
       return {
         id: sello.id,
         orderId: sello.orden_id,
+        clienteId: cliente?.id ?? null,
+        customerName,
         date: dateStr ?? undefined,
         itemType,
         designName: resolveDisplayDesignName(sello.diseno, itemType),
@@ -508,9 +513,15 @@ export const updateProductionItem = async (
       ? (typeof updatedSello.fecha === 'string' ? updatedSello.fecha : (updatedSello.fecha as any)?.toISOString?.()?.slice(0, 10) ?? undefined)
       : undefined;
 
+    const customerName = cliente
+      ? [cliente.nombre, cliente.apellido].filter(Boolean).join(' ').trim() || null
+      : null;
+
     const updatedItem: ProductionItem = {
       id: updatedSello.id,
       orderId: updatedSello.orden_id,
+      clienteId: cliente?.id ?? null,
+      customerName,
       date: dateStr,
       itemType,
       designName: resolveDisplayDesignName(updatedSello.diseno, itemType),

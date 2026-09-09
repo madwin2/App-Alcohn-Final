@@ -169,6 +169,8 @@ export const getCarrierIcon = (carrier: string): string => {
       return 'VIA CARGO DOMICILIO';
     case 'OTRO':
       return 'ANDREANI DOMICILIO'; // Usar Andreani como default
+    case 'RETIRO_EN_PERSONA':
+      return 'ANDREANI DOMICILIO';
     default:
       return 'ANDREANI DOMICILIO';
   }

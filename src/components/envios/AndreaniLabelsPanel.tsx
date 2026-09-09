@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { useAuth } from '@/lib/hooks/useAuth';
 import type { Order, OrderItem, SaleState } from '@/lib/types';
 import {
   andreaniAssignCandidatesFromOrders,
@@ -37,6 +36,10 @@ import { isEtiquetaActivaEnTabla } from '@/lib/utils/andreaniPortalEstado';
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
 import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
+import {
+  getDownloadedAndreaniEtiquetaIds,
+  insertEnvioEventoForOrden,
+} from '@/lib/supabase/services/enviosHistorial.service';
 import {
   Check,
   ChevronDown,
@@ -89,26 +92,6 @@ function orderItemsDesignLabel(order: Order | undefined, fallback: string | null
   return order.items.map((item) => getOrderItemDisplayName(item)).join(', ');
 }
 
-function downloadedStorageKey(userId: string) {
-  return `andreani-etiquetas-downloaded:${userId}`;
-}
-
-function readDownloadedIds(userId: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(downloadedStorageKey(userId));
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((id): id is string => typeof id === 'string'));
-  } catch {
-    return new Set();
-  }
-}
-
-function writeDownloadedIds(userId: string, ids: Set<string>) {
-  localStorage.setItem(downloadedStorageKey(userId), JSON.stringify([...ids]));
-}
-
 export function AndreaniLabelsPanel({
   orders,
   onAssigned,
@@ -119,7 +102,6 @@ export function AndreaniLabelsPanel({
   onUpdateOrder?: (orderId: string, updates: Partial<Order>) => Promise<unknown>;
 }) {
   const { toast } = useToast();
-  const { user } = useAuth();
   const [rows, setRows] = useState<AndreaniEtiquetaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -161,12 +143,14 @@ export function AndreaniLabelsPanel({
   }, [refresh]);
 
   useEffect(() => {
-    if (!user?.id) {
-      setDownloadedIds(new Set());
-      return;
-    }
-    setDownloadedIds(readDownloadedIds(user.id));
-  }, [user?.id]);
+    let cancelled = false;
+    void getDownloadedAndreaniEtiquetaIds().then((ids) => {
+      if (!cancelled) setDownloadedIds(ids);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Poll del estado del worker mientras haya job activo (o al montar).
   useEffect(() => {
@@ -226,16 +210,24 @@ export function AndreaniLabelsPanel({
   const pendingCount = assigned.length - downloadable.length;
 
   const markDownloaded = useCallback(
-    (etiquetaIds: string[]) => {
-      if (!user?.id || etiquetaIds.length === 0) return;
+    (etiquetaRows: Array<{ id: string; ordenId: string | null }>) => {
+      if (etiquetaRows.length === 0) return;
       setDownloadedIds((prev) => {
         const next = new Set(prev);
-        for (const id of etiquetaIds) next.add(id);
-        writeDownloadedIds(user.id, next);
+        for (const row of etiquetaRows) next.add(row.id);
         return next;
       });
+      for (const row of etiquetaRows) {
+        if (!row.ordenId) continue;
+        const already = downloadedIds.has(row.id);
+        void insertEnvioEventoForOrden(
+          row.ordenId,
+          already ? 'etiqueta_reimpresa' : 'etiqueta_descargada',
+          { etiqueta_id: row.id },
+        );
+      }
     },
-    [user?.id],
+    [downloadedIds],
   );
 
   const resolvePhoneDigits = (row: AndreaniEtiquetaRow): string => {
@@ -400,7 +392,7 @@ export function AndreaniLabelsPanel({
     setDownloadingId(row.id);
     try {
       await downloadAndreaniEtiquetaPdf(row.pdfPath);
-      markDownloaded([row.id]);
+      markDownloaded([{ id: row.id, ordenId: row.ordenId }]);
     } catch (error) {
       toast({
         title: 'No se pudo descargar',
@@ -426,7 +418,7 @@ export function AndreaniLabelsPanel({
     setDownloadingAll(true);
     try {
       await downloadMergedAndreaniEtiquetasPdfs(paths);
-      markDownloaded(ready.map((r) => r.id));
+      markDownloaded(ready.map((r) => ({ id: r.id, ordenId: r.ordenId })));
       toast({
         title: 'PDF listo',
         description: `${paths.length} etiqueta${paths.length === 1 ? '' : 's'} en un solo archivo (100×152).`,

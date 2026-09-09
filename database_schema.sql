@@ -62,7 +62,7 @@ CREATE TABLE ordenes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
     direccion_id UUID REFERENCES direcciones(id),
-    empresa_envio VARCHAR(50) CHECK (empresa_envio IN ('Andreani', 'Correo Argentino', 'Via Cargo', 'Retiro')),
+    empresa_envio VARCHAR(50) CHECK (empresa_envio IN ('Andreani', 'Correo Argentino', 'Via Cargo', 'Retiro', 'Retiro en Persona')),
     tipo_envio VARCHAR(20) CHECK (tipo_envio IN ('Domicilio', 'Sucursal', 'Retiro')),
     cantidad_sellos INTEGER DEFAULT 0,
     senia_total DECIMAL(10,2) DEFAULT 0.00,
@@ -180,7 +180,7 @@ DECLARE
     v_costo DECIMAL(10,2);
 BEGIN
     -- Si no hay empresa de envío o es "Retiro", retornar 0
-    IF p_empresa_envio IS NULL OR p_empresa_envio = 'Retiro' OR p_tipo_envio IS NULL OR p_tipo_envio = 'Retiro' THEN
+    IF p_empresa_envio IS NULL OR p_empresa_envio IN ('Retiro', 'Retiro en Persona') OR p_tipo_envio IS NULL OR p_tipo_envio = 'Retiro' THEN
         RETURN 0;
     END IF;
 

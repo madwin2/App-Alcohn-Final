@@ -5,6 +5,7 @@ import { CellDeadline } from './cells/CellDeadline';
 import { CellFecha } from './cells/CellFecha';
 import { CellTipo } from './cells/CellTipo';
 import { CellDisenio } from './cells/CellDisenio';
+import { CellMultiplesItems } from './cells/CellMultiplesItems';
 import { CellMedida } from './cells/CellMedida';
 import { CellNotas } from './cells/CellNotas';
 import { CellFabricacionAspire } from './cells/CellFabricacionAspire';
@@ -31,6 +32,8 @@ interface ProductionTableProps {
   editingRowId?: string | null;
   onUpdate?: (itemId: string, patch: any) => void;
   onUpdateItem?: (itemId: string, updates: Partial<ProductionItem>) => Promise<ProductionItem>;
+  onOpenOrderInfo?: (item: ProductionItem) => void;
+  itemCountByOrderId?: Map<string, number>;
 }
 
 export const createProductionColumns = ({
@@ -47,6 +50,8 @@ export const createProductionColumns = ({
   editingRowId,
   onUpdate,
   onUpdateItem,
+  onOpenOrderInfo,
+  itemCountByOrderId,
 }: ProductionTableProps): ColumnDef<ProductionItem>[] => [
   {
     id: 'tarea',
@@ -103,9 +108,22 @@ export const createProductionColumns = ({
   {
     id: 'disenio',
     header: 'Diseño',
-    cell: ({ row }) => <CellDisenio item={row.original} />,
+    cell: ({ row }) => (
+      <CellDisenio item={row.original} onOpenOrderInfo={onOpenOrderInfo} />
+    ),
     size: 150,
     meta: { align: 'left' }
+  },
+  {
+    id: 'multiplesItems',
+    header: '',
+    cell: ({ row }) => (
+      <CellMultiplesItems
+        orderItemCount={itemCountByOrderId?.get(row.original.orderId) ?? 1}
+      />
+    ),
+    size: 48,
+    meta: { align: 'center' }
   },
   {
     id: 'medida',

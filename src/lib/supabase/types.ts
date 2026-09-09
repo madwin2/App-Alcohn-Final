@@ -42,7 +42,7 @@ export interface Database {
           id: string;
           cliente_id: string;
           direccion_id: string | null;
-          empresa_envio: 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' | null;
+          empresa_envio: 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' | 'Retiro en Persona' | null;
           tipo_envio: 'Domicilio' | 'Sucursal' | 'Retiro' | null;
           cantidad_sellos: number | null;
           senia_total: number | null;
@@ -315,6 +315,25 @@ export interface Database {
           changed_at?: string;
         };
         Update: Partial<Database['public']['Tables']['estado_historial']['Insert']>;
+      };
+      envio_eventos: {
+        Row: {
+          id: string;
+          orden_id: string;
+          tipo_evento: 'csv_generado' | 'etiqueta_descargada' | 'etiqueta_reimpresa';
+          created_at: string;
+          created_by: string | null;
+          meta: Record<string, unknown> | null;
+        };
+        Insert: {
+          id?: string;
+          orden_id: string;
+          tipo_evento: 'csv_generado' | 'etiqueta_descargada' | 'etiqueta_reimpresa';
+          created_at?: string;
+          created_by?: string | null;
+          meta?: Record<string, unknown> | null;
+        };
+        Update: Partial<Database['public']['Tables']['envio_eventos']['Insert']>;
       };
       economia_movimientos_reales: {
         Row: {

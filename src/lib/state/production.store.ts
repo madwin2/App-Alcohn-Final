@@ -110,17 +110,28 @@ const initialColumns: ProductionColumnState[] = [
   { id: 'fechaLimite', size: 80, order: 3 },
   { id: 'tipo', size: 50, order: 4 },
   { id: 'disenio', size: 150, order: 5 },
-  { id: 'medida', size: 80, order: 6 },
-  { id: 'notas', size: 220, order: 7 },
-  { id: 'prioridad', size: 28, order: 8 },
-  { id: 'fabricacion', size: 20, order: 9 },
-  { id: 'vectorizado', size: 20, order: 10 },
-  { id: 'programa', size: 20, order: 11 },
-  { id: 'aspire', size: 120, order: 12 },
-  { id: 'maquina', size: 80, order: 13 },
-  { id: 'archivoBase', size: 60, order: 14 },
-  { id: 'vector', size: 60, order: 15 }
+  { id: 'multiplesItems', size: 48, order: 6 },
+  { id: 'medida', size: 80, order: 7 },
+  { id: 'notas', size: 220, order: 8 },
+  { id: 'prioridad', size: 28, order: 9 },
+  { id: 'fabricacion', size: 20, order: 10 },
+  { id: 'vectorizado', size: 20, order: 11 },
+  { id: 'programa', size: 20, order: 12 },
+  { id: 'aspire', size: 120, order: 13 },
+  { id: 'maquina', size: 80, order: 14 },
+  { id: 'archivoBase', size: 60, order: 15 },
+  { id: 'vector', size: 60, order: 16 }
 ];
+
+function ensureKnownColumns(columns: ProductionColumnState[]): ProductionColumnState[] {
+  const updated = [...columns];
+  for (const col of initialColumns) {
+    if (!updated.some((c) => c.id === col.id)) {
+      updated.push(col);
+    }
+  }
+  return updated;
+}
 
 export const useProductionStore = create<ProductionStore>((set, get) => ({
   // Estado inicial
@@ -137,57 +148,17 @@ export const useProductionStore = create<ProductionStore>((set, get) => ({
   // Acciones de UI
   setSidebarExpanded: (expanded) => set({ sidebarExpanded: expanded }),
   setSidebarHovered: (hovered) => set({ sidebarHovered: hovered }),
-  setShowPreviews: (show) => set((state) => {
-    // Asegurar que archivoBase y vector siempre estén en las columnas cuando se cambia showPreviews
-    const updatedColumns = [...state.columns];
-    const hasArchivoBase = updatedColumns.some(col => col.id === 'archivoBase');
-    const hasVector = updatedColumns.some(col => col.id === 'vector');
-    
-    // Si faltan, agregarlas desde initialColumns
-    if (!hasArchivoBase) {
-      const archivoBaseCol = initialColumns.find(col => col.id === 'archivoBase');
-      if (archivoBaseCol) {
-        updatedColumns.push(archivoBaseCol);
-      }
-    }
-    if (!hasVector) {
-      const vectorCol = initialColumns.find(col => col.id === 'vector');
-      if (vectorCol) {
-        updatedColumns.push(vectorCol);
-      }
-    }
-    
-    return { 
-      showPreviews: show,
-      columns: updatedColumns
-    };
-  }),
+  setShowPreviews: (show) => set((state) => ({
+    showPreviews: show,
+    columns: ensureKnownColumns(state.columns),
+  })),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setEditingRow: (id) => set({ editingRowId: id }),
   setConfigLoaded: (loaded) => set({ configLoaded: loaded }),
   
   loadConfig: (config) => {
     if (config.columns) {
-      // Asegurar que archivoBase y vector siempre estén en las columnas
-      const loadedColumns = [...config.columns];
-      const hasArchivoBase = loadedColumns.some(col => col.id === 'archivoBase');
-      const hasVector = loadedColumns.some(col => col.id === 'vector');
-      
-      // Si faltan, agregarlas desde initialColumns
-      if (!hasArchivoBase) {
-        const archivoBaseCol = initialColumns.find(col => col.id === 'archivoBase');
-        if (archivoBaseCol) {
-          loadedColumns.push(archivoBaseCol);
-        }
-      }
-      if (!hasVector) {
-        const vectorCol = initialColumns.find(col => col.id === 'vector');
-        if (vectorCol) {
-          loadedColumns.push(vectorCol);
-        }
-      }
-      
-      set({ columns: loadedColumns });
+      set({ columns: ensureKnownColumns(config.columns) });
     }
     if (config.filters) {
       set({ filters: config.filters });
@@ -275,27 +246,8 @@ export const useProductionStore = create<ProductionStore>((set, get) => ({
   
   getConfigForSave: () => {
     const state = get();
-    // Asegurar que archivoBase y vector siempre estén en las columnas guardadas
-    const columnsToSave = [...state.columns];
-    const hasArchivoBase = columnsToSave.some(col => col.id === 'archivoBase');
-    const hasVector = columnsToSave.some(col => col.id === 'vector');
-    
-    // Si faltan, agregarlas desde initialColumns
-    if (!hasArchivoBase) {
-      const archivoBaseCol = initialColumns.find(col => col.id === 'archivoBase');
-      if (archivoBaseCol) {
-        columnsToSave.push(archivoBaseCol);
-      }
-    }
-    if (!hasVector) {
-      const vectorCol = initialColumns.find(col => col.id === 'vector');
-      if (vectorCol) {
-        columnsToSave.push(vectorCol);
-      }
-    }
-    
     return {
-      columns: columnsToSave,
+      columns: ensureKnownColumns(state.columns),
       filters: state.filters,
       sort: state.sort,
       showPreviews: state.showPreviews,

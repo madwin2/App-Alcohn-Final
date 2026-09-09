@@ -86,6 +86,7 @@ export function CellSummary({ order, columnId }: CellSummaryProps) {
       const getShippingLabel = () => {
         if (!order.shipping?.carrier) return '—';
         if (order.shipping.carrier === 'OTRO') return 'Otro';
+        if (order.shipping.carrier === 'RETIRO_EN_PERSONA') return 'Retiro en Persona';
         const carrierName = order.shipping.carrier === 'ANDREANI' ? 'Andreani' :
                            order.shipping.carrier === 'CORREO_ARGENTINO' ? 'Correo Argentino' :
                            order.shipping.carrier === 'VIA_CARGO' ? 'Vía Cargo' : '';

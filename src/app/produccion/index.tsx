@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AppMain } from '@/components/layout/AppMain';
 import { ProductionHeader } from '@/components/produccion/Header/ProductionHeader';
 import { ProductionTable } from '@/components/produccion/Table/ProductionTable';
@@ -20,6 +20,14 @@ export default function ProduccionPage() {
     loadConfig,
     getConfigForSave,
   } = store;
+
+  const itemCountByOrderId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      counts.set(item.orderId, (counts.get(item.orderId) ?? 0) + 1);
+    }
+    return counts;
+  }, [items]);
 
   // Marcar como cargado si no hay usuario (para evitar esperar)
   useEffect(() => {
@@ -60,7 +68,12 @@ export default function ProduccionPage() {
               <p className="text-destructive">Error: {error.message}</p>
             </div>
           ) : (
-            <ProductionTable items={items} onUpdateItem={updateItem} onRefreshItems={fetchItems} />
+            <ProductionTable
+              items={items}
+              onUpdateItem={updateItem}
+              onRefreshItems={fetchItems}
+              itemCountByOrderId={itemCountByOrderId}
+            />
           )}
         </div>
 

@@ -72,7 +72,7 @@ const ECONOMIA_ENVIO_SIN_TIPO_ARS = 5000;
 function orderHasShippingCarrierAndService(order: Order): boolean {
   const c = order.shipping?.carrier;
   const s = order.shipping?.service;
-  return Boolean(c && c !== 'OTRO' && s);
+  return Boolean(c && c !== 'OTRO' && c !== 'RETIRO_EN_PERSONA' && s);
 }
 
 /** Envío imputado a ventas solo si ya salió el envío (no antes, para no inflar plata). Todos los ítems deben estar en Despachado o Seguimiento enviado. */

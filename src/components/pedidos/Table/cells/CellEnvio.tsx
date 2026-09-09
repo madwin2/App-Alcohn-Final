@@ -22,6 +22,7 @@ const shippingOptions: { value: ShippingOption; carrier: ShippingCarrier | null;
   { value: 'CORREO_ARGENTINO_SUCURSAL', carrier: 'CORREO_ARGENTINO', service: 'SUCURSAL', iconName: 'CORREO ARGENTINO SUCURSAL', label: 'Correo Argentino Sucursal' },
   { value: 'VIA_CARGO_DOMICILIO', carrier: 'VIA_CARGO', service: 'DOMICILIO', iconName: 'VIA CARGO DOMICILIO', label: 'Vía Cargo Domicilio' },
   { value: 'VIA_CARGO_SUCURSAL', carrier: 'VIA_CARGO', service: 'SUCURSAL', iconName: 'VIA CARGO SUCURSAL', label: 'Vía Cargo Sucursal' },
+  { value: 'RETIRO_EN_PERSONA', carrier: 'RETIRO_EN_PERSONA', service: null, iconName: '', label: 'Retiro en Persona' },
   { value: 'OTRO', carrier: 'OTRO', service: null, iconName: 'ANDREANI DOMICILIO', label: 'Otro' },
   { value: 'NONE', carrier: null, service: null, iconName: '', label: '—' },
 ];
@@ -34,6 +35,10 @@ const getCurrentShippingOption = (carrier: ShippingCarrier | null | undefined, s
   
   if (carrier === 'OTRO') {
     return 'OTRO';
+  }
+
+  if (carrier === 'RETIRO_EN_PERSONA') {
+    return 'RETIRO_EN_PERSONA';
   }
   
   const option = `${carrier}_${service || 'DOMICILIO'}` as ShippingOption;
@@ -70,6 +75,8 @@ export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
                   size={20}
                   className="flex-shrink-0"
                 />
+              ) : currentOption === 'RETIRO_EN_PERSONA' ? (
+                <span className="text-xs font-medium">Retiro</span>
               ) : (
                 <span className="text-muted-foreground">—</span>
               )}

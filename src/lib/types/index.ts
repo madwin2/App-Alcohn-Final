@@ -8,7 +8,7 @@ export type ShippingState =
   | 'ETIQUETA_LISTA'
   | 'DESPACHADO'
   | 'SEGUIMIENTO_ENVIADO';
-export type ShippingCarrier = 'ANDREANI' | 'CORREO_ARGENTINO' | 'VIA_CARGO' | 'OTRO';
+export type ShippingCarrier = 'ANDREANI' | 'CORREO_ARGENTINO' | 'VIA_CARGO' | 'OTRO' | 'RETIRO_EN_PERSONA';
 export type ShippingServiceDest = 'DOMICILIO' | 'SUCURSAL';
 export type ShippingOption = 
   | 'ANDREANI_DOMICILIO' 
@@ -17,7 +17,8 @@ export type ShippingOption =
   | 'CORREO_ARGENTINO_SUCURSAL' 
   | 'VIA_CARGO_DOMICILIO' 
   | 'VIA_CARGO_SUCURSAL' 
-  | 'OTRO' 
+  | 'OTRO'
+  | 'RETIRO_EN_PERSONA'
   | 'NONE';
 export type ShippingOriginMethod = 'RETIRO_EN_ORIGEN' | 'ENTREGA_EN_SUCURSAL';
 export type StampType = '3MM' | 'ALIMENTO' | 'CLASICO' | 'ABC' | 'LACRE';
@@ -216,6 +217,8 @@ export interface ProductionTask {
 export interface ProductionItem {
   id: string;
   orderId: string;
+  clienteId?: string | null;
+  customerName?: string | null;
   date?: string; // Fecha del sello (columna fecha en BD), formato YYYY-MM-DD
   itemType?: ItemType;
   designName: string;

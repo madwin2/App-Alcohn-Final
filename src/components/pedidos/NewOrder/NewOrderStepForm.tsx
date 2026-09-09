@@ -53,7 +53,7 @@ const orderSchema = z.object({
     depositValue: z.number().min(0, 'La seña debe ser mayor o igual a 0'),
   }),
   shipping: z.object({
-    carrier: z.enum(['ANDREANI', 'CORREO_ARGENTINO', 'VIA_CARGO', 'OTRO']).optional(),
+    carrier: z.enum(['ANDREANI', 'CORREO_ARGENTINO', 'VIA_CARGO', 'OTRO', 'RETIRO_EN_PERSONA']).optional(),
     service: z.enum(['DOMICILIO', 'SUCURSAL']).optional(),
   }),
   states: z.object({
@@ -147,6 +147,7 @@ const carrierOptions: {
   { value: 'CORREO_ARGENTINO_SUCURSAL', label: 'Correo Argentino - Sucursal', carrier: 'CORREO_ARGENTINO', service: 'SUCURSAL' },
   { value: 'VIA_CARGO_DOMICILIO', label: 'Vía Cargo - Domicilio', carrier: 'VIA_CARGO', service: 'DOMICILIO' },
   { value: 'VIA_CARGO_SUCURSAL', label: 'Vía Cargo - Sucursal', carrier: 'VIA_CARGO', service: 'SUCURSAL' },
+  { value: 'RETIRO_EN_PERSONA', label: 'Retiro en Persona', carrier: 'RETIRO_EN_PERSONA' },
   { value: 'OTRO', label: 'Otro', carrier: 'OTRO' },
 ];
 

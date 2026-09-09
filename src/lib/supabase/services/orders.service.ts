@@ -832,12 +832,11 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
     }
 
     if (updates.shipping) {
-      // Si carrier es 'OTRO' o vacío/null, no guardar empresa_envio (o guardarlo como null)
+      // OTRO histórico se guarda sin empresa; RETIRO_EN_PERSONA sí persiste en DB
       if (updates.shipping.carrier && updates.shipping.carrier !== 'OTRO') {
         ordenData.empresa_envio = mapShippingCarrierToDB(updates.shipping.carrier);
         ordenData.tipo_envio = updates.shipping.service ? mapShippingServiceToDB(updates.shipping.service) : null;
       } else {
-        // Para 'OTRO' o vacío, no guardar empresa_envio (o guardarlo como null/Retiro)
         ordenData.empresa_envio = null;
         ordenData.tipo_envio = null;
       }
@@ -1364,8 +1363,8 @@ export const getShippingCost = async (
   carrier: ShippingCarrier | null | undefined,
   service: ShippingServiceDest | null | undefined
 ): Promise<number> => {
-  // Si no hay empresa seleccionada, es "OTRO", o no hay servicio, retornar 0 (no suma al restante)
-  if (!carrier || carrier === 'OTRO' || !service) {
+  // Si no hay empresa seleccionada, es retiro/otro, o no hay servicio, retornar 0
+  if (!carrier || carrier === 'OTRO' || carrier === 'RETIRO_EN_PERSONA' || !service) {
     return 0;
   }
 
@@ -1375,7 +1374,8 @@ export const getShippingCost = async (
       'ANDREANI': 'Andreani',
       'CORREO_ARGENTINO': 'Correo Argentino',
       'VIA_CARGO': 'Via Cargo',
-      'OTRO': 'Retiro', // No debería llegar aquí por el check anterior
+      'OTRO': 'Retiro',
+      'RETIRO_EN_PERSONA': 'Retiro en Persona',
     };
 
     // Mapear el service del frontend al formato de la base de datos

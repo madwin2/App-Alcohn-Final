@@ -89,6 +89,7 @@ export const mapShippingCarrier = (empresa: string | null): ShippingCarrier | nu
     'Correo Argentino': 'CORREO_ARGENTINO',
     'Via Cargo': 'VIA_CARGO',
     'Retiro': 'OTRO',
+    'Retiro en Persona': 'RETIRO_EN_PERSONA',
   };
   return mapping[empresa] || 'OTRO';
 };
@@ -99,6 +100,7 @@ export const mapShippingCarrierToDB = (carrier: ShippingCarrier): string => {
     'CORREO_ARGENTINO': 'Correo Argentino',
     'VIA_CARGO': 'Via Cargo',
     'OTRO': 'Retiro',
+    'RETIRO_EN_PERSONA': 'Retiro en Persona',
   };
   return mapping[carrier];
 };
@@ -391,7 +393,7 @@ export const mapOrderToOrden = (
 ) => ({
   cliente_id: clienteId,
   direccion_id: direccionId || null,
-  empresa_envio: order.shipping?.carrier ? mapShippingCarrierToDB(order.shipping.carrier) as 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' : null,
+  empresa_envio: order.shipping?.carrier ? mapShippingCarrierToDB(order.shipping.carrier) as 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' | 'Retiro en Persona' : null,
   tipo_envio: order.shipping?.service ? mapShippingServiceToDB(order.shipping.service) as 'Domicilio' | 'Sucursal' | 'Retiro' : null,
   seguimiento: order.shipping?.trackingNumber || null,
   estado_orden: order.saleStateOrder ? mapSaleStateToDB(order.saleStateOrder) as 'Señado' | 'Hecho' | 'Foto' | 'Transferido' | 'Hacer Etiqueta' | 'Etiqueta Lista' | 'Despachado' | 'Seguimiento Enviado' : null,
