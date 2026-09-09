@@ -26,14 +26,15 @@ const MM_TO_PT = 72 / 25.4;
 const LABEL_W_PT = 100 * MM_TO_PT;
 const LABEL_H_PT = 152 * MM_TO_PT;
 
-/** Pie fino (~8 mm texto / ~11 mm con preview / ~14 mm multi-ítem). */
-const FOOTER_H_TEXT_PT = 8 * MM_TO_PT;
-const FOOTER_H_PREVIEW_PT = 11 * MM_TO_PT;
-const FOOTER_H_MULTI_PT = 14 * MM_TO_PT;
+/** Pie fino (~7 mm texto / ~9.5 mm con preview / ~11 mm multi-ítem). */
+const FOOTER_H_TEXT_PT = 7 * MM_TO_PT;
+const FOOTER_H_PREVIEW_PT = 9.5 * MM_TO_PT;
+const FOOTER_H_MULTI_PT = 11 * MM_TO_PT;
 /** Aire claro entre stub (2 QR) y el pie Pedido. */
-const GAP_PT = 8 * MM_TO_PT;
+const GAP_PT = 6 * MM_TO_PT;
 const TOP_MARGIN_PT = 0.5 * MM_TO_PT;
-const BOTTOM_SAFE_PT = 1.5 * MM_TO_PT;
+/** Margen inferior físico: evita que la térmica corte logo/texto (~4 mm). */
+const BOTTOM_SAFE_PT = 4.5 * MM_TO_PT;
 /** Andreani un poco más chica que el hueco → aire bajo el stub. */
 const FIT_ZOOM = 0.92;
 
@@ -325,8 +326,8 @@ export async function enrichZebraLabelPdf(
   const rightW = LABEL_W_PT * 0.4;
   const textX = leftW + pad;
   const textW = Math.max(36, LABEL_W_PT - leftW - rightW - pad * 2);
-  const contentTop = footerY + bandH - 2;
-  const imgH = bandH - 4;
+  const contentTop = footerY + bandH - 1.5;
+  const imgH = Math.max(6, bandH - 5);
 
   if (alcohn) {
     const sc = Math.min((leftW - 2) / alcohn.width, imgH / alcohn.height);
@@ -341,7 +342,7 @@ export async function enrichZebraLabelPdf(
   }
 
   const maxTextLines = multiItem ? 4 : 2;
-  const fontSize = Math.max(5.8, Math.min(7.2, bandH * (multiItem ? 0.28 : 0.35)));
+  const fontSize = Math.max(5.5, Math.min(6.8, bandH * (multiItem ? 0.26 : 0.32)));
   let y = contentTop - fontSize;
   for (const line of lines.slice(0, maxTextLines)) {
     page.drawText(line, {
@@ -352,8 +353,8 @@ export async function enrichZebraLabelPdf(
       color: rgb(0.05, 0.05, 0.05),
       maxWidth: textW,
     });
-    y -= fontSize + 1;
-    if (y < footerY + 1) break;
+    y -= fontSize + 0.8;
+    if (y < footerY + 1.5) break;
   }
 
   const urls = (order?.imageUrls ?? []).slice(0, 3);

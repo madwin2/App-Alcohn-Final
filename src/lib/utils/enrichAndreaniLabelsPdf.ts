@@ -28,8 +28,8 @@ const LABEL_W_PT = LABEL_W_MM * MM_TO_PT;
 const LABEL_H_PT = LABEL_H_MM * MM_TO_PT;
 
 /** Alto del zócalo (pedido + logos), relativo al alto de página. */
-const FOOTER_FRAC_OF_PAGE = 0.14;
-const FOOTER_FRAC_MULTI = 0.17;
+const FOOTER_FRAC_OF_PAGE = 0.11;
+const FOOTER_FRAC_MULTI = 0.13;
 const RENDER_SCALE = 2.5;
 const TRIM_WHITE_THRESHOLD = 250;
 const TRIM_PADDING_PX = 6;
@@ -41,6 +41,8 @@ const BOTTOM_LEGAL_CROP_FRAC = 0.42;
 /** Escala de la etiqueta original. */
 const FIT_ZOOM = 1;
 const TOP_PRINT_MARGIN_PT = MM_TO_PT * 1.0;
+/** Margen inferior físico: evita que la térmica corte logo/texto (~4 mm). */
+const BOTTOM_SAFE_PT = MM_TO_PT * 4.5;
 const BOTTOM_FOOTER_GAP_PT = MM_TO_PT * 0.8;
 const HORIZONTAL_NUDGE_PT = 0;
 /** Mantener stub inferior Andreani (tracking + QR); no descartar en Zebra crudo. */
@@ -223,17 +225,17 @@ const enrichZebraVector = async (
       : 0;
     const footerFrac = itemLineCount > 1 ? FOOTER_FRAC_MULTI : FOOTER_FRAC_OF_PAGE;
     const bandH = LABEL_H_PT * footerFrac;
-    const bandY = BOTTOM_FOOTER_GAP_PT * 0.4;
+    const bandY = BOTTOM_SAFE_PT;
     const iw = embeddedPng.width;
     const ih = embeddedPng.height;
     // Si ya es nuestra etiqueta 100×152, sacar el pie viejo antes de redibujar.
     const discardFrac = isOurEnrichedLabelPage(iw, ih)
-      ? Math.min(0.28, footerFrac + 0.04)
+      ? Math.min(0.28, footerFrac + 0.06)
       : ZEBRA_BOTTOM_DISCARD_FRAC;
     const contentH = ih * (1 - discardFrac);
     const availableH = Math.max(
       40,
-      LABEL_H_PT - TOP_PRINT_MARGIN_PT - bandH - BOTTOM_FOOTER_GAP_PT,
+      LABEL_H_PT - TOP_PRINT_MARGIN_PT - bandH - bandY - BOTTOM_FOOTER_GAP_PT,
     );
     const scale = Math.min(LABEL_W_PT / iw, availableH / contentH) * FIT_ZOOM;
     const dw = iw * scale;
@@ -412,10 +414,11 @@ export const enrichAndreaniLabelsPdf = async (
     const bandH = LABEL_H_PT * FOOTER_FRAC_OF_PAGE;
     const iw = embeddedPng.width;
     const ih = embeddedPng.height;
+    const bandY = BOTTOM_SAFE_PT;
     // Espacio útil para la etiqueta: arriba del zócalo (sin solaparse)
     const availableH = Math.max(
       40,
-      LABEL_H_PT - TOP_PRINT_MARGIN_PT - bandH - BOTTOM_FOOTER_GAP_PT,
+      LABEL_H_PT - TOP_PRINT_MARGIN_PT - bandH - bandY - BOTTOM_FOOTER_GAP_PT,
     );
     const fitW = LABEL_W_PT / iw;
     const fitH = availableH / ih;
@@ -430,7 +433,6 @@ export const enrichAndreaniLabelsPdf = async (
 
     const pad = Math.max(3, dw * 0.024);
     // Zócalo fijo abajo de la página (sin tapar la etiqueta)
-    const bandY = BOTTOM_FOOTER_GAP_PT * 0.4;
     labelPage.drawRectangle({
       x: xImg - 2,
       y: bandY,
