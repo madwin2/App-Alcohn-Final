@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,6 +19,7 @@ import {
   deleteAndreaniEtiqueta,
   downloadAndreaniEtiquetaPdf,
   downloadMergedAndreaniEtiquetasPdfs,
+  importManualAndreaniEtiquetaPdfs,
   liberarAndreaniEtiqueta,
   listAndreaniEtiquetas,
   type AndreaniEtiquetaRow,
@@ -50,8 +51,8 @@ import {
   RefreshCw,
   Trash2,
   Unlink,
+  Upload,
 } from 'lucide-react';
-
 type SyncResponse = {
   status?: string;
   message?: string;
@@ -120,6 +121,12 @@ export function AndreaniLabelsPanel({
   const [seguimientoManual, setSeguimientoManual] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [uploadingPdfs, setUploadingPdfs] = useState(false);
+  const [manualUploadFiles, setManualUploadFiles] = useState<File[] | null>(null);
+  const [manualMissing, setManualMissing] = useState<
+    Array<{ fileName: string; pageNumber: number; tracking: string; destinatario: string }>
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -374,6 +381,83 @@ export function AndreaniLabelsPanel({
     } finally {
       setAssigningId(null);
     }
+  };
+
+  const runManualImport = async (
+    files: File[],
+    overrides?: Record<string, { tracking: string; destinatario?: string | null }>,
+  ) => {
+    setUploadingPdfs(true);
+    try {
+      const result = await importManualAndreaniEtiquetaPdfs(files, overrides);
+      const done = result.imported + result.updated;
+      if (result.skipped.length > 0 && !overrides) {
+        setManualUploadFiles(files);
+        setManualMissing(
+          result.skipped.map((s) => ({
+            fileName: s.fileName,
+            pageNumber: s.pageNumber,
+            tracking: '',
+            destinatario: '',
+          })),
+        );
+        if (done > 0) {
+          toast({
+            title: 'Carga parcial',
+            description: `${done} PDF(s) listos. Completá el seguimiento de ${result.skipped.length} hoja(s).`,
+          });
+          await refresh();
+        }
+        return;
+      }
+      if (done === 0 && result.skipped.length > 0) {
+        throw new Error(result.skipped[0]?.reason || 'No se pudo importar ningún PDF');
+      }
+      setManualUploadFiles(null);
+      setManualMissing([]);
+      toast({
+        title: 'PDFs cargados',
+        description: `${result.imported} nuevo(s), ${result.updated} actualizado(s). Asignalos desde Huérfanos.`,
+      });
+      await refresh();
+      onAssigned?.();
+    } catch (error) {
+      toast({
+        title: 'No se pudieron cargar los PDFs',
+        description: error instanceof Error ? error.message : 'Error al importar',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingPdfs(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleManualFilePick = (event: { target: HTMLInputElement }) => {
+    const list = event.target.files;
+    if (!list?.length) return;
+    void runManualImport(Array.from(list));
+  };
+
+  const handleConfirmManualMissing = async () => {
+    if (!manualUploadFiles?.length) return;
+    const incomplete = manualMissing.filter((m) => m.tracking.trim().length < 10);
+    if (incomplete.length) {
+      toast({
+        title: 'Falta el seguimiento',
+        description: 'Completá el número de seguimiento (mín. 10 dígitos) en cada hoja.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const overrides: Record<string, { tracking: string; destinatario?: string | null }> = {};
+    for (const m of manualMissing) {
+      overrides[`${m.fileName}::${m.pageNumber}`] = {
+        tracking: m.tracking.trim(),
+        destinatario: m.destinatario.trim() || null,
+      };
+    }
+    await runManualImport(manualUploadFiles, overrides);
   };
 
   const handleDownload = async (row: AndreaniEtiquetaRow) => {
@@ -738,9 +822,37 @@ export function AndreaniLabelsPanel({
               </Button>
               <Button
                 type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPdfs || syncing || updatingTracking || jobActive}
+                title="Subí PDFs bajados a mano desde Andreani; quedan como huérfanos listos para asignar"
+              >
+                {uploadingPdfs ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Cargando…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    Cargar PDF
+                  </>
+                )}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                className="hidden"
+                onChange={handleManualFilePick}
+              />
+              <Button
+                type="button"
                 size="sm"
                 onClick={() => void handleSync()}
-                disabled={syncing || updatingTracking || jobActive}
+                disabled={syncing || updatingTracking || jobActive || uploadingPdfs}
               >
                 {syncing || (jobActive && workerJob?.kind === 'sync-labels') ? (
                   <>
@@ -916,6 +1028,7 @@ export function AndreaniLabelsPanel({
             </h3>
             <p className="text-[11px] text-muted-foreground">
               Envíos pagados en Andreani sin un único pedido con link asignado. Asignalos a mano o eliminá el PDF.
+              Si el sync falla, bajá el PDF en Andreani y usá <span className="font-medium">Cargar PDF</span>.
             </p>
             <div className="overflow-auto max-h-[min(36vh,280px)] rounded-lg border">
               <table className="w-full text-xs">
@@ -982,6 +1095,74 @@ export function AndreaniLabelsPanel({
           </div>
         </>
       ) : null}
+
+      <Dialog
+        open={manualMissing.length > 0}
+        onOpenChange={(open) => {
+          if (!open) {
+            setManualMissing([]);
+            setManualUploadFiles(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Completar seguimiento</DialogTitle>
+            <DialogDescription>
+              No se pudo leer el TN en {manualMissing.length} hoja(s). Copiá el número desde Andreani y
+              confirmá para cargarlo como huérfano.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[50vh] space-y-3 overflow-auto py-1">
+            {manualMissing.map((row, idx) => (
+              <div key={`${row.fileName}-${row.pageNumber}`} className="space-y-1.5 rounded-md border p-2.5">
+                <p className="text-xs text-muted-foreground">
+                  {row.fileName}
+                  {manualMissing.length > 1 ? ` · hoja ${row.pageNumber}` : ''}
+                </p>
+                <Input
+                  value={row.tracking}
+                  onChange={(e) =>
+                    setManualMissing((prev) =>
+                      prev.map((p, i) => (i === idx ? { ...p, tracking: e.target.value } : p)),
+                    )
+                  }
+                  placeholder="N° de seguimiento (ej. 360003072157470)"
+                  className="h-8 font-mono text-xs"
+                  autoComplete="off"
+                />
+                <Input
+                  value={row.destinatario}
+                  onChange={(e) =>
+                    setManualMissing((prev) =>
+                      prev.map((p, i) => (i === idx ? { ...p, destinatario: e.target.value } : p)),
+                    )
+                  }
+                  placeholder="Destinatario (opcional)"
+                  className="h-8 text-xs"
+                  autoComplete="off"
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setManualMissing([]);
+                setManualUploadFiles(null);
+              }}
+              disabled={uploadingPdfs}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void handleConfirmManualMissing()} disabled={uploadingPdfs}>
+              {uploadingPdfs ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Cargar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(confirmAction)}

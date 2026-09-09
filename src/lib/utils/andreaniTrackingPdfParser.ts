@@ -81,6 +81,20 @@ const extractNameFromLines = (lines: string[]): string | null => {
   return null;
 };
 
+/** Busca TN Andreani típico (15 dígitos, suele empezar 36000) en texto crudo. */
+export const extractLooseTrackingFromText = (text: string): string | null => {
+  const andreani = text.match(/\b(36000\d{10})\b/);
+  if (andreani?.[1]) return andreani[1];
+  const any = text.match(/\b(\d{15})\b/);
+  return any?.[1] ?? null;
+};
+
+export const extractTrackingFromFileName = (fileName: string): string | null => {
+  const base = fileName.replace(/^.*[\\/]/, '');
+  const m = base.match(/(36000\d{10}|\d{12,20})/i);
+  return m?.[1] ?? null;
+};
+
 export const extractAndreaniTrackingEntryFromLines = (
   lines: string[],
 ): Pick<TrackingPdfEntry, 'fullName' | 'trackingNumber'> | null => {
@@ -88,6 +102,56 @@ export const extractAndreaniTrackingEntryFromLines = (
   const trackingNumber = extractTrackingFromLines(lines);
   if (!fullName || !trackingNumber) return null;
   return { fullName, trackingNumber };
+};
+
+/** Tracking aunque falte el nombre (carga manual / Zebra con poco texto). */
+export const extractAndreaniFieldsFromLines = (
+  lines: string[],
+): { fullName: string | null; trackingNumber: string | null } => ({
+  fullName: extractNameFromLines(lines),
+  trackingNumber: extractTrackingFromLines(lines) ?? extractLooseTrackingFromText(lines.join('\n')),
+});
+
+export type AndreaniParsedPage = {
+  pageNumber: number;
+  trackingNumber: string | null;
+  fullName: string | null;
+};
+
+/** Parsea cada hoja: texto pdf.js + fallback bytes/filename. */
+export const parseAndreaniLabelPages = async (
+  buffer: ArrayBuffer | Uint8Array,
+  fileName?: string,
+): Promise<AndreaniParsedPage[]> => {
+  const data = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const rawLatin1 = new TextDecoder('latin1').decode(data);
+  const fileTracking = fileName ? extractTrackingFromFileName(fileName) : null;
+  const out: AndreaniParsedPage[] = [];
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const items = textContent.items.filter((i): i is TextItem => 'str' in i);
+    const lines = pageItemsToLines(items);
+    const fromLines = extractAndreaniFieldsFromLines(lines);
+    let trackingNumber = fromLines.trackingNumber;
+    if (!trackingNumber && pdf.numPages === 1) {
+      trackingNumber = extractLooseTrackingFromText(rawLatin1) ?? fileTracking;
+    }
+    out.push({
+      pageNumber,
+      trackingNumber,
+      fullName: fromLines.fullName,
+    });
+  }
+
+  // Una sola hoja sin TN legible pero el archivo se llama como el tracking.
+  if (out.length === 1 && !out[0].trackingNumber && fileTracking) {
+    out[0] = { ...out[0], trackingNumber: fileTracking };
+  }
+
+  return out;
 };
 
 export const listAndreaniTrackingNumbersByPage = async (

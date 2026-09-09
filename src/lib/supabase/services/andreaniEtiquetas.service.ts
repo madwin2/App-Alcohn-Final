@@ -3,6 +3,7 @@ import { supabase } from '../client';
 import type { Order } from '@/lib/types';
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 import { enrichAndreaniLabelsPdf } from '@/lib/utils/enrichAndreaniLabelsPdf';
+import { parseAndreaniLabelPages } from '@/lib/utils/andreaniTrackingPdfParser';
 
 export type AndreaniEtiquetaEstado = 'asignada' | 'huerfano';
 
@@ -303,3 +304,102 @@ export const andreaniAssignCandidatesFromOrders = (orders: Order[]): Array<{ id:
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label, 'es'));
+
+export type ManualAndreaniImportResult = {
+  imported: number;
+  updated: number;
+  skipped: Array<{ fileName: string; pageNumber: number; reason: string }>;
+};
+
+const uploadEtiquetaPdfBytes = async (tracking: string, bytes: Uint8Array): Promise<string> => {
+  const path = `${tracking}.pdf`;
+  const { error } = await supabase.storage.from('etiquetas-andreani').upload(path, bytes, {
+    contentType: 'application/pdf',
+    upsert: true,
+  });
+  if (error) throw error;
+  return path;
+};
+
+/**
+ * Carga manual: PDF(s) bajados del portal Andreani → filas huérfanas asignables.
+ * Multi-hoja: una etiqueta por página. Si ya existe el tracking, refresca el PDF.
+ */
+export const importManualAndreaniEtiquetaPdfs = async (
+  files: File[],
+  overrides?: Record<string, { tracking: string; destinatario?: string | null }>,
+): Promise<ManualAndreaniImportResult> => {
+  let imported = 0;
+  let updated = 0;
+  const skipped: ManualAndreaniImportResult['skipped'] = [];
+
+  for (const file of files) {
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    const src = await PDFDocument.load(buffer);
+    const pages = await parseAndreaniLabelPages(buffer, file.name);
+
+    for (let i = 0; i < src.getPageCount(); i += 1) {
+      const pageNumber = i + 1;
+      const parsed = pages[i];
+      const overrideKey = `${file.name}::${pageNumber}`;
+      const override = overrides?.[overrideKey];
+      const tracking = (override?.tracking || parsed?.trackingNumber || '').trim();
+      const destinatario =
+        (override?.destinatario ?? parsed?.fullName)?.trim() || null;
+
+      if (!tracking || tracking.length < 10) {
+        skipped.push({
+          fileName: file.name,
+          pageNumber,
+          reason: 'No se pudo leer el número de seguimiento (indicá el TN a mano)',
+        });
+        continue;
+      }
+
+      const single = await PDFDocument.create();
+      const [copied] = await single.copyPages(src, [i]);
+      single.addPage(copied);
+      const pageBytes = await single.save();
+
+      const pdfPath = await uploadEtiquetaPdfBytes(tracking, pageBytes);
+
+      const { data: existing, error: findError } = await supabase
+        .from('envios_andreani_etiquetas')
+        .select('id, estado, orden_id')
+        .eq('tracking', tracking)
+        .maybeSingle();
+      if (findError) throw findError;
+
+      if (existing?.id) {
+        const patch: Record<string, unknown> = {
+          pdf_path: pdfPath,
+          estado_portal: 'Pendiente de ingreso',
+          nota: 'carga_manual',
+        };
+        if (destinatario) patch.destinatario = destinatario;
+        const { error: updError } = await supabase
+          .from('envios_andreani_etiquetas')
+          .update(patch)
+          .eq('id', existing.id);
+        if (updError) throw updError;
+        updated += 1;
+      } else {
+        const { error: insError } = await supabase.from('envios_andreani_etiquetas').insert({
+          tracking,
+          destinatario,
+          destino: null,
+          fecha_portal: null,
+          estado_portal: 'Pendiente de ingreso',
+          orden_id: null,
+          estado: 'huerfano',
+          pdf_path: pdfPath,
+          nota: 'carga_manual',
+        });
+        if (insError) throw insError;
+        imported += 1;
+      }
+    }
+  }
+
+  return { imported, updated, skipped };
+};
