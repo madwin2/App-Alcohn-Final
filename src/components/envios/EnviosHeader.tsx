@@ -1,6 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { History, Loader2, Search } from 'lucide-react';
+import { History, Loader2 } from 'lucide-react';
 
 export type EnviosCarrierFilter = 'ALL' | 'CORREO_ARGENTINO' | 'ANDREANI' | 'VIA_CARGO';
 
@@ -14,8 +13,6 @@ type CarrierCount = {
 interface EnviosHeaderProps {
   carrierFilter: EnviosCarrierFilter;
   onCarrierFilterChange: (value: EnviosCarrierFilter) => void;
-  searchQuery: string;
-  onSearchQueryChange: (value: string) => void;
   counts: CarrierCount;
   onOpenHistorial: () => void;
   showCsvButton?: boolean;
@@ -36,8 +33,6 @@ const FILTERS: { id: EnviosCarrierFilter; label: string; countKey: keyof Carrier
 export function EnviosHeader({
   carrierFilter,
   onCarrierFilterChange,
-  searchQuery,
-  onSearchQueryChange,
   counts,
   onOpenHistorial,
   showCsvButton = false,
@@ -58,10 +53,6 @@ export function EnviosHeader({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" onClick={onOpenHistorial}>
-            <History className="mr-1.5 h-4 w-4" />
-            Historial
-          </Button>
           {showCsvButton ? (
             <Button
               onClick={onGenerateCsv}
@@ -111,15 +102,10 @@ export function EnviosHeader({
           })}
         </div>
 
-        <div className="relative min-w-[220px] flex-1 max-w-md">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => onSearchQueryChange(e.target.value)}
-            placeholder="Buscar por cliente o diseño..."
-            className="pl-8"
-          />
-        </div>
+        <Button type="button" variant="outline" onClick={onOpenHistorial}>
+          <History className="mr-1.5 h-4 w-4" />
+          Historial de Envíos
+        </Button>
       </div>
     </div>
   );

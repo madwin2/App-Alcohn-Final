@@ -328,6 +328,7 @@ export const mapOrdenToOrder = (
     customer: mapClienteToCustomer(cliente),
     orderDate: orden.fecha || todayArgentinaDateKey(),
     createdAt: orden.created_at || undefined,
+    seguimientoEnviadoAt: (orden as { seguimiento_enviado_at?: string | null }).seguimiento_enviado_at ?? null,
     takenBy: takenBy || null,
     totalValue: orden.valor_total ? Number(orden.valor_total) : 0,
     fabricationCostTotal: (orden as any).costo_fabricacion_total != null ? Number((orden as any).costo_fabricacion_total) : null,

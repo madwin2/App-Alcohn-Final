@@ -61,6 +61,8 @@ export interface Database {
             | 'Despachado'
             | 'Seguimiento Enviado'
             | null;
+          /** Fecha en que el pedido pasó a Seguimiento Enviado (trigger + backfill). */
+          seguimiento_enviado_at?: string | null;
           error_etiqueta_mensaje?: string | null;
           taken_by: string | null;
           envio_datos_cargado_por?: string | null;

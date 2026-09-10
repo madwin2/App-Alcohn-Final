@@ -133,7 +133,11 @@ function SidebarInner() {
             <SidebarItem
               icon={item.icon}
               label={item.label}
-              isActive={location.pathname === item.path}
+              isActive={
+                item.path === '/'
+                  ? location.pathname === '/'
+                  : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+              }
               isExpanded={isExpanded}
               disabled={item.disabled}
               badgeCount={badgeForPath(item.path)}

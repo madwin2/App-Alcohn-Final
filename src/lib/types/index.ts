@@ -78,6 +78,8 @@ export interface Order {
   customer: Customer;
   orderDate: string; // ISO o YYYY-MM-DD (fecha de negocio)
   createdAt?: string | null; // ISO, cuando se creó la orden en el sistema
+  /** Fecha en que el pedido pasó a Seguimiento Enviado (`ordenes.seguimiento_enviado_at`). */
+  seguimientoEnviadoAt?: string | null;
   takenBy?: { id: string; name: string } | null;
   totalValue: number;
   fabricationCostTotal?: number | null;

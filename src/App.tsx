@@ -4,6 +4,7 @@ import PedidosPage from './app/pedidos/index'
 import ProduccionPage from './app/produccion/index'
 import ProgramasPage from './app/programas/index'
 import EnviosPage from './app/envios/index'
+import EnviosHistorialPage from './app/envios/historial/index'
 import StockPage from './app/stock/index'
 import EconomiaPage from './app/economia/index'
 import GastosPage from './app/gastos/index'
@@ -31,6 +32,7 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/pedidos" element={<PedidosPage />} />
               <Route path="/envios" element={<EnviosPage />} />
+              <Route path="/envios/historial" element={<EnviosHistorialPage />} />
               <Route path="/economia" element={<EconomiaPage />} />
             </Route>
             <Route path="/produccion" element={<ProduccionPage />} />
