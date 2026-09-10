@@ -125,6 +125,7 @@ interface OrdersActionsContextValue {
     orderId: string,
     item: Partial<OrderItem>,
     files?: { base?: File; vector?: File; photo?: File },
+    options?: ordersService.AddStampOptions,
   ) => Promise<OrderItem>;
   deleteStamp: (stampId: string) => Promise<void>;
 }
@@ -422,12 +423,16 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       orderId: string,
       item: Partial<OrderItem>,
       files?: { base?: File; vector?: File; photo?: File },
+      options?: ordersService.AddStampOptions,
     ) => {
       const newStamp = await ordersService.addStampToOrder(orderId, item, files);
       bumpEconomiaCache();
       const updatedOrder = await ordersService.getOrderById(orderId);
       if (updatedOrder) {
         syncBothLists(orderId, updatedOrder);
+        if (options?.notifyCustomer !== false) {
+          void ordersService.notifyOrderUpdated(updatedOrder);
+        }
       }
       return newStamp;
     },
@@ -445,6 +450,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         const updatedOrder = await ordersService.getOrderById(orderWithStamp.id);
         if (updatedOrder) {
           syncBothLists(orderWithStamp.id, updatedOrder);
+          void ordersService.notifyOrderUpdated(updatedOrder);
         }
       }
     },

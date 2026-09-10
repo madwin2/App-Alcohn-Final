@@ -109,4 +109,8 @@ services/andreani-worker/data/
 services/andreani-worker/tmp/
 services/andreani-worker/playwright-report/
 services/andreani-worker/test-results/
+
+# Copia local del bot de WhatsApp (vive en el VPS, no en este repo)
+_wa_bot_inspect/
+
 tmp/

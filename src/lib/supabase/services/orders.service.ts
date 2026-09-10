@@ -34,6 +34,7 @@ import {
   liberarLinkAndreani,
 } from './andreani.service';
 import { fetchReworkChargesForOrders } from './rehacer.service';
+import { invokeBotWebhook } from './botWebhook.service';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -72,8 +73,10 @@ export const isWebOrderHiddenFromInternalApp = (
   return estadoPago !== 'pagado';
 };
 
-const ORDER_REGISTERED_WEBHOOK_FN =
-  (import.meta as any)?.env?.VITE_ORDER_WEBHOOK_FUNCTION_NAME || 'webhook-bot';
+export type AddStampOptions = {
+  /** Si es false, no se reenvía el WhatsApp de pedido actualizado. Default: true. */
+  notifyCustomer?: boolean;
+};
 
 /** Coincide con mapSaleState: NULL/vacío se muestra como Señado; al subir foto hay que pasar a Foto en BD. */
 const isVentaEquivalentToSenadoForPhoto = (estado: string | null | undefined): boolean =>
@@ -94,31 +97,49 @@ const enqueueVectorizationSafely = async (input: {
   }
 };
 
+const orderWebhookNombre = (order: Order): string =>
+  `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim() ||
+  order.customer.firstName ||
+  'Cliente';
+
+const orderWebhookDatos = (order: Order): Record<string, unknown> => {
+  const datos: Record<string, unknown> = {
+    numero_pedido: order.id,
+  };
+  if (order.shipping?.carrier === 'ANDREANI' && order.andreaniLinkUrl) {
+    datos.link_andreani = order.andreaniLinkUrl;
+    datos.empresa_envio = 'Andreani';
+  }
+  return datos;
+};
+
 export const notifyOrderRegistered = async (order: Order): Promise<void> => {
   try {
-    const fullName = `${order.customer.firstName || ''} ${order.customer.lastName || ''}`.trim();
-    const datos: Record<string, unknown> = {
-      numero_pedido: order.id,
-    };
-    if (order.shipping?.carrier === 'ANDREANI' && order.andreaniLinkUrl) {
-      datos.link_andreani = order.andreaniLinkUrl;
-      datos.empresa_envio = 'Andreani';
-    }
-    const { error } = await supabase.functions.invoke(ORDER_REGISTERED_WEBHOOK_FN, {
-      body: {
-        numero_telefono: order.customer.phoneE164,
-        tipo_actualizacion: 'pedido_registrado',
-        nombre: fullName || order.customer.firstName || 'Cliente',
-        datos,
-      },
+    await invokeBotWebhook({
+      numeroTelefono: order.customer.phoneE164,
+      tipo: 'pedido_registrado',
+      nombre: orderWebhookNombre(order),
+      datos: orderWebhookDatos(order),
     });
-
-    if (error) {
-      console.error('Error sending pedido_registrado webhook:', error);
-    }
   } catch (error) {
     // No bloquear el alta del pedido por fallo de webhook
     console.error('Error invoking webhook function for order registration:', error);
+  }
+};
+
+export const notifyOrderUpdated = async (order: Order): Promise<void> => {
+  try {
+    await invokeBotWebhook({
+      numeroTelefono: order.customer.phoneE164,
+      tipo: 'pedido_actualizado',
+      nombre: orderWebhookNombre(order),
+      datos: {
+        ...orderWebhookDatos(order),
+        es_actualizacion: true,
+      },
+    });
+  } catch (error) {
+    console.error('Error invoking webhook function for order update:', error);
   }
 };
 

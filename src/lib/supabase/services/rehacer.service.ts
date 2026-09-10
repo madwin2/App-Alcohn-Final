@@ -1,6 +1,7 @@
 import { supabase } from '../client';
 import type { ReworkCharge } from '@/lib/types';
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
+import { invokeBotWebhook } from './botWebhook.service';
 
 export const REHACER_MOTIVOS = [
   'ERROR_DETECTADO_EN_MAQUINA',
@@ -138,6 +139,64 @@ export async function registrarRehacer(input: RegistrarRehacerInput): Promise<vo
     p_cobro_concepto: input.cobroConcepto?.trim() || null,
   });
   if (error) throw error;
+  void notifySellosRehacer(input.selloIds);
+}
+
+async function notifySellosRehacer(selloIds: string[]): Promise<void> {
+  if (!selloIds.length) return;
+  try {
+    const { data, error } = await supabase
+      .from('sellos')
+      .select(
+        `
+        id, diseno, item_type, orden_id,
+        ordenes (
+          clientes ( nombre, apellido, telefono )
+        )
+      `,
+      )
+      .in('id', selloIds);
+    if (error) throw error;
+
+    type ClienteJoin = { nombre: string | null; apellido: string | null; telefono: string | null } | null;
+    type OrdenJoin = { clientes: ClienteJoin | ClienteJoin[] | null } | null;
+
+    const byOrden = new Map<
+      string,
+      Array<{
+        id: string;
+        cliente: { nombre: string | null; apellido: string | null; telefono: string | null } | null;
+      }>
+    >();
+
+    for (const row of data ?? []) {
+      const ordenId = row.orden_id as string;
+      if (!ordenId) continue;
+      const orden = firstJoin(row.ordenes as OrdenJoin | OrdenJoin[]);
+      const cliente = firstJoin(orden?.clientes);
+      const list = byOrden.get(ordenId) ?? [];
+      list.push({ id: row.id as string, cliente });
+      byOrden.set(ordenId, list);
+    }
+
+    for (const [ordenId, rows] of byOrden) {
+      const cliente = rows[0]?.cliente;
+      const nombre = cliente
+        ? `${cliente.nombre ?? ''} ${cliente.apellido ?? ''}`.trim() || 'Cliente'
+        : 'Cliente';
+      await invokeBotWebhook({
+        numeroTelefono: cliente?.telefono,
+        tipo: 'sello_rehacer',
+        nombre,
+        datos: {
+          numero_pedido: ordenId,
+          sello_ids: rows.map((r) => r.id),
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Error sending sello_rehacer webhook:', error);
+  }
 }
 
 const mapReworkCharge = (row: {

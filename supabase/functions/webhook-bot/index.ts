@@ -63,6 +63,44 @@ const resolveItemDisplayName = (diseno: unknown, itemType: unknown): string => {
   return getItemTypeLabel(itemType);
 };
 
+const esEmpresaAndreani = (
+  empresaRaw: unknown,
+  datos?: Record<string, unknown> | null,
+): boolean => {
+  if (datos && parseBoolean((datos as { es_andreani?: unknown }).es_andreani)) {
+    return true;
+  }
+  const fromOrden =
+    empresaRaw === null || empresaRaw === undefined
+      ? ""
+      : String(empresaRaw).trim().toLowerCase();
+  if (fromOrden.includes("andreani")) return true;
+  const fromDatos = datos?.empresa_envio;
+  if (
+    fromDatos !== null &&
+    fromDatos !== undefined &&
+    String(fromDatos).toLowerCase().includes("andreani")
+  ) {
+    return true;
+  }
+  return false;
+};
+
+const esEmpresaRetiro = (empresaRaw: unknown): boolean => {
+  const t =
+    empresaRaw === null || empresaRaw === undefined
+      ? ""
+      : String(empresaRaw).trim().toLowerCase();
+  return t === "retiro" || t === "retiro en persona";
+};
+
+const tieneEmpresaEnvioAsignada = (empresaRaw: unknown): boolean => {
+  if (empresaRaw === null || empresaRaw === undefined) return false;
+  const t = String(empresaRaw).trim();
+  if (!t) return false;
+  return !esEmpresaRetiro(empresaRaw);
+};
+
 /** Valor de `ordenes.tipo_envio` + etiqueta para mensajes (pedido_enviado, etc.). */
 const buildTipoEnvioCampos = (tipoEnvioRaw: unknown) => {
   const tipo =
@@ -231,7 +269,6 @@ Deno.serve(async (req: Request) => {
           cliente_id,
           tipo_envio,
           empresa_envio,
-          seguimiento,
           clientes (
             nombre,
             apellido,
@@ -346,7 +383,6 @@ Deno.serve(async (req: Request) => {
 
         const tipoEnvioOrden = (orden as any)?.tipo_envio;
         const empresaEnvioOrden = (orden as any)?.empresa_envio;
-        const seguimientoOrden = (orden as any)?.seguimiento;
         const camposTipoEnvio = buildTipoEnvioCampos(tipoEnvioOrden);
 
         const selloActualDb = currentItemId
@@ -362,55 +398,6 @@ Deno.serve(async (req: Request) => {
         const imagenUrlDesdeDb = selloActualDb
           ? resolveFotoSelloUrl(selloActualDb.foto_sello)
           : null;
-
-        // Link de pago Andreani (pool) si la orden es Andreani
-        let linkAndreani: string | null =
-          typeof body?.datos?.link_andreani === "string" &&
-            body.datos.link_andreani.trim()
-            ? String(body.datos.link_andreani).trim()
-            : null;
-
-        const esAndreani =
-          empresaEnvioOrden !== null &&
-          empresaEnvioOrden !== undefined &&
-          String(empresaEnvioOrden).trim().toLowerCase() === "andreani";
-
-        if (esAndreani && !linkAndreani) {
-          const { data: linkRow, error: linkError } = await supabase
-            .from("envios_andreani_links")
-            .select("url")
-            .eq("orden_id", numeroPedido)
-            .eq("estado", "asignado")
-            .maybeSingle();
-          if (linkError) {
-            console.warn("Error obteniendo link Andreani", linkError);
-          } else if (linkRow?.url) {
-            linkAndreani = String(linkRow.url);
-          }
-        }
-
-        // URL de seguimiento pública según carrier (pedido_enviado y similares)
-        let urlSeguimiento: string | null =
-          typeof body?.datos?.url_seguimiento === "string" &&
-            body.datos.url_seguimiento.trim()
-            ? String(body.datos.url_seguimiento).trim()
-            : null;
-        const seguimiento =
-          seguimientoOrden !== null &&
-            seguimientoOrden !== undefined &&
-            String(seguimientoOrden).trim() !== ""
-            ? String(seguimientoOrden).trim()
-            : null;
-        if (!urlSeguimiento && seguimiento) {
-          const emp = String(empresaEnvioOrden || "").trim();
-          if (emp === "Andreani") {
-            urlSeguimiento = `https://www.andreani.com/#!/envios/${seguimiento}`;
-          } else if (emp === "Correo Argentino") {
-            urlSeguimiento = "https://www.correoargentino.com.ar/formularios/e-commerce";
-          } else if (emp === "Via Cargo") {
-            urlSeguimiento = "https://www.viacargo.com.ar/seguimiento";
-          }
-        }
 
         body.datos = {
           ...(body.datos || {}),
@@ -429,9 +416,6 @@ Deno.serve(async (req: Request) => {
               String(empresaEnvioOrden).trim() !== ""
             ? { empresa_envio: String(empresaEnvioOrden).trim() }
             : {}),
-          ...(linkAndreani ? { link_andreani: linkAndreani } : {}),
-          ...(seguimiento ? { numero_seguimiento: seguimiento } : {}),
-          ...(urlSeguimiento ? { url_seguimiento: urlSeguimiento } : {}),
           ...(imagenUrlExistente
             ? {}
             : imagenUrlDesdeDb
@@ -445,6 +429,26 @@ Deno.serve(async (req: Request) => {
           tipoActualizacion.includes("finalizado");
 
         const esPedidoListo = tipoActualizacion.includes("pedido_listo");
+        const esPedidoActualizado = tipoActualizacion.includes("pedido_actualizado");
+        const esSelloRehacer = tipoActualizacion.includes("rehacer");
+
+        if (esPedidoActualizado) {
+          body.datos.es_actualizacion = true;
+        }
+
+        if (esSelloRehacer) {
+          const idsRaw = Array.isArray(body.datos.sello_ids)
+            ? body.datos.sello_ids
+            : currentItemId
+            ? [currentItemId]
+            : [];
+          const ids = idsRaw.map((id: unknown) => String(id));
+          body.datos.items_rehacer = ids.length
+            ? items.filter((it: { item_id?: unknown }) =>
+              ids.includes(String(it.item_id)),
+            )
+            : [];
+        }
 
         const esUltimoSelloPayload = parseBoolean(body?.datos?.es_ultimo_sello);
         // Solo en pedido_listo: si el payload pierde `es_ultimo_sello`, inferimos desde DB
@@ -497,27 +501,120 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // Reglas de cobro:
-        // - Si es último item (o pedido completado/finalizado): enviar RESTANTE GLOBAL
-        //   y opciones de total con envío a sucursal / domicilio.
-        // - Si no: NO forzar cobro global
+        // Reglas de cobro (solo último sello / pedido completado):
+        // - Andreani: restante del producto (el envío se paga en el link).
+        // - Sin empresa: restante del producto, sin montos de envío (preguntar Andreani vs Correo).
+        // - Correo / otros: restante + opciones sucursal / domicilio.
+        // - Si no es el último: no forzar cobro global.
+        const esAndreani = esEmpresaAndreani(
+          empresaEnvioOrden,
+          body.datos as Record<string, unknown>,
+        );
+        const tieneEmpresaEnvio = tieneEmpresaEnvioAsignada(empresaEnvioOrden);
+        const esRetiro = esEmpresaRetiro(empresaEnvioOrden);
+        body.datos.es_andreani = esAndreani;
+        body.datos.tiene_envio_seleccionado = tieneEmpresaEnvio || esRetiro;
+        body.datos.pedir_empresa_envio = !tieneEmpresaEnvio && !esRetiro && !esAndreani;
+
         if (esUltimoSello || esPedidoCompletado) {
           body.datos.es_ultimo_sello = true;
-          body.datos.tipo_mensaje_restante = "total_orden";
-          body.datos.restante_a_pagar = saldoTotalOrdenPreferido;
-
-          // Compatibilidad con bots que leen `restante_sello` o campos top-level "por item":
-          body.datos.restante_sello = saldoTotalOrdenPreferido;
           body.datos.valor_item = valorTotalOrden;
           body.datos.senia_item = seniaTotalOrden;
-          body.datos.saldo_item = saldoTotalOrdenPreferido;
 
-          if (esPedidoListo || esPedidoCompletado) {
-            body.datos.restante_opcion_sucursal = restanteOpcionSucursal;
-            body.datos.restante_opcion_domicilio = restanteOpcionDomicilio;
-            body.datos.envio_gratis = envioGratisPorCantidad;
-            body.datos.costo_envio_sucursal = costoEnvioSucursal;
-            body.datos.costo_envio_domicilio = costoEnvioDomicilio;
+          if (esAndreani) {
+            const restanteProducto = saldoProductosParaEnvio;
+            body.datos.tipo_mensaje_restante = "restante_producto";
+            body.datos.restante_a_pagar = restanteProducto;
+            body.datos.restante_sello = restanteProducto;
+            body.datos.saldo_item = restanteProducto;
+            body.datos.saldo_total = restanteProducto;
+            body.datos.pedir_empresa_envio = false;
+
+            // Link Andreani: se asigna del pool acá (al enviar la foto), no al
+            // crear el pedido — así no caduca mientras el sello se fabrica.
+            const linkYaEnPayload =
+              typeof body.datos.link_andreani === "string"
+                ? body.datos.link_andreani.trim()
+                : "";
+            if (!linkYaEnPayload && esPedidoListo) {
+              try {
+                const { data: assignedUrl, error: assignErr } = await supabase
+                  .rpc("asignar_link_andreani", { p_orden_id: numeroPedido });
+
+                if (assignErr) {
+                  console.error(
+                    "Error asignando link Andreani para pedido_listo",
+                    assignErr,
+                  );
+                } else if (
+                  typeof assignedUrl === "string" && assignedUrl.trim()
+                ) {
+                  const url = assignedUrl.trim();
+                  body.datos.link_andreani = url;
+                  console.log(
+                    "link_andreani asignado del pool al enviar foto",
+                    {
+                      numero_pedido: numeroPedido,
+                      link_len: url.length,
+                    },
+                  );
+                } else {
+                  console.warn(
+                    "pedido_listo Andreani: pool vacío, sin link fresco",
+                    { numero_pedido: numeroPedido },
+                  );
+                }
+              } catch (linkAssignErr) {
+                console.error(
+                  "Excepción asignando link Andreani",
+                  linkAssignErr,
+                );
+              }
+            }
+          } else if (!tieneEmpresaEnvio && !esRetiro) {
+            // Sin empresa: restante del producto y preguntar Andreani vs Correo.
+            // No mandar montos de envío: Andreani se paga en su página, Correo acá.
+            const restanteProducto = saldoProductosParaEnvio;
+            body.datos.tipo_mensaje_restante = "restante_sin_empresa";
+            body.datos.pedir_empresa_envio = true;
+            body.datos.tiene_envio_seleccionado = false;
+            body.datos.restante_a_pagar = restanteProducto;
+            body.datos.restante_sello = restanteProducto;
+            body.datos.saldo_item = restanteProducto;
+            body.datos.saldo_total = restanteProducto;
+            delete body.datos.restante_opcion_sucursal;
+            delete body.datos.restante_opcion_domicilio;
+            delete body.datos.envio_gratis;
+            delete body.datos.costo_envio_sucursal;
+            delete body.datos.costo_envio_domicilio;
+            delete body.datos.costo_envio;
+          } else if (esRetiro) {
+            const restanteProducto = saldoProductosParaEnvio;
+            body.datos.tipo_mensaje_restante = "restante_producto";
+            body.datos.pedir_empresa_envio = false;
+            body.datos.restante_a_pagar = restanteProducto;
+            body.datos.restante_sello = restanteProducto;
+            body.datos.saldo_item = restanteProducto;
+            body.datos.saldo_total = restanteProducto;
+            delete body.datos.restante_opcion_sucursal;
+            delete body.datos.restante_opcion_domicilio;
+            delete body.datos.envio_gratis;
+            delete body.datos.costo_envio_sucursal;
+            delete body.datos.costo_envio_domicilio;
+          } else {
+            body.datos.tipo_mensaje_restante = "total_orden";
+            body.datos.pedir_empresa_envio = false;
+            body.datos.restante_a_pagar = saldoTotalOrdenPreferido;
+            body.datos.restante_sello = saldoTotalOrdenPreferido;
+            body.datos.saldo_item = saldoTotalOrdenPreferido;
+
+            if (esPedidoListo || esPedidoCompletado) {
+              body.datos.restante_opcion_sucursal = restanteOpcionSucursal;
+              body.datos.restante_opcion_domicilio = restanteOpcionDomicilio;
+              body.datos.envio_gratis = envioGratisPorCantidad;
+              body.datos.costo_envio_sucursal = costoEnvioSucursal;
+              body.datos.costo_envio_domicilio = costoEnvioDomicilio;
+            }
           }
         } else {
           body.datos.es_ultimo_sello = false;
@@ -533,6 +630,8 @@ Deno.serve(async (req: Request) => {
           delete body.datos.envio_gratis;
           delete body.datos.costo_envio_sucursal;
           delete body.datos.costo_envio_domicilio;
+          delete body.datos.es_andreani;
+          delete body.datos.pedir_empresa_envio;
         }
       }
     } else if (!numeroPedido) {

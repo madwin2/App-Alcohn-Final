@@ -134,8 +134,8 @@ export default function PedidosPage() {
         open={showNewOrder}
         onOpenChange={setShowNewOrder}
         createOrder={createOrder}
-        addStampToOrder={async (orderId, item, files) => {
-          await addStampToOrder(orderId, item, files);
+        addStampToOrder={async (orderId, item, files, options) => {
+          await addStampToOrder(orderId, item, files, options);
         }}
         fetchOrders={fetchOrders}
       />

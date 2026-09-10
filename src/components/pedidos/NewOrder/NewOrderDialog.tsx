@@ -19,7 +19,8 @@ interface NewOrderDialogProps {
   addStampToOrder?: (
     orderId: string,
     item: Partial<OrderItem>,
-    files?: { base?: File; vector?: File; photo?: File }
+    files?: { base?: File; vector?: File; photo?: File },
+    options?: { notifyCustomer?: boolean },
   ) => Promise<any>;
   fetchOrders?: () => Promise<void>;
 }
@@ -157,6 +158,7 @@ export function NewOrderDialog({
             },
           },
           design.files,
+          { notifyCustomer: false },
         );
       }
 
