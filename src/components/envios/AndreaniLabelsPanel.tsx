@@ -22,6 +22,8 @@ import {
   importManualAndreaniEtiquetaPdfs,
   liberarAndreaniEtiqueta,
   listAndreaniEtiquetas,
+  marcarAndreaniEtiquetaErronea,
+  restaurarAndreaniEtiquetaHuerfano,
   type AndreaniEtiquetaRow,
   type AndreaniPedidoTrasLiberar,
 } from '@/lib/supabase/services/andreaniEtiquetas.service';
@@ -43,6 +45,7 @@ import {
   insertEnvioEventoForOrden,
 } from '@/lib/supabase/services/enviosHistorial.service';
 import {
+  Ban,
   Check,
   ChevronDown,
   ChevronRight,
@@ -50,6 +53,7 @@ import {
   Loader2,
   MoreHorizontal,
   RefreshCw,
+  RotateCcw,
   Trash2,
   Unlink,
   Upload,
@@ -74,7 +78,9 @@ type SyncTrackingResponse = {
 
 type ConfirmAction =
   | { kind: 'liberar'; row: AndreaniEtiquetaRow }
-  | { kind: 'eliminar'; row: AndreaniEtiquetaRow };
+  | { kind: 'eliminar'; row: AndreaniEtiquetaRow }
+  | { kind: 'erronea'; row: AndreaniEtiquetaRow }
+  | { kind: 'restaurar'; row: AndreaniEtiquetaRow };
 
 function itemPreviewUrl(item: OrderItem): string | null {
   return item.files?.vectorPreviewUrl || item.files?.baseUrl || item.files?.vectorUrl || null;
@@ -113,6 +119,7 @@ export function AndreaniLabelsPanel({
   const [seguimientoManual, setSeguimientoManual] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [erroneasExpanded, setErroneasExpanded] = useState(false);
   const [uploadingPdfs, setUploadingPdfs] = useState(false);
   const [manualUploadFiles, setManualUploadFiles] = useState<File[] | null>(null);
   const [manualMissing, setManualMissing] = useState<
@@ -199,6 +206,11 @@ export function AndreaniLabelsPanel({
 
   const orphans = useMemo(
     () => rows.filter((r) => r.estado === 'huerfano' && isEtiquetaActivaEnTabla(r)),
+    [rows],
+  );
+
+  const erroneas = useMemo(
+    () => rows.filter((r) => r.estado === 'erronea'),
     [rows],
   );
 
@@ -612,6 +624,19 @@ export function AndreaniLabelsPanel({
               ? 'Quedó huérfano. El pedido pasó a Sin envío.'
               : 'Quedó huérfano. El pedido pasó a Seguimiento enviado.',
         });
+      } else if (kind === 'erronea') {
+        await marcarAndreaniEtiquetaErronea(row.id);
+        toast({
+          title: 'Etiqueta errónea',
+          description: 'Ya no aparece en Huérfanos. Podés asignarla después desde Erróneas.',
+        });
+        setErroneasExpanded(true);
+      } else if (kind === 'restaurar') {
+        await restaurarAndreaniEtiquetaHuerfano(row.id);
+        toast({
+          title: 'Volvió a huérfanos',
+          description: 'La etiqueta está otra vez en la lista para asignar.',
+        });
       } else {
         await deleteAndreaniEtiqueta(row.id, options);
         toast({
@@ -628,12 +653,37 @@ export function AndreaniLabelsPanel({
       onAssigned?.();
     } catch (error) {
       toast({
-        title: kind === 'liberar' ? 'No se pudo liberar' : 'No se pudo eliminar',
+        title: kind === 'liberar'
+          ? 'No se pudo liberar'
+          : kind === 'erronea'
+            ? 'No se pudo marcar como errónea'
+            : kind === 'restaurar'
+              ? 'No se pudo restaurar'
+              : 'No se pudo eliminar',
         description: error instanceof Error ? error.message : 'Error',
         variant: 'destructive',
       });
     } finally {
       setActionBusyId(null);
+    }
+  };
+
+  const handleDownloadRaw = async (row: AndreaniEtiquetaRow) => {
+    if (!row.pdfPath) {
+      toast({ title: 'Sin PDF', description: 'Esta etiqueta no tiene archivo guardado.', variant: 'destructive' });
+      return;
+    }
+    setDownloadingId(row.id);
+    try {
+      await downloadAndreaniEtiquetaPdf(row.pdfPath, { tracking: row.tracking, order: null });
+    } catch (error) {
+      toast({
+        title: 'No se pudo descargar',
+        description: error instanceof Error ? error.message : 'Error al firmar el PDF',
+        variant: 'destructive',
+      });
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -680,7 +730,10 @@ export function AndreaniLabelsPanel({
     );
   };
 
-  const renderActionsMenu = (row: AndreaniEtiquetaRow, opts: { canLiberar: boolean }) => (
+  const renderActionsMenu = (
+    row: AndreaniEtiquetaRow,
+    opts: { canLiberar: boolean; canMarcarErronea?: boolean; canRestaurar?: boolean },
+  ) => (
     <Popover
       open={menuOpenId === row.id}
       onOpenChange={(open) => setMenuOpenId(open ? row.id : null)}
@@ -701,7 +754,7 @@ export function AndreaniLabelsPanel({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-48 p-1" align="end">
+      <PopoverContent className="w-52 p-1" align="end">
         {opts.canLiberar ? (
           <button
             type="button"
@@ -713,6 +766,32 @@ export function AndreaniLabelsPanel({
           >
             <Unlink className="h-3.5 w-3.5" />
             Liberar a huérfano
+          </button>
+        ) : null}
+        {opts.canMarcarErronea ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted"
+            onClick={() => {
+              setMenuOpenId(null);
+              openConfirmAction({ kind: 'erronea', row });
+            }}
+          >
+            <Ban className="h-3.5 w-3.5" />
+            Marcar como errónea
+          </button>
+        ) : null}
+        {opts.canRestaurar ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-muted"
+            onClick={() => {
+              setMenuOpenId(null);
+              openConfirmAction({ kind: 'restaurar', row });
+            }}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Devolver a huérfanos
           </button>
         ) : null}
         <button
@@ -728,6 +807,109 @@ export function AndreaniLabelsPanel({
         </button>
       </PopoverContent>
     </Popover>
+  );
+
+  const renderUnassignedTable = (
+    list: AndreaniEtiquetaRow[],
+    emptyLabel: string,
+    opts: { canMarcarErronea: boolean; canRestaurar: boolean },
+  ) => (
+    <div className="overflow-auto max-h-[min(36vh,280px)] rounded-lg border">
+      <table className="w-full text-xs">
+        <thead className="bg-muted/50 text-left sticky top-0">
+          <tr>
+            <th className="px-2 py-1.5 font-medium">Destinatario</th>
+            <th className="px-2 py-1.5 font-medium">Seguimiento</th>
+            <th className="px-2 py-1.5 font-medium">Pedido</th>
+            <th className="px-2 py-1.5 font-medium text-right"> </th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="px-2 py-4 text-center text-muted-foreground">
+                {emptyLabel}
+              </td>
+            </tr>
+          ) : (
+            list.map((row) => (
+              <tr key={row.id} className="border-t">
+                <td className="px-2 py-1.5">
+                  <div>{row.destinatario || '—'}</div>
+                  <div className="text-[10px] text-muted-foreground">{row.destino}</div>
+                </td>
+                <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
+                <td className="px-2 py-1.5 min-w-[180px]">
+                  <Select
+                    value={assignPick[row.id] || ''}
+                    onValueChange={(value) => setAssignPick((prev) => ({ ...prev, [row.id]: value }))}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Elegir pedido…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {candidates.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs">
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="px-2 py-1.5 text-right">
+                  <div className="inline-flex items-center gap-1">
+                    {row.pdfPath ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        disabled={downloadingId === row.id}
+                        title="Ver PDF"
+                        onClick={() => void handleDownloadRaw(row)}
+                      >
+                        {downloadingId === row.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7"
+                      disabled={!assignPick[row.id] || assigningId === row.id}
+                      onClick={() => void handleAssign(row.id)}
+                    >
+                      {assigningId === row.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Asignar'}
+                    </Button>
+                    {opts.canMarcarErronea ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7"
+                        disabled={actionBusyId === row.id}
+                        title="Mover a Erróneas (duplicada, mal generada o no usada)"
+                        onClick={() => openConfirmAction({ kind: 'erronea', row })}
+                      >
+                        Errónea
+                      </Button>
+                    ) : null}
+                    {renderActionsMenu(row, {
+                      canLiberar: false,
+                      canMarcarErronea: opts.canMarcarErronea,
+                      canRestaurar: opts.canRestaurar,
+                    })}
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 
   return (
@@ -782,6 +964,19 @@ export function AndreaniLabelsPanel({
               {pendingCount} pendiente{pendingCount === 1 ? '' : 's'}
             </span>
             <span className="rounded-md border px-1.5 py-0.5">{assigned.length} activas</span>
+            {erroneas.length > 0 ? (
+              <button
+                type="button"
+                className="rounded-md border border-amber-600/30 bg-amber-500/10 px-1.5 py-0.5 text-amber-800 dark:text-amber-400"
+                title="Ver etiquetas erróneas"
+                onClick={() => {
+                  setIsExpanded(true);
+                  setErroneasExpanded(true);
+                }}
+              >
+                {erroneas.length} errónea{erroneas.length === 1 ? '' : 's'}
+              </button>
+            ) : null}
           </div>
           {isExpanded ? (
             <>
@@ -1019,71 +1214,41 @@ export function AndreaniLabelsPanel({
               Huérfanos ({orphans.length})
             </h3>
             <p className="text-[11px] text-muted-foreground">
-              Envíos pagados en Andreani sin un único pedido con link asignado. Asignalos a mano o eliminá el PDF.
-              Si el sync falla, bajá el PDF en Andreani y usá <span className="font-medium">Cargar PDF</span>.
+              Envíos pagados en Andreani sin un único pedido con link asignado. Asignalos a mano, marcalos como
+              erróneos o eliminá el PDF. Si el sync falla, bajá el PDF en Andreani y usá{' '}
+              <span className="font-medium">Cargar PDF</span>.
             </p>
-            <div className="overflow-auto max-h-[min(36vh,280px)] rounded-lg border">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/50 text-left sticky top-0">
-                  <tr>
-                    <th className="px-2 py-1.5 font-medium">Destinatario</th>
-                    <th className="px-2 py-1.5 font-medium">Seguimiento</th>
-                    <th className="px-2 py-1.5 font-medium">Pedido</th>
-                    <th className="px-2 py-1.5 font-medium text-right"> </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orphans.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-2 py-4 text-center text-muted-foreground">
-                        No hay huérfanos.
-                      </td>
-                    </tr>
-                  ) : (
-                    orphans.map((row) => (
-                      <tr key={row.id} className="border-t">
-                        <td className="px-2 py-1.5">
-                          <div>{row.destinatario || '—'}</div>
-                          <div className="text-[10px] text-muted-foreground">{row.destino}</div>
-                        </td>
-                        <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
-                        <td className="px-2 py-1.5 min-w-[180px]">
-                          <Select
-                            value={assignPick[row.id] || ''}
-                            onValueChange={(value) => setAssignPick((prev) => ({ ...prev, [row.id]: value }))}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Elegir pedido…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {candidates.map((c) => (
-                                <SelectItem key={c.id} value={c.id} className="text-xs">
-                                  {c.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="px-2 py-1.5 text-right">
-                          <div className="inline-flex items-center gap-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-7"
-                              disabled={!assignPick[row.id] || assigningId === row.id}
-                              onClick={() => void handleAssign(row.id)}
-                            >
-                              {assigningId === row.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Asignar'}
-                            </Button>
-                            {renderActionsMenu(row, { canLiberar: false })}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {renderUnassignedTable(orphans, 'No hay huérfanos.', {
+              canMarcarErronea: true,
+              canRestaurar: false,
+            })}
+          </div>
+
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setErroneasExpanded((prev) => !prev)}
+              className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              {erroneasExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              )}
+              Erróneas ({erroneas.length})
+            </button>
+            {erroneasExpanded ? (
+              <>
+                <p className="text-[11px] text-muted-foreground">
+                  Etiquetas duplicadas, mal generadas o que no vas a usar. No vuelven a aparecer en Huérfanos al
+                  traer etiquetas. Si más adelante coinciden con un pedido, asignalas desde acá.
+                </p>
+                {renderUnassignedTable(erroneas, 'No hay etiquetas erróneas.', {
+                  canMarcarErronea: false,
+                  canRestaurar: true,
+                })}
+              </>
+            ) : null}
           </div>
         </>
       ) : null}
@@ -1165,12 +1330,22 @@ export function AndreaniLabelsPanel({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {confirmAction?.kind === 'liberar' ? 'Liberar PDF a huérfano' : 'Eliminar PDF'}
+              {confirmAction?.kind === 'liberar'
+                ? 'Liberar PDF a huérfano'
+                : confirmAction?.kind === 'erronea'
+                  ? 'Marcar como errónea'
+                  : confirmAction?.kind === 'restaurar'
+                    ? 'Devolver a huérfanos'
+                    : 'Eliminar PDF'}
             </DialogTitle>
             <DialogDescription>
               {confirmAction?.kind === 'liberar'
                 ? `Se desvincula el seguimiento ${confirmAction.row.tracking} del pedido. El PDF queda disponible como huérfano.`
-                : `Se elimina permanentemente la etiqueta ${confirmAction?.row.tracking ?? ''}.`}
+                : confirmAction?.kind === 'erronea'
+                  ? `La etiqueta ${confirmAction.row.tracking} deja de aparecer en Huérfanos. El PDF se conserva y podés asignarla después desde Erróneas.`
+                  : confirmAction?.kind === 'restaurar'
+                    ? `La etiqueta ${confirmAction.row.tracking} vuelve a la lista de huérfanos.`
+                    : `Se elimina permanentemente la etiqueta ${confirmAction?.row.tracking ?? ''}.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -1236,7 +1411,13 @@ export function AndreaniLabelsPanel({
               onClick={() => void runConfirmAction()}
             >
               {actionBusyId ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-              {confirmAction?.kind === 'liberar' ? 'Liberar' : 'Eliminar'}
+              {confirmAction?.kind === 'liberar'
+                ? 'Liberar'
+                : confirmAction?.kind === 'erronea'
+                  ? 'Marcar errónea'
+                  : confirmAction?.kind === 'restaurar'
+                    ? 'Devolver'
+                    : 'Eliminar'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -5,7 +5,7 @@ import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 import { enrichAndreaniLabelsPdf } from '@/lib/utils/enrichAndreaniLabelsPdf';
 import { parseAndreaniLabelPages } from '@/lib/utils/andreaniTrackingPdfParser';
 
-export type AndreaniEtiquetaEstado = 'asignada' | 'huerfano';
+export type AndreaniEtiquetaEstado = 'asignada' | 'huerfano' | 'erronea';
 
 export interface AndreaniEtiquetaRow {
   id: string;
@@ -124,11 +124,7 @@ const mapListRow = (row: {
   };
 };
 
-export const listAndreaniEtiquetas = async (): Promise<AndreaniEtiquetaRow[]> => {
-  const { data, error } = await supabase
-    .from('envios_andreani_etiquetas')
-    .select(
-      `
+const ETIQUETA_LIST_SELECT = `
       id, tracking, nro_operacion, destinatario, destino, fecha_portal, estado_portal,
       orden_id, estado, pdf_path, nota, creado_en, asignado_en,
       ordenes (
@@ -137,18 +133,50 @@ export const listAndreaniEtiquetas = async (): Promise<AndreaniEtiquetaRow[]> =>
         clientes ( nombre, apellido, telefono ),
         sellos ( diseno, estado_venta, item_type, item_config )
       )
-    `,
-    )
-    .order('creado_en', { ascending: false })
-    .limit(300);
-  if (error) throw error;
-  return (data ?? []).map((row: Parameters<typeof mapListRow>[0]) => mapListRow(row));
+    `;
+
+export const listAndreaniEtiquetas = async (): Promise<AndreaniEtiquetaRow[]> => {
+  const [activeRes, erroneasRes] = await Promise.all([
+    supabase
+      .from('envios_andreani_etiquetas')
+      .select(ETIQUETA_LIST_SELECT)
+      .in('estado', ['asignada', 'huerfano'])
+      .order('creado_en', { ascending: false })
+      .limit(300),
+    supabase
+      .from('envios_andreani_etiquetas')
+      .select(ETIQUETA_LIST_SELECT)
+      .eq('estado', 'erronea')
+      .order('creado_en', { ascending: false })
+      .limit(500),
+  ]);
+  if (activeRes.error) throw activeRes.error;
+  if (erroneasRes.error) throw erroneasRes.error;
+  return [...(activeRes.data ?? []), ...(erroneasRes.data ?? [])].map((row: Parameters<typeof mapListRow>[0]) =>
+    mapListRow(row),
+  );
 };
 
 export const assignAndreaniEtiquetaToOrder = async (etiquetaId: string, ordenId: string): Promise<void> => {
   const { error } = await supabase.rpc('asignar_etiqueta_andreani', {
     p_etiqueta_id: etiquetaId,
     p_orden_id: ordenId,
+  });
+  if (error) throw error;
+};
+
+/** Mueve un huérfano a errónea (PDF se conserva, deja de aparecer en Huérfanos). */
+export const marcarAndreaniEtiquetaErronea = async (etiquetaId: string): Promise<void> => {
+  const { error } = await supabase.rpc('marcar_etiqueta_andreani_erronea', {
+    p_etiqueta_id: etiquetaId,
+  });
+  if (error) throw error;
+};
+
+/** Devuelve una errónea a huérfano. */
+export const restaurarAndreaniEtiquetaHuerfano = async (etiquetaId: string): Promise<void> => {
+  const { error } = await supabase.rpc('restaurar_etiqueta_andreani_huerfano', {
+    p_etiqueta_id: etiquetaId,
   });
   if (error) throw error;
 };

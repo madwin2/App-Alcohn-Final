@@ -722,7 +722,7 @@ export interface Database {
           fecha_portal: string | null;
           estado_portal: string | null;
           orden_id: string | null;
-          estado: 'asignada' | 'huerfano';
+          estado: 'asignada' | 'huerfano' | 'erronea';
           pdf_path: string | null;
           nota: string | null;
           creado_en: string;
@@ -737,7 +737,7 @@ export interface Database {
           fecha_portal?: string | null;
           estado_portal?: string | null;
           orden_id?: string | null;
-          estado?: 'asignada' | 'huerfano';
+          estado?: 'asignada' | 'huerfano' | 'erronea';
           pdf_path?: string | null;
           nota?: string | null;
           creado_en?: string;
