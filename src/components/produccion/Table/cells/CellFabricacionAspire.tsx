@@ -6,6 +6,7 @@ interface CellFabricacionAspireProps {
   item: ProductionItem;
   onFabricacionChange?: (itemId: string, newState: ProductionState) => void;
   onAspireChange?: (itemId: string, newState: AspireState | null) => void;
+  onRequestRehacer?: (itemId: string) => void;
 }
 
 // Mapeo de estados de producción a estados de fabricación de pedidos
@@ -130,7 +131,7 @@ const getAspireLabel = (state: AspireState | null): string => {
   return state;
 };
 
-export function CellFabricacionAspire({ item, onFabricacionChange, onAspireChange }: CellFabricacionAspireProps) {
+export function CellFabricacionAspire({ item, onFabricacionChange, onAspireChange, onRequestRehacer }: CellFabricacionAspireProps) {
   const fabricationState = productionToFabricationMap[item.productionState];
   
   // Determinar qué mostrar: si tiene aspire state, mostrar ese; si no, mostrar fabrication state
@@ -143,6 +144,8 @@ export function CellFabricacionAspire({ item, onFabricacionChange, onAspireChang
     if (value.startsWith('ASPIRE_')) {
       const aspireValue = value.replace('ASPIRE_', '').replace(/_/g, ' ') as AspireState;
       onAspireChange?.(item.id, aspireValue);
+    } else if (value === 'REHACER') {
+      onRequestRehacer?.(item.id);
     } else {
       // Es un estado de fabricación
       const productionState = fabricationToProductionMap[value] || 'PENDIENTE';

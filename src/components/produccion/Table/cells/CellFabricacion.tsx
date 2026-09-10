@@ -5,6 +5,7 @@ import { getFabricationStateColor, getFabricationChipVisual, getFabricationLabel
 interface CellFabricacionProps {
   item: ProductionItem;
   onFabricacionChange?: (itemId: string, newState: ProductionState) => void;
+  onRequestRehacer?: (itemId: string) => void;
 }
 
 // Mapeo de estados de producción a estados de fabricación de pedidos
@@ -25,10 +26,14 @@ const fabricationToProductionMap: Record<string, ProductionState> = {
   'RETOCAR': 'REVISAR' // Mapear a revisar
 };
 
-export function CellFabricacion({ item, onFabricacionChange }: CellFabricacionProps) {
+export function CellFabricacion({ item, onFabricacionChange, onRequestRehacer }: CellFabricacionProps) {
   const fabricationState = productionToFabricationMap[item.productionState];
   
   const handleValueChange = (value: string) => {
+    if (value === 'REHACER') {
+      onRequestRehacer?.(item.id);
+      return;
+    }
     const productionState = fabricationToProductionMap[value] || 'PENDIENTE';
     onFabricacionChange?.(item.id, productionState);
   };

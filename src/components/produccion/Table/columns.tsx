@@ -21,6 +21,7 @@ import { CellUploader } from './cells/CellUploader';
 interface ProductionTableProps {
   onTipoChange?: (itemId: string, newTipo: StampType) => void;
   onFabricacionChange?: (itemId: string, newState: ProductionState) => void;
+  onRequestRehacer?: (itemId: string) => void;
   onVectorizadoChange?: (itemId: string, newState: VectorizationState) => void;
   onProgramaChange?: (itemId: string, newProgram: string) => void;
   onAspireChange?: (itemId: string, newState: any) => void;
@@ -39,6 +40,7 @@ interface ProductionTableProps {
 export const createProductionColumns = ({
   onTipoChange,
   onFabricacionChange,
+  onRequestRehacer,
   onVectorizadoChange,
   onProgramaChange,
   onAspireChange,
@@ -154,6 +156,7 @@ export const createProductionColumns = ({
         item={row.original} 
         onFabricacionChange={onFabricacionChange}
         onAspireChange={onAspireChange}
+        onRequestRehacer={onRequestRehacer}
       />
     ),
     size: 140,

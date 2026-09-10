@@ -73,6 +73,17 @@ export interface Task {
   dueDate?: string;
 }
 
+export interface ReworkCharge {
+  id: string;
+  selloId: string;
+  motivo: string;
+  descripcion: string | null;
+  monto: number;
+  concepto: string | null;
+  cobrado: boolean;
+  createdAt: string;
+}
+
 export interface Order {
   id: string;
   customer: Customer;
@@ -122,6 +133,8 @@ export interface Order {
   items: OrderItem[];
   tasks?: Task[];
   progressStep?: ProgressStep;
+  /** Cargos extra ligados a un Rehacer (informativos; no suman al restante). */
+  reworkCharges?: ReworkCharge[];
 }
 
 export type LabelState = 'pendiente' | 'generando' | 'generada' | 'pagando' | 'pagada' | 'error';

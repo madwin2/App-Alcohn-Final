@@ -24,6 +24,8 @@ import { useExpandableRows } from './useExpandableRows';
 import './expand-animations.css';
 import { AddStampDialog } from '../AddStamp/AddStampDialog';
 import { ClienteProfileDialog } from '../ClienteProfile/ClienteProfileDialog';
+import { RehacerDialog } from '@/components/shared/RehacerDialog';
+import { useOrdersActions } from '@/lib/hooks/useOrders';
 import {
   createOrderStickyTask,
   deleteOrderStickyTaskByTaskId,
@@ -69,7 +71,10 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   const [addStampDialogOpen, setAddStampDialogOpen] = useState(false);
   const [selectedOrderForStamp, setSelectedOrderForStamp] = useState<Order | null>(null);
   const [clienteProfileOrder, setClienteProfileOrder] = useState<Order | null>(null);
+  const [rehacerOpen, setRehacerOpen] = useState(false);
+  const [rehacerSelloIds, setRehacerSelloIds] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(ORDERS_PAGE_SIZE);
+  const { fetchOrders } = useOrdersActions();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -440,10 +445,17 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   };
 
 
+  const handleRequestRehacer = (selloIds: string[]) => {
+    if (!selloIds.length) return;
+    setRehacerSelloIds(selloIds);
+    setRehacerOpen(true);
+  };
+
   const tableColumns = useMemo(() => {
     return createUnifiedColumns({
       onTipoChange: handleTipoChange,
       onFabricacionChange: handleFabricacionChange,
+      onRequestRehacer: handleRequestRehacer,
       onVentaChange: handleVentaChange,
       onEnvioEstadoChange: handleEnvioEstadoChange,
       onEnvioChange: handleEnvioChange,
@@ -464,6 +476,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
     return createUnifiedColumns({
       onTipoChange: handleTipoChange,
       onFabricacionChange: handleFabricacionChange,
+      onRequestRehacer: handleRequestRehacer,
       onVentaChange: handleVentaChange,
       onEnvioEstadoChange: handleEnvioEstadoChange,
       onEnvioChange: handleEnvioChange,
@@ -856,6 +869,18 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
           .filter(Boolean)
           .join(' ')
           .trim()}
+      />
+
+      <RehacerDialog
+        open={rehacerOpen}
+        selloIds={rehacerSelloIds}
+        onOpenChange={(open) => {
+          setRehacerOpen(open);
+          if (!open) setRehacerSelloIds([]);
+        }}
+        onConfirmed={() => {
+          void fetchOrders({ silent: true });
+        }}
       />
     </div>
   );

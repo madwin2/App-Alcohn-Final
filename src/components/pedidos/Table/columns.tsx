@@ -20,10 +20,12 @@ import { CellFoto } from './cells/CellFoto';
 import { CellPrioridad } from './cells/CellPrioridad';
 import { CellTasks } from './cells/CellTasks';
 import { CellDeadline } from './cells/CellDeadline';
+import { CellRehacerCargo } from './cells/CellRehacerCargo';
 
 interface OrdersTableProps {
   onTipoChange?: (orderId: string, newTipo: StampType) => void;
   onFabricacionChange?: (orderId: string, newState: FabricationState) => void;
+  onRequestRehacer?: (selloIds: string[]) => void;
   onVentaChange?: (orderId: string, newState: SaleState) => void;
   onEnvioEstadoChange?: (orderId: string, newState: ShippingState) => void;
   onEnvioChange?: (orderId: string, newCarrier: ShippingCarrier) => void;
@@ -80,6 +82,7 @@ function EditableInline({
 export const createColumns = ({
   onTipoChange,
   onFabricacionChange,
+  onRequestRehacer,
   onVentaChange,
   onEnvioEstadoChange,
   onEnvioChange,
@@ -106,6 +109,7 @@ export const createColumns = ({
           order={row.original} 
           onDeadlineChange={onDeadlineChange}
         />
+        <CellRehacerCargo order={row.original} />
       </div>
     ),
     size: 16,
@@ -233,7 +237,11 @@ export const createColumns = ({
     id: 'fabricacion',
     header: 'Fabricación',
     cell: ({ row }) => (
-      <CellFabricacion order={row.original} onFabricacionChange={onFabricacionChange} />
+      <CellFabricacion
+        order={row.original}
+        onFabricacionChange={onFabricacionChange}
+        onRequestRehacer={onRequestRehacer}
+      />
     ),
     size: 20,
     meta: { align: 'center' }

@@ -792,6 +792,47 @@ export interface Database {
         };
         Update: Partial<Database['public']['Tables']['web_analytics_events']['Insert']>;
       };
+      sello_rehacer_eventos: {
+        Row: {
+          id: string;
+          sello_id: string;
+          orden_id: string;
+          motivo: string;
+          descripcion: string | null;
+          fabricacion_estado_previo: string | null;
+          venta_estado_previo: string | null;
+          foto_sello_previo: string | null;
+          envio_estado_previo: string | null;
+          envio_seguimiento_previo: string | null;
+          envio_empresa_previo: string | null;
+          envio_fecha_previo: string | null;
+          cobro_adicional_monto: number | null;
+          cobro_adicional_concepto: string | null;
+          cobro_adicional_cobrado: boolean;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          sello_id: string;
+          orden_id: string;
+          motivo: string;
+          descripcion?: string | null;
+          fabricacion_estado_previo?: string | null;
+          venta_estado_previo?: string | null;
+          foto_sello_previo?: string | null;
+          envio_estado_previo?: string | null;
+          envio_seguimiento_previo?: string | null;
+          envio_empresa_previo?: string | null;
+          envio_fecha_previo?: string | null;
+          cobro_adicional_monto?: number | null;
+          cobro_adicional_concepto?: string | null;
+          cobro_adicional_cobrado?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['sello_rehacer_eventos']['Insert']>;
+      };
     };
   };
 }

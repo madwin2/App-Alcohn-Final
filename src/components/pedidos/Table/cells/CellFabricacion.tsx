@@ -5,6 +5,7 @@ import { getFabricationStateColor, getFabricationChipVisual, getFabricationLabel
 interface CellFabricacionProps {
   order: Order;
   onFabricacionChange?: (orderId: string, newState: FabricationState, itemId?: string) => void;
+  onRequestRehacer?: (selloIds: string[]) => void;
 }
 
 const fabricationLabels: Record<FabricationState, string> = {
@@ -17,7 +18,7 @@ const fabricationLabels: Record<FabricationState, string> = {
   'PROGRAMADO': 'Programado'
 };
 
-export function CellFabricacion({ order, onFabricacionChange }: CellFabricacionProps) {
+export function CellFabricacion({ order, onFabricacionChange, onRequestRehacer }: CellFabricacionProps) {
   if (order.items.length === 0) return null;
 
   // Si solo hay un item, estamos en una fila expandida (sello individual)
@@ -46,6 +47,11 @@ export function CellFabricacion({ order, onFabricacionChange }: CellFabricacionP
   })();
   
   const handleValueChange = (value: string) => {
+    if (value === 'REHACER') {
+      const ids = singleItemId ? [singleItemId] : order.items.map((item) => item.id);
+      onRequestRehacer?.(ids);
+      return;
+    }
     // Si es un solo item (fila expandida), pasar el itemId para actualizar solo ese sello
     // Si son múltiples items (fila resumen), no pasar itemId para actualizar todos
     onFabricacionChange?.(order.id, value as FabricationState, singleItemId);

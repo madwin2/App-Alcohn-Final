@@ -1,5 +1,5 @@
 import { supabase } from '../client';
-import { Order, OrderItem, Customer, NewOrderFormData, Task, ShippingCarrier, ShippingServiceDest, ShippingState } from '../../types/index';
+import { Order, OrderItem, Customer, NewOrderFormData, Task, ShippingCarrier, ShippingServiceDest, ShippingState, ReworkCharge } from '../../types/index';
 import { 
   mapOrdenToOrder, 
   mapSelloToOrderItem, 
@@ -33,6 +33,7 @@ import {
   getAssignedAndreaniLinkUrl,
   liberarLinkAndreani,
 } from './andreani.service';
+import { fetchReworkChargesForOrders } from './rehacer.service';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -307,6 +308,13 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
     console.warn('Error fetching Andreani links:', error);
   }
 
+  let reworkChargesByOrden = new Map<string, ReworkCharge[]>();
+  try {
+    reworkChargesByOrden = await fetchReworkChargesForOrders(ordenIds);
+  } catch (error) {
+    console.warn('Error fetching rework charges:', error);
+  }
+
   return ordenes.map((orden) => {
     const cliente = orden.clientes as unknown as ClienteRow;
     const sellosDeOrden = sellosPorOrden.get(orden.id) || [];
@@ -321,6 +329,7 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
         : null;
     const order = mapOrdenToOrder(orden, cliente, sellosDeOrden, tareasDeOrden, takenBy, shippingDataLoadedBy);
     order.andreaniLinkUrl = andreaniLinksByOrden.get(orden.id) ?? null;
+    order.reworkCharges = reworkChargesByOrden.get(orden.id) ?? [];
     return order;
   });
 };
@@ -475,6 +484,13 @@ export const getOrderById = async (orderId: string): Promise<Order | null> => {
     } catch (linkError) {
       console.warn('Error fetching Andreani link for order:', linkError);
       order.andreaniLinkUrl = null;
+    }
+    try {
+      const charges = await fetchReworkChargesForOrders([orderId]);
+      order.reworkCharges = charges.get(orderId) ?? [];
+    } catch (reworkError) {
+      console.warn('Error fetching rework charges for order:', reworkError);
+      order.reworkCharges = [];
     }
     return order;
   } catch (error) {

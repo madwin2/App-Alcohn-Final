@@ -29,6 +29,7 @@ import {
   deleteOrderStickyTaskByTaskId,
 } from '@/lib/supabase/services/order-sticky-tasks.service';
 import { OrderInfoDialog } from '@/components/produccion/OrderInfoDialog';
+import { RehacerDialog } from '@/components/shared/RehacerDialog';
 
 interface ProductionTableProps {
   items: ProductionItem[];
@@ -62,6 +63,8 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState[]>([] as any);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [orderInfoItem, setOrderInfoItem] = useState<ProductionItem | null>(null);
+  const [rehacerOpen, setRehacerOpen] = useState(false);
+  const [rehacerSelloIds, setRehacerSelloIds] = useState<string[]>([]);
   const { toast } = useToast();
 
   const resolvedItemCountByOrderId = useMemo(() => {
@@ -291,6 +294,12 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
       toast({ title: 'Error', description: 'No se pudo actualizar el estado de fabricación', variant: 'destructive' });
     }
   }, [selectedRows, updateItem, toast]);
+  const handleRequestRehacer = useCallback((itemId: string) => {
+    const ids = selectedRows.size > 0 ? Array.from(selectedRows) : [itemId];
+    setRehacerSelloIds(ids);
+    setRehacerOpen(true);
+  }, [selectedRows]);
+
   const handleVectorizadoChange = useCallback(async (itemId: string, newState: VectorizationState) => {
     try {
       // Si hay filas seleccionadas, aplicar a todas las seleccionadas
@@ -559,6 +568,7 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
     return createProductionColumns({
       onTipoChange: handleTipoChange,
       onFabricacionChange: handleFabricacionChange,
+      onRequestRehacer: handleRequestRehacer,
       onVectorizadoChange: handleVectorizadoChange,
       onProgramaChange: handleProgramaChange,
       onAspireChange: handleAspireChange,
@@ -573,7 +583,7 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
       onOpenOrderInfo: setOrderInfoItem,
       itemCountByOrderId: resolvedItemCountByOrderId,
     });
-  }, [editingRowId, handleFabricacionChange, handleVectorizadoChange, handleProgramaChange, handleAspireChange, handleDeadlineChange, updateItem, resolvedItemCountByOrderId]);
+  }, [editingRowId, handleFabricacionChange, handleRequestRehacer, handleVectorizadoChange, handleProgramaChange, handleAspireChange, handleDeadlineChange, updateItem, resolvedItemCountByOrderId]);
 
   // Sistema unificado de columnas con redimensionamiento y reordenamiento
   const sortedColumns = useMemo(() => {
@@ -809,6 +819,17 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
         clienteId={orderInfoItem?.clienteId ?? null}
         orderId={orderInfoItem?.orderId ?? null}
         fallbackName={orderInfoItem?.customerName ?? undefined}
+      />
+      <RehacerDialog
+        open={rehacerOpen}
+        selloIds={rehacerSelloIds}
+        onOpenChange={(open) => {
+          setRehacerOpen(open);
+          if (!open) setRehacerSelloIds([]);
+        }}
+        onConfirmed={() => {
+          void fetchItems({ silent: true });
+        }}
       />
     </div>
   );

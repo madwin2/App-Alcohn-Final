@@ -19,12 +19,14 @@ import { CellBase } from './cells/CellBase';
 import { CellVector } from './cells/CellVector';
 import { CellTasks } from './cells/CellTasks';
 import { CellDeadline } from './cells/CellDeadline';
+import { CellRehacerCargo } from './cells/CellRehacerCargo';
 import { CellPrioridad } from './cells/CellPrioridad';
 import { CompactProgressIndicator } from './cells/CellProgressIndicator';
 
 interface UnifiedColumnsProps {
   onTipoChange?: (orderId: string, newTipo: any, itemId?: string) => void;
   onFabricacionChange?: (orderId: string, newState: any, itemId?: string) => void;
+  onRequestRehacer?: (selloIds: string[]) => void;
   onVentaChange?: (orderId: string, newState: any, itemId?: string) => void;
   onEnvioEstadoChange?: (orderId: string, newState: any, itemId?: string) => void;
   onEnvioChange?: (orderId: string, newCarrier: string | null, newService?: string | null) => void;
@@ -44,6 +46,7 @@ interface UnifiedColumnsProps {
 export function createUnifiedColumns({
   onTipoChange,
   onFabricacionChange,
+  onRequestRehacer,
   onVentaChange,
   onEnvioEstadoChange,
   onEnvioChange,
@@ -75,6 +78,7 @@ export function createUnifiedColumns({
           order={row.original}
           onDeadlineChange={onDeadlineChange}
         />
+        <CellRehacerCargo order={row.original} />
       </div>
     ),
     
@@ -174,6 +178,7 @@ export function createUnifiedColumns({
       <CellFabricacion
         order={row.original}
         onFabricacionChange={onFabricacionChange}
+        onRequestRehacer={onRequestRehacer}
       />
     ),
     
