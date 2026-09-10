@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, MapPin, Clock, FileDown } from 'lucide-react';
+import { Loader2, MapPin, Clock, FileDown, Package, User } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -12,12 +12,29 @@ import {
   type EnvioHistorialDetail,
 } from '@/lib/supabase/services/enviosHistorialTabla.service';
 import { formatDateTime } from '@/lib/utils/format';
+import type { ShippingCarrier } from '@/lib/types';
 
 interface EnviosHistorialDetailDialogProps {
   ordenId: string | null;
   customerName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+function carrierLabel(carrier: ShippingCarrier | null): string | null {
+  if (carrier === 'ANDREANI') return 'Andreani';
+  if (carrier === 'CORREO_ARGENTINO') return 'Correo Argentino';
+  if (carrier === 'VIA_CARGO') return 'Vía Cargo';
+  if (carrier === 'RETIRO_EN_PERSONA') return 'Retiro en persona';
+  if (carrier === 'OTRO') return 'Otro';
+  return null;
+}
+
+function shippingTypeLabel(detail: EnvioHistorialDetail): string {
+  if (detail.shippingType === 'Sucursal') return 'Sucursal';
+  if (detail.shippingType === 'Domicilio') return 'Domicilio';
+  if (detail.shippingType === 'Retiro') return 'Retiro en persona';
+  return 'Sin tipo de envío';
 }
 
 function formatShippingAddress(detail: EnvioHistorialDetail): string {
@@ -101,14 +118,54 @@ export function EnviosHistorialDetailDialog({
           <p className="text-sm text-destructive">{error}</p>
         ) : detail ? (
           <div className="min-h-0 flex-1 overflow-y-auto space-y-5 pr-1">
-            <section className="space-y-1.5">
+            <section className="space-y-2">
               <h3 className="flex items-center gap-1.5 text-sm font-medium">
                 <MapPin className="h-4 w-4 text-muted-foreground" />
                 Dirección de envío
               </h3>
-              <p className="whitespace-pre-line text-sm text-muted-foreground leading-relaxed">
-                {formatShippingAddress(detail)}
-              </p>
+              <dl className="space-y-1.5 text-sm">
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">Tipo</dt>
+                  <dd>
+                    {shippingTypeLabel(detail)}
+                    {carrierLabel(detail.carrier) ? ` · ${carrierLabel(detail.carrier)}` : ''}
+                  </dd>
+                </div>
+                {detail.shippingType !== 'Retiro' ? (
+                  <div className="flex gap-2">
+                    <dt className="flex w-28 shrink-0 items-center gap-1 text-muted-foreground">
+                      <User className="h-3.5 w-3.5" />
+                      A nombre de
+                    </dt>
+                    <dd>{detail.recipientName || 'Sin destinatario cargado'}</dd>
+                  </div>
+                ) : null}
+                <div className="flex gap-2">
+                  <dt className="w-28 shrink-0 text-muted-foreground">Destino</dt>
+                  <dd className="whitespace-pre-line leading-relaxed">{formatShippingAddress(detail)}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="flex items-center gap-1.5 text-sm font-medium">
+                <Package className="h-4 w-4 text-muted-foreground" />
+                Contenido del pedido
+              </h3>
+              {detail.items.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Este pedido no tiene ítems cargados.</p>
+              ) : (
+                <ul className="divide-y rounded-lg border">
+                  {detail.items.map((item, index) => (
+                    <li key={`${item.label}-${index}`} className="px-3 py-2.5 text-sm">
+                      <p className="font-medium">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.kind === 'sello' ? 'Sello' : 'Complemento'}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
 
             <section className="space-y-2">

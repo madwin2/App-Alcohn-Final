@@ -12,21 +12,64 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
+import { SvgIcon } from '@/components/ui/SvgIcon';
 import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
-import { WhatsappLogo } from '@/components/shared/WhatsappLogo';
 import { formatDate, formatDateTime } from '@/lib/utils/format';
 import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
 import type { EnvioHistorialRow } from '@/lib/supabase/services/enviosHistorialTabla.service';
 import type { ShippingCarrier } from '@/lib/types';
 
-const CARRIER_LABEL: Record<ShippingCarrier, string> = {
-  ANDREANI: 'Andreani',
-  CORREO_ARGENTINO: 'Correo Argentino',
-  VIA_CARGO: 'Via Cargo',
-  OTRO: 'Otro',
-  RETIRO_EN_PERSONA: 'Retiro',
-};
+function carrierIconName(
+  carrier: ShippingCarrier | null,
+  shippingType: EnvioHistorialRow['shippingType'],
+): string | null {
+  if (!carrier || carrier === 'RETIRO_EN_PERSONA') return null;
+  const dest = shippingType === 'Sucursal' ? 'SUCURSAL' : 'DOMICILIO';
+  if (carrier === 'ANDREANI') return `ANDREANI ${dest}`;
+  if (carrier === 'CORREO_ARGENTINO') return `CORREO ARGENTINO ${dest}`;
+  if (carrier === 'VIA_CARGO') return `VIA CARGO ${dest}`;
+  if (carrier === 'OTRO') return 'ANDREANI DOMICILIO';
+  return null;
+}
+
+function carrierTitle(
+  carrier: ShippingCarrier | null,
+  shippingType: EnvioHistorialRow['shippingType'],
+): string {
+  const name =
+    carrier === 'ANDREANI'
+      ? 'Andreani'
+      : carrier === 'CORREO_ARGENTINO'
+        ? 'Correo Argentino'
+        : carrier === 'VIA_CARGO'
+          ? 'Vía Cargo'
+          : carrier === 'RETIRO_EN_PERSONA'
+            ? 'Retiro en persona'
+            : carrier === 'OTRO'
+              ? 'Otro'
+              : 'Sin empresa';
+  if (!shippingType || shippingType === 'Retiro' || carrier === 'RETIRO_EN_PERSONA') return name;
+  return `${name} ${shippingType}`;
+}
+
+function CarrierIcon({
+  carrier,
+  shippingType,
+}: {
+  carrier: ShippingCarrier | null;
+  shippingType: EnvioHistorialRow['shippingType'];
+}) {
+  const icon = carrierIconName(carrier, shippingType);
+  if (carrier === 'RETIRO_EN_PERSONA') {
+    return <span className="text-xs font-medium">Retiro</span>;
+  }
+  if (!icon) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span className="flex justify-center" title={carrierTitle(carrier, shippingType)}>
+      <SvgIcon name={icon} size={22} className="flex-shrink-0" />
+    </span>
+  );
+}
 
 interface EnviosHistorialTableProps {
   rows: EnvioHistorialRow[];
@@ -35,15 +78,6 @@ interface EnviosHistorialTableProps {
   onRowClick: (row: EnvioHistorialRow) => void;
   onDownloadPdf: (row: EnvioHistorialRow) => void;
   onCopyPhone: (phone: string) => void;
-}
-
-function CarrierBadge({ carrier }: { carrier: ShippingCarrier | null }) {
-  if (!carrier) return <span className="text-muted-foreground">—</span>;
-  return (
-    <Badge variant="outline" className="font-normal whitespace-nowrap">
-      {CARRIER_LABEL[carrier] ?? carrier}
-    </Badge>
-  );
 }
 
 export function EnviosHistorialTable({
@@ -99,10 +133,10 @@ export function EnviosHistorialTable({
                 <th className={head}>Diseño</th>
                 <th className={head}>Preview</th>
                 <th className={head}>N° seguimiento</th>
-                <th className={head}>Empresa</th>
+                <th className={`${head} text-center`}>Empresa</th>
                 <th className={head}>Seguimiento enviado</th>
                 <th className={`${head} text-center`}>WhatsApp</th>
-                <th className={head}>Items</th>
+                <th className={`${head} text-center`}>Items</th>
               </tr>
             </thead>
             <tbody>
@@ -151,8 +185,8 @@ export function EnviosHistorialTable({
                     <td className={`${cell} font-mono text-xs whitespace-nowrap`}>
                       {row.trackingNumber || '—'}
                     </td>
-                    <td className={cell}>
-                      <CarrierBadge carrier={row.carrier} />
+                    <td className={`${cell} text-center`}>
+                      <CarrierIcon carrier={row.carrier} shippingType={row.shippingType} />
                     </td>
                     <td className={`${cell} whitespace-nowrap text-muted-foreground`}>
                       {row.seguimientoEnviadoAt ? formatDateTime(row.seguimientoEnviadoAt) : '—'}
@@ -166,19 +200,17 @@ export function EnviosHistorialTable({
                           e.stopPropagation();
                           if (row.customerPhone) onCopyPhone(row.customerPhone);
                         }}
-                        className={`inline-flex size-8 items-center justify-center rounded-full border transition-colors ${
+                        className={`inline-flex size-8 items-center justify-center rounded-full transition-opacity ${
                           row.customerPhone
-                            ? 'border-green-600/35 bg-green-500/15 text-green-700 hover:bg-green-500/25 dark:border-green-400/35 dark:text-green-400'
-                            : 'cursor-not-allowed border-muted text-muted-foreground opacity-40'
+                            ? 'hover:bg-muted'
+                            : 'cursor-not-allowed opacity-40'
                         }`}
                       >
-                        <WhatsappLogo className="size-4" />
+                        <SvgIcon name="WHATSAPP" size={20} className="flex-shrink-0" />
                       </button>
                     </td>
-                    <td className={`${cell} max-w-[14rem]`}>
-                      <span className="line-clamp-2 text-xs text-muted-foreground leading-snug" title={row.itemsSummary}>
-                        {row.itemsSummary}
-                      </span>
+                    <td className={`${cell} text-center tabular-nums`}>
+                      {row.itemCount}
                     </td>
                   </tr>
                   </ContextMenuTrigger>

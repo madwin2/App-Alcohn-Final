@@ -2,7 +2,7 @@ import { supabase } from '../client';
 import type { ItemType, ShippingCarrier } from '@/lib/types';
 import { mapShippingCarrier } from '../mappers';
 import { getEstadoHistorialByOrdenId } from './estadoHistorial.service';
-import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
+import { getItemTypeLabel, getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 import { normalizePhoneDigits, stripAccents } from '@/lib/utils/shippingNormalization';
 
 export const ENVIOS_HISTORIAL_PAGE_SIZE = 50;
@@ -20,6 +20,7 @@ export interface EnvioHistorialRow {
   previewMockupSolicitudId: string | null;
   trackingNumber: string | null;
   carrier: ShippingCarrier | null;
+  shippingType: 'Domicilio' | 'Sucursal' | 'Retiro' | null;
   seguimientoEnviadoAt: string | null;
   itemsSummary: string;
   itemCount: number;
@@ -27,8 +28,15 @@ export interface EnvioHistorialRow {
   andreaniEtiquetaId: string | null;
 }
 
+export interface EnvioHistorialDetailItem {
+  label: string;
+  kind: 'sello' | 'complemento';
+}
+
 export interface EnvioHistorialDetail {
+  carrier: ShippingCarrier | null;
   shippingType: 'Domicilio' | 'Sucursal' | 'Retiro' | null;
+  recipientName: string | null;
   address: {
     domicilio: string | null;
     localidad: string | null;
@@ -36,6 +44,7 @@ export interface EnvioHistorialDetail {
     codigoPostal: string | null;
     sucursalCodigo: string | null;
   } | null;
+  items: EnvioHistorialDetailItem[];
   timeline: Array<{ estadoAnterior: string | null; estadoNuevo: string | null; changedAt: string }>;
   pdfDownloads: Array<{ tipoEvento: 'etiqueta_descargada' | 'etiqueta_reimpresa'; createdAt: string }>;
 }
@@ -52,6 +61,7 @@ type DireccionLite = {
 
 type SelloLite = {
   diseno?: string | null;
+  tipo?: string | null;
   item_type?: ItemType | null;
   item_config?: Record<string, unknown> | null;
   archivo_base?: string | null;
@@ -70,6 +80,7 @@ type OrdenHistorialQueryRow = {
   created_at: string | null;
   seguimiento: string | null;
   empresa_envio: string | null;
+  tipo_envio: 'Domicilio' | 'Sucursal' | 'Retiro' | null;
   seguimiento_enviado_at: string | null;
   clientes: ClienteLite | ClienteLite[] | null;
   direcciones: DireccionLite | DireccionLite[] | null;
@@ -117,6 +128,38 @@ function buildItemsSummary(sellos: SelloLite[]): string {
   return [...counts.entries()].map(([name, n]) => `${n}× ${name}`).join(', ');
 }
 
+const STAMP_TYPE_LABEL: Record<string, string> = {
+  Clasico: 'clásico',
+  '3mm': '3mm',
+  Lacre: 'lacre',
+  Alimento: 'alimento',
+  ABC: 'abecedario',
+};
+
+function describeSello(sello: SelloLite): EnvioHistorialDetailItem {
+  const itemType = (sello.item_type as ItemType) || 'SELLO';
+  if (itemType === 'SELLO') {
+    const tipo = STAMP_TYPE_LABEL[sello.tipo || ''] || 'sello';
+    const name = sello.diseno?.trim();
+    const hasName = Boolean(name && name.toLowerCase() !== 'sin diseño');
+    return {
+      kind: 'sello',
+      label: hasName ? `Sello ${tipo}: ${name}` : `Sello ${tipo}`,
+    };
+  }
+  if (itemType === 'SOLDADOR') {
+    const power = (sello.item_config as { soldadorPower?: string } | null)?.soldadorPower;
+    return {
+      kind: 'complemento',
+      label: power ? `Soldador ${power}` : 'Soldador',
+    };
+  }
+  return {
+    kind: 'complemento',
+    label: getItemTypeLabel(itemType),
+  };
+}
+
 function pickAndreaniEtiqueta(etiquetas: EtiquetaLite[]): EtiquetaLite | null {
   return etiquetas.find((row) => row.pdf_path) || etiquetas[0] || null;
 }
@@ -143,6 +186,7 @@ function mapOrdenToHistorialRow(row: OrdenHistorialQueryRow): EnvioHistorialRow 
     previewMockupSolicitudId: representative?.mockup_solicitud_id ?? null,
     trackingNumber: row.seguimiento,
     carrier: mapShippingCarrier(row.empresa_envio),
+    shippingType: row.tipo_envio ?? null,
     seguimientoEnviadoAt: row.seguimiento_enviado_at,
     itemsSummary: buildItemsSummary(sellos) || '—',
     itemCount: sellos.length,
@@ -194,10 +238,11 @@ export async function fetchEnviosHistorial(options: {
       created_at,
       seguimiento,
       empresa_envio,
+      tipo_envio,
       seguimiento_enviado_at,
       clientes ( nombre, apellido, telefono ),
       direcciones ( telefono ),
-      sellos ( diseno, item_type, item_config, archivo_base, archivo_vector_preview, foto_sello, mockup_solicitud_id ),
+      sellos ( diseno, tipo, item_type, item_config, archivo_base, archivo_vector_preview, foto_sello, mockup_solicitud_id ),
       envios_andreani_etiquetas ( id, pdf_path )
     `,
     )
@@ -223,13 +268,17 @@ export async function fetchEnvioHistorialDetail(ordenId: string): Promise<EnvioH
         .select(
           `
           tipo_envio,
+          empresa_envio,
           direcciones (
+            nombre,
+            apellido,
             domicilio,
             localidad,
             provincia,
             codigo_postal,
             codigo_sucursal_micorreo
-          )
+          ),
+          sellos ( diseno, tipo, item_type, item_config )
         `,
         )
         .eq('id', ordenId)
@@ -250,6 +299,8 @@ export async function fetchEnvioHistorialDetail(ordenId: string): Promise<EnvioH
   const direccion = asOne(
     orden?.direcciones as
       | {
+          nombre?: string | null;
+          apellido?: string | null;
           domicilio?: string | null;
           localidad?: string | null;
           provincia?: string | null;
@@ -257,6 +308,8 @@ export async function fetchEnvioHistorialDetail(ordenId: string): Promise<EnvioH
           codigo_sucursal_micorreo?: string | null;
         }
       | Array<{
+          nombre?: string | null;
+          apellido?: string | null;
           domicilio?: string | null;
           localidad?: string | null;
           provincia?: string | null;
@@ -277,6 +330,12 @@ export async function fetchEnvioHistorialDetail(ordenId: string): Promise<EnvioH
           sucursalCodigo: direccion.codigo_sucursal_micorreo ?? null,
         };
 
+  const recipientName = direccion
+    ? [direccion.nombre, direccion.apellido].filter(Boolean).join(' ').trim() || null
+    : null;
+
+  const items = asMany(orden?.sellos as SelloLite[] | SelloLite | null).map(describeSello);
+
   const timeline = [...timelineDesc]
     .reverse()
     .map((entry) => ({
@@ -295,7 +354,15 @@ export async function fetchEnvioHistorialDetail(ordenId: string): Promise<EnvioH
       createdAt: row.created_at,
     }));
 
-  return { shippingType, address, timeline, pdfDownloads };
+  return {
+    carrier: mapShippingCarrier((orden?.empresa_envio as string | null) ?? null),
+    shippingType,
+    recipientName,
+    address,
+    items,
+    timeline,
+    pdfDownloads,
+  };
 }
 
 export async function hasEtiquetaPdfDownloaded(ordenId: string, etiquetaId: string | null): Promise<boolean> {
