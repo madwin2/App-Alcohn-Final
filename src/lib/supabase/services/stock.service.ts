@@ -1,4 +1,5 @@
 import { supabase } from '../client';
+import { notifyStockBajo, notifyStockBajoResuelto } from '@/lib/notificaciones/events';
 
 export type StockItemKey =
   | 'CAJA_ABECEDARIO'
@@ -520,7 +521,10 @@ export const syncStockReplenishTasksForCurrentUser = async (): Promise<void> => 
     const prev = generalByKey.get(key);
 
     if (needed <= 0 || shortage <= 0) {
-      if (prev) await rmTask(prev.id);
+      if (prev) {
+        await rmTask(prev.id);
+        notifyStockBajoResuelto(key);
+      }
       generalByKey.delete(key);
       continue;
     }
@@ -546,6 +550,7 @@ export const syncStockReplenishTasksForCurrentUser = async (): Promise<void> => 
         pos_y: 0,
       });
       if (insErr) throw insErr;
+      notifyStockBajo({ itemKey: key, itemName: item.itemName, shortage });
     }
   }
 
@@ -654,4 +659,11 @@ const createMissingStockTasks = async (
   if (!inserts.length) return;
   const { error: insertError } = await supabase.from('tareas_dashboard').insert(inserts as any[]);
   if (insertError) throw insertError;
+
+  for (const gap of missing) {
+    const shortage = gap.required - gap.available;
+    if (shortage > 0) {
+      notifyStockBajo({ itemKey: gap.key, itemName: gap.name, shortage });
+    }
+  }
 };

@@ -23,6 +23,8 @@ import { deriveLifecycleFromStamps } from '../../programas/lifecycle';
 import { nextAutoProgramName } from '../../programas/programName';
 import { ELIGIBLE_FAB_STATES, isEligibleStampForMachine } from '../../programas/eligibility';
 import { fetchLatestFabricacionParams } from './fabricacionParametros.service';
+import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
+import { notifySellosHechos } from '@/lib/notificaciones/events';
 
 type ProgramaRow = Database['public']['Tables']['programa']['Row'];
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
@@ -620,6 +622,17 @@ export const setFabricationStateForProgram = async (
   programId: string,
   state: FabricationState,
 ): Promise<Program> => {
+  let pendingHechoIds: string[] = [];
+  if (state === 'HECHO') {
+    const { data: prev } = await supabase
+      .from('sellos')
+      .select('id, estado_fabricacion')
+      .eq('programa_id', programId);
+    pendingHechoIds = (prev ?? [])
+      .filter((s) => s.estado_fabricacion !== 'Hecho')
+      .map((s) => s.id as string);
+  }
+
   const { error } = await supabase
     .from('sellos')
     .update({
@@ -629,6 +642,35 @@ export const setFabricationStateForProgram = async (
     .eq('programa_id', programId);
 
   if (error) throw error;
+
+  if (state === 'HECHO' && pendingHechoIds.length > 0) {
+    if (pendingHechoIds.length === 1) {
+      const { data: row } = await supabase
+        .from('sellos')
+        .select('id, diseno, item_type, item_config, orden_id, ordenes ( clientes ( nombre, apellido ) )')
+        .eq('id', pendingHechoIds[0])
+        .maybeSingle();
+      if (row) {
+        const orden = Array.isArray(row.ordenes) ? row.ordenes[0] : row.ordenes;
+        const clientes = orden && typeof orden === 'object' ? (orden as { clientes?: unknown }).clientes : null;
+        const cliente = Array.isArray(clientes) ? clientes[0] : clientes;
+        const c = cliente as { nombre?: string | null; apellido?: string | null } | null;
+        notifySellosHechos({
+          count: 1,
+          ordenId: row.orden_id as string,
+          selloId: row.id as string,
+          clienteNombre: `${c?.nombre ?? ''} ${c?.apellido ?? ''}`.trim(),
+          diseno: getOrderItemDisplayName({
+            designName: (row.diseno as string) || '',
+            itemType: (row.item_type as 'SELLO') || 'SELLO',
+            itemConfig: (row.item_config as Record<string, unknown> | null) ?? undefined,
+          }),
+        });
+      }
+    } else {
+      notifySellosHechos({ count: pendingHechoIds.length });
+    }
+  }
 
   await logProgramEvent(programId, 'ESTADO_CAMBIADO', { estado: state });
 
@@ -660,6 +702,34 @@ export const setStampFabricationStates = async (
       .eq('programa_id', programId);
 
     if (error) throw error;
+  }
+
+  const hechos = assignments.filter((a) => a.state === 'HECHO');
+  if (hechos.length === 1) {
+    const { data: row } = await supabase
+      .from('sellos')
+      .select('id, diseno, item_type, item_config, orden_id, ordenes ( clientes ( nombre, apellido ) )')
+      .eq('id', hechos[0].stampId)
+      .maybeSingle();
+    if (row) {
+      const orden = Array.isArray(row.ordenes) ? row.ordenes[0] : row.ordenes;
+      const clientes = orden && typeof orden === 'object' ? (orden as { clientes?: unknown }).clientes : null;
+      const cliente = Array.isArray(clientes) ? clientes[0] : clientes;
+      const c = cliente as { nombre?: string | null; apellido?: string | null } | null;
+      notifySellosHechos({
+        count: 1,
+        ordenId: row.orden_id as string,
+        selloId: row.id as string,
+        clienteNombre: `${c?.nombre ?? ''} ${c?.apellido ?? ''}`.trim(),
+        diseno: getOrderItemDisplayName({
+          designName: (row.diseno as string) || '',
+          itemType: (row.item_type as 'SELLO') || 'SELLO',
+          itemConfig: (row.item_config as Record<string, unknown> | null) ?? undefined,
+        }),
+      });
+    }
+  } else if (hechos.length > 1) {
+    notifySellosHechos({ count: hechos.length });
   }
 
   await logProgramEvent(programId, 'ESTADO_CAMBIADO', {

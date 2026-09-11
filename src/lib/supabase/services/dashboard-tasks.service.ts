@@ -81,7 +81,11 @@ export const createDashboardTask = async (
     throw error;
   }
 
-  return;
+  const { notifyTareaAsignada } = await import('@/lib/notificaciones/events');
+  notifyTareaAsignada({
+    asignadoAUserId,
+    texto: texto.trim(),
+  });
 };
 
 /**

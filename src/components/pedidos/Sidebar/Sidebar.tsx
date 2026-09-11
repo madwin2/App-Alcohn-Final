@@ -18,6 +18,7 @@ import {
   Tag,
   Sparkles,
   TrendingUp,
+  Settings,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SidebarItem } from './SidebarItem';
@@ -181,6 +182,16 @@ function SidebarInner() {
             isExpanded={isExpanded}
             disabled={false}
             onClick={() => navigate('/precios')}
+          />
+        </div>
+        <div className="flex justify-start">
+          <SidebarItem
+            icon={Settings}
+            label="Áreas"
+            isActive={location.pathname === '/configuracion'}
+            isExpanded={isExpanded}
+            disabled={false}
+            onClick={() => navigate('/configuracion')}
           />
         </div>
       </nav>

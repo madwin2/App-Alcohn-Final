@@ -13,6 +13,7 @@ import PreciosPage from './app/precios/index'
 import InnovacionPage from './app/innovacion/index'
 import ComercialPage from './app/comercial/index'
 import LoginPage from './app/login/index'
+import ConfiguracionPage from './app/configuracion/index'
 import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -43,6 +44,7 @@ function App() {
             <Route path="/precios" element={<PreciosPage />} />
             <Route path="/comercial" element={<ComercialPage />} />
             <Route path="/innovacion" element={<InnovacionPage />} />
+            <Route path="/configuracion" element={<ConfiguracionPage />} />
           </Route>
           <Route path="/admin/registros" element={<Navigate to="/pedidos" replace />} />
           {import.meta.env.DEV ? (

@@ -833,6 +833,59 @@ export interface Database {
         };
         Update: Partial<Database['public']['Tables']['sello_rehacer_eventos']['Insert']>;
       };
+      usuario_area: {
+        Row: {
+          user_id: string;
+          area: 'produccion' | 'logistica' | 'ventas';
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          area: 'produccion' | 'logistica' | 'ventas';
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['usuario_area']['Insert']>;
+      };
+      notificaciones: {
+        Row: {
+          id: string;
+          tipo: string;
+          area: 'produccion' | 'logistica' | 'ventas' | null;
+          autor_id: string | null;
+          autor_nombre: string | null;
+          titulo: string;
+          cuerpo: string | null;
+          entidad_tipo: string | null;
+          entidad_id: string | null;
+          link_path: string | null;
+          severidad: 'info' | 'warning' | 'urgent';
+          dedup_key: string | null;
+          metadata: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['notificaciones']['Row'], 'id' | 'created_at'> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['notificaciones']['Insert']>;
+      };
+      notificacion_destinatarios: {
+        Row: {
+          id: string;
+          notificacion_id: string;
+          user_id: string;
+          leida_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          notificacion_id: string;
+          user_id: string;
+          leida_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['notificacion_destinatarios']['Insert']>;
+      };
     };
   };
 }

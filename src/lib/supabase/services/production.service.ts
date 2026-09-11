@@ -2,6 +2,9 @@ import { supabase } from '../client';
 import { ProductionItem, ProductionTask } from '../../types/index';
 import { Database } from '../types';
 import { vectorUrlFromPreview } from '../../utils/vectorUrlFromPreview';
+import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
+import { selloEnCurso, valuesEqual } from '@/lib/notificaciones/format';
+import { notifyPrioridad, notifySelloModificado, notifySellosHechos } from '@/lib/notificaciones/events';
 
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
@@ -279,7 +282,7 @@ export const updateProductionItem = async (
     // Obtener también los archivos del sello para calcular vectorizationState si es necesario
     const { data: currentSello } = await supabase
       .from('sellos')
-      .select('archivo_base, foto_sello, estado_vectorizacion')
+      .select('archivo_base, foto_sello, estado_vectorizacion, estado_fabricacion, es_prioritario, tipo, archivo_vector_preview, ancho_real, largo_real, ancho_fabricacion_mm, largo_fabricacion_mm, orden_id, diseno, item_type, item_config')
       .eq('id', itemId)
       .single();
     
@@ -548,6 +551,61 @@ export const updateProductionItem = async (
       },
       tasks: productionTasks,
     };
+
+    if (currentSello) {
+      const clienteNombre = customerName || 'Cliente';
+      const diseno = getOrderItemDisplayName(updatedItem);
+      const p1Campos: string[] = [];
+      if (selloEnCurso(currentSello.estado_fabricacion as string | null)) {
+        if (updateData.archivo_base !== undefined && !valuesEqual(currentSello.archivo_base, updateData.archivo_base)) {
+          p1Campos.push('archivo base');
+        }
+        const nextVector = (updateData as { archivo_vector_preview?: string | null }).archivo_vector_preview;
+        if (nextVector !== undefined && !valuesEqual(currentSello.archivo_vector_preview, nextVector)) {
+          p1Campos.push('vector');
+        }
+        const nextAncho = (updateData as { ancho_fabricacion_mm?: number | null }).ancho_fabricacion_mm;
+        const nextLargo = (updateData as { largo_fabricacion_mm?: number | null }).largo_fabricacion_mm;
+        if (
+          (nextAncho !== undefined && !valuesEqual(currentSello.ancho_fabricacion_mm, nextAncho)) ||
+          (nextLargo !== undefined && !valuesEqual(currentSello.largo_fabricacion_mm, nextLargo))
+        ) {
+          p1Campos.push('medida');
+        }
+      }
+      if (p1Campos.length) {
+        notifySelloModificado({
+          ordenId: updatedItem.orderId,
+          clienteNombre,
+          items: [
+            {
+              selloId: itemId,
+              diseno,
+              campos: p1Campos,
+              estadoFabricacion: (currentSello.estado_fabricacion as string) || 'Sin Hacer',
+            },
+          ],
+        });
+      }
+      const nextPriority = (updateData as { es_prioritario?: boolean }).es_prioritario;
+      if (nextPriority === true && !currentSello.es_prioritario) {
+        notifyPrioridad({
+          ordenId: updatedItem.orderId,
+          clienteNombre,
+          diseno,
+          selloId: itemId,
+        });
+      }
+      if (updateData.estado_fabricacion === 'Hecho' && currentSello.estado_fabricacion !== 'Hecho') {
+        notifySellosHechos({
+          count: 1,
+          ordenId: updatedItem.orderId,
+          selloId: itemId,
+          clienteNombre,
+          diseno,
+        });
+      }
+    }
 
     return updatedItem;
   } catch (error) {

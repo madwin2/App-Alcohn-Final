@@ -2,6 +2,7 @@ import { supabase } from '../client';
 import type { ReworkCharge } from '@/lib/types';
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 import { invokeBotWebhook } from './botWebhook.service';
+import { notifyRehacer } from '@/lib/notificaciones/events';
 
 export const REHACER_MOTIVOS = [
   'ERROR_DETECTADO_EN_MAQUINA',
@@ -140,6 +141,36 @@ export async function registrarRehacer(input: RegistrarRehacerInput): Promise<vo
   });
   if (error) throw error;
   void notifySellosRehacer(input.selloIds);
+  void notifyRehacerInApp(input);
+}
+
+async function notifyRehacerInApp(input: RegistrarRehacerInput): Promise<void> {
+  try {
+    const contextos = await fetchRehacerContexto(input.selloIds);
+    if (!contextos.length) return;
+    const byOrden = new Map<string, typeof contextos>();
+    for (const ctx of contextos) {
+      const list = byOrden.get(ctx.ordenId) ?? [];
+      list.push(ctx);
+      byOrden.set(ctx.ordenId, list);
+    }
+    const motivoTexto =
+      REHACER_MOTIVO_LABELS[input.motivo as RehacerMotivo] ?? input.motivo;
+    for (const [ordenId, rows] of byOrden) {
+      notifyRehacer({
+        selloIds: rows.map((r) => r.selloId),
+        ordenId,
+        clienteNombre: rows[0]?.clienteNombre || 'Cliente',
+        disenos: rows.map((r) => r.disenoNombre),
+        motivo: motivoTexto,
+        descripcion: input.descripcion,
+        cobroMonto: input.cobroMonto,
+        cobroConcepto: input.cobroConcepto,
+      });
+    }
+  } catch (error) {
+    console.error('Error emitiendo notificación de Rehacer:', error);
+  }
 }
 
 async function notifySellosRehacer(selloIds: string[]): Promise<void> {

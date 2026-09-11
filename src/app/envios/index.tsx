@@ -43,6 +43,7 @@ import {
   triggerMicorreoUploadForOrder,
 } from '@/lib/utils/micorreoBackgroundUpload';
 import { resolveCorreoCsvPaqueteFromOrderItems } from '@/lib/utils/correoCsvPackageFromOrder';
+import { notifyDireccionPostEtiqueta } from '@/lib/notificaciones/events';
 import { ParsedShippingData, parseShippingText } from '@/lib/utils/parseShippingText';
 import {
   catalogAddressOptions,
@@ -1028,6 +1029,16 @@ export default function EnviosPage() {
         .eq('id', selectedOrder.id);
 
       if (orderError) throw orderError;
+
+      const hadLabel =
+        selectedOrder.labelState === 'generada' || selectedOrder.labelState === 'pagada';
+      if (hadLabel) {
+        notifyDireccionPostEtiqueta({
+          ordenId: selectedOrder.id,
+          clienteNombre: `${selectedOrder.customer.firstName} ${selectedOrder.customer.lastName}`.trim(),
+          variant: isEditingExistingShippingData ? 'address' : 'duplicate',
+        });
+      }
 
       const mailParaCliente = emailToPersistOnCliente({
         customerEmail: selectedOrder.customer.email,

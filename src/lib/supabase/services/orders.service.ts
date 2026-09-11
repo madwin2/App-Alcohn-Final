@@ -23,6 +23,13 @@ import { todayArgentinaDateKey } from '../../utils/argentinaDate';
 import { isVectorAutoEnabled, vectorizationStateAfterBaseUpload } from '../../config/vectorAuto';
 import { enqueueVectorization } from '../../utils/vectorizeWorker';
 import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
+import { selloEnCurso, valuesEqual } from '@/lib/notificaciones/format';
+import {
+  notifyItemAgregadoPedidoPagado,
+  notifyPrioridad,
+  notifySelloModificado,
+  notifySellosHechos,
+} from '@/lib/notificaciones/events';
 import {
   normalizeEmailCliente,
   normalizePhoneDigitsCliente,
@@ -823,6 +830,9 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
 // Actualizar orden
 export const updateOrder = async (orderId: string, updates: Partial<Order>): Promise<Order> => {
   try {
+    const p1Items: Array<{ selloId: string; campos: string[]; estadoFabricacion: string }> = [];
+    const p3SelloIds: string[] = [];
+    const v3SelloIds: string[] = [];
     // Solo cargar la orden existente si realmente se va a actualizar cliente.
     // Esto evita una lectura completa extra para updates simples de estados.
     let existingOrder: Order | null = null;
@@ -920,7 +930,7 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
       // e inspeccionar el estado de fabricación actual (para manejar prioridad)
       const { data: allSellos } = await supabase
         .from('sellos')
-        .select('id, valor, senia, estado_fabricacion, es_prioritario, estado_venta')
+        .select('id, valor, senia, estado_fabricacion, es_prioritario, estado_venta, tipo, archivo_base, archivo_vector_preview, ancho_real, largo_real, ancho_fabricacion_mm, largo_fabricacion_mm, diseno, item_type, item_config')
         .eq('orden_id', orderId);
 
       const sellosMap = new Map(allSellos?.map(s => [s.id, s]) || []);
@@ -1019,6 +1029,50 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
 
         // Actualizar fecha_limite si viene en el item (aunque normalmente viene en deadlineAt de la orden)
         // Esto permite actualizar fecha_limite por item si es necesario
+
+        if (currentSello && Object.keys(selloData).length > 0) {
+          if (selloEnCurso(currentSello.estado_fabricacion as string | null)) {
+            const campos: string[] = [];
+            if (selloData.tipo !== undefined && !valuesEqual(currentSello.tipo, selloData.tipo)) {
+              campos.push('tipo');
+            }
+            if (selloData.archivo_base !== undefined && !valuesEqual(currentSello.archivo_base, selloData.archivo_base)) {
+              campos.push('archivo base');
+            }
+            if (
+              selloData.archivo_vector_preview !== undefined &&
+              !valuesEqual(currentSello.archivo_vector_preview, selloData.archivo_vector_preview)
+            ) {
+              campos.push('vector');
+            }
+            const medidaChanged =
+              (selloData.ancho_real !== undefined && !valuesEqual(currentSello.ancho_real, selloData.ancho_real)) ||
+              (selloData.largo_real !== undefined && !valuesEqual(currentSello.largo_real, selloData.largo_real)) ||
+              (selloData.ancho_fabricacion_mm !== undefined &&
+                !valuesEqual(currentSello.ancho_fabricacion_mm, selloData.ancho_fabricacion_mm)) ||
+              (selloData.largo_fabricacion_mm !== undefined &&
+                !valuesEqual(currentSello.largo_fabricacion_mm, selloData.largo_fabricacion_mm));
+            if (medidaChanged) campos.push('medida');
+            if (campos.length) {
+              p1Items.push({
+                selloId: item.id,
+                campos,
+                estadoFabricacion: (currentSello.estado_fabricacion as string) || 'Sin Hacer',
+              });
+            }
+          }
+          if (selloData.es_prioritario === true && !currentSello.es_prioritario) {
+            p3SelloIds.push(item.id);
+          } else if (
+            selloData.estado_fabricacion === 'Prioridad' &&
+            currentSello.estado_fabricacion !== 'Prioridad'
+          ) {
+            p3SelloIds.push(item.id);
+          }
+          if (selloData.estado_fabricacion === 'Hecho' && currentSello.estado_fabricacion !== 'Hecho') {
+            v3SelloIds.push(item.id);
+          }
+        }
 
         // Solo actualizar si hay datos para actualizar
         if (Object.keys(selloData).length > 0) {
@@ -1125,6 +1179,37 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
     if (!finalOrder) {
       throw new Error('No se pudo obtener la orden actualizada');
     }
+
+    const clienteNombre = `${finalOrder.customer.firstName} ${finalOrder.customer.lastName}`.trim();
+    const disenoDe = (selloId: string) => {
+      const found = finalOrder.items.find((i) => i.id === selloId);
+      return found ? getOrderItemDisplayName(found) : 'Sello';
+    };
+    if (p1Items.length) {
+      notifySelloModificado({
+        ordenId: orderId,
+        clienteNombre,
+        items: p1Items.map((row) => ({ ...row, diseno: disenoDe(row.selloId) })),
+      });
+    }
+    for (const selloId of p3SelloIds) {
+      notifyPrioridad({
+        ordenId: orderId,
+        clienteNombre,
+        diseno: disenoDe(selloId),
+        selloId,
+      });
+    }
+    if (v3SelloIds.length) {
+      notifySellosHechos({
+        count: v3SelloIds.length,
+        ordenId: orderId,
+        selloId: v3SelloIds.length === 1 ? v3SelloIds[0] : undefined,
+        clienteNombre,
+        diseno: v3SelloIds.length === 1 ? disenoDe(v3SelloIds[0]) : undefined,
+      });
+    }
+
     return finalOrder;
   } catch (error) {
     console.error('Error updating order:', error);
@@ -1258,7 +1343,7 @@ export const addStampToOrder = async (orderId: string, item: Partial<OrderItem>,
       }
     }
 
-    return mapSelloToOrderItem(sello, {
+    const mapped = mapSelloToOrderItem(sello, {
       id: orden.customer.id,
       nombre: orden.customer.firstName,
       apellido: orden.customer.lastName,
@@ -1269,6 +1354,23 @@ export const addStampToOrder = async (orderId: string, item: Partial<OrderItem>,
       created_at: null,
       updated_at: null,
     });
+
+    const yaPagado =
+      orden.saleStateOrder === 'TRANSFERIDO' ||
+      orden.items.some((i) => i.saleState === 'TRANSFERIDO');
+    const yaFoto =
+      orden.saleStateOrder === 'FOTO_ENVIADA' ||
+      orden.items.some((i) => i.saleState === 'FOTO_ENVIADA');
+    if (yaPagado || yaFoto) {
+      notifyItemAgregadoPedidoPagado({
+        ordenId: orderId,
+        clienteNombre: `${orden.customer.firstName} ${orden.customer.lastName}`.trim(),
+        itemNombre: getOrderItemDisplayName(mapped),
+        estado: yaPagado ? 'pagado' : 'con foto enviada',
+      });
+    }
+
+    return mapped;
   } catch (error) {
     console.error('Error adding stamp to order:', error);
     throw error;
