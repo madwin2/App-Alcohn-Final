@@ -16,6 +16,7 @@ import LoginPage from './app/login/index'
 import ConfiguracionPage from './app/configuracion/index'
 import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import WhatsNewSandboxPage from './app/dev/WhatsNewSandboxPage'
+import AppUpdateSandboxPage from './app/dev/AppUpdateSandboxPage'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { AppUpdatesHost } from './components/global/AppUpdatesHost'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -54,6 +55,7 @@ function App() {
             <>
               <Route path="/dev/test-etiquetas-pdf" element={<TestEtiquetasPdfPage />} />
               <Route path="/dev/whats-new" element={<WhatsNewSandboxPage />} />
+              <Route path="/dev/app-update" element={<AppUpdateSandboxPage />} />
             </>
           ) : null}
         </Routes>

@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import { AppUpdateDialog } from '@/components/global/AppUpdateDialog';
 import { WhatsNewDialog } from '@/components/global/WhatsNewDialog';
+import { getLatestChangelogEntry } from '@/lib/changelog/entries';
 import { useAppVersionCheck } from '@/lib/hooks/useAppVersionCheck';
 import { useWhatsNew } from '@/lib/hooks/useWhatsNew';
 
@@ -13,14 +14,15 @@ export function AppUpdatesHost() {
   const location = useLocation();
   const isLoginRoute = location.pathname === '/login';
 
-  const { updateAvailable, isOutdated, builtAt, dismiss, applyUpdate } = useAppVersionCheck();
+  const { updateAvailable, isOutdated, dismiss, applyUpdate } = useAppVersionCheck();
   const whatsNew = useWhatsNew({ enabled: !isOutdated && !isLoginRoute });
+  const displayVersion = getLatestChangelogEntry()?.version ?? null;
 
   return (
     <>
       <AppUpdateDialog
         open={updateAvailable && !isLoginRoute}
-        builtAt={builtAt}
+        version={displayVersion}
         onSnooze={dismiss}
         onUpdate={applyUpdate}
       />
