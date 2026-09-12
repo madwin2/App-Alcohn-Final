@@ -14,8 +14,16 @@ export interface ChangelogEntry {
   id: number;
   /** 'YYYY-MM-DD'. */
   date: string;
-  /** Título corto de la tanda de novedades. */
+  /** Título corto de la tanda (uso interno / historial). */
   title: string;
+  /**
+   * Versión legible para la slide de presentación
+   * ("Mirá las novedades… en la versión 1.2").
+   */
+  version: string;
+  /** Ilustración de portada (slide 0) y fondo blur de las siguientes. */
+  coverImage?: string;
+  /** Solo las novedades; la intro se arma sola. */
   slides: ChangelogSlide[];
 }
 
@@ -25,6 +33,8 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
     id: 1,
     date: '2026-09-12',
     title: 'Novedades',
+    version: '1.1',
+    coverImage: '/changelog/1/hero.jpg',
     slides: [
       {
         heading: 'La app te avisa cuando hay una versión nueva',

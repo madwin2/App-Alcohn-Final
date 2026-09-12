@@ -17,16 +17,18 @@ va a descubrir solo (ej. "ahora hay notificaciones por área", "Rehacer pide mot
 
 Cómo escribirla:
 - `id`: el más alto actual + 1. `date`: la fecha de hoy en `YYYY-MM-DD`.
-- 1 a 4 `slides`. Cada slide: `heading` corto y `body` de 1-2 frases, en lenguaje de
-  quien va a usar la función (no técnico): qué cambia y para qué le sirve.
-- `icon`: un ícono de `lucide-react` que represente la novedad. Si el cambio es muy
-  visual, usar `image` con una captura en `public/changelog/<id>/`.
+- `version`: string legible (`'1.2'`) — arma sola la slide de presentación.
+- `coverImage` (opcional): ilustración en `public/changelog/<id>/…`; también es el
+  fondo blur de las slides de novedad.
+- 1 a 4 `slides` (solo novedades, sin la intro). Cada una: `heading` corto y `body`
+  de 1-2 frases, en lenguaje de quien va a usar la función. `icon` de lucide-react.
 
 ```ts
 {
   id: 2,
   date: '2026-09-20',
   title: 'Novedades',
+  version: '1.2',
   slides: [
     {
       heading: 'Rehacer ahora pide el motivo',
