@@ -45,6 +45,9 @@ pids
 # Artefactos locales de prueba
 artifacts/
 
+# Identificador de build (lo genera scripts/generate-version.mjs en cada build)
+public/version.json
+
 # Coverage directory used by tools like istanbul
 coverage/
 

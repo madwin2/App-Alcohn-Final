@@ -1,0 +1,38 @@
+---
+description: Toda feature visible para el equipo debe sumar una entrada al changelog "Qué hay de nuevo"
+alwaysApply: true
+---
+
+# Changelog "Qué hay de nuevo"
+
+Antes de dar por terminada una feature (junto con lint y typecheck): si el cambio es
+**visible para el equipo**, agregar una entrada nueva a `CHANGELOG_ENTRIES` en
+`src/lib/changelog/entries.ts`. El modal se le muestra solo a cada usuario la próxima
+vez que entre; no hay que tocar nada más.
+
+**Amerita entrada**: función nueva, cambio de flujo, algo que si no se explica nadie
+va a descubrir solo (ej. "ahora hay notificaciones por área", "Rehacer pide motivo").
+
+**No amerita**: fixes de bugs invisibles, refactors, performance, ajustes de estilo menores.
+
+Cómo escribirla:
+- `id`: el más alto actual + 1. `date`: la fecha de hoy en `YYYY-MM-DD`.
+- 1 a 4 `slides`. Cada slide: `heading` corto y `body` de 1-2 frases, en lenguaje de
+  quien va a usar la función (no técnico): qué cambia y para qué le sirve.
+- `icon`: un ícono de `lucide-react` que represente la novedad. Si el cambio es muy
+  visual, usar `image` con una captura en `public/changelog/<id>/`.
+
+```ts
+{
+  id: 2,
+  date: '2026-09-20',
+  title: 'Novedades',
+  slides: [
+    {
+      heading: 'Rehacer ahora pide el motivo',
+      body: 'Cuando marcás un sello para rehacer, se anota por qué. Sirve para ver qué falla más seguido.',
+      icon: RotateCcw,
+    },
+  ],
+}
+```

@@ -16,6 +16,7 @@ import LoginPage from './app/login/index'
 import ConfiguracionPage from './app/configuracion/index'
 import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
+import { AppUpdatesHost } from './components/global/AppUpdatesHost'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
 import { OrdersScopeLayout } from './components/orders/OrdersScope'
 import { FabricationSizeDialogHost } from './components/shared/FabricationSizeDialogHost'
@@ -26,6 +27,7 @@ function App() {
       <div className="min-h-screen bg-background">
         <OrderTasksOverlay />
         <FabricationSizeDialogHost />
+        <AppUpdatesHost />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<AuthenticatedLayout />}>

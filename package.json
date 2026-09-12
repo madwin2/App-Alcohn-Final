@@ -4,8 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/generate-version.mjs",
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/generate-version.mjs && vite build",
+    "version:generate": "node scripts/generate-version.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
