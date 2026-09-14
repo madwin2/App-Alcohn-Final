@@ -637,6 +637,7 @@ export const setFabricationStateForProgram = async (
     .from('sellos')
     .update({
       estado_fabricacion: mapFabricationStateToDB(state),
+      ...(state === 'REHACER' ? { es_prioritario: true } : {}),
       updated_at: new Date().toISOString(),
     } as any)
     .eq('programa_id', programId);
@@ -696,6 +697,7 @@ export const setStampFabricationStates = async (
       .from('sellos')
       .update({
         estado_fabricacion: mapFabricationStateToDB(state),
+        ...(state === 'REHACER' ? { es_prioritario: true } : {}),
         updated_at: now,
       } as any)
       .eq('id', stampId)

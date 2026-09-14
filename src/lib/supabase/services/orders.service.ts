@@ -974,6 +974,13 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
           // - En cualquier otro caso, sí actualizar estado_fabricacion según fabricationState.
           if (!(isCurrentlyPriority && !priorityExplicitlyChanged)) {
             selloData.estado_fabricacion = mapFabricationStateToDB(item.fabricationState);
+            if (
+              selloData.estado_fabricacion === 'Rehacer' &&
+              currentSello?.estado_fabricacion !== 'Rehacer' &&
+              item.isPriority === undefined
+            ) {
+              selloData.es_prioritario = true;
+            }
           }
         }
         // Manejar isPriority: guardar en la columna es_prioritario (separada del estado de fabricación)

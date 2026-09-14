@@ -234,6 +234,8 @@ export interface ProductionItem {
   orderId: string;
   clienteId?: string | null;
   customerName?: string | null;
+  /** Solo para buscar por cliente; no se muestra como columna. */
+  customerPhone?: string | null;
   date?: string; // Fecha del sello (columna fecha en BD), formato YYYY-MM-DD
   itemType?: ItemType;
   designName: string;

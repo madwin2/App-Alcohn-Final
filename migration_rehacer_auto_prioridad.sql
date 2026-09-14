@@ -1,64 +1,29 @@
--- Flujo Rehacer: evento por ítem (motivo, snapshot de estados, cobro adicional)
--- + RPC atómico que resetea fabricación / foto / envío.
+-- Al pasar un sello a Rehacer, marcarlo automáticamente como Prioridad.
+-- Cubra el RPC registrar_rehacer y cualquier otro update de estado_fabricacion.
 -- Ejecutar en Supabase SQL Editor.
 
-CREATE TABLE IF NOT EXISTS public.sello_rehacer_eventos (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  sello_id uuid NOT NULL REFERENCES public.sellos(id) ON DELETE CASCADE,
-  orden_id uuid NOT NULL REFERENCES public.ordenes(id) ON DELETE CASCADE,
-  motivo text NOT NULL CHECK (motivo IN (
-    'ERROR_DETECTADO_EN_MAQUINA',
-    'ERROR_MEDIDA_O_VECTOR',
-    'RECLAMO_CLIENTE_PRE_ENTREGA',
-    'DANIO_O_ERROR_EN_ENVIO',
-    'RECLAMO_CLIENTE_POST_ENTREGA',
-    'OTRO'
-  )),
-  descripcion text,
+CREATE OR REPLACE FUNCTION public.sellos_rehacer_auto_prioridad()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.estado_fabricacion = 'Rehacer'
+     AND (TG_OP = 'INSERT' OR OLD.estado_fabricacion IS DISTINCT FROM 'Rehacer') THEN
+    NEW.es_prioritario := TRUE;
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
-  fabricacion_estado_previo text,
-  venta_estado_previo text,
-  foto_sello_previo text,
-  envio_estado_previo text,
-  envio_seguimiento_previo text,
-  envio_empresa_previo text,
-  envio_fecha_previo timestamptz,
+COMMENT ON FUNCTION public.sellos_rehacer_auto_prioridad() IS
+  'Si un sello entra a estado Rehacer, lo marca como prioritario.';
 
-  cobro_adicional_monto numeric,
-  cobro_adicional_concepto text,
-  cobro_adicional_cobrado boolean NOT NULL DEFAULT false,
+DROP TRIGGER IF EXISTS trigger_sellos_rehacer_auto_prioridad ON public.sellos;
+CREATE TRIGGER trigger_sellos_rehacer_auto_prioridad
+  BEFORE INSERT OR UPDATE OF estado_fabricacion ON public.sellos
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sellos_rehacer_auto_prioridad();
 
-  created_by uuid REFERENCES auth.users(id),
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_sello_rehacer_sello_id ON public.sello_rehacer_eventos (sello_id);
-CREATE INDEX IF NOT EXISTS idx_sello_rehacer_orden_id ON public.sello_rehacer_eventos (orden_id);
-CREATE INDEX IF NOT EXISTS idx_sello_rehacer_created_at ON public.sello_rehacer_eventos (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_sello_rehacer_cobro_pendiente
-  ON public.sello_rehacer_eventos (orden_id)
-  WHERE cobro_adicional_monto IS NOT NULL AND cobro_adicional_cobrado = false;
-
-COMMENT ON TABLE public.sello_rehacer_eventos IS
-  'Cada vez que se marca Rehacer: motivo, snapshot de venta/envío y cobro adicional opcional.';
-
-ALTER TABLE public.sello_rehacer_eventos ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "sello_rehacer_select_authenticated" ON public.sello_rehacer_eventos;
-CREATE POLICY "sello_rehacer_select_authenticated"
-  ON public.sello_rehacer_eventos FOR SELECT TO authenticated USING (true);
-
-DROP POLICY IF EXISTS "sello_rehacer_update_authenticated" ON public.sello_rehacer_eventos;
-CREATE POLICY "sello_rehacer_update_authenticated"
-  ON public.sello_rehacer_eventos FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
-
-GRANT SELECT, UPDATE ON public.sello_rehacer_eventos TO authenticated;
-REVOKE INSERT, DELETE ON public.sello_rehacer_eventos FROM authenticated;
-REVOKE ALL ON public.sello_rehacer_eventos FROM anon;
-
--- ---------------------------------------------------------------------------
--- RPC: inserta eventos + resetea ítems y envío del pedido en una transacción
--- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.registrar_rehacer(
   p_sello_ids uuid[],
   p_motivo text,
@@ -147,6 +112,3 @@ $$;
 
 COMMENT ON FUNCTION public.registrar_rehacer(uuid[], text, text, numeric, text) IS
   'Registra Rehacer (motivo + snapshot), marca Prioridad y resetea fabricación/foto/envío.';
-
-GRANT EXECUTE ON FUNCTION public.registrar_rehacer(uuid[], text, text, numeric, text)
-  TO authenticated, service_role;

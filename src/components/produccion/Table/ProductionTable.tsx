@@ -30,6 +30,7 @@ import {
 } from '@/lib/supabase/services/order-sticky-tasks.service';
 import { OrderInfoDialog } from '@/components/produccion/OrderInfoDialog';
 import { RehacerDialog } from '@/components/shared/RehacerDialog';
+import { phoneMatchesSearch } from '@/lib/utils/phoneNormalization';
 
 interface ProductionTableProps {
   items: ProductionItem[];
@@ -98,12 +99,14 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
   const filteredItems = useMemo(() => {
     let result = items;
 
-    // Aplicar búsqueda por texto
+    // Aplicar búsqueda por texto (el teléfono no es columna, pero sirve para buscar)
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
       result = result.filter(item =>
         item.designName.toLowerCase().includes(searchLower) ||
-        item.notes?.toLowerCase().includes(searchLower)
+        item.notes?.toLowerCase().includes(searchLower) ||
+        item.customerName?.toLowerCase().includes(searchLower) ||
+        phoneMatchesSearch([item.customerPhone ?? ''], searchQuery)
       );
     }
 

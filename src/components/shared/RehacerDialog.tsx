@@ -131,8 +131,8 @@ export function RehacerDialog({ open, selloIds, onOpenChange, onConfirmed }: Reh
         title: 'Marcado para rehacer',
         description:
           selloIds.length === 1
-            ? 'El ítem volvió a Rehacer.'
-            : `${selloIds.length} ítems volvieron a Rehacer.`,
+            ? 'El ítem volvió a Rehacer y quedó como Prioridad.'
+            : `${selloIds.length} ítems volvieron a Rehacer y quedaron como Prioridad.`,
       });
       onConfirmed();
       onOpenChange(false);

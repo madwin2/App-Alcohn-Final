@@ -233,6 +233,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         orderId: sello.orden_id,
         clienteId: cliente?.id ?? null,
         customerName,
+        customerPhone: cliente?.telefono ?? null,
         date: dateStr ?? undefined,
         itemType,
         designName: resolveDisplayDesignName(sello.diseno, itemType),
@@ -312,6 +313,9 @@ export const updateProductionItem = async (
 
     if (updates.productionState) {
       updateData.estado_fabricacion = mapToFabricationState(updates.productionState) as any;
+      if (updateData.estado_fabricacion === 'Rehacer' && updates.isPriority === undefined) {
+        (updateData as any).es_prioritario = true;
+      }
       // Regla de negocio: si el usuario cambia el estado de fabricación, se debe limpiar Aspire
       // (Aspire solo aplica cuando está "Programado").
       if (updates.aspireState === undefined) {
@@ -525,6 +529,7 @@ export const updateProductionItem = async (
       orderId: updatedSello.orden_id,
       clienteId: cliente?.id ?? null,
       customerName,
+      customerPhone: cliente?.telefono ?? null,
       date: dateStr,
       itemType,
       designName: resolveDisplayDesignName(updatedSello.diseno, itemType),

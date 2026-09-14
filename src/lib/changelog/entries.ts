@@ -1,4 +1,4 @@
-import { Bell, RefreshCw, type LucideIcon } from 'lucide-react';
+import { Bell, Flag, MousePointerClick, RefreshCw, Search, type LucideIcon } from 'lucide-react';
 
 export interface ChangelogSlide {
   heading: string;
@@ -45,6 +45,29 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Y te contamos qué cambió',
         body: 'Cada vez que sumemos algo importante vas a ver una pantalla como esta, explicando en dos líneas qué es nuevo y para qué te sirve.',
         icon: Bell,
+      },
+    ],
+  },
+  {
+    id: 2,
+    date: '2026-09-14',
+    title: 'Novedades',
+    version: '1.11',
+    slides: [
+      {
+        heading: 'Rehacer ahora es Prioridad',
+        body: 'Al marcar un pedido para rehacer, pasa a estado prioritario. Así no se pierde entre el resto de la cola.',
+        icon: Flag,
+      },
+      {
+        heading: 'Las notificaciones te llevan al pedido',
+        body: 'Al tocar una notificación, la tabla se abre con el buscador puesto en el teléfono de ese cliente, así ves directo el pedido del que te avisó. Borrás el buscador y volvés a la lista completa.',
+        icon: MousePointerClick,
+      },
+      {
+        heading: 'En Producción podés buscar por cliente',
+        body: 'El buscador de Producción ahora también encuentra por nombre o teléfono del cliente, además del diseño.',
+        icon: Search,
       },
     ],
   },

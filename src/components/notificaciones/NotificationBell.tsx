@@ -15,6 +15,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils/cn';
 import { useNotifications } from '@/lib/hooks/useNotifications';
 import { formatRelativeEs } from '@/lib/notificaciones/format';
+import { prepararBusquedaDePedido } from '@/lib/notificaciones/abrirDesdeNotificacion';
 import {
   AREA_LABELS,
   AUTO_TIPOS,
@@ -135,7 +136,9 @@ export function NotificationBell() {
   const handleSelect = async (item: NotificacionItem) => {
     await markRead(item.destinatarioId);
     setOpen(false);
-    if (item.linkPath) navigate(item.linkPath);
+    if (!item.linkPath) return;
+    await prepararBusquedaDePedido(item);
+    navigate(item.linkPath);
   };
 
   const badgeLabel = unreadCount > 99 ? '99+' : String(unreadCount);

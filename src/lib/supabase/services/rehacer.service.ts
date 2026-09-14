@@ -140,6 +140,14 @@ export async function registrarRehacer(input: RegistrarRehacerInput): Promise<vo
     p_cobro_concepto: input.cobroConcepto?.trim() || null,
   });
   if (error) throw error;
+
+  const { error: priorityError } = await supabase
+    .from('sellos')
+    .update({ es_prioritario: true })
+    .in('id', input.selloIds);
+  if (priorityError) {
+    console.warn('No se pudo marcar Prioridad al rehacer:', priorityError);
+  }
   void notifySellosRehacer(input.selloIds);
   void notifyRehacerInApp(input);
 }
