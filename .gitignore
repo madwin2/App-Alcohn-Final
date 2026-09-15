@@ -117,3 +117,6 @@ services/andreani-worker/test-results/
 _wa_bot_inspect/
 
 tmp/
+
+# Programa viejo de escritorio (contiene credenciales en texto plano)
+vectorizer ai/

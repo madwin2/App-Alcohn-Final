@@ -30,28 +30,41 @@ export interface FabricationSizeResolution {
   measuredHeightMm: number | null;
 }
 
-/** Sugiere la medida pedida; si el menor pedido supera el tope, lo recorta al tope manteniendo proporción. */
-function suggestionFromRequested(
-  requestedWidthMm: number,
-  requestedHeightMm: number,
+/** Escala un rectángulo para que el lado menor no pase el tope, sin deformar. */
+export function clampToTopePreservingAspect(
+  widthMm: number,
+  heightMm: number,
   maxUsableMm: number | null,
 ): { widthMm: number; heightMm: number } {
-  let widthMm = requestedWidthMm;
-  let heightMm = requestedHeightMm;
-  if (maxUsableMm == null || widthMm <= 0 || heightMm <= 0) {
-    return { widthMm, heightMm };
-  }
-  const requestedMinor = Math.min(widthMm, heightMm);
-  if (requestedMinor <= maxUsableMm + 0.05) {
-    return { widthMm, heightMm };
-  }
-  const ratio = widthMm / heightMm;
-  if (widthMm <= heightMm) {
-    widthMm = maxUsableMm;
-    heightMm = widthMm / ratio;
+  let w = widthMm;
+  let h = heightMm;
+  if (maxUsableMm == null || w <= 0 || h <= 0) return { widthMm: w, heightMm: h };
+  if (Math.min(w, h) <= maxUsableMm + 0.05) return { widthMm: w, heightMm: h };
+  const ratio = w / h;
+  if (w <= h) {
+    w = maxUsableMm;
+    h = w / ratio;
   } else {
-    heightMm = maxUsableMm;
-    widthMm = heightMm * ratio;
+    h = maxUsableMm;
+    w = h * ratio;
+  }
+  return { widthMm: w, heightMm: h };
+}
+
+/** Encaja la proporción `aspect` (ancho/alto) dentro de una caja, sin deformar. */
+export function fitAspectInBox(
+  aspectRatio: number,
+  boxWidthMm: number,
+  boxHeightMm: number,
+): { widthMm: number; heightMm: number } {
+  if (!(aspectRatio > 0) || boxWidthMm <= 0 || boxHeightMm <= 0) {
+    return { widthMm: boxWidthMm, heightMm: boxHeightMm };
+  }
+  let widthMm = boxWidthMm;
+  let heightMm = boxWidthMm / aspectRatio;
+  if (heightMm > boxHeightMm) {
+    heightMm = boxHeightMm;
+    widthMm = heightMm * aspectRatio;
   }
   return { widthMm, heightMm };
 }
@@ -59,8 +72,8 @@ function suggestionFromRequested(
 /**
  * Resuelve la medida de fabricación a partir de lo pedido y lo medido del SVG.
  * - Si el SVG ya entra en el tope y no se desvía ≥6mm de lo pedido → guarda lo medido, sin popup.
- * - Si supera el tope o hay diferencia grande → popup, sugerencia = medida pedida
- *   (recortada al tope solo si lo pedido también lo supera).
+ * - Si supera el tope o hay diferencia grande → popup; la sugerencia conserva la proporción del
+ *   vector (lo medido, recortado al tope si hace falta). Nunca deforma al forzar lo pedido.
  */
 export function resolveFabricationSize(
   requestedWidthMm: number,
@@ -111,7 +124,7 @@ export function resolveFabricationSize(
     };
   }
 
-  const suggested = suggestionFromRequested(requestedWidthMm, requestedHeightMm, maxUsableMm);
+  const suggested = clampToTopePreservingAspect(naturalWidth, naturalHeight, maxUsableMm);
   return {
     widthMm: suggested.widthMm,
     heightMm: suggested.heightMm,

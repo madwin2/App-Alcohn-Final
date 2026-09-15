@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { AppUpdateDialog } from '@/components/global/AppUpdateDialog';
 import { WhatsNewDialog } from '@/components/global/WhatsNewDialog';
 import { getLatestChangelogEntry } from '@/lib/changelog/entries';
+import { changelogToTourContent } from '@/lib/changelog/toTourContent';
 import { useAppVersionCheck } from '@/lib/hooks/useAppVersionCheck';
 import { useWhatsNew } from '@/lib/hooks/useWhatsNew';
 
@@ -17,6 +19,10 @@ export function AppUpdatesHost() {
   const { updateAvailable, isOutdated, dismiss, applyUpdate } = useAppVersionCheck();
   const whatsNew = useWhatsNew({ enabled: !isOutdated && !isLoginRoute });
   const displayVersion = getLatestChangelogEntry()?.version ?? null;
+  const tourContent = useMemo(
+    () => (whatsNew.entry ? changelogToTourContent(whatsNew.entry) : null),
+    [whatsNew.entry],
+  );
 
   return (
     <>
@@ -27,7 +33,7 @@ export function AppUpdatesHost() {
         onUpdate={applyUpdate}
       />
       <WhatsNewDialog
-        entry={whatsNew.entry}
+        content={tourContent}
         open={whatsNew.open && !isOutdated && !isLoginRoute}
         onClose={whatsNew.close}
       />

@@ -2,6 +2,7 @@ import { Order, OrderItem, Customer, FabricationState, SaleState, ShippingState,
 import { Database } from './types';
 import { todayArgentinaDateKey } from '../utils/argentinaDate';
 import { vectorUrlFromPreview } from '../utils/vectorUrlFromPreview';
+import { baseFileUtil } from '@/lib/vectorizacion/baseFile';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -238,7 +239,10 @@ export const mapSelloToOrderItem = (sello: SelloRow, cliente: ClienteRow): Order
     program: (sello as any).programa_nombre || undefined,
     mockupSolicitudId: (sello as any).mockup_solicitud_id ?? null,
     files: {
-      baseUrl: sello.archivo_base || undefined,
+      baseUrl: baseFileUtil({
+        archivoBase: sello.archivo_base || '',
+        archivoBaseMejorado: (sello as { archivo_base_mejorado?: string | null }).archivo_base_mejorado,
+      }) || undefined,
       vectorUrl: vectorUrlFromPreview((sello as any).archivo_vector_preview),
       vectorPreviewUrl: (sello as any).archivo_vector_preview || undefined,
       photoUrl: sello.foto_sello || undefined,

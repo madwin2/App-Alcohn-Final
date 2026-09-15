@@ -196,6 +196,119 @@ export function notifyItemAgregadoPedidoPagado(params: {
   });
 }
 
+type SellosHechosPending = {
+  count: number;
+  ordenId?: string;
+  selloId?: string;
+  clienteNombre?: string;
+  diseno?: string;
+};
+
+/** Tras el último “Hecho”: espera quietud antes de emitir. */
+const SELLOS_HECHOS_QUIET_MS = 2 * 60 * 1000;
+/** Tope desde el primero del lote, aunque sigan marcando. */
+const SELLOS_HECHOS_MAX_MS = 5 * 60 * 1000;
+
+let sellosHechosQueue: SellosHechosPending[] = [];
+let sellosHechosQuietTimer: ReturnType<typeof setTimeout> | null = null;
+let sellosHechosMaxTimer: ReturnType<typeof setTimeout> | null = null;
+let sellosHechosUnloadBound = false;
+
+function clearSellosHechosTimers(): void {
+  if (sellosHechosQuietTimer) {
+    clearTimeout(sellosHechosQuietTimer);
+    sellosHechosQuietTimer = null;
+  }
+  if (sellosHechosMaxTimer) {
+    clearTimeout(sellosHechosMaxTimer);
+    sellosHechosMaxTimer = null;
+  }
+}
+
+function emitSellosHechosBatch(items: SellosHechosPending[]): void {
+  if (!items.length) return;
+
+  const selloIds = new Set<string>();
+  let anonymousCount = 0;
+  let single: SellosHechosPending | null = null;
+
+  for (const item of items) {
+    if (item.selloId) {
+      if (!selloIds.has(item.selloId)) {
+        selloIds.add(item.selloId);
+        if (!single) single = item;
+      }
+    } else {
+      anonymousCount += Math.max(1, item.count);
+    }
+  }
+
+  const total = selloIds.size + anonymousCount;
+  if (total <= 0) return;
+
+  if (total === 1 && single) {
+    const cliente = single.clienteNombre || 'Cliente';
+    emitNotificacionSafe({
+      tipo: 'v3_sellos_hechos',
+      area: 'ventas',
+      titulo: `${cliente} — ${single.diseno || 'Sello'} fue terminado`,
+      entidadTipo: single.selloId ? 'sello' : 'orden',
+      entidadId: single.selloId ?? single.ordenId ?? null,
+      linkPath: '/pedidos',
+      metadata: {
+        clienteNombre: cliente,
+        diseno: single.diseno,
+        ordenId: single.ordenId,
+      },
+    });
+    return;
+  }
+
+  emitNotificacionSafe({
+    tipo: 'v3_sellos_hechos',
+    area: 'ventas',
+    titulo: `${total} sellos fueron terminados`,
+    entidadTipo: 'orden',
+    entidadId: null,
+    linkPath: '/pedidos',
+    metadata: {
+      count: total,
+      selloIds: selloIds.size ? [...selloIds] : undefined,
+    },
+  });
+}
+
+function flushSellosHechos(): void {
+  clearSellosHechosTimers();
+  const items = sellosHechosQueue;
+  sellosHechosQueue = [];
+  emitSellosHechosBatch(items);
+}
+
+function ensureSellosHechosUnloadFlush(): void {
+  if (sellosHechosUnloadBound || typeof window === 'undefined') return;
+  sellosHechosUnloadBound = true;
+  window.addEventListener('pagehide', () => {
+    if (sellosHechosQueue.length) flushSellosHechos();
+  });
+}
+
+function scheduleSellosHechosFlush(): void {
+  ensureSellosHechosUnloadFlush();
+
+  if (sellosHechosQuietTimer) clearTimeout(sellosHechosQuietTimer);
+  sellosHechosQuietTimer = setTimeout(flushSellosHechos, SELLOS_HECHOS_QUIET_MS);
+
+  if (!sellosHechosMaxTimer) {
+    sellosHechosMaxTimer = setTimeout(flushSellosHechos, SELLOS_HECHOS_MAX_MS);
+  }
+}
+
+/**
+ * Agrupa los “sello terminado” de la sesión: en producción suelen marcar de a
+ * uno y no queremos 17 avisos. Espera 2 min de silencio (máx. 5 min desde el
+ * primero) y manda una sola notificación.
+ */
 export function notifySellosHechos(params: {
   count: number;
   ordenId?: string;
@@ -203,24 +316,15 @@ export function notifySellosHechos(params: {
   clienteNombre?: string;
   diseno?: string;
 }): void {
-  const cliente = params.clienteNombre || 'Cliente';
-  const titulo =
-    params.count === 1
-      ? `${cliente} — ${params.diseno || 'Sello'} fue terminado`
-      : `Se terminaron ${params.count} sellos`;
-  emitNotificacionSafe({
-    tipo: 'v3_sellos_hechos',
-    area: 'ventas',
-    titulo,
-    entidadTipo: params.count === 1 && params.selloId ? 'sello' : 'orden',
-    entidadId: params.count === 1 && params.selloId ? params.selloId : params.ordenId ?? null,
-    linkPath: '/pedidos',
-    metadata: {
-      clienteNombre: cliente,
-      diseno: params.diseno,
-      ordenId: params.ordenId,
-    },
+  const count = Math.max(1, params.count || 1);
+  sellosHechosQueue.push({
+    count,
+    ordenId: params.ordenId,
+    selloId: params.selloId,
+    clienteNombre: params.clienteNombre,
+    diseno: params.diseno,
   });
+  scheduleSellosHechosFlush();
 }
 
 export function notifyTareaAsignada(params: {

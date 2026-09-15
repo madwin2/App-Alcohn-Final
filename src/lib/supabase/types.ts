@@ -126,6 +126,8 @@ export interface Database {
           estado_fabricacion_previo?: string | null;
           estado_venta: 'Señado' | 'Foto' | 'Transferido' | null;
           archivo_base: string | null;
+          archivo_base_mejorado?: string | null;
+          archivo_base_mejorado_at?: string | null;
           foto_sello: string | null;
           archivo_vector_preview: string | null;
           estado_vectorizacion?: 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR' | null;

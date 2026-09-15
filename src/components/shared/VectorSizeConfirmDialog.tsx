@@ -4,7 +4,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { applyAspectRatioLock } from '@/lib/programas/fabricationSize';
+import {
+  applyAspectRatioLock,
+  clampToTopePreservingAspect,
+  fitAspectInBox,
+} from '@/lib/programas/fabricationSize';
 import type { FabricationSizeResolution } from '@/lib/programas/fabricationSize';
 
 interface VectorSizeConfirmDialogProps {
@@ -35,8 +39,13 @@ export function VectorSizeConfirmDialog({
   const [locked, setLocked] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Bloquear proporción según la sugerencia (medida pedida / recorte), no según el SVG crudo.
-  const lockRatio = resolution.heightMm > 0 ? resolution.widthMm / resolution.heightMm : 1;
+  // Proporción del diseño real (SVG); si no se pudo medir, la de la sugerencia.
+  const lockRatio =
+    svgAspectRatio != null && svgAspectRatio > 0
+      ? svgAspectRatio
+      : resolution.heightMm > 0
+        ? resolution.widthMm / resolution.heightMm
+        : 1;
 
   useEffect(() => {
     if (open) {
@@ -66,9 +75,23 @@ export function VectorSizeConfirmDialog({
     }
   };
 
+  /** Encaja lo pedido en la proporción del SVG (no deforma). */
   const handleUseRequested = () => {
-    setWidthMm(requestedWidthMm);
-    setHeightMm(requestedHeightMm);
+    const fitted = fitAspectInBox(lockRatio, requestedWidthMm, requestedHeightMm);
+    const clamped = clampToTopePreservingAspect(fitted.widthMm, fitted.heightMm, resolution.maxUsableMm);
+    setWidthMm(clamped.widthMm);
+    setHeightMm(clamped.heightMm);
+  };
+
+  const handleUseMeasured = () => {
+    if (resolution.measuredWidthMm == null || resolution.measuredHeightMm == null) return;
+    const clamped = clampToTopePreservingAspect(
+      resolution.measuredWidthMm,
+      resolution.measuredHeightMm,
+      resolution.maxUsableMm,
+    );
+    setWidthMm(clamped.widthMm);
+    setHeightMm(clamped.heightMm);
   };
 
   const handleConfirm = async () => {
@@ -113,24 +136,19 @@ export function VectorSizeConfirmDialog({
 
           {resolution.reviewReason === 'large_diff' ? (
             <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
-              El vector se desvía ≥6mm de la medida pedida — revisá la medida de fabricación.
-              Se sugiere la medida que pidió el cliente.
+              El vector se desvía ≥6mm de la medida pedida. Se sugiere la medida del diseño
+              (misma proporción del SVG, sin deformar).
             </div>
           ) : (
             <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
               El vector supera el máximo de la planchuela {resolution.tipoPlanchuela}mm
-              ({resolution.maxUsableMm}mm). Se sugiere la medida pedida
-              {resolution.maxUsableMm != null &&
-              Math.min(requestedWidthMm, requestedHeightMm) > resolution.maxUsableMm + 0.05
-                ? ' recortada al tope'
-                : ''}
-              .
+              ({resolution.maxUsableMm}mm). Se sugiere el diseño recortado al tope, sin deformar.
             </div>
           )}
 
           {svgAspectRatio == null && (
             <div className="text-xs rounded bg-muted px-3 py-2 text-muted-foreground">
-              No se pudo medir el SVG automáticamente; se usa la medida pedida.
+              No se pudo medir el SVG automáticamente; revisá la proporción a mano.
             </div>
           )}
 
@@ -169,10 +187,17 @@ export function VectorSizeConfirmDialog({
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-2">
-            <Button type="button" variant="link" size="sm" className="px-0" onClick={handleUseRequested}>
-              Usar medida pedida
-            </Button>
+          <div className="flex flex-wrap justify-between items-center gap-2 pt-2">
+            <div className="flex flex-wrap gap-1">
+              <Button type="button" variant="link" size="sm" className="px-0" onClick={handleUseRequested}>
+                Acercar a lo pedido
+              </Button>
+              {resolution.measuredWidthMm != null && resolution.measuredHeightMm != null ? (
+                <Button type="button" variant="link" size="sm" className="px-0" onClick={handleUseMeasured}>
+                  Usar vector medido
+                </Button>
+              ) : null}
+            </div>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
                 Cancelar

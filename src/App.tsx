@@ -11,11 +11,13 @@ import GastosPage from './app/gastos/index'
 import MockupsPage from './app/mockups/index'
 import PreciosPage from './app/precios/index'
 import InnovacionPage from './app/innovacion/index'
+import VectorizacionPage from './app/vectorizacion/index'
 import ComercialPage from './app/comercial/index'
 import LoginPage from './app/login/index'
 import ConfiguracionPage from './app/configuracion/index'
 import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import WhatsNewSandboxPage from './app/dev/WhatsNewSandboxPage'
+import VectorizarTourSandboxPage from './app/dev/VectorizarTourSandboxPage'
 import AppUpdateSandboxPage from './app/dev/AppUpdateSandboxPage'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { AppUpdatesHost } from './components/global/AppUpdatesHost'
@@ -48,6 +50,7 @@ function App() {
             <Route path="/precios" element={<PreciosPage />} />
             <Route path="/comercial" element={<ComercialPage />} />
             <Route path="/innovacion" element={<InnovacionPage />} />
+            <Route path="/vectorizacion" element={<VectorizacionPage />} />
             <Route path="/configuracion" element={<ConfiguracionPage />} />
           </Route>
           <Route path="/admin/registros" element={<Navigate to="/pedidos" replace />} />
@@ -55,6 +58,7 @@ function App() {
             <>
               <Route path="/dev/test-etiquetas-pdf" element={<TestEtiquetasPdfPage />} />
               <Route path="/dev/whats-new" element={<WhatsNewSandboxPage />} />
+              <Route path="/dev/vectorizar-tour" element={<VectorizarTourSandboxPage />} />
               <Route path="/dev/app-update" element={<AppUpdateSandboxPage />} />
             </>
           ) : null}

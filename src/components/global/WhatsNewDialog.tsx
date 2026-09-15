@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, type LucideIcon } from 'lucide-react';
 import { Dialog, DialogDescription, DialogOverlay, DialogPortal, DialogTitle } from '@/components/ui/dialog';
-import type { ChangelogEntry, ChangelogSlide } from '@/lib/changelog/entries';
 import { cn } from '@/lib/utils/cn';
 
 const DEFAULT_COVER = '/changelog/1/hero.jpg';
@@ -11,10 +10,25 @@ const DEFAULT_COVER = '/changelog/1/hero.jpg';
 const NOISE_BG =
   "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
 
+export interface FeatureTourSlide {
+  heading: string;
+  body: string;
+  icon?: LucideIcon;
+}
+
+/** Contenido genérico del carrusel (novedades o onboarding de una página). */
+export interface FeatureTourContent {
+  id: string | number;
+  coverImage?: string;
+  introHeading: string;
+  introBody: string;
+  slides: FeatureTourSlide[];
+}
+
 interface WhatsNewDialogProps {
-  entry: ChangelogEntry | null;
+  content: FeatureTourContent | null;
   open: boolean;
-  /** Saltar / Entendido: marca la tanda como vista. */
+  /** Saltar / Entendido: cierra y marca como visto en el caller. */
   onClose: () => void;
 }
 
@@ -23,17 +37,17 @@ interface CarouselPage {
   kind: 'intro' | 'feature';
   heading: string;
   body: string;
-  slide?: ChangelogSlide;
+  slide?: FeatureTourSlide;
 }
 
-function buildPages(entry: ChangelogEntry): CarouselPage[] {
+function buildPages(content: FeatureTourContent): CarouselPage[] {
   const intro: CarouselPage = {
     key: 'intro',
     kind: 'intro',
-    heading: `Mirá las novedades de la app\nen la versión ${entry.version}`,
-    body: 'Te contamos en un minuto qué cambió y para qué te sirve.',
+    heading: content.introHeading,
+    body: content.introBody,
   };
-  const features = entry.slides.map((slide, i) => ({
+  const features = content.slides.map((slide, i) => ({
     key: `feature-${i}`,
     kind: 'feature' as const,
     heading: slide.heading,
@@ -44,25 +58,25 @@ function buildPages(entry: ChangelogEntry): CarouselPage[] {
 }
 
 /**
- * Carrusel de novedades. Shell de tamaño fijo (horizontal): la cover
+ * Carrusel de novedades / onboarding. Shell de tamaño fijo: la cover
  * no se remonta; solo se desliza el contenido y se morphéa blur/glass.
  * Atrás = tocar un puntito anterior (sin botón de volver).
  */
-export function WhatsNewDialog({ entry, open, onClose }: WhatsNewDialogProps) {
+export function WhatsNewDialog({ content, open, onClose }: WhatsNewDialogProps) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
     setIndex(0);
-  }, [entry?.id]);
+  }, [content?.id]);
 
-  const pages = useMemo(() => (entry ? buildPages(entry) : []), [entry]);
+  const pages = useMemo(() => (content ? buildPages(content) : []), [content]);
 
-  if (!entry || entry.slides.length === 0 || pages.length === 0) return null;
+  if (!content || content.slides.length === 0 || pages.length === 0) return null;
 
   const safeIndex = Math.min(index, pages.length - 1);
   const isLast = safeIndex >= pages.length - 1;
   const isIntro = safeIndex === 0;
-  const cover = entry.coverImage || DEFAULT_COVER;
+  const cover = content.coverImage || DEFAULT_COVER;
   const activePage = pages[safeIndex];
   const ActiveIcon = activePage.slide?.icon ?? Sparkles;
 
@@ -89,7 +103,6 @@ export function WhatsNewDialog({ entry, open, onClose }: WhatsNewDialogProps) {
             'focus:outline-none',
           )}
         >
-          {/* Media con un poco más de margen; degradé más largo y suave abajo */}
           <div className="relative px-2 pt-2">
             <div
               className="relative aspect-[16/9] overflow-hidden rounded-t-[18px] bg-zinc-950"
@@ -189,7 +202,7 @@ export function WhatsNewDialog({ entry, open, onClose }: WhatsNewDialogProps) {
                     type="button"
                     disabled={!canGoBack}
                     onClick={() => goTo(i)}
-                    aria-label={canGoBack ? `Volver a la novedad ${i + 1}` : undefined}
+                    aria-label={canGoBack ? `Volver a la slide ${i + 1}` : undefined}
                     aria-current={i === safeIndex ? 'step' : undefined}
                     className={cn(
                       'rounded-full transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30',

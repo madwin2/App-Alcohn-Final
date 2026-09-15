@@ -38,7 +38,7 @@ const sidebarItems = [
   { icon: Image, label: 'Mockups', path: '/mockups', disabled: false },
   { icon: TrendingUp, label: 'Comercial Web', path: '/comercial', disabled: false },
   { icon: Sparkles, label: 'Innovación', path: '/innovacion', disabled: false },
-  { icon: Layers, label: 'Vectorización', path: '/vectorizacion', disabled: true },
+  { icon: Layers, label: 'Vectorización', path: '/vectorizacion', disabled: false },
   { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },
   { icon: Calendar, label: 'Programas', path: '/programas' },
   { icon: CheckCircle, label: 'Verificación', path: '/verificacion', disabled: true },

@@ -2,6 +2,7 @@ import { supabase } from '../client';
 import { ProductionItem, ProductionTask } from '../../types/index';
 import { Database } from '../types';
 import { vectorUrlFromPreview } from '../../utils/vectorUrlFromPreview';
+import { baseFileUtil } from '@/lib/vectorizacion/baseFile';
 import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
 import { selloEnCurso, valuesEqual } from '@/lib/notificaciones/format';
 import { notifyPrioridad, notifySelloModificado, notifySellosHechos } from '@/lib/notificaciones/events';
@@ -77,6 +78,7 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         estado_fabricacion,
         estado_venta,
         archivo_base,
+        archivo_base_mejorado,
         foto_sello,
         archivo_vector_preview,
         tipo_planchuela,
@@ -254,7 +256,11 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         takenBy,
         mockupSolicitudId: (sello as any).mockup_solicitud_id ?? null,
         files: {
-          baseUrl: sello.archivo_base || undefined,
+          baseUrl:
+            baseFileUtil({
+              archivoBase: sello.archivo_base || '',
+              archivoBaseMejorado: (sello as { archivo_base_mejorado?: string | null }).archivo_base_mejorado,
+            }) || undefined,
           vectorUrl: vectorUrlFromPreview((sello as any).archivo_vector_preview),
           vectorPreviewUrl: (sello as any).archivo_vector_preview || undefined,
           photoUrl: sello.foto_sello || undefined,

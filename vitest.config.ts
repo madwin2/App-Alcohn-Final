@@ -9,5 +9,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    environmentMatchGlobs: [['src/lib/vectorizacion/svgSplit.test.ts', 'jsdom']],
   },
 });

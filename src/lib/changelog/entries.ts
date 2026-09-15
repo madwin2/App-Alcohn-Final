@@ -1,4 +1,12 @@
-import { Bell, Flag, MousePointerClick, RefreshCw, Search, type LucideIcon } from 'lucide-react';
+import {
+  Bell,
+  Flag,
+  Layers,
+  MousePointerClick,
+  RefreshCw,
+  Search,
+  type LucideIcon,
+} from 'lucide-react';
 
 export interface ChangelogSlide {
   heading: string;
@@ -68,6 +76,33 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'En Producción podés buscar por cliente',
         body: 'El buscador de Producción ahora también encuentra por nombre o teléfono del cliente, además del diseño.',
         icon: Search,
+      },
+    ],
+  },
+  {
+    id: 3,
+    date: '2026-09-15',
+    title: 'Novedades',
+    version: '1.12',
+    slides: [
+      {
+        heading: 'Un aviso cuando terminan varios sellos',
+        body: 'Si en Producción marcan varios sellos como terminados seguidos, Ventas recibe una sola notificación (“17 sellos fueron terminados”) en lugar de una por cada uno.',
+        icon: Layers,
+      },
+    ],
+  },
+  {
+    id: 4,
+    date: '2026-09-15',
+    title: 'Novedades',
+    version: '1.2',
+    coverImage: '/changelog/1/hero.jpg',
+    slides: [
+      {
+        heading: 'Nueva página para vectorizar',
+        body: 'En Vectorización podés tomar los archivos base pendientes y generar el SVG ahí mismo, sin el programa de escritorio. La primera vez que entres, te contamos cómo usarla.',
+        icon: Layers,
       },
     ],
   },
