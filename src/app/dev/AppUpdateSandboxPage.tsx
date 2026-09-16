@@ -9,7 +9,7 @@ import { getLatestChangelogEntry } from '@/lib/changelog/entries';
  */
 export default function AppUpdateSandboxPage() {
   const [open, setOpen] = useState(true);
-  const version = getLatestChangelogEntry()?.version ?? '1.1';
+  const version = getLatestChangelogEntry()?.version ?? null;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-zinc-950 px-4 text-center">

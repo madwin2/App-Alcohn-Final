@@ -1,10 +1,14 @@
 import {
   Bell,
+  FileText,
   Flag,
   Layers,
+  Link2,
   MousePointerClick,
   RefreshCw,
   Search,
+  Type,
+  Truck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -103,6 +107,35 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Nueva página para vectorizar',
         body: 'En Vectorización podés tomar los archivos base pendientes y generar el SVG ahí mismo, sin el programa de escritorio. La primera vez que entres, te contamos cómo usarla.',
         icon: Layers,
+      },
+    ],
+  },
+  {
+    id: 5,
+    date: '2026-09-16',
+    title: 'Novedades',
+    version: '1.21',
+    coverImage: '/changelog/1/hero.jpg',
+    slides: [
+      {
+        heading: 'Envíos se elige al entrar',
+        body: 'Ya no se abre todo junto. Elegís Correo, Andreani, Via Cargo, Todos o Historial, y vas directo a esa cola. Las secciones vacías quedan plegadas.',
+        icon: Truck,
+      },
+      {
+        heading: 'Abecedarios se cargan por juegos',
+        body: 'En vez del desplegable, ahora sumás mayúsculas y minúsculas de a uno. Letras extras abre un recuadro para cargar cada letra y los caracteres especiales.',
+        icon: Type,
+      },
+      {
+        heading: 'Hoja de fabricación del abecedario',
+        body: 'Si el pedido tiene un abecedario, con click derecho podés descargar la hoja de fabricación ya completada con los datos.',
+        icon: FileText,
+      },
+      {
+        heading: 'Avisa si faltan links de Andreani',
+        body: 'Al asignar las fotos, se fija si el pool alcanza. Si faltan, te pregunta si esperás o asignás igual. Las fotos quedan guardadas en el modal para mandarlas después.',
+        icon: Link2,
       },
     ],
   },

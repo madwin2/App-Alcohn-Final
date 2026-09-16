@@ -11,7 +11,7 @@ import {
   ColumnFiltersState,
   getFilteredRowModel,
 } from '@tanstack/react-table';
-import { Order, FabricationState, SaleState, ShippingState, StampType } from '@/lib/types/index';
+import { Order, OrderItem, FabricationState, SaleState, ShippingState, StampType } from '@/lib/types/index';
 import { filterOrders } from '@/lib/utils/orders.utils';
 import { createUnifiedColumns } from './UnifiedColumns';
 import { useOrdersStore } from '@/lib/state/orders.store';
@@ -40,6 +40,8 @@ import {
   isSelloMissingBaseAndVector,
   orderHasSelloMissingFiles,
 } from '@/lib/utils/orderMissingFiles';
+import { getAbecedarioItems, isAbecedarioItem } from '@/lib/abecedario/abecedarioConfig';
+import { downloadAbecedarioHojaFabricacion } from '@/lib/abecedario/abecedarioFabricacionPdf';
 
 const ROW_MISSING_FILES_BG = 'bg-red-500/[0.08] dark:bg-red-500/15';
 
@@ -147,6 +149,31 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
         variant: 'destructive' 
       });
     }
+  };
+
+  const handleDownloadHojaAbc = async (order: Order, item?: OrderItem) => {
+    try {
+      const targets = item && isAbecedarioItem(item) ? [item] : getAbecedarioItems(order);
+      await downloadAbecedarioHojaFabricacion(order, targets);
+    } catch (error) {
+      console.error('Error downloading hoja de fabricacion:', error);
+      toast({
+        title: 'Error al descargar',
+        description: error instanceof Error ? error.message : 'No se pudo generar la hoja de fabricación',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const hojaAbcMenuItem = (order: Order, item?: OrderItem) => {
+    const abcItems = getAbecedarioItems(order);
+    if (abcItems.length === 0) return null;
+    if (item && !isAbecedarioItem(item)) return null;
+    return (
+      <ContextMenuItem onSelect={() => void handleDownloadHojaAbc(order, item)}>
+        Descargar hoja de fabricación
+      </ContextMenuItem>
+    );
   };
 
   const handleTipoChange = async (orderId: string, newTipo: StampType, itemId?: string) => {
@@ -634,6 +661,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                   </ContextMenuTrigger>
                   <ContextMenuContent>
                       <ContextMenuItem onSelect={() => setEditingRow(order.id)}>Editar pedido</ContextMenuItem>
+                      {hojaAbcMenuItem(order, order.items[0])}
                       {onAddStamp && (
                         <ContextMenuItem onSelect={() => {
                           setSelectedOrderForStamp(order);
@@ -667,6 +695,8 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
               return (
                 <Fragment key={order.id}>
                   {/* Fila resumen con animación mejorada */}
+                  <ContextMenu>
+                  <ContextMenuTrigger asChild>
                   <tr className={`border-b hover:bg-primary/5 transition-colors duration-150 cursor-pointer group ${summaryMissingFiles ? ROW_MISSING_FILES_BG : ''} ${isExpandedState ? 'summary-row-expanded' : ''} ${isCollapsing(order.id) ? 'summary-row-collapsing' : ''} ${isExpanding(order.id) ? 'summary-row-expanding' : ''}`}>
                     {(() => {
                       const mockRow = {
@@ -707,6 +737,22 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                       });
                     })()}
                   </tr>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem onSelect={() => setEditingRow(order.id)}>Editar pedido</ContextMenuItem>
+                    {hojaAbcMenuItem(order)}
+                    {onAddStamp && (
+                      <ContextMenuItem onSelect={() => {
+                        setSelectedOrderForStamp(order);
+                        setAddStampDialogOpen(true);
+                      }}>
+                        Agregar sello
+                      </ContextMenuItem>
+                    )}
+                    <ContextMenuSeparator />
+                    <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(order.id)}>Eliminar pedido</ContextMenuItem>
+                  </ContextMenuContent>
+                  </ContextMenu>
                   
                   {/* Filas expandidas */}
                   {isExpandedState && order.items.map((item, index) => {
@@ -775,6 +821,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                       </ContextMenuTrigger>
                       <ContextMenuContent>
                         <ContextMenuItem onSelect={() => setEditingRow(order.id)}>Editar pedido</ContextMenuItem>
+                        {hojaAbcMenuItem(order, item)}
                         {onAddStamp && (
                           <ContextMenuItem onSelect={() => {
                             setSelectedOrderForStamp(order);

@@ -141,14 +141,15 @@ export default function EnviosHistorialPage() {
 
   return (
     <AppMain className="flex flex-col">
-      <div className="border-b bg-background p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/envios')} title="Volver a Envíos">
+      <div className="sticky top-0 z-20 border-b bg-background/90 px-5 py-3 backdrop-blur space-y-3">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate('/envios')} title="Volver a Envíos">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-2xl font-semibold">Historial de Envíos</h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Envíos</p>
+            <h1 className="text-xl font-semibold leading-tight">Historial</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Pedidos ya despachados, ordenados por fecha de envío de seguimiento.
             </p>
           </div>
@@ -164,7 +165,7 @@ export default function EnviosHistorialPage() {
         </div>
       </div>
 
-      <div className="flex-1 p-6 overflow-hidden flex flex-col gap-4 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-5 py-4">
         <EnviosHistorialTable
           rows={rows}
           loading={loading}

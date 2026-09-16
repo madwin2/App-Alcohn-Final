@@ -1,7 +1,14 @@
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, History, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { History, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
+import { SvgIcon } from '@/components/ui/SvgIcon';
+import {
+  ENVIOS_CARRIER_PATH,
+  type EnviosCarrierFilter,
+} from '@/components/envios/enviosRoutes';
 
-export type EnviosCarrierFilter = 'ALL' | 'CORREO_ARGENTINO' | 'ANDREANI' | 'VIA_CARGO';
+export type { EnviosCarrierFilter };
 
 type CarrierCount = {
   correo: number;
@@ -12,9 +19,7 @@ type CarrierCount = {
 
 interface EnviosHeaderProps {
   carrierFilter: EnviosCarrierFilter;
-  onCarrierFilterChange: (value: EnviosCarrierFilter) => void;
   counts: CarrierCount;
-  onOpenHistorial: () => void;
   showCsvButton?: boolean;
   csvCount?: number;
   isGeneratingCsv?: boolean;
@@ -23,18 +28,41 @@ interface EnviosHeaderProps {
   micorreoQueueSize?: number;
 }
 
-const FILTERS: { id: EnviosCarrierFilter; label: string; countKey: keyof CarrierCount }[] = [
+const FILTERS: {
+  id: EnviosCarrierFilter;
+  label: string;
+  countKey: keyof CarrierCount;
+  logo?: string;
+}[] = [
+  { id: 'CORREO_ARGENTINO', label: 'Correo', countKey: 'correo', logo: 'CORREO ARGENTINO DOMICILIO' },
+  { id: 'ANDREANI', label: 'Andreani', countKey: 'andreani', logo: 'ANDREANI DOMICILIO' },
+  { id: 'VIA_CARGO', label: 'Via Cargo', countKey: 'viaCargo', logo: 'VIA CARGO DOMICILIO' },
   { id: 'ALL', label: 'Todos', countKey: 'all' },
-  { id: 'CORREO_ARGENTINO', label: 'Correo Argentino', countKey: 'correo' },
-  { id: 'ANDREANI', label: 'Andreani', countKey: 'andreani' },
-  { id: 'VIA_CARGO', label: 'Via Cargo', countKey: 'viaCargo' },
 ];
+
+const TITLE: Record<EnviosCarrierFilter, string> = {
+  ALL: 'Todos',
+  CORREO_ARGENTINO: 'Correo Argentino',
+  ANDREANI: 'Andreani',
+  VIA_CARGO: 'Via Cargo',
+};
+
+const TITLE_LOGO: Partial<Record<EnviosCarrierFilter, string>> = {
+  CORREO_ARGENTINO: 'CORREO ARGENTINO DOMICILIO',
+  ANDREANI: 'ANDREANI DOMICILIO',
+  VIA_CARGO: 'VIA CARGO DOMICILIO',
+};
+
+const SUBTITLE: Record<EnviosCarrierFilter, string> = {
+  ALL: 'Las tres colas en una vista. Las secciones vacías quedan plegadas.',
+  CORREO_ARGENTINO: 'Al confirmar datos se sube a MiCorreo. El CSV es solo para Hacer Etiqueta.',
+  ANDREANI: 'Pool, etiquetas del portal y PDF de despacho.',
+  VIA_CARGO: 'Pedidos Via Cargo listos para despachar.',
+};
 
 export function EnviosHeader({
   carrierFilter,
-  onCarrierFilterChange,
   counts,
-  onOpenHistorial,
   showCsvButton = false,
   csvCount = 0,
   isGeneratingCsv = false,
@@ -42,21 +70,39 @@ export function EnviosHeader({
   micorreoBusy = false,
   micorreoQueueSize = 0,
 }: EnviosHeaderProps) {
+  const navigate = useNavigate();
+
   return (
-    <div className="border-b bg-background p-6 space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Envíos</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Al confirmar datos se sube a MiCorreo automáticamente. El CSV manual incluye solo pedidos en
-            Hacer Etiqueta.
-          </p>
+    <div className="sticky top-0 z-20 border-b bg-background/90 px-5 py-3 backdrop-blur">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="mt-0.5 h-8 w-8 shrink-0"
+            onClick={() => navigate('/envios')}
+            title="Volver a elegir flujo"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Envíos</p>
+            <h1 className="flex items-center gap-2 text-xl font-semibold leading-tight">
+              {TITLE_LOGO[carrierFilter] ? (
+                <SvgIcon name={TITLE_LOGO[carrierFilter]!} size={22} className="h-6 w-6 object-contain" />
+              ) : null}
+              {TITLE[carrierFilter]}
+            </h1>
+            <p className="mt-0.5 max-w-xl text-xs text-muted-foreground">{SUBTITLE[carrierFilter]}</p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {showCsvButton ? (
             <Button
               onClick={onGenerateCsv}
               disabled={!csvCount || isGeneratingCsv}
+              size="sm"
               title={
                 csvCount
                   ? 'Descarga CSV para carga manual en MiCorreo (solo Hacer Etiqueta)'
@@ -77,8 +123,8 @@ export function EnviosHeader({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="inline-flex flex-wrap gap-1 rounded-full border border-border bg-card p-1">
           {FILTERS.map((filter) => {
             const active = carrierFilter === filter.id;
             const count = counts[filter.countKey];
@@ -86,25 +132,32 @@ export function EnviosHeader({
               <button
                 key={filter.id}
                 type="button"
-                onClick={() => onCarrierFilterChange(filter.id)}
-                className={`min-w-[7.5rem] rounded-lg border px-3 py-2 text-left transition-colors ${
+                onClick={() => navigate(ENVIOS_CARRIER_PATH[filter.id])}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors',
                   active
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'border-border bg-card hover:bg-muted/50'
-                }`}
+                    ? 'bg-foreground text-background'
+                    : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
+                )}
               >
-                <span className="block text-sm font-medium">{filter.label}</span>
-                <span className={`text-xs tabular-nums ${active ? 'opacity-80' : 'text-muted-foreground'}`}>
-                  {count}
-                </span>
+                {filter.logo ? (
+                  <SvgIcon name={filter.logo} size={16} className="h-4 w-4 object-contain" />
+                ) : null}
+                {filter.label}
+                <span className={cn('tabular-nums', active ? 'opacity-80' : 'opacity-70')}>{count}</span>
               </button>
             );
           })}
         </div>
-
-        <Button type="button" variant="outline" onClick={onOpenHistorial}>
-          <History className="mr-1.5 h-4 w-4" />
-          Historial de Envíos
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => navigate('/envios/historial')}
+        >
+          <History className="mr-1.5 h-3.5 w-3.5" />
+          Historial
         </Button>
       </div>
     </div>

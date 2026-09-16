@@ -1,6 +1,7 @@
 import { formatDimensions, truncateToWords } from '@/lib/utils/format';
 import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
+import { formatAbecedarioSummary } from '@/lib/abecedario/abecedarioConfig';
 
 interface CellDisenioProps {
   order: Order;
@@ -27,12 +28,7 @@ export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, o
 
   const getItemSecondary = () => {
     if (item.itemType === 'ABECEDARIO') {
-      const parts = [
-        item.itemConfig?.abecedarioTipografia,
-        item.itemConfig?.abecedarioAlturaMm ? `${item.itemConfig.abecedarioAlturaMm}mm` : undefined,
-        item.itemConfig?.abecedarioCase,
-      ].filter(Boolean);
-      return parts.length > 0 ? parts.join(' • ') : undefined;
+      return formatAbecedarioSummary(item.itemConfig);
     }
     if (item.itemType === 'SELLO') {
       return formatDimensions(item.requestedWidthMm, item.requestedHeightMm);

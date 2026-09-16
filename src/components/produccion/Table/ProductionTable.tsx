@@ -17,7 +17,7 @@ import { useProduction } from '@/lib/hooks/useProduction';
 import { DndTableContainer } from './DndTableContainer';
 import { ResizableHeader } from './ResizableHeader';
 import { Checkbox } from '@/components/ui/checkbox';
-import { createTask, updateTask, deleteTask } from '@/lib/supabase/services/orders.service';
+import { createTask, updateTask, deleteTask, getOrderById } from '@/lib/supabase/services/orders.service';
 import {
   downloadBaseFile,
   downloadFile,
@@ -31,6 +31,8 @@ import {
 import { OrderInfoDialog } from '@/components/produccion/OrderInfoDialog';
 import { RehacerDialog } from '@/components/shared/RehacerDialog';
 import { phoneMatchesSearch } from '@/lib/utils/phoneNormalization';
+import { isAbecedarioItem } from '@/lib/abecedario/abecedarioConfig';
+import { downloadAbecedarioHojaFabricacion } from '@/lib/abecedario/abecedarioFabricacionPdf';
 
 interface ProductionTableProps {
   items: ProductionItem[];
@@ -371,6 +373,23 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
       toast({ title: 'Error', description: 'No se pudo actualizar la fecha límite', variant: 'destructive' });
     }
   }, [selectedRows, updateItem, toast]);
+
+  const handleDownloadHojaAbc = async (item: ProductionItem) => {
+    if (!item.orderId || !isAbecedarioItem(item)) return;
+    try {
+      const order = await getOrderById(item.orderId);
+      if (!order) throw new Error('No se encontró el pedido');
+      const abcItem = order.items.find((entry) => entry.id === item.id) ?? order.items.find(isAbecedarioItem);
+      await downloadAbecedarioHojaFabricacion(order, abcItem ? [abcItem] : undefined);
+    } catch (error) {
+      console.error('Error downloading hoja de fabricacion:', error);
+      toast({
+        title: 'Error al descargar',
+        description: error instanceof Error ? error.message : 'No se pudo generar la hoja de fabricación',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const handleDownloadBase = async (item: ProductionItem) => {
     if (!item.files?.baseUrl) return;
@@ -786,6 +805,11 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
                       </ContextMenuItem>
                     )}
                     <ContextMenuSeparator />
+                    {row.original.itemType === 'ABECEDARIO' ? (
+                      <ContextMenuItem onSelect={() => void handleDownloadHojaAbc(row.original)}>
+                        Descargar hoja de fabricación
+                      </ContextMenuItem>
+                    ) : null}
                     <ContextMenuItem 
                       onSelect={() => handleDownloadBase(row.original)}
                       disabled={!row.original.files?.baseUrl}

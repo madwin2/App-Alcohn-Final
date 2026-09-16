@@ -18,6 +18,7 @@ import {
 import { Database } from '../types';
 import { uploadFile, generateFilePath, uploadVectorFileWithPreview } from './storage.service';
 import { runMigrations } from '../migrations';
+import { itemConfigFromForm } from '@/lib/abecedario/abecedarioConfig';
 import { getSixMonthsCutoffDate } from '../../utils/orderLifecycle';
 import { todayArgentinaDateKey } from '../../utils/argentinaDate';
 import { isVectorAutoEnabled, vectorizationStateAfterBaseUpload } from '../../config/vectorAuto';
@@ -679,13 +680,7 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
         requestedHeightMm: formData.order.requestedHeightMm,
         itemType: formData.order.itemType || 'SELLO',
         stampType: formData.order.stampType,
-        itemConfig: {
-          soldadorPower: formData.order.soldadorPower,
-          abecedarioTipografia: formData.order.abecedarioTipografia,
-          abecedarioAlturaMm: formData.order.abecedarioAlturaMm,
-          abecedarioCase: formData.order.abecedarioCase,
-          abecedarioExtraLetters: formData.order.abecedarioExtraLetters,
-        },
+        itemConfig: itemConfigFromForm(formData.order.itemType, formData.order),
         notes: formData.order.notes,
         itemValue: formData.values.totalValue,
         fabricationState: formData.states.fabrication,
@@ -1718,6 +1713,21 @@ export interface PendingPhoto {
   fechaSubida: string;
   selloId?: string;
 }
+
+export const updatePendingPhotoStamp = async (
+  pendingPhotoId: string,
+  selloId: string | null,
+): Promise<void> => {
+  const { error } = await supabase
+    .from('fotos_pendientes')
+    .update({
+      sello_id: selloId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', pendingPhotoId)
+    .eq('asignada', false);
+  if (error) throw error;
+};
 
 export const savePendingPhoto = async (photoFile: File, selloId?: string): Promise<PendingPhoto> => {
   try {

@@ -8,13 +8,19 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Order, StampType, FabricationState, SaleState, ShippingState, ItemType, SoldadorPower, AbecedarioCase } from '@/lib/types/index';
+import { Order, StampType, FabricationState, SaleState, ShippingState, ItemType, SoldadorPower } from '@/lib/types/index';
 import { useState, useEffect, useCallback } from 'react';
 import { Upload, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { fetchPreciosResolverInputForCotizacion } from '@/lib/supabase/services/preciosPro.service';
 import type { PreciosResolverInput } from '@/lib/precios/resolverPrecioSello';
 import { cotizarSelloRectangularCm, mmPedidoAcm, parseMedidaMmAString } from '@/lib/precios/cotizacionMedida';
+import { AbecedarioFields } from '@/components/pedidos/abecedario/AbecedarioFields';
+import {
+  itemConfigFromForm,
+  writeAbecedarioFields,
+  type AbecedarioFormFields,
+} from '@/lib/abecedario/abecedarioConfig';
 
 const addStampSchema = z.object({
   itemType: z.enum(['SELLO', 'ABECEDARIO', 'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA']),
@@ -25,6 +31,11 @@ const addStampSchema = z.object({
   soldadorPower: z.enum(['100W', '200W']).optional(),
   abecedarioTipografia: z.string().optional(),
   abecedarioAlturaMm: z.number().optional(),
+  abecedarioMayusculas: z.number().optional(),
+  abecedarioMinusculas: z.number().optional(),
+  abecedarioExtraLetterCounts: z.record(z.string(), z.number()).optional(),
+  abecedarioSpecialCharsCount: z.number().optional(),
+  abecedarioSpecialCharsDescription: z.string().optional(),
   abecedarioCase: z.enum(['MAYUSCULA', 'MINUSCULA', 'AMBAS']).optional(),
   abecedarioExtraLetters: z.string().optional(),
   notes: z.string().optional(),
@@ -139,6 +150,22 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
 
   const watchedValues = watch(['itemValue', 'depositValueItem']);
   const selectedItemType = watch('itemType');
+  const abcFields: AbecedarioFormFields = {
+    abecedarioTipografia: watch('abecedarioTipografia'),
+    abecedarioAlturaMm: watch('abecedarioAlturaMm'),
+    abecedarioMayusculas: watch('abecedarioMayusculas'),
+    abecedarioMinusculas: watch('abecedarioMinusculas'),
+    abecedarioExtraLetterCounts: watch('abecedarioExtraLetterCounts'),
+    abecedarioSpecialCharsCount: watch('abecedarioSpecialCharsCount'),
+    abecedarioSpecialCharsDescription: watch('abecedarioSpecialCharsDescription'),
+    abecedarioCase: watch('abecedarioCase'),
+    abecedarioExtraLetters: watch('abecedarioExtraLetters'),
+  };
+  const handleAbecedarioChange = (patch: Partial<AbecedarioFormFields>) => {
+    writeAbecedarioFields(abcFields, patch, (key, value) => {
+      setValue(key as 'abecedarioTipografia', value as never);
+    });
+  };
   const itemValue = watchedValues[0] || 0;
   const depositValue = watchedValues[1] || 0;
   const restante = Math.max(0, itemValue - depositValue);
@@ -228,13 +255,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
         requestedWidthMm: width,
         requestedHeightMm: height,
         stampType: data.stampType,
-        itemConfig: {
-          soldadorPower: data.soldadorPower,
-          abecedarioTipografia: data.abecedarioTipografia,
-          abecedarioAlturaMm: data.abecedarioAlturaMm,
-          abecedarioCase: data.abecedarioCase,
-          abecedarioExtraLetters: data.abecedarioExtraLetters,
-        },
+        itemConfig: itemConfigFromForm(data.itemType, data),
         notes: data.notes,
         itemValue: data.itemValue,
         depositValueItem: data.depositValueItem,
@@ -360,6 +381,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                   )}
                 </div>
               )}
+              {(selectedItemType === 'SELLO' || selectedItemType === 'SOLDADOR') && (
               <div>
                 {selectedItemType === 'SELLO' && (
                   <>
@@ -392,37 +414,10 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                     </Select>
                   </>
                 )}
-                {selectedItemType === 'ABECEDARIO' && (
-                  <>
-                    <Label>Tipografía</Label>
-                    <Input value={watch('abecedarioTipografia') || ''} onChange={(e) => setValue('abecedarioTipografia', e.target.value)} />
-                  </>
-                )}
               </div>
+              )}
               {selectedItemType === 'ABECEDARIO' && (
-                <>
-                  <div>
-                    <Label>Altura de letra (mm)</Label>
-                    <Input type="number" value={watch('abecedarioAlturaMm') || ''} onChange={(e) => setValue('abecedarioAlturaMm', Number(e.target.value))} />
-                  </div>
-                  <div>
-                    <Label>Mayús / Minús</Label>
-                    <Select onValueChange={(value) => setValue('abecedarioCase', value as AbecedarioCase)} value={watch('abecedarioCase') || 'MAYUSCULA'}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="MAYUSCULA">Mayúscula</SelectItem>
-                        <SelectItem value="MINUSCULA">Minúscula</SelectItem>
-                        <SelectItem value="AMBAS">Ambas</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2">
-                    <Label>Letras extras</Label>
-                    <Input value={watch('abecedarioExtraLetters') || ''} onChange={(e) => setValue('abecedarioExtraLetters', e.target.value)} />
-                  </div>
-                </>
+                <AbecedarioFields labeled values={abcFields} onChange={handleAbecedarioChange} />
               )}
               <div className="col-span-2">
                 <Label htmlFor="notes">Notas</Label>

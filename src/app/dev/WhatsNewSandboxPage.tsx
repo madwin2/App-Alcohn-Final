@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { WhatsNewDialog } from '@/components/global/WhatsNewDialog';
 import { getLatestChangelogEntry } from '@/lib/changelog/entries';
@@ -7,8 +8,14 @@ import { changelogToTourContent } from '@/lib/changelog/toTourContent';
 /**
  * Preview local del cartel publicado. Usa la misma entrada que la app
  * (CHANGELOG_ENTRIES). Abrí /dev/whats-new para ver el modal y las tarjetas.
+ * `?slide=1` abre directo en una novedad (0 = intro).
  */
 export default function WhatsNewSandboxPage() {
+  const [searchParams] = useSearchParams();
+  const startAt = useMemo(() => {
+    const raw = Number(searchParams.get('slide') ?? 0);
+    return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 0;
+  }, [searchParams]);
   const [open, setOpen] = useState(true);
   const entry = getLatestChangelogEntry();
   const content = entry ? changelogToTourContent(entry) : null;
@@ -71,7 +78,12 @@ export default function WhatsNewSandboxPage() {
         )}
       </div>
 
-      <WhatsNewDialog content={content} open={open && !!content} onClose={() => setOpen(false)} />
+      <WhatsNewDialog
+        content={content}
+        open={open && !!content}
+        onClose={() => setOpen(false)}
+        startAt={startAt}
+      />
     </div>
   );
 }

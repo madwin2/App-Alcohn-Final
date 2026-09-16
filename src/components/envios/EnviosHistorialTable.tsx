@@ -16,7 +16,7 @@ import { SvgIcon } from '@/components/ui/SvgIcon';
 import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
 import { formatDate, formatDateTime } from '@/lib/utils/format';
 import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
-import type { EnvioHistorialRow } from '@/lib/supabase/services/enviosHistorialTabla.service';
+import { enviosTable, enviosTd, enviosTh, enviosThead, enviosThumb, enviosTr } from '@/components/envios/enviosTableStyles';
 import type { ShippingCarrier } from '@/lib/types';
 
 function carrierIconName(
@@ -89,8 +89,8 @@ export function EnviosHistorialTable({
   onCopyPhone,
 }: EnviosHistorialTableProps) {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-  const cell = 'px-3 py-3 align-middle';
-  const head = 'px-3 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap';
+  const cell = enviosTd;
+  const head = enviosTh;
 
   const openPreview = (row: EnvioHistorialRow) => {
     if (!row.previewUrl) return;
@@ -123,15 +123,14 @@ export function EnviosHistorialTable({
 
   return (
     <>
-      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-card/50">
         <div className="overflow-auto max-h-[min(75vh,720px)]">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 z-10 bg-card border-b">
+          <table className={enviosTable}>
+            <thead className={enviosThead}>
               <tr>
                 <th className={head}>Creado</th>
                 <th className={head}>Cliente</th>
                 <th className={head}>Diseño</th>
-                <th className={head}>Preview</th>
                 <th className={head}>N° seguimiento</th>
                 <th className={`${head} text-center`}>Empresa</th>
                 <th className={head}>Seguimiento enviado</th>
@@ -144,7 +143,7 @@ export function EnviosHistorialTable({
                 <ContextMenu key={row.ordenId}>
                   <ContextMenuTrigger asChild>
                   <tr
-                    className="border-b last:border-b-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                    className={`${enviosTr} cursor-pointer`}
                     onClick={() => onRowClick(row)}
                   >
                     <td className={`${cell} whitespace-nowrap text-muted-foreground`}>
@@ -155,32 +154,36 @@ export function EnviosHistorialTable({
                         {row.customerName}
                       </span>
                     </td>
-                    <td className={`${cell} max-w-[10rem] truncate`} title={row.designLabel}>
-                      {row.designLabel}
-                    </td>
-                    <td className={`${cell} w-[4.5rem]`}>
-                      {row.previewUrl ? (
-                        <button
-                          type="button"
-                          title="Ver archivo"
-                          className="block h-12 w-12 cursor-zoom-in rounded-md border bg-white p-1"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openPreview(row);
-                          }}
-                        >
-                          <StorageUrlImage
-                            url={row.previewUrl}
-                            alt={row.designLabel}
-                            mockupSolicitudId={row.previewMockupSolicitudId}
-                            className="h-full w-full"
-                            imgClassName="h-full w-full object-contain"
-                            fallbackClassName="flex h-full w-full items-center justify-center bg-muted/40"
-                          />
-                        </button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                    <td className={cell}>
+                      <div className="flex min-w-0 max-w-[14rem] items-center gap-2">
+                        {row.previewUrl ? (
+                          <button
+                            type="button"
+                            title="Ver archivo"
+                            className={enviosThumb}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openPreview(row);
+                            }}
+                          >
+                            <StorageUrlImage
+                              url={row.previewUrl}
+                              alt={row.designLabel}
+                              mockupSolicitudId={row.previewMockupSolicitudId}
+                              className="h-full w-full"
+                              imgClassName="h-full w-full object-contain"
+                              fallbackClassName="flex h-full w-full items-center justify-center bg-muted/40"
+                            />
+                          </button>
+                        ) : (
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center text-[11px] text-muted-foreground">
+                            —
+                          </span>
+                        )}
+                        <span className="truncate" title={row.designLabel}>
+                          {row.designLabel}
+                        </span>
+                      </div>
                     </td>
                     <td className={`${cell} font-mono text-xs whitespace-nowrap`}>
                       {row.trackingNumber || '—'}
@@ -200,7 +203,7 @@ export function EnviosHistorialTable({
                           e.stopPropagation();
                           if (row.customerPhone) onCopyPhone(row.customerPhone);
                         }}
-                        className={`inline-flex size-8 items-center justify-center rounded-full transition-opacity ${
+                        className={`inline-flex size-7 items-center justify-center rounded-full transition-opacity ${
                           row.customerPhone
                             ? 'hover:bg-muted'
                             : 'cursor-not-allowed opacity-40'

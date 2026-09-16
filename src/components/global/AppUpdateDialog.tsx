@@ -10,7 +10,7 @@ const NOISE_BG =
 
 interface AppUpdateDialogProps {
   open: boolean;
-  /** Versión legible para el chip (ej. "1.1"). */
+  /** Versión legible del changelog (ej. "1.21"), no el hash de build. */
   version: string | null;
   /** "Recordar más tarde": también se usa al cerrar con Esc o click afuera. */
   onSnooze: () => void;

@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import {
-  andreaniJobKindLabel,
   fetchAndreaniWorkerJob,
   isAndreaniJobActive,
   waitAndreaniWorkerJob,
@@ -165,29 +164,7 @@ export function AndreaniPoolCard() {
   };
 
   return (
-    <div className="rounded-lg border bg-card px-3 py-2 space-y-1.5">
-      {(jobActive || workerJob?.phase === 'done' || workerJob?.phase === 'error') && workerJob ? (
-        <div
-          className={
-            workerJob.phase === 'error'
-              ? 'rounded border border-destructive/40 bg-destructive/10 px-2 py-1 text-[11px]'
-              : workerJob.phase === 'done'
-                ? 'rounded border border-emerald-600/30 bg-emerald-500/10 px-2 py-1 text-[11px]'
-                : 'rounded border border-amber-600/30 bg-amber-500/10 px-2 py-1 text-[11px]'
-          }
-        >
-          <div className="flex items-center gap-1.5 font-medium">
-            {jobActive ? <Loader2 className="h-3 w-3 animate-spin shrink-0" /> : null}
-            <span className="truncate">
-              {jobActive ? 'Worker' : workerJob.phase === 'error' ? 'Error' : 'Listo'}
-              {workerJob.kind ? ` · ${andreaniJobKindLabel(workerJob.kind)}` : ''}
-              {workerJob.queueDepth > 0 ? ` · cola ${workerJob.queueDepth}` : ''}
-              {workerJob.detail ? ` · ${workerJob.detail}` : ''}
-            </span>
-          </div>
-        </div>
-      ) : null}
-
+    <div className="rounded-lg border border-white/10 bg-card/50 px-3 py-2 space-y-1.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span className="text-xs font-semibold shrink-0">Pool Andreani</span>
         <div className="flex items-center gap-2 text-[11px] tabular-nums text-muted-foreground">

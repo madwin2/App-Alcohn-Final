@@ -1,4 +1,5 @@
 import { ProductionItem } from '@/lib/types/index';
+import { formatAbecedarioSummary } from '@/lib/abecedario/abecedarioConfig';
 
 interface CellDisenioProps {
   item: ProductionItem;
@@ -23,12 +24,7 @@ function getItemDisplayName(item: ProductionItem): string {
 
 function getItemSecondary(item: ProductionItem): string | undefined {
   if (item.itemType === 'ABECEDARIO') {
-    const parts = [
-      item.itemConfig?.abecedarioTipografia,
-      item.itemConfig?.abecedarioAlturaMm ? `${item.itemConfig.abecedarioAlturaMm}mm` : undefined,
-      item.itemConfig?.abecedarioCase,
-    ].filter(Boolean);
-    return parts.length > 0 ? parts.join(' • ') : undefined;
+    return formatAbecedarioSummary(item.itemConfig);
   }
   return undefined;
 }

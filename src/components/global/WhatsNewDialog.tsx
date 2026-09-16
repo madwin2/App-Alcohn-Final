@@ -30,6 +30,8 @@ interface WhatsNewDialogProps {
   open: boolean;
   /** Saltar / Entendido: cierra y marca como visto en el caller. */
   onClose: () => void;
+  /** Índice inicial del carrusel (0 = intro). Útil en el sandbox. */
+  startAt?: number;
 }
 
 interface CarouselPage {
@@ -62,12 +64,12 @@ function buildPages(content: FeatureTourContent): CarouselPage[] {
  * no se remonta; solo se desliza el contenido y se morphéa blur/glass.
  * Atrás = tocar un puntito anterior (sin botón de volver).
  */
-export function WhatsNewDialog({ content, open, onClose }: WhatsNewDialogProps) {
-  const [index, setIndex] = useState(0);
+export function WhatsNewDialog({ content, open, onClose, startAt = 0 }: WhatsNewDialogProps) {
+  const [index, setIndex] = useState(startAt);
 
   useEffect(() => {
-    setIndex(0);
-  }, [content?.id]);
+    setIndex(startAt);
+  }, [content?.id, startAt]);
 
   const pages = useMemo(() => (content ? buildPages(content) : []), [content]);
 

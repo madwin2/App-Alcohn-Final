@@ -40,6 +40,7 @@ function App() {
               <Route path="/pedidos" element={<PedidosPage />} />
               <Route path="/envios" element={<EnviosPage />} />
               <Route path="/envios/historial" element={<EnviosHistorialPage />} />
+              <Route path="/envios/:carrier" element={<EnviosPage />} />
               <Route path="/economia" element={<EconomiaPage />} />
             </Route>
             <Route path="/produccion" element={<ProduccionPage />} />

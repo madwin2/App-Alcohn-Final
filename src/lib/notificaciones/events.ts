@@ -166,7 +166,7 @@ export function notifyDireccionPostEtiqueta(params: {
       : `${cliente} — pedido #${pedido}: se generó la etiqueta de Correo Argentino dos veces`,
     entidadTipo: 'orden',
     entidadId: params.ordenId,
-    linkPath: '/envios',
+    linkPath: '/envios/correo',
     severidad: 'warning',
     metadata: { clienteNombre: cliente, ordenId: params.ordenId },
   });

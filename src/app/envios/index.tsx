@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 import { AppMain } from '@/components/layout/AppMain';
 import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/toaster';
@@ -24,7 +24,18 @@ import {
 } from '@/components/ui/context-menu';
 import { AndreaniPoolCard } from '@/components/envios/AndreaniPoolCard';
 import { AndreaniLabelsPanel } from '@/components/envios/AndreaniLabelsPanel';
-import { EnviosHeader, type EnviosCarrierFilter } from '@/components/envios/EnviosHeader';
+import { EnviosCollapsibleSection } from '@/components/envios/EnviosCollapsibleSection';
+import { EnviosHeader } from '@/components/envios/EnviosHeader';
+import { EnviosHub } from '@/components/envios/EnviosHub';
+import { enviosFilterFromSlug } from '@/components/envios/enviosRoutes';
+import {
+  enviosTable,
+  enviosTd,
+  enviosTh,
+  enviosThead,
+  enviosThumb,
+  enviosTr,
+} from '@/components/envios/enviosTableStyles';
 import { Badge } from '@/components/ui/badge';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -70,10 +81,10 @@ import {
   normalizePhoneDigitsForEnvios,
   stripAccents,
 } from '@/lib/utils/shippingNormalization';
-import { ChevronDown, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
-import { WhatsappLogo } from '@/components/shared/WhatsappLogo';
+import { SvgIcon } from '@/components/ui/SvgIcon';
 import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
 
 const isEligibleForShipping = (order: Order): boolean => {
@@ -229,7 +240,9 @@ const normalizeShippingFormData = (data: ShippingFormData): ShippingFormData => 
 };
 
 export default function EnviosPage() {
-  const navigate = useNavigate();
+  const { carrier: carrierSlug } = useParams<{ carrier?: string }>();
+  const carrierFilter = enviosFilterFromSlug(carrierSlug);
+  const isHub = !carrierSlug;
   const { orders, loading, error, updateOrder, fetchOrders } = useOrders();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -244,16 +257,17 @@ export default function EnviosPage() {
   const [isParsingWithAi, setIsParsingWithAi] = useState(false);
   const [isLoadingExistingShippingData, setIsLoadingExistingShippingData] = useState(false);
   const [lastCsvSkipped, setLastCsvSkipped] = useState<Array<{ orderId: string; reason: string }>>([]);
-  const [isConDatosExpanded, setIsConDatosExpanded] = useState(true);
-  const [isPendientesExpanded, setIsPendientesExpanded] = useState(true);
-  const [isViaCargoExpanded, setIsViaCargoExpanded] = useState(true);
-  const [carrierFilter, setCarrierFilter] = useState<EnviosCarrierFilter>('ALL');
+  const [conDatosOpen, setConDatosOpen] = useState<boolean | null>(null);
+  const [pendientesOpen, setPendientesOpen] = useState<boolean | null>(null);
+  const [viaCargoOpen, setViaCargoOpen] = useState<boolean | null>(null);
+  const [correoGroupOpen, setCorreoGroupOpen] = useState<boolean | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [manualSucursalCode, setManualSucursalCode] = useState('');
   const [addressCatalogRows, setAddressCatalogRows] = useState<DireccionCatalogRow[]>([]);
   const [isLoadingAddressCatalog, setIsLoadingAddressCatalog] = useState(false);
 
   useEffect(() => {
+    if (isHub || (carrierFilter !== 'CORREO_ARGENTINO' && carrierFilter !== 'ALL')) return;
     let cancelled = false;
     setIsLoadingAddressCatalog(true);
     void (async () => {
@@ -287,7 +301,7 @@ export default function EnviosPage() {
     return () => {
       cancelled = true;
     };
-  }, [toast]);
+  }, [isHub, carrierFilter, toast]);
 
   useEffect(() => {
     const syncMicorreoActivity = () => {
@@ -448,6 +462,12 @@ export default function EnviosPage() {
     }),
     [ordersConDatosEnvio, ordersPendientesDatos, ordersAndreaniEligible, ordersViaCargo],
   );
+
+  const isConDatosExpanded = conDatosOpen ?? ordersConDatosEnvio.length > 0;
+  const isPendientesExpanded = pendientesOpen ?? ordersPendientesDatos.length > 0;
+  const isViaCargoExpanded = viaCargoOpen ?? ordersViaCargo.length > 0;
+  const correoGroupCount = ordersConDatosEnvio.length + ordersPendientesDatos.length;
+  const isCorreoGroupExpanded = correoGroupOpen ?? correoGroupCount > 0;
 
   const showAndreaniSection = carrierFilter === 'ALL' || carrierFilter === 'ANDREANI';
   const showCorreoSection = carrierFilter === 'ALL' || carrierFilter === 'CORREO_ARGENTINO';
@@ -1220,23 +1240,25 @@ export default function EnviosPage() {
     const isDomicilio = order.shipping.service === 'DOMICILIO';
 
     return (
-      <div className="flex gap-1 whitespace-nowrap">
-        <Button
-          size="sm"
-          variant={isDomicilio ? 'default' : 'outline'}
-          className="h-8 px-2.5 text-xs"
+      <div className="inline-flex rounded-md border border-white/10 p-0.5">
+        <button
+          type="button"
+          className={`h-6 rounded px-2 text-[11px] font-medium transition-colors ${
+            isDomicilio ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+          }`}
           onClick={() => handleToggleShippingType(order, 'DOMICILIO')}
         >
           Dom.
-        </Button>
-        <Button
-          size="sm"
-          variant={isSucursal ? 'default' : 'outline'}
-          className="h-8 px-2.5 text-xs"
+        </button>
+        <button
+          type="button"
+          className={`h-6 rounded px-2 text-[11px] font-medium transition-colors ${
+            isSucursal ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+          }`}
           onClick={() => handleToggleShippingType(order, 'SUCURSAL')}
         >
           Suc.
-        </Button>
+        </button>
       </div>
     );
   };
@@ -1356,11 +1378,11 @@ export default function EnviosPage() {
                 src={profileImage}
                 alt={loadedBy.name}
                 title={loadedBy.name}
-                className="h-9 w-9 rounded-full border border-border object-cover"
+                className="h-7 w-7 rounded-full border border-white/10 object-cover"
               />
             ) : (
               <span
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-muted text-[11px] font-semibold text-muted-foreground"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-muted text-[10px] font-semibold text-muted-foreground"
                 title={loadedBy.name}
               >
                 {getUserInitials(loadedBy.name) || '?'}
@@ -1403,52 +1425,82 @@ export default function EnviosPage() {
       );
     const designLabel = item ? getOrderItemDisplayName(item) : 'Sin diseño';
     const loadedAtRaw = order.shippingDataLoadedAt ?? shippingAddress?.created_at ?? null;
-    const isDense = Boolean(opts?.showShippingDetails);
-    const cell = isDense ? 'px-3 py-3 align-middle' : 'px-4 py-3 align-middle';
+    const cell = enviosTd;
+    const customerName = `${order.customer.firstName} ${order.customer.lastName}`.trim();
+
+    const previewThumb = availablePreview ? (
+      <button
+        type="button"
+        title="Ver archivo"
+        className={enviosThumb}
+        onClick={(e) => {
+          e.stopPropagation();
+          void (async () => {
+            try {
+              const src = await resolveStorageDisplayUrl(availablePreview, item?.mockupSolicitudId);
+              setPreviewImageUrl(src);
+            } catch {
+              setPreviewImageUrl(availablePreview);
+            }
+          })();
+        }}
+      >
+        <StorageUrlImage
+          url={availablePreview}
+          alt="Preview archivo"
+          mockupSolicitudId={item?.mockupSolicitudId}
+          className="h-full w-full"
+          imgClassName="h-full w-full object-contain"
+          fallbackClassName="flex h-full w-full items-center justify-center bg-muted/40"
+        />
+      </button>
+    ) : (
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center text-[11px] text-muted-foreground">—</span>
+    );
 
     return (
       <ContextMenu key={order.id}>
         <ContextMenuTrigger asChild>
       <tr
-        className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors ${
-          isDuplicateDestName ? 'bg-amber-500/15 hover:bg-amber-500/20' : ''
+        className={`${enviosTr} ${
+          isDuplicateDestName ? 'bg-amber-500/10 hover:bg-amber-500/15' : ''
         }`}
       >
         {opts?.showCsvLine ? (
-          <td className={`${cell} text-center tabular-nums text-muted-foreground w-10`}>
+          <td className={`${cell} w-10 text-center tabular-nums text-muted-foreground`}>
             {csvLine !== undefined ? csvLine : '—'}
           </td>
         ) : null}
         <td className={`${cell} whitespace-nowrap text-muted-foreground`}>{formatDate(order.orderDate)}</td>
-        <td className={`${cell} font-medium max-w-[7.5rem]`}>
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="truncate" title={`${order.customer.firstName} ${order.customer.lastName}`.trim()}>
-              {`${order.customer.firstName} ${order.customer.lastName}`.trim()}
+        <td className={`${cell} max-w-[9rem] font-medium`}>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate" title={customerName}>
+              {customerName}
             </span>
             {isWebPendingShippingConfirmation(order) ? (
-              <Badge variant="outline" className="w-fit text-[10px] px-1.5 py-0 font-normal">
+              <Badge variant="outline" className="w-fit px-1.5 py-0 text-[10px] font-normal">
                 Web — sin confirmar
               </Badge>
             ) : null}
           </div>
         </td>
         {opts?.showShippingDetails ? (
-          <>
-            <td className={`${cell} max-w-[7.5rem] truncate`} title={destRecipientName || undefined}>
-              {destRecipientName || '—'}
-            </td>
-            <td className={`${cell} min-w-[9rem] max-w-[11rem]`}>
-              <span
-                className="line-clamp-2 text-xs text-muted-foreground leading-snug"
+          <td className={`${cell} min-w-[10rem] max-w-[14rem]`}>
+            <div className="min-w-0">
+              <div className="truncate" title={destRecipientName || undefined}>
+                {destRecipientName || '—'}
+              </div>
+              <div
+                className="truncate text-[11px] text-muted-foreground"
                 title={destAddressLabel !== '—' ? destAddressLabel : undefined}
               >
                 {destAddressLabel}
-              </span>
-            </td>
-          </>
+              </div>
+            </div>
+          </td>
         ) : null}
         {opts?.showWhatsapp ? (
-          <td className={`${cell} text-center w-12`}>
+          <td className={`${cell} w-12 text-center`}>
             <button
               type="button"
               title={phoneDigitsCopiar ? 'Copiar número al portapapeles' : 'Sin teléfono en la orden'}
@@ -1471,87 +1523,67 @@ export default function EnviosPage() {
                   },
                 );
               }}
-              className={`inline-flex size-8 items-center justify-center rounded-full border transition-colors ${
+              className={`inline-flex size-7 items-center justify-center rounded-full transition-opacity ${
                 phoneDigitsCopiar
-                  ? 'border-green-600/35 bg-green-500/15 text-green-700 hover:bg-green-500/25 dark:border-green-400/35 dark:text-green-400'
-                  : 'cursor-not-allowed border-muted text-muted-foreground opacity-40'
+                  ? 'hover:bg-muted'
+                  : 'cursor-not-allowed opacity-40'
               }`}
             >
-              <WhatsappLogo className="size-4" />
+              <SvgIcon name="WHATSAPP" size={20} className="flex-shrink-0" />
             </button>
           </td>
         ) : null}
-        <td className={`${cell} text-center tabular-nums`}>{order.items.length}</td>
-        <td className={`${cell} max-w-[8rem] truncate`} title={designLabel}>
-          {designLabel}
-        </td>
-        <td className={`${cell} w-[4.5rem]`}>
-          {availablePreview ? (
-            <button
-              type="button"
-              title="Ver archivo"
-              className="block h-12 w-12 cursor-zoom-in rounded-md border bg-white p-1"
-              onClick={(e) => {
-                e.stopPropagation();
-                void (async () => {
-                  try {
-                    const src = await resolveStorageDisplayUrl(
-                      availablePreview,
-                      item?.mockupSolicitudId,
-                    );
-                    setPreviewImageUrl(src);
-                  } catch {
-                    setPreviewImageUrl(availablePreview);
-                  }
-                })();
-              }}
-            >
-              <StorageUrlImage
-                url={availablePreview}
-                alt="Preview archivo"
-                mockupSolicitudId={item?.mockupSolicitudId}
-                className="h-full w-full"
-                imgClassName="h-full w-full object-contain"
-                fallbackClassName="flex h-full w-full items-center justify-center bg-muted/40"
-              />
-            </button>
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          )}
+        <td className={`${cell} text-center tabular-nums text-muted-foreground`}>{order.items.length}</td>
+        <td className={cell}>
+          <div className="flex min-w-0 max-w-[14rem] items-center gap-2">
+            {previewThumb}
+            <span className="truncate" title={designLabel}>
+              {designLabel}
+            </span>
+          </div>
         </td>
         <td className={cell}>{renderDomSucCell(order)}</td>
         <td className={cell}>{renderEtiquetaCell(order)}</td>
         {opts?.showShippingDetails ? (
-          <>
-            <td className={`${cell} w-12 text-center`}>{renderLoadedByCell(order)}</td>
-            <td
-              className={`${cell} whitespace-nowrap text-sm text-muted-foreground`}
-              title={loadedAtRaw ? formatDateTime(loadedAtRaw) : undefined}
-            >
-              {loadedAtRaw ? formatDate(loadedAtRaw) : '—'}
-            </td>
-            <td className={`${cell} text-center text-sm`}>
-              {order.shippingDataEdited ? (
-                <span className="text-amber-600 dark:text-amber-400">Sí</span>
-              ) : (
-                <span className="text-muted-foreground">No</span>
-              )}
-            </td>
-          </>
+          <td className={cell}>
+            <div className="flex items-center gap-2">
+              {renderLoadedByCell(order)}
+              <div className="min-w-0">
+                <div
+                  className="whitespace-nowrap text-[12px] text-muted-foreground"
+                  title={loadedAtRaw ? formatDateTime(loadedAtRaw) : undefined}
+                >
+                  {loadedAtRaw ? formatDate(loadedAtRaw) : '—'}
+                </div>
+                {order.shippingDataEdited ? (
+                  <div className="text-[10px] text-amber-400">Editado</div>
+                ) : null}
+              </div>
+            </div>
+          </td>
         ) : null}
-        <td className={`${cell}`}>
+        <td className={cell}>
           <Button
             size="sm"
-            variant="secondary"
+            variant="outline"
+            className="h-7 text-xs"
             onClick={() => openShippingDialog(order)}
             disabled={!hasShippingTypeSelected}
-            title={!hasShippingTypeSelected ? 'Seleccioná Domicilio o Sucursal primero' : undefined}
+            title={
+              !hasShippingTypeSelected
+                ? 'Seleccioná Domicilio o Sucursal primero'
+                : opts?.confirmWebShipping || isWebPendingShippingConfirmation(order)
+                  ? 'Confirmar datos'
+                  : order.direccionId
+                    ? 'Editar datos'
+                    : 'Cargar datos'
+            }
           >
             {opts?.confirmWebShipping || isWebPendingShippingConfirmation(order)
-              ? 'Confirmar datos'
+              ? 'Confirmar'
               : order.direccionId
-                ? 'Editar datos'
-                : 'Cargar datos'}
+                ? 'Editar'
+                : 'Cargar'}
           </Button>
         </td>
       </tr>
@@ -1571,18 +1603,17 @@ export default function EnviosPage() {
   };
 
   const getTableClass = (showShippingDetails?: boolean) =>
-    showShippingDetails ? 'w-full min-w-[1200px] text-sm' : 'w-full text-sm';
+    showShippingDetails ? `${enviosTable} min-w-[1080px]` : enviosTable;
 
   const tableHead = (
     showCsvLine: boolean,
     opts?: { showWhatsapp?: boolean; showShippingDetails?: boolean },
   ) => {
-    const isDense = Boolean(opts?.showShippingDetails);
-    const head = isDense ? 'px-3 py-3 font-medium whitespace-nowrap' : 'px-4 py-3 font-medium whitespace-nowrap';
+    const head = enviosTh;
 
     return (
-    <thead className="sticky top-0 z-10 border-b bg-card">
-      <tr className="text-left text-sm text-muted-foreground">
+    <thead className={enviosThead}>
+      <tr>
         {showCsvLine ? (
           <th className={`${head} w-10 text-center`} title="Número de fila en el CSV (la 1 es el encabezado)">
             CSV
@@ -1591,10 +1622,9 @@ export default function EnviosPage() {
         <th className={head}>Fecha</th>
         <th className={head}>Cliente</th>
         {opts?.showShippingDetails ? (
-          <>
-            <th className={head}>Destinatario</th>
-            <th className={head}>Dir / Suc</th>
-          </>
+          <th className={head} title="Destinatario y dirección o sucursal">
+            Destino
+          </th>
         ) : null}
         {opts?.showWhatsapp ? (
           <th className={`${head} w-12 text-center`} title="Copiar número de WhatsApp">
@@ -1603,101 +1633,164 @@ export default function EnviosPage() {
         ) : null}
         <th className={`${head} text-center`}>Items</th>
         <th className={head}>Diseño</th>
-        <th className={`${head} w-[4.5rem]`}>Archivo</th>
         <th className={head}>Dom / Suc</th>
         <th className={head}>Etiqueta</th>
         {opts?.showShippingDetails ? (
-          <>
-            <th className={`${head} w-12 text-center`} title="Quién cargó los datos">
-              Subido
-            </th>
-            <th className={head} title="Fecha de carga">
-              Carga
-            </th>
-            <th className={`${head} text-center`} title="Datos editados">
-              Editado
-            </th>
-          </>
+          <th className={head} title="Quién cargó, cuándo, y si se editó">
+            Carga
+          </th>
         ) : null}
-        <th className={head}>Acciones</th>
+        <th className={head}> </th>
       </tr>
     </thead>
     );
   };
 
+  if (carrierSlug && !carrierFilter) {
+    return <Navigate to="/envios" replace />;
+  }
+
   return (
     <AppMain className="flex flex-col">
-        <EnviosHeader
-          carrierFilter={carrierFilter}
-          onCarrierFilterChange={setCarrierFilter}
-          counts={carrierCounts}
-          onOpenHistorial={() => navigate('/envios/historial')}
-          showCsvButton={showCsvButton}
-          csvCount={csvOrders.length}
-          isGeneratingCsv={isGeneratingCsv}
-          onGenerateCsv={() => void handleGenerateCsv()}
-          micorreoBusy={micorreoUploadBusy}
-          micorreoQueueSize={micorreoQueueSize}
-        />
+      {isHub || !carrierFilter ? (
+        <EnviosHub counts={carrierCounts} loading={loading} />
+      ) : (
+        <>
+          <EnviosHeader
+            carrierFilter={carrierFilter}
+            counts={carrierCounts}
+            showCsvButton={showCsvButton}
+            csvCount={csvOrders.length}
+            isGeneratingCsv={isGeneratingCsv}
+            onGenerateCsv={() => void handleGenerateCsv()}
+            micorreoBusy={micorreoUploadBusy}
+            micorreoQueueSize={micorreoQueueSize}
+          />
 
-        <div className="flex-1 p-6 overflow-hidden flex flex-col gap-6 min-h-0">
-          {showAndreaniSection ? (
-            <>
-              <AndreaniPoolCard />
-              <AndreaniLabelsPanel
-                orders={orders}
-                onUpdateOrder={updateOrder}
-                onAssigned={() => {
-                  void fetchOrders({ silent: true });
-                }}
-              />
-            </>
-          ) : null}
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-muted-foreground">Cargando órdenes...</p>
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-destructive">Error: {error.message}</p>
-            </div>
-          ) : (
-            <>
-              {showCorreoSection ? (
-                <>
-              <div className="space-y-2 min-h-0 flex flex-col flex-1">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsConDatosExpanded((prev) => !prev)}
-                    className="inline-flex items-center gap-1 text-sm font-medium text-foreground"
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-5 py-4">
+            {showAndreaniSection ? (
+              <>
+                <AndreaniPoolCard />
+                <AndreaniLabelsPanel
+                  orders={orders}
+                  onUpdateOrder={updateOrder}
+                  onAssigned={() => {
+                    void fetchOrders({ silent: true });
+                  }}
+                />
+              </>
+            ) : null}
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <p className="text-sm text-muted-foreground">Cargando órdenes...</p>
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center py-16">
+                <p className="text-destructive">Error: {error.message}</p>
+              </div>
+            ) : (
+              <>
+                {showCorreoSection ? (
+                  (() => {
+                    const nested = carrierFilter === 'ALL';
+                    const correoTables = (
+                      <>
+                        <EnviosCollapsibleSection
+                          variant={nested ? 'plain' : 'section'}
+                          title="Con datos de envío"
+                          count={ordersConDatosEnvio.length}
+                          open={isConDatosExpanded}
+                          onOpenChange={(open) => setConDatosOpen(open)}
+                          actions={
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={!ordersConDatosEnvio.length || isBulkResettingEnvio}
+                              onClick={() => void handleBulkResetSinEnvioConDatos()}
+                            >
+                              {isBulkResettingEnvio ? 'Aplicando…' : 'Todos → Sin envío'}
+                            </Button>
+                          }
+                          empty={
+                            eligibleOrders.length
+                              ? 'Ningún pedido de Correo Argentino con datos de envío.'
+                              : 'No hay pedidos en esta lista.'
+                          }
+                        >
+                          <div className="overflow-auto max-h-[min(50vh,420px)]">
+                            <table className={getTableClass(true)}>
+                              {tableHead(true, { showShippingDetails: true, showWhatsapp: true })}
+                              <tbody>
+                                {ordersConDatosEnvio.map((o) =>
+                                  renderOrderRow(o, {
+                                    showCsvLine: true,
+                                    showShippingDetails: true,
+                                    showWhatsapp: true,
+                                  }),
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </EnviosCollapsibleSection>
+
+                        <EnviosCollapsibleSection
+                          variant={nested ? 'plain' : 'section'}
+                          title="Pendientes de cargar datos"
+                          count={ordersPendientesDatos.length}
+                          open={isPendientesExpanded}
+                          onOpenChange={(open) => setPendientesOpen(open)}
+                          empty={
+                            eligibleOrders.length
+                              ? 'No hay pedidos pendientes con venta en Foto enviada o Transferido.'
+                              : 'No hay órdenes con fabricación lista y filtro de envío aplicable.'
+                          }
+                        >
+                          <div className="overflow-auto max-h-[min(50vh,420px)]">
+                            <table className={getTableClass(false)}>
+                              {tableHead(false, { showWhatsapp: true })}
+                              <tbody>
+                                {ordersPendientesDatos.map((o) =>
+                                  renderOrderRow(o, { showWhatsapp: true }),
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </EnviosCollapsibleSection>
+                      </>
+                    );
+
+                    if (!nested) return correoTables;
+
+                    return (
+                      <EnviosCollapsibleSection
+                        variant="panel"
+                        title="Envíos Correo Argentino"
+                        count={correoGroupCount}
+                        open={isCorreoGroupExpanded}
+                        onOpenChange={(open) => setCorreoGroupOpen(open)}
+                      >
+                        {correoTables}
+                      </EnviosCollapsibleSection>
+                    );
+                  })()
+                ) : null}
+
+                {showViaCargoSection ? (
+                  <EnviosCollapsibleSection
+                    title="Via Cargo"
+                    count={ordersViaCargo.length}
+                    open={isViaCargoExpanded}
+                    onOpenChange={(open) => setViaCargoOpen(open)}
+                    empty="No hay pedidos de Via Cargo listos para envío."
                   >
-                    {isConDatosExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    Con datos de envío ({ordersConDatosEnvio.length})
-                  </button>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs"
-                      disabled={!ordersConDatosEnvio.length || isBulkResettingEnvio}
-                      onClick={() => void handleBulkResetSinEnvioConDatos()}
-                    >
-                      {isBulkResettingEnvio ? 'Aplicando…' : 'Todos → Sin envío'}
-                    </Button>
-                    <span className="text-xs text-muted-foreground tabular-nums">{ordersConDatosEnvio.length}</span>
-                  </div>
-                </div>
-                <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
-                  {isConDatosExpanded ? (
                     <div className="overflow-auto max-h-[min(50vh,420px)]">
                       <table className={getTableClass(true)}>
-                        {tableHead(true, { showShippingDetails: true, showWhatsapp: true })}
+                        {tableHead(false, { showShippingDetails: true, showWhatsapp: true })}
                         <tbody>
-                          {ordersConDatosEnvio.map((o) =>
+                          {ordersViaCargo.map((o) =>
                             renderOrderRow(o, {
-                              showCsvLine: true,
                               showShippingDetails: true,
                               showWhatsapp: true,
                             }),
@@ -1705,110 +1798,26 @@ export default function EnviosPage() {
                         </tbody>
                       </table>
                     </div>
-                  ) : null}
-                  {!ordersConDatosEnvio.length ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground border-t">
-                      {eligibleOrders.length
-                        ? 'Ningún pedido de Correo Argentino con datos de envío. Cargá datos en la tabla de pendientes.'
-                        : 'No hay pedidos en esta lista.'}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+                  </EnviosCollapsibleSection>
+                ) : null}
 
-              <div className="space-y-2 min-h-0 flex flex-col flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsPendientesExpanded((prev) => !prev)}
-                    className="inline-flex items-center gap-1 text-sm font-medium text-foreground"
-                  >
-                    {isPendientesExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    Pendientes de cargar datos de envío
-                  </button>
-                  <span className="text-xs text-muted-foreground tabular-nums">{ordersPendientesDatos.length}</span>
-                </div>
-                <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
-                  {isPendientesExpanded ? (
-                    <div className="overflow-auto max-h-[min(50vh,420px)]">
-                      <table className={getTableClass(false)}>
-                        {tableHead(false, { showWhatsapp: true })}
-                        <tbody>
-                          {ordersPendientesDatos.map((o) =>
-                            renderOrderRow(o, { showWhatsapp: true }),
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
-                  {!ordersPendientesDatos.length && eligibleOrders.length > 0 ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground border-t">
-                      No hay pedidos pendientes con venta en Foto enviada o Transferido.
-                    </div>
-                  ) : null}
-                  {!eligibleOrders.length ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground border-t">
-                      No hay órdenes con fabricación lista y filtro de envío aplicable.
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-                </>
-              ) : null}
-
-              {showViaCargoSection ? (
-              <div className="space-y-2 min-h-0 flex flex-col flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsViaCargoExpanded((prev) => !prev)}
-                    className="inline-flex items-center gap-1 text-sm font-medium text-foreground"
-                  >
-                    {isViaCargoExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    Via Cargo ({ordersViaCargo.length})
-                  </button>
-                  <span className="text-xs text-muted-foreground tabular-nums">{ordersViaCargo.length}</span>
-                </div>
-                <div className="rounded-xl border bg-card shadow-sm overflow-hidden flex-1 min-h-[120px]">
-                  {isViaCargoExpanded ? (
-                    <div className="overflow-auto max-h-[min(50vh,420px)]">
-                      <table className={getTableClass(true)}>
-                        {tableHead(false, { showShippingDetails: true, showWhatsapp: true })}
-                        <tbody>
-                          {ordersViaCargo.map((o) =>
-                            renderOrderRow(o, {
-                              showShippingDetails: Boolean(o.direccionId),
-                              showWhatsapp: true,
-                            }),
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
-                  {!ordersViaCargo.length ? (
-                    <div className="p-6 text-center text-sm text-muted-foreground border-t">
-                      No hay pedidos de Via Cargo listos para envío.
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-              ) : null}
-
-              {lastCsvSkipped.length > 0 && showCorreoSection ? (
-                <div className="rounded-xl border bg-card p-4 bg-muted/20">
-                  <p className="text-sm font-medium mb-2">Órdenes excluidas del último CSV</p>
-                  <ul className="space-y-1 text-sm text-muted-foreground max-h-40 overflow-auto">
-                    {lastCsvSkipped.map((entry) => (
-                      <li key={entry.orderId}>
-                        {entry.orderId}: {entry.reason}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </>
-          )}
-        </div>
+                {lastCsvSkipped.length > 0 && showCorreoSection ? (
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <p className="mb-2 text-sm font-medium">Órdenes excluidas del último CSV</p>
+                    <ul className="max-h-40 space-y-1 overflow-auto text-sm text-muted-foreground">
+                      {lastCsvSkipped.map((entry) => (
+                        <li key={entry.orderId}>
+                          {entry.orderId}: {entry.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && closeShippingDialog()}>
         <DialogContent className="max-w-3xl">

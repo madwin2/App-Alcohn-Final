@@ -8,7 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { NewOrderFormData, FabricationState, ShippingCarrier, ShippingServiceDest, StampType, ItemType, SoldadorPower, AbecedarioCase } from '@/lib/types/index';
+import { NewOrderFormData, FabricationState, ShippingCarrier, ShippingServiceDest, StampType, ItemType, SoldadorPower } from '@/lib/types/index';
+import { AbecedarioFields } from '@/components/pedidos/abecedario/AbecedarioFields';
+import {
+  writeAbecedarioFields,
+  type AbecedarioFormFields,
+} from '@/lib/abecedario/abecedarioConfig';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, X } from 'lucide-react';
 import { findCustomer } from '@/lib/supabase/services/orders.service';
@@ -44,6 +49,11 @@ const orderSchema = z.object({
     soldadorPower: z.enum(['100W', '200W']).optional(),
     abecedarioTipografia: z.string().optional(),
     abecedarioAlturaMm: z.number().optional(),
+    abecedarioMayusculas: z.number().optional(),
+    abecedarioMinusculas: z.number().optional(),
+    abecedarioExtraLetterCounts: z.record(z.string(), z.number()).optional(),
+    abecedarioSpecialCharsCount: z.number().optional(),
+    abecedarioSpecialCharsDescription: z.string().optional(),
     abecedarioCase: z.enum(['MAYUSCULA', 'MINUSCULA', 'AMBAS']).optional(),
     abecedarioExtraLetters: z.string().optional(),
     notes: z.string().optional(),
@@ -126,12 +136,6 @@ const itemTypeOptions: { value: ItemType; label: string }[] = [
 const soldadorPowerOptions: { value: SoldadorPower; label: string }[] = [
   { value: '100W', label: '100W' },
   { value: '200W', label: '200W' },
-];
-
-const abecedarioCaseOptions: { value: AbecedarioCase; label: string }[] = [
-  { value: 'MAYUSCULA', label: 'Mayúscula' },
-  { value: 'MINUSCULA', label: 'Minúscula' },
-  { value: 'AMBAS', label: 'Ambas' },
 ];
 
 const carrierOptions: {
@@ -357,6 +361,22 @@ export function NewOrderStepForm({
 
   const watchedValues = orderForm.watch(['values.totalValue', 'values.depositValue']);
   const selectedItemType = orderForm.watch('order.itemType');
+  const abcFields: AbecedarioFormFields = {
+    abecedarioTipografia: orderForm.watch('order.abecedarioTipografia'),
+    abecedarioAlturaMm: orderForm.watch('order.abecedarioAlturaMm'),
+    abecedarioMayusculas: orderForm.watch('order.abecedarioMayusculas'),
+    abecedarioMinusculas: orderForm.watch('order.abecedarioMinusculas'),
+    abecedarioExtraLetterCounts: orderForm.watch('order.abecedarioExtraLetterCounts'),
+    abecedarioSpecialCharsCount: orderForm.watch('order.abecedarioSpecialCharsCount'),
+    abecedarioSpecialCharsDescription: orderForm.watch('order.abecedarioSpecialCharsDescription'),
+    abecedarioCase: orderForm.watch('order.abecedarioCase'),
+    abecedarioExtraLetters: orderForm.watch('order.abecedarioExtraLetters'),
+  };
+  const handleAbecedarioChange = (patch: Partial<AbecedarioFormFields>) => {
+    writeAbecedarioFields(abcFields, patch, (key, value) => {
+      orderForm.setValue(`order.${key}` as 'order.abecedarioTipografia', value as never);
+    });
+  };
   const totalValue = watchedValues[0] || 0;
   const depositValue = watchedValues[1] || 0;
   const restante = Math.max(0, totalValue - depositValue);
@@ -759,46 +779,16 @@ export function NewOrderStepForm({
             {selectedItemType === 'ABECEDARIO' && (
               <Input
                 placeholder="Tipografía"
-                value={orderForm.watch('order.abecedarioTipografia') || ''}
-                onChange={(e) => orderForm.setValue('order.abecedarioTipografia', e.target.value)}
+                value={abcFields.abecedarioTipografia || ''}
+                onChange={(e) => handleAbecedarioChange({ abecedarioTipografia: e.target.value })}
               />
             )}
           </div>
           {selectedItemType === 'ABECEDARIO' && (
-            <>
-              <div className="col-span-2">
-                <Input
-                  type="number"
-                  placeholder="Altura de letra (mm)"
-                  value={orderForm.watch('order.abecedarioAlturaMm') || ''}
-                  onChange={(e) => orderForm.setValue('order.abecedarioAlturaMm', Number(e.target.value))}
-                />
-              </div>
-              <div className="col-span-2">
-                <Select
-                  value={orderForm.watch('order.abecedarioCase') || 'MAYUSCULA'}
-                  onValueChange={(value) => orderForm.setValue('order.abecedarioCase', value as AbecedarioCase)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Mayús / Minús" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {abecedarioCaseOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="col-span-2">
-                <Input
-                  placeholder="Letras extras (opcional)"
-                  value={orderForm.watch('order.abecedarioExtraLetters') || ''}
-                  onChange={(e) => orderForm.setValue('order.abecedarioExtraLetters', e.target.value)}
-                />
-              </div>
-            </>
+            <AbecedarioFields
+              values={abcFields}
+              onChange={handleAbecedarioChange}
+            />
           )}
           <div className="col-span-6">
             <Textarea

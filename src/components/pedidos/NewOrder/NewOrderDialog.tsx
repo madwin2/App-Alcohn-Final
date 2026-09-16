@@ -6,6 +6,7 @@ import { useSound } from '@/lib/hooks/useSound';
 import { useOrders } from '@/lib/hooks/useOrders';
 import { useState } from 'react';
 import { notifyOrderRegistered } from '@/lib/supabase/services/orders.service';
+import { itemConfigFromForm } from '@/lib/abecedario/abecedarioConfig';
 import type { SavedDesignData } from './newOrderDesignUtils';
 
 interface NewOrderDialogProps {
@@ -134,13 +135,7 @@ export function NewOrderDialog({
             requestedHeightMm: design.order.requestedHeightMm || design.order.requestedWidthMm,
             itemType: design.order.itemType || 'SELLO',
             stampType: design.order.stampType,
-            itemConfig: {
-              soldadorPower: design.order.soldadorPower,
-              abecedarioTipografia: design.order.abecedarioTipografia,
-              abecedarioAlturaMm: design.order.abecedarioAlturaMm,
-              abecedarioCase: design.order.abecedarioCase,
-              abecedarioExtraLetters: design.order.abecedarioExtraLetters,
-            },
+            itemConfig: itemConfigFromForm(design.order.itemType, design.order),
             notes: design.order.notes,
             itemValue: design.values.totalValue,
             fabricationState: design.states.fabrication,

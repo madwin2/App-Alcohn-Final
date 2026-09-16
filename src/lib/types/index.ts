@@ -25,6 +25,22 @@ export type StampType = '3MM' | 'ALIMENTO' | 'CLASICO' | 'ABC' | 'LACRE';
 export type ItemType = 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA';
 export type SoldadorPower = '100W' | '200W';
 export type AbecedarioCase = 'MAYUSCULA' | 'MINUSCULA' | 'AMBAS';
+export type AbecedarioExtraLetterCounts = Record<string, number>;
+
+export interface ItemConfig {
+  soldadorPower?: SoldadorPower;
+  abecedarioTipografia?: string;
+  abecedarioAlturaMm?: number;
+  abecedarioMayusculas?: number;
+  abecedarioMinusculas?: number;
+  abecedarioExtraLetterCounts?: AbecedarioExtraLetterCounts;
+  abecedarioSpecialCharsCount?: number;
+  abecedarioSpecialCharsDescription?: string;
+  /** Compat: derivado de los contadores de juegos. */
+  abecedarioCase?: AbecedarioCase;
+  /** Compat: resumen de letras extra y caracteres especiales. */
+  abecedarioExtraLetters?: string;
+}
 export type AspireState =
   | 'Aspire G'
   | 'Aspire G Check'
@@ -150,13 +166,7 @@ export interface OrderItem {
   fabricationHeightMm?: number | null;
   itemType?: ItemType;
   stampType: StampType;
-  itemConfig?: {
-    soldadorPower?: SoldadorPower;
-    abecedarioTipografia?: string;
-    abecedarioAlturaMm?: number;
-    abecedarioCase?: AbecedarioCase;
-    abecedarioExtraLetters?: string;
-  };
+  itemConfig?: ItemConfig;
   itemValue?: number | null;
   fabricationCostItem?: number | null;
   fabricationMarginItem?: number | null;
@@ -255,13 +265,7 @@ export interface ProductionItem {
   deadline?: string | null; // Fecha límite del sello
   takenBy?: { id: string; name: string } | null; // Usuario que subió el pedido
   mockupSolicitudId?: string | null;
-  itemConfig?: {
-    soldadorPower?: SoldadorPower;
-    abecedarioTipografia?: string;
-    abecedarioAlturaMm?: number;
-    abecedarioCase?: AbecedarioCase;
-    abecedarioExtraLetters?: string;
-  };
+  itemConfig?: ItemConfig;
   files?: {
     baseUrl?: string;
     vectorUrl?: string;
@@ -361,6 +365,11 @@ export interface NewOrderFormData {
     soldadorPower?: SoldadorPower;
     abecedarioTipografia?: string;
     abecedarioAlturaMm?: number;
+    abecedarioMayusculas?: number;
+    abecedarioMinusculas?: number;
+    abecedarioExtraLetterCounts?: AbecedarioExtraLetterCounts;
+    abecedarioSpecialCharsCount?: number;
+    abecedarioSpecialCharsDescription?: string;
     abecedarioCase?: AbecedarioCase;
     abecedarioExtraLetters?: string;
     notes?: string;

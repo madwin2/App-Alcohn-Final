@@ -1,10 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Link2, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { formatDate } from '@/lib/utils/format';
+import { ENVIOS_CARRIER_PATH } from '@/components/envios/enviosRoutes';
+import {
+  checkAndreaniLinksForPhotoAssignment,
+  type AndreaniPhotoLinkCheck,
+} from '@/lib/supabase/services/andreani.service';
 import { 
   getAvailableStampsForPhoto, 
   assignPhotoToStamp,
@@ -12,7 +18,7 @@ import {
   getPendingPhotos,
   assignPendingPhotoToStamp,
   deletePendingPhoto,
-  PendingPhoto
+  updatePendingPhotoStamp,
 } from '@/lib/supabase/services/orders.service';
 
 interface UploadedPhoto {
@@ -41,27 +47,119 @@ interface UploadPhotosDialogProps {
   onSuccess?: () => void;
 }
 
+type ShortageState = {
+  check: AndreaniPhotoLinkCheck;
+  photos: UploadedPhoto[];
+};
+
+function shortageCopy(check: AndreaniPhotoLinkCheck): string {
+  if (check.available === 0) {
+    return `No hay links de Andreani disponibles. Hacen falta ${check.needed} para ${
+      check.needed === 1 ? 'este pedido' : 'estos pedidos'
+    }.`;
+  }
+  return `Hacen falta ${check.needed} link${check.needed === 1 ? '' : 's'} y hay ${check.available} disponible${
+    check.available === 1 ? '' : 's'
+  }. Faltan ${check.missing}.`;
+}
+
+async function persistDraftPhotos(list: UploadedPhoto[]): Promise<UploadedPhoto[]> {
+  const next: UploadedPhoto[] = [];
+  for (const photo of list) {
+    if (photo.isUploading || photo.isAssigning) {
+      next.push(photo);
+      continue;
+    }
+
+    if (photo.isPending && photo.pendingId) {
+      try {
+        await updatePendingPhotoStamp(photo.pendingId, photo.selectedStampId ?? null);
+      } catch (error) {
+        console.error('Error updating pending photo stamp:', error);
+      }
+      next.push(photo);
+      continue;
+    }
+
+    if (photo.file) {
+      try {
+        const saved = await savePendingPhoto(photo.file, photo.selectedStampId);
+        if (photo.preview.startsWith('blob:')) {
+          URL.revokeObjectURL(photo.preview);
+        }
+        next.push({
+          id: saved.id,
+          preview: saved.url,
+          uploadedUrl: saved.url,
+          selectedStampId: saved.selloId ?? photo.selectedStampId,
+          isPending: true,
+          pendingId: saved.id,
+        });
+      } catch (error) {
+        console.error('Error saving pending photo:', error);
+        next.push(photo);
+      }
+      continue;
+    }
+
+    next.push(photo);
+  }
+  return next;
+}
+
 export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhotosDialogProps) {
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
   const [availableStamps, setAvailableStamps] = useState<AvailableStamp[]>([]);
   const [loadingStamps, setLoadingStamps] = useState(false);
   const [savingPending, setSavingPending] = useState(false);
+  const [checkingLinks, setCheckingLinks] = useState(false);
+  const [shortage, setShortage] = useState<ShortageState | null>(null);
+  const [waitBanner, setWaitBanner] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photosRef = useRef<UploadedPhoto[]>([]);
+  const persistPromiseRef = useRef<Promise<void> | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  photosRef.current = photos;
 
   // Cargar sellos disponibles y fotos pendientes cuando se abre el modal
   useEffect(() => {
-    if (open) {
-      loadAvailableStamps();
-      loadPendingPhotos();
-    } else {
-      // Guardar fotos no asignadas antes de cerrar
-      saveUnassignedPhotos();
-      // Limpiar cuando se cierra
+    if (!open) {
       setPhotos([]);
       setAvailableStamps([]);
+      setShortage(null);
+      setWaitBanner(false);
+      return;
     }
+
+    let cancelled = false;
+    const load = async () => {
+      if (persistPromiseRef.current) {
+        await persistPromiseRef.current;
+      }
+      if (cancelled) return;
+      await loadAvailableStamps();
+      if (cancelled) return;
+      await loadPendingPhotos();
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      const snapshot = photosRef.current;
+      persistPromiseRef.current = persistDraftPhotos(snapshot)
+        .then(() => undefined)
+        .catch((error) => {
+          console.error('Error saving pending photos:', error);
+        });
+    }
+    onOpenChange(next);
+  };
 
   const loadAvailableStamps = async () => {
     setLoadingStamps(true);
@@ -94,7 +192,10 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
         pendingId: pending.id,
       }));
 
-      setPhotos(prev => [...pendingUploadedPhotos, ...prev]);
+      setPhotos((prev) => {
+        const localNew = prev.filter((photo) => !photo.isPending);
+        return [...pendingUploadedPhotos, ...localNew];
+      });
     } catch (error) {
       console.error('Error loading pending photos:', error);
       toast({
@@ -102,30 +203,6 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
         description: "No se pudieron cargar las fotos pendientes",
         variant: "destructive",
       });
-    }
-  };
-
-  const saveUnassignedPhotos = async () => {
-    const unassignedPhotos = photos.filter(p => !p.isPending && !p.selectedStampId && !p.isUploading);
-    
-    if (unassignedPhotos.length === 0) return;
-
-    setSavingPending(true);
-    try {
-      for (const photo of unassignedPhotos) {
-        if (photo.file) {
-          await savePendingPhoto(photo.file);
-        }
-      }
-    } catch (error) {
-      console.error('Error saving pending photos:', error);
-      toast({
-        title: "Atención",
-        description: "Algunas fotos no se pudieron guardar como pendientes",
-        variant: "destructive",
-      });
-    } finally {
-      setSavingPending(false);
     }
   };
 
@@ -185,9 +262,16 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
         ? { ...photo, selectedStampId: stampId }
         : photo
     ));
+
+    const photo = photosRef.current.find((item) => item.id === photoId);
+    if (photo?.isPending && photo.pendingId) {
+      void updatePendingPhotoStamp(photo.pendingId, stampId).catch((error) => {
+        console.error('Error updating pending photo stamp:', error);
+      });
+    }
   };
 
-  const handleAssignPhoto = async (photo: UploadedPhoto) => {
+  const assignPhotoNow = async (photo: UploadedPhoto) => {
     if (!photo.selectedStampId) {
       toast({
         title: "Error",
@@ -206,10 +290,10 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
     try {
       if (photo.isPending && photo.pendingId) {
         // Si es una foto pendiente, usar la función específica
-        await assignPendingPhotoToStamp(photo.pendingId, photo.selectedStampId!);
+        await assignPendingPhotoToStamp(photo.pendingId, photo.selectedStampId);
       } else if (photo.file) {
         // Si es una foto nueva, subirla y asignarla
-        await assignPhotoToStamp(photo.selectedStampId!, photo.file);
+        await assignPhotoToStamp(photo.selectedStampId, photo.file);
       } else {
         throw new Error('No se puede asignar la foto: falta información');
       }
@@ -220,7 +304,10 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
       });
 
       // Remover la foto de la lista
-      removePhoto(photo.id);
+      setPhotos(prev => prev.filter(p => p.id !== photo.id));
+      if (photo.file && photo.preview.startsWith('blob:')) {
+        URL.revokeObjectURL(photo.preview);
+      }
       
       // Recargar sellos disponibles (porque este ya no estará disponible)
       await loadAvailableStamps();
@@ -243,6 +330,50 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
     }
   };
 
+  const ensureAndreaniLinksOrPrompt = async (
+    photosToAssign: UploadedPhoto[],
+  ): Promise<boolean> => {
+    const stampIds = photosToAssign
+      .map((photo) => photo.selectedStampId)
+      .filter((id): id is string => Boolean(id));
+    if (!stampIds.length) return true;
+
+    setCheckingLinks(true);
+    try {
+      const check = await checkAndreaniLinksForPhotoAssignment(stampIds);
+      if (check.missing > 0) {
+        setShortage({ check, photos: photosToAssign });
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Error checking Andreani links:', error);
+      toast({
+        title: 'No se pudo verificar el pool de Andreani',
+        description: 'Probá de nuevo en un momento. Si sigue fallando, cargá el pool y volvé.',
+        variant: 'destructive',
+      });
+      return false;
+    } finally {
+      setCheckingLinks(false);
+    }
+  };
+
+  const handleAssignPhoto = async (photo: UploadedPhoto) => {
+    if (!photo.selectedStampId) {
+      toast({
+        title: "Error",
+        description: "Debe seleccionar un sello para asignar la foto",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const ok = await ensureAndreaniLinksOrPrompt([photo]);
+    if (!ok) return;
+    await assignPhotoNow(photo);
+  };
+
   const handleAssignAll = async () => {
     const photosToAssign = photos.filter(p => p.selectedStampId && !p.isUploading);
     
@@ -255,23 +386,92 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
       return;
     }
 
-    // Asignar todas las fotos
+    const ok = await ensureAndreaniLinksOrPrompt(photosToAssign);
+    if (!ok) return;
+
     for (const photo of photosToAssign) {
-      await handleAssignPhoto(photo);
+      await assignPhotoNow(photo);
     }
   };
 
+  const handleWaitForLinks = async () => {
+    setSavingPending(true);
+    try {
+      const saved = await persistDraftPhotos(photosRef.current);
+      setPhotos(saved);
+      persistPromiseRef.current = Promise.resolve();
+      setShortage(null);
+      setWaitBanner(true);
+      toast({
+        title: 'Fotos guardadas',
+        description: 'Quedan en este modal. Cargá el pool de Andreani y volvé a asignar.',
+      });
+    } catch (error) {
+      console.error('Error saving pending photos:', error);
+      toast({
+        title: 'Atención',
+        description: 'Algunas fotos no se pudieron guardar como pendientes',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingPending(false);
+    }
+  };
+
+  const handleGoLoadPool = async () => {
+    setSavingPending(true);
+    try {
+      const snapshot = photosRef.current;
+      persistPromiseRef.current = persistDraftPhotos(snapshot).then(() => undefined);
+      await persistPromiseRef.current;
+      setShortage(null);
+      onOpenChange(false);
+      navigate(ENVIOS_CARRIER_PATH.ANDREANI);
+    } catch (error) {
+      console.error('Error saving pending photos:', error);
+      toast({
+        title: 'Atención',
+        description: 'Algunas fotos no se pudieron guardar como pendientes',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingPending(false);
+    }
+  };
+
+  const handleAssignAnyway = async () => {
+    const photosToAssign = shortage?.photos ?? [];
+    setShortage(null);
+    setWaitBanner(false);
+    for (const photo of photosToAssign) {
+      await assignPhotoNow(photo);
+    }
+  };
+
+  const busy = photos.some(p => p.isUploading) || checkingLinks || savingPending;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto border border-white/20 shadow-[0_0_80px_rgba(255,255,255,0.075),0_0_150px_rgba(255,255,255,0.05),0_0_220px_rgba(255,255,255,0.025)]">
-        <DialogHeader className="pb-4 border-b">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="relative flex max-h-[85vh] max-w-4xl flex-col overflow-hidden border border-white/20 shadow-[0_0_80px_rgba(255,255,255,0.075),0_0_150px_rgba(255,255,255,0.05),0_0_220px_rgba(255,255,255,0.025)]">
+        <DialogHeader className="pb-4 border-b shrink-0">
           <DialogTitle className="text-xl font-semibold">Subir Fotos</DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
             Sube fotos y asígnalas a sellos disponibles. Las fotos no asignadas se guardarán automáticamente.
           </p>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+          {waitBanner && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm space-y-2">
+              <p>
+                Las fotos quedaron guardadas. Cargá el pool de Andreani y después volvé y apretá Asignar todas.
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={() => void handleGoLoadPool()}>
+                Ir a cargar el pool
+              </Button>
+            </div>
+          )}
+
           {/* Botón para seleccionar archivos */}
           <div className="flex items-center gap-2">
             <input
@@ -296,11 +496,18 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
             {photos.length > 0 && (
               <Button
                 type="button"
-                onClick={handleAssignAll}
+                onClick={() => void handleAssignAll()}
                 className="gap-2"
-                disabled={photos.some(p => p.isUploading)}
+                disabled={busy}
               >
-                Asignar Todas
+                {checkingLinks ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Verificando links…
+                  </>
+                ) : (
+                  'Asignar Todas'
+                )}
               </Button>
             )}
           </div>
@@ -374,12 +581,12 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
                   {photo.selectedStampId && (
                     <Button
                       type="button"
-                      onClick={() => handleAssignPhoto(photo)}
-                      disabled={photo.isUploading}
+                      onClick={() => void handleAssignPhoto(photo)}
+                      disabled={busy}
                       className="w-full"
                       size="sm"
                     >
-                      {photo.isUploading ? 'Asignando...' : 'Asignar Foto'}
+                      {photo.isUploading ? 'Asignando...' : checkingLinks ? 'Verificando…' : 'Asignar Foto'}
                     </Button>
                   )}
                 </div>
@@ -398,6 +605,50 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
             </div>
           )}
         </div>
+
+        {shortage && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/90 p-6 backdrop-blur-sm">
+            <div className="w-full max-w-md space-y-4 rounded-lg border bg-background p-6 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-md bg-amber-500/15 p-2 text-amber-600">
+                  <Link2 className="h-5 w-5" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold">Faltan links de Andreani</h3>
+                  <p className="text-sm text-muted-foreground">{shortageCopy(shortage.check)}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Las fotos quedan guardadas acá. Podés ir a cargar el pool y después volver y solo apretar Asignar todas.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => void handleAssignAnyway()}
+                  disabled={busy}
+                >
+                  Asignar de todas formas
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleGoLoadPool()}
+                  disabled={savingPending}
+                >
+                  Ir a cargar el pool
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleWaitForLinks()}
+                  disabled={savingPending}
+                >
+                  Esperar a que estén disponibles
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

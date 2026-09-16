@@ -1,4 +1,9 @@
 import { supabase } from '../client';
+import {
+  andreaniLinkFreshSinceIso,
+  isEmpresaAndreani,
+  orderIdsNeedingAndreaniLink,
+} from '@/lib/utils/andreaniPhotoLinks';
 
 export type AndreaniLinkEstado = 'disponible' | 'asignado' | 'descartado';
 
@@ -113,6 +118,104 @@ export const getAssignedAndreaniLinksByOrdenIds = async (
     }
   }
   return map;
+};
+
+export const countAndreaniLinksDisponibles = async (): Promise<number> => {
+  try {
+    await purgarLinksAndreaniViejos();
+  } catch {
+    /* si la migración de purga aún no corrió, seguimos con el conteo */
+  }
+  const { count, error } = await supabase
+    .from('envios_andreani_links')
+    .select('id', { count: 'exact', head: true })
+    .eq('estado', 'disponible');
+  if (error) throw error;
+  return count ?? 0;
+};
+
+export type AndreaniPhotoLinkCheck = {
+  needed: number;
+  available: number;
+  missing: number;
+  orderIds: string[];
+};
+
+const emptyAndreaniPhotoLinkCheck = (): AndreaniPhotoLinkCheck => ({
+  needed: 0,
+  available: 0,
+  missing: 0,
+  orderIds: [],
+});
+
+/**
+ * Cuántos links del pool harían falta al asignar estas fotos (último sello de
+ * pedidos Andreani sin link fresco). `missing > 0` si el pool no alcanza.
+ */
+export const checkAndreaniLinksForPhotoAssignment = async (
+  stampIds: string[],
+): Promise<AndreaniPhotoLinkCheck> => {
+  const uniqueStampIds = [...new Set(stampIds.filter(Boolean))];
+  if (!uniqueStampIds.length) return emptyAndreaniPhotoLinkCheck();
+
+  const { data: assigningStamps, error: stampsErr } = await supabase
+    .from('sellos')
+    .select('id, orden_id')
+    .in('id', uniqueStampIds);
+  if (stampsErr) throw stampsErr;
+
+  const orderIds = [
+    ...new Set((assigningStamps ?? []).map((row) => row.orden_id).filter(Boolean)),
+  ];
+  if (!orderIds.length) return emptyAndreaniPhotoLinkCheck();
+
+  const { data: orders, error: ordersErr } = await supabase
+    .from('ordenes')
+    .select('id, empresa_envio')
+    .in('id', orderIds);
+  if (ordersErr) throw ordersErr;
+
+  const andreaniOrderIds = (orders ?? [])
+    .filter((row) => isEmpresaAndreani(row.empresa_envio))
+    .map((row) => row.id);
+  if (!andreaniOrderIds.length) return emptyAndreaniPhotoLinkCheck();
+
+  const { data: allStamps, error: allStampsErr } = await supabase
+    .from('sellos')
+    .select('id, orden_id, foto_sello')
+    .in('orden_id', andreaniOrderIds);
+  if (allStampsErr) throw allStampsErr;
+
+  const { data: freshLinks, error: linksErr } = await supabase
+    .from('envios_andreani_links')
+    .select('orden_id')
+    .eq('estado', 'asignado')
+    .in('orden_id', andreaniOrderIds)
+    .gte('creado_en', andreaniLinkFreshSinceIso());
+  if (linksErr) throw linksErr;
+
+  const needing = orderIdsNeedingAndreaniLink({
+    assigningStampIds: uniqueStampIds,
+    stamps: (allStamps ?? []).map((row) => ({
+      id: row.id,
+      ordenId: row.orden_id,
+      hasPhoto: Boolean(row.foto_sello && row.foto_sello !== ''),
+    })),
+    andreaniOrderIds,
+    orderIdsWithFreshLink: (freshLinks ?? [])
+      .map((row) => row.orden_id)
+      .filter((id): id is string => Boolean(id)),
+  });
+
+  if (!needing.length) return emptyAndreaniPhotoLinkCheck();
+
+  const available = await countAndreaniLinksDisponibles();
+  return {
+    needed: needing.length,
+    available,
+    missing: Math.max(0, needing.length - available),
+    orderIds: needing,
+  };
 };
 
 export const getAndreaniPoolCounts = async (): Promise<Record<AndreaniLinkEstado, number>> => {

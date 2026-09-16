@@ -39,7 +39,15 @@ import { isEtiquetaActivaEnTabla } from '@/lib/utils/andreaniPortalEstado';
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
 import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
-import { WhatsappLogo } from '@/components/shared/WhatsappLogo';
+import { SvgIcon } from '@/components/ui/SvgIcon';
+import {
+  enviosTable,
+  enviosTd,
+  enviosTh,
+  enviosThead,
+  enviosThumb,
+  enviosTr,
+} from '@/components/envios/enviosTableStyles';
 import {
   getDownloadedAndreaniEtiquetaIds,
   insertEnvioEventoForOrden,
@@ -120,6 +128,7 @@ export function AndreaniLabelsPanel({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [erroneasExpanded, setErroneasExpanded] = useState(false);
+  const [orphansOpen, setOrphansOpen] = useState<boolean | null>(null);
   const [uploadingPdfs, setUploadingPdfs] = useState(false);
   const [manualUploadFiles, setManualUploadFiles] = useState<File[] | null>(null);
   const [manualMissing, setManualMissing] = useState<
@@ -208,6 +217,7 @@ export function AndreaniLabelsPanel({
     () => rows.filter((r) => r.estado === 'huerfano' && isEtiquetaActivaEnTabla(r)),
     [rows],
   );
+  const orphansExpanded = orphansOpen ?? orphans.length > 0;
 
   const erroneas = useMemo(
     () => rows.filter((r) => r.estado === 'erronea'),
@@ -713,7 +723,7 @@ export function AndreaniLabelsPanel({
             key={item.id}
             type="button"
             title={getOrderItemDisplayName(item)}
-            className="block h-9 w-9 cursor-zoom-in rounded border bg-white p-0.5"
+            className={enviosThumb}
             onClick={() => void openPreview(url, item.mockupSolicitudId)}
           >
             <StorageUrlImage
@@ -741,9 +751,9 @@ export function AndreaniLabelsPanel({
       <PopoverTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="h-7 px-2"
+          className="h-7 w-7 px-0"
           disabled={actionBusyId === row.id}
           title="Más acciones"
         >
@@ -814,32 +824,32 @@ export function AndreaniLabelsPanel({
     emptyLabel: string,
     opts: { canMarcarErronea: boolean; canRestaurar: boolean },
   ) => (
-    <div className="overflow-auto max-h-[min(36vh,280px)] rounded-lg border">
-      <table className="w-full text-xs">
-        <thead className="bg-muted/50 text-left sticky top-0">
+    <div className="overflow-auto max-h-[min(36vh,280px)]">
+      <table className={enviosTable}>
+        <thead className={enviosThead}>
           <tr>
-            <th className="px-2 py-1.5 font-medium">Destinatario</th>
-            <th className="px-2 py-1.5 font-medium">Seguimiento</th>
-            <th className="px-2 py-1.5 font-medium">Pedido</th>
-            <th className="px-2 py-1.5 font-medium text-right"> </th>
+            <th className={enviosTh}>Destinatario</th>
+            <th className={enviosTh}>Seguimiento</th>
+            <th className={enviosTh}>Pedido</th>
+            <th className={`${enviosTh} text-right`}> </th>
           </tr>
         </thead>
         <tbody>
           {list.length === 0 ? (
             <tr>
-              <td colSpan={4} className="px-2 py-4 text-center text-muted-foreground">
+              <td colSpan={4} className={`${enviosTd} text-center text-muted-foreground`}>
                 {emptyLabel}
               </td>
             </tr>
           ) : (
             list.map((row) => (
-              <tr key={row.id} className="border-t">
-                <td className="px-2 py-1.5">
-                  <div>{row.destinatario || '—'}</div>
-                  <div className="text-[10px] text-muted-foreground">{row.destino}</div>
+              <tr key={row.id} className={enviosTr}>
+                <td className={enviosTd}>
+                  <div className="truncate">{row.destinatario || '—'}</div>
+                  <div className="truncate text-[11px] text-muted-foreground">{row.destino}</div>
                 </td>
-                <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
-                <td className="px-2 py-1.5 min-w-[180px]">
+                <td className={`${enviosTd} font-mono text-xs tabular-nums`}>{row.tracking}</td>
+                <td className={`${enviosTd} min-w-[180px]`}>
                   <Select
                     value={assignPick[row.id] || ''}
                     onValueChange={(value) => setAssignPick((prev) => ({ ...prev, [row.id]: value }))}
@@ -856,7 +866,7 @@ export function AndreaniLabelsPanel({
                     </SelectContent>
                   </Select>
                 </td>
-                <td className="px-2 py-1.5 text-right">
+                <td className={`${enviosTd} text-right`}>
                   <div className="inline-flex items-center gap-1">
                     {row.pdfPath ? (
                       <Button
@@ -913,28 +923,28 @@ export function AndreaniLabelsPanel({
   );
 
   return (
-    <div className="rounded-xl border bg-card shadow-sm p-4 space-y-4">
+    <div className="space-y-3 rounded-2xl border border-white/10 bg-card/50 p-3">
       {(jobActive || workerJob?.phase === 'done' || workerJob?.phase === 'error') && workerJob ? (
         <div
           className={
             workerJob.phase === 'error'
-              ? 'rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs'
+              ? 'rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-[11px]'
               : workerJob.phase === 'done'
-                ? 'rounded-lg border border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-xs'
-                : 'rounded-lg border border-amber-600/30 bg-amber-500/10 px-3 py-2 text-xs'
+                ? 'rounded-md border border-emerald-600/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px]'
+                : 'rounded-md border border-amber-600/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px]'
           }
         >
-          <div className="flex items-center gap-2 font-medium">
-            {jobActive ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : null}
-            <span>
-              {jobActive ? 'Worker en curso' : workerJob.phase === 'error' ? 'Worker: error' : 'Worker: listo'}
+          <div className="flex items-center gap-1.5 font-medium">
+            {jobActive ? <Loader2 className="h-3 w-3 animate-spin shrink-0" /> : null}
+            <span className="truncate">
+              {jobActive ? 'Worker' : workerJob.phase === 'error' ? 'Error' : 'Listo'}
               {workerJob.kind ? ` · ${andreaniJobKindLabel(workerJob.kind)}` : ''}
               {workerJob.queueDepth > 0 ? ` · cola ${workerJob.queueDepth}` : ''}
+              {workerJob.detail ? ` · ${workerJob.detail}` : ''}
             </span>
           </div>
-          <p className="mt-0.5 text-muted-foreground">{workerJob.detail}</p>
-          {workerJob.lastMessage && !jobActive ? (
-            <p className="mt-0.5 text-muted-foreground">{workerJob.lastMessage}</p>
+          {workerJob.lastMessage && !jobActive && workerJob.lastMessage !== workerJob.detail ? (
+            <p className="mt-0.5 truncate text-muted-foreground">{workerJob.lastMessage}</p>
           ) : null}
         </div>
       ) : null}
@@ -1077,68 +1087,70 @@ export function AndreaniLabelsPanel({
 
       {isExpanded ? (
         <>
-          <div className="overflow-auto max-h-[min(40vh,360px)] rounded-lg border">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/50 text-left sticky top-0">
+          {assigned.length === 0 ? (
+            <p className="pl-5 text-xs text-muted-foreground">Todavía no hay etiquetas asignadas a pedidos.</p>
+          ) : (
+          <div className="overflow-auto max-h-[min(40vh,360px)]">
+            <table className={enviosTable}>
+              <thead className={enviosThead}>
                 <tr>
-                  <th className="px-2 py-1.5 font-medium">Pedido</th>
-                  <th className="px-2 py-1.5 font-medium text-center w-10">WA</th>
-                  <th className="px-2 py-1.5 font-medium">Diseño</th>
-                  <th className="px-2 py-1.5 font-medium">Base / Vector</th>
-                  <th className="px-2 py-1.5 font-medium">Seguimiento</th>
-                  <th className="px-2 py-1.5 font-medium">Operación</th>
-                  <th className="px-2 py-1.5 font-medium">Venta</th>
-                  <th className="px-2 py-1.5 font-medium">Estado Andreani</th>
-                  <th className="px-2 py-1.5 font-medium text-right">PDF</th>
-                  <th className="px-2 py-1.5 font-medium text-center w-16">Desc.</th>
-                  <th className="px-2 py-1.5 font-medium text-right w-10"> </th>
+                  <th className={enviosTh}>Pedido</th>
+                  <th className={`${enviosTh} w-10 text-center`}>WA</th>
+                  <th className={enviosTh}>Diseño</th>
+                  <th className={enviosTh} title="N° de seguimiento y n° de operación">
+                    Seguimiento
+                  </th>
+                  <th className={enviosTh}>Venta</th>
+                  <th className={enviosTh}>Estado</th>
+                  <th className={`${enviosTh} text-right`}>PDF</th>
+                  <th className={`${enviosTh} w-16 text-center`}>Desc.</th>
+                  <th className={`${enviosTh} w-10 text-right`}> </th>
                 </tr>
               </thead>
               <tbody>
-                {assigned.length === 0 ? (
-                  <tr>
-                    <td colSpan={11} className="px-2 py-4 text-center text-muted-foreground">
-                      Todavía no hay etiquetas asignadas a pedidos.
-                    </td>
-                  </tr>
-                ) : (
-                  assigned.map((row) => {
+                {assigned.map((row) => {
                     const canDownload = Boolean(row.pdfPath) && row.saleTransferred;
                     const phoneDigits = resolvePhoneDigits(row);
                     const order = row.ordenId ? ordersById.get(row.ordenId) : undefined;
                     const designLabel = orderItemsDesignLabel(order, row.disenoNombre);
                     const wasDownloaded = downloadedIds.has(row.id);
                     return (
-                      <tr key={row.id} className="border-t">
-                        <td className="px-2 py-1.5">
-                          <span className="truncate block max-w-[9rem]" title={row.clienteNombre || undefined}>
+                      <tr key={row.id} className={enviosTr}>
+                        <td className={enviosTd}>
+                          <span className="block max-w-[9rem] truncate font-medium" title={row.clienteNombre || undefined}>
                             {row.clienteNombre || '—'}
                           </span>
                         </td>
-                        <td className="px-2 py-1.5 text-center">
+                        <td className={`${enviosTd} text-center`}>
                           <button
                             type="button"
                             title={phoneDigits ? 'Copiar número al portapapeles' : 'Sin teléfono en la orden'}
                             disabled={!phoneDigits}
                             onClick={() => handleCopyPhone(row)}
-                            className={`inline-flex size-6 items-center justify-center rounded-full border transition-colors ${
+                            className={`inline-flex size-7 items-center justify-center rounded-full transition-opacity ${
                               phoneDigits
-                                ? 'border-border bg-background text-foreground hover:bg-muted'
-                                : 'cursor-not-allowed border-muted text-muted-foreground opacity-40'
+                                ? 'hover:bg-muted'
+                                : 'cursor-not-allowed opacity-40'
                             }`}
                           >
-                            <WhatsappLogo className="size-3.5" />
+                            <SvgIcon name="WHATSAPP" size={20} className="flex-shrink-0" />
                           </button>
                         </td>
-                        <td className="px-2 py-1.5 max-w-[12rem]">
-                          <span className="line-clamp-2" title={designLabel}>
-                            {designLabel}
-                          </span>
+                        <td className={enviosTd}>
+                          <div className="flex min-w-0 max-w-[16rem] items-center gap-2">
+                            {renderFilesCell(order)}
+                            <span className="line-clamp-2 min-w-0" title={designLabel}>
+                              {designLabel}
+                            </span>
+                          </div>
                         </td>
-                        <td className="px-2 py-1.5">{renderFilesCell(order)}</td>
-                        <td className="px-2 py-1.5 font-mono tabular-nums">{row.tracking}</td>
-                        <td className="px-2 py-1.5 font-mono tabular-nums">{row.nroOperacion || '—'}</td>
-                        <td className="px-2 py-1.5 min-w-[7.5rem]">
+                        <td className={enviosTd}>
+                          <div className="font-mono text-xs tabular-nums">{row.tracking}</div>
+                          <div className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                            {row.nroOperacion || '—'}
+                          </div>
+                        </td>
+                        <td className={`${enviosTd} min-w-[7.5rem]`}>
                           {row.ordenId && onUpdateOrder ? (
                             <Select
                               value={row.saleTransferred ? 'transferido' : 'pendiente'}
@@ -1163,13 +1175,13 @@ export function AndreaniLabelsPanel({
                             <span>{row.saleTransferred ? 'Transferido' : 'Pendiente'}</span>
                           )}
                         </td>
-                        <td className="px-2 py-1.5 text-muted-foreground">{row.estadoPortal || '—'}</td>
-                        <td className="px-2 py-1.5 text-right">
+                        <td className={`${enviosTd} text-muted-foreground`}>{row.estadoPortal || '—'}</td>
+                        <td className={`${enviosTd} text-right`}>
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            className="h-7 px-2"
+                            className="h-7 w-7 px-0"
                             disabled={!canDownload || downloadingId === row.id || downloadingAll}
                             title={
                               row.saleTransferred
@@ -1185,46 +1197,67 @@ export function AndreaniLabelsPanel({
                             )}
                           </Button>
                         </td>
-                        <td className="px-2 py-1.5 text-center">
+                        <td className={`${enviosTd} text-center`}>
                           {wasDownloaded ? (
                             <span
-                              className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 dark:text-emerald-400"
+                              className="inline-flex items-center gap-0.5 text-[11px] text-emerald-400"
                               title="Ya descargaste este PDF"
                             >
                               <Check className="h-3.5 w-3.5" />
                               Sí
                             </span>
                           ) : (
-                            <span className="text-[10px] text-muted-foreground">No</span>
+                            <span className="text-[11px] text-muted-foreground" title="Todavía no se descargó">
+                              No
+                            </span>
                           )}
                         </td>
-                        <td className="px-2 py-1.5 text-right">
+                        <td className={`${enviosTd} text-right`}>
                           {renderActionsMenu(row, { canLiberar: true })}
                         </td>
                       </tr>
                     );
-                  })
-                )}
+                  })}
               </tbody>
             </table>
           </div>
+          )}
 
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div>
+            <button
+              type="button"
+              onClick={() => setOrphansOpen((prev) => !(prev ?? orphans.length > 0))}
+              className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              {orphansExpanded ? (
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              )}
               Huérfanos ({orphans.length})
-            </h3>
-            <p className="text-[11px] text-muted-foreground">
-              Envíos pagados en Andreani sin un único pedido con link asignado. Asignalos a mano, marcalos como
-              erróneos o eliminá el PDF. Si el sync falla, bajá el PDF en Andreani y usá{' '}
-              <span className="font-medium">Cargar PDF</span>.
-            </p>
-            {renderUnassignedTable(orphans, 'No hay huérfanos.', {
-              canMarcarErronea: true,
-              canRestaurar: false,
-            })}
+            </button>
+            {orphansExpanded ? (
+              orphans.length > 0 ? (
+                <>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Envíos pagados en Andreani sin un único pedido con link asignado. Asignalos a mano, marcalos como
+                    erróneos o eliminá el PDF. Si el sync falla, bajá el PDF en Andreani y usá{' '}
+                    <span className="font-medium">Cargar PDF</span>.
+                  </p>
+                  <div className="mt-2">
+                    {renderUnassignedTable(orphans, 'No hay huérfanos.', {
+                      canMarcarErronea: true,
+                      canRestaurar: false,
+                    })}
+                  </div>
+                </>
+              ) : (
+                <p className="mt-1 pl-5 text-[11px] text-muted-foreground">No hay huérfanos.</p>
+              )
+            ) : null}
           </div>
 
-          <div className="space-y-2">
+          <div>
             <button
               type="button"
               onClick={() => setErroneasExpanded((prev) => !prev)}
@@ -1238,16 +1271,22 @@ export function AndreaniLabelsPanel({
               Erróneas ({erroneas.length})
             </button>
             {erroneasExpanded ? (
-              <>
-                <p className="text-[11px] text-muted-foreground">
-                  Etiquetas duplicadas, mal generadas o que no vas a usar. No vuelven a aparecer en Huérfanos al
-                  traer etiquetas. Si más adelante coinciden con un pedido, asignalas desde acá.
-                </p>
-                {renderUnassignedTable(erroneas, 'No hay etiquetas erróneas.', {
-                  canMarcarErronea: false,
-                  canRestaurar: true,
-                })}
-              </>
+              erroneas.length > 0 ? (
+                <>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Etiquetas duplicadas, mal generadas o que no vas a usar. No vuelven a aparecer en Huérfanos al
+                    traer etiquetas. Si más adelante coinciden con un pedido, asignalas desde acá.
+                  </p>
+                  <div className="mt-2">
+                    {renderUnassignedTable(erroneas, 'No hay etiquetas erróneas.', {
+                      canMarcarErronea: false,
+                      canRestaurar: true,
+                    })}
+                  </div>
+                </>
+              ) : (
+                <p className="mt-1 pl-5 text-[11px] text-muted-foreground">No hay etiquetas erróneas.</p>
+              )
             ) : null}
           </div>
         </>
