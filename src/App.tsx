@@ -15,6 +15,7 @@ import VectorizacionPage from './app/vectorizacion/index'
 import ComercialPage from './app/comercial/index'
 import LoginPage from './app/login/index'
 import ConfiguracionPage from './app/configuracion/index'
+import WhatsAppPage from './app/whatsapp/index'
 import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import WhatsNewSandboxPage from './app/dev/WhatsNewSandboxPage'
 import VectorizarTourSandboxPage from './app/dev/VectorizarTourSandboxPage'
@@ -53,6 +54,7 @@ function App() {
             <Route path="/innovacion" element={<InnovacionPage />} />
             <Route path="/vectorizacion" element={<VectorizacionPage />} />
             <Route path="/configuracion" element={<ConfiguracionPage />} />
+            <Route path="/whatsapp" element={<WhatsAppPage />} />
           </Route>
           <Route path="/admin/registros" element={<Navigate to="/pedidos" replace />} />
           {import.meta.env.DEV ? (

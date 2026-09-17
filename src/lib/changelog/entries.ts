@@ -4,6 +4,7 @@ import {
   Flag,
   Layers,
   Link2,
+  MessageCircle,
   MousePointerClick,
   RefreshCw,
   Search,
@@ -136,6 +137,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Avisa si faltan links de Andreani',
         body: 'Al asignar las fotos, se fija si el pool alcanza. Si faltan, te pregunta si esperás o asignás igual. Las fotos quedan guardadas en el modal para mandarlas después.',
         icon: Link2,
+      },
+    ],
+  },
+  {
+    id: 6,
+    date: '2026-09-17',
+    title: 'Novedades',
+    version: '1.22',
+    slides: [
+      {
+        heading: 'WhatsApp Bot, desde el menú',
+        body: 'En WhatsApp Bot podés conectar la cuenta de WhatsApp Business de Alcohn con Meta. Todavía falta vincularla con el servidor del bot.',
+        icon: MessageCircle,
       },
     ],
   },

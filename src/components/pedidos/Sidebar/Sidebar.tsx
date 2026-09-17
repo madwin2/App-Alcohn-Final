@@ -42,7 +42,7 @@ const sidebarItems = [
   { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },
   { icon: Calendar, label: 'Programas', path: '/programas' },
   { icon: CheckCircle, label: 'Verificación', path: '/verificacion', disabled: true },
-  { icon: MessageCircle, label: 'WhatsApp Bot', path: '/whatsapp', disabled: true },
+  { icon: MessageCircle, label: 'WhatsApp Bot', path: '/whatsapp', disabled: false },
 ];
 
 function SidebarInner() {
