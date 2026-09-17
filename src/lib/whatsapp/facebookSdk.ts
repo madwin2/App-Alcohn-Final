@@ -7,7 +7,22 @@ let sdkLoadPromise: Promise<FacebookSDK> | null = null;
 /** Código de autorización de esta sesión. Solo en memoria; nunca persistir. */
 let authorizationCodeInMemory: string | null = null;
 
-export type WaEmbeddedSignupEvent = 'FINISH' | 'CANCEL' | 'ERROR';
+export type WaEmbeddedSignupEvent =
+  | 'FINISH'
+  | 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'
+  | 'CANCEL'
+  | 'ERROR';
+
+const FINISH_EVENTS = new Set<WaEmbeddedSignupEvent>([
+  'FINISH',
+  'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+]);
+
+export function isWaSignupFinishEvent(
+  event: WaEmbeddedSignupEvent | null,
+): event is 'FINISH' | 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' {
+  return event !== null && FINISH_EVENTS.has(event);
+}
 
 export interface WhatsAppSessionIds {
   wabaId?: string;
@@ -77,17 +92,32 @@ function extractEventName(payload: Record<string, unknown>): WaEmbeddedSignupEve
   const raw =
     readNonEmptyString(payload.event) ??
     (isRecord(payload.data) ? readNonEmptyString(payload.data.event) : undefined);
-  if (raw === 'FINISH' || raw === 'CANCEL' || raw === 'ERROR') return raw;
+  if (
+    raw === 'FINISH' ||
+    raw === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ||
+    raw === 'CANCEL' ||
+    raw === 'ERROR'
+  ) {
+    return raw;
+  }
   return null;
 }
 
-function extractSessionIds(payload: Record<string, unknown>): WhatsAppSessionIds {
-  const nested = isRecord(payload.data) ? payload.data : payload;
+function extractSessionIdsFromRecord(source: Record<string, unknown>): WhatsAppSessionIds {
   return {
-    wabaId: readStringField(nested, ['waba_id', 'wabaId']),
-    phoneNumberId: readStringField(nested, ['phone_number_id', 'phoneNumberId']),
-    businessId: readStringField(nested, ['business_id', 'businessId']),
+    wabaId: readStringField(source, ['waba_id', 'wabaId']),
+    phoneNumberId: readStringField(source, ['phone_number_id', 'phoneNumberId']),
+    businessId: readStringField(source, ['business_id', 'businessId']),
   };
+}
+
+function extractSessionIds(payload: Record<string, unknown>): WhatsAppSessionIds {
+  const nested = isRecord(payload.data) ? payload.data : null;
+  const deeper = nested && isRecord(nested.data) ? nested.data : null;
+  return mergeSessionIds(
+    mergeSessionIds(extractSessionIdsFromRecord(payload), nested ? extractSessionIdsFromRecord(nested) : {}),
+    deeper ? extractSessionIdsFromRecord(deeper) : {},
+  );
 }
 
 export function parseWaEmbeddedSignupMessage(event: MessageEvent): ParsedWaEmbeddedSignup | null {

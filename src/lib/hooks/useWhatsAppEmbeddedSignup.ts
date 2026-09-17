@@ -3,10 +3,12 @@ import { useToast } from '@/components/ui/use-toast';
 import { getMetaWhatsAppConfig } from '@/lib/whatsapp/metaConfig';
 import {
   hasAuthorizationCodeInMemory,
+  isWaSignupFinishEvent,
   loadFacebookSdk,
   mergeSessionIds,
   parseWaEmbeddedSignupMessage,
   storeAuthorizationCodeInMemory,
+  type WaEmbeddedSignupEvent,
   type WhatsAppSessionIds,
 } from '@/lib/whatsapp/facebookSdk';
 
@@ -28,7 +30,8 @@ export function useWhatsAppEmbeddedSignup() {
       : 'Faltan VITE_META_APP_ID o VITE_META_WHATSAPP_CONFIG_ID. Agregalas en el entorno de la app.',
   );
   const [sessionIds, setSessionIds] = useState<WhatsAppSessionIds>({});
-  const lastSignupEventRef = useRef<'FINISH' | 'CANCEL' | 'ERROR' | null>(null);
+  const lastSignupEventRef = useRef<WaEmbeddedSignupEvent | null>(null);
+  const onboardingFinishedRef = useRef(false);
   const mountedRef = useRef(true);
   const sdkReadyRef = useRef(false);
 
@@ -87,9 +90,18 @@ export function useWhatsAppEmbeddedSignup() {
       });
 
       if (parsed.event === 'CANCEL') {
-        if (hasAuthorizationCodeInMemory()) return;
+        if (hasAuthorizationCodeInMemory() || onboardingFinishedRef.current) return;
         setIfMounted(() => {
           setStatus('cancelled');
+          setErrorMessage(null);
+        });
+        return;
+      }
+
+      if (isWaSignupFinishEvent(parsed.event)) {
+        onboardingFinishedRef.current = true;
+        setIfMounted(() => {
+          setStatus('authorized');
           setErrorMessage(null);
         });
         return;
@@ -135,6 +147,7 @@ export function useWhatsAppEmbeddedSignup() {
     }
 
     lastSignupEventRef.current = null;
+    onboardingFinishedRef.current = false;
     setStatus('connecting');
     setErrorMessage(null);
 
@@ -144,6 +157,7 @@ export function useWhatsAppEmbeddedSignup() {
           const code = response.authResponse?.code;
           if (typeof code === 'string' && code.length > 0) {
             storeAuthorizationCodeInMemory(code);
+            onboardingFinishedRef.current = true;
             setIfMounted(() => {
               setStatus('authorized');
               setErrorMessage(null);
@@ -152,6 +166,7 @@ export function useWhatsAppEmbeddedSignup() {
           }
 
           if (hasAuthorizationCodeInMemory()) {
+            onboardingFinishedRef.current = true;
             setIfMounted(() => {
               setStatus('authorized');
               setErrorMessage(null);
@@ -160,6 +175,15 @@ export function useWhatsAppEmbeddedSignup() {
           }
 
           if (lastSignupEventRef.current === 'ERROR') {
+            return;
+          }
+
+          if (isWaSignupFinishEvent(lastSignupEventRef.current) || onboardingFinishedRef.current) {
+            onboardingFinishedRef.current = true;
+            setIfMounted(() => {
+              setStatus('authorized');
+              setErrorMessage(null);
+            });
             return;
           }
 
@@ -187,6 +211,8 @@ export function useWhatsAppEmbeddedSignup() {
           response_type: 'code',
           override_default_response_type: true,
           extras: {
+            setup: {},
+            featureType: 'whatsapp_business_app_onboarding',
             sessionInfoVersion: '3',
           },
         },
