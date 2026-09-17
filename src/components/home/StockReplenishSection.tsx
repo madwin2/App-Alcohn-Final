@@ -58,22 +58,44 @@ function formatSyncedLabel(at: Date | null): string {
   return `Actualizado · ${format(at, 'd MMM yyyy, HH:mm', { locale: es })}`;
 }
 
+function groupEntriesByItem(
+  entries: { task: DashboardTask; payload: StockReplenishPayload }[],
+): { task: DashboardTask; payload: StockReplenishPayload }[] {
+  const byKey = new Map<StockItemKey, { task: DashboardTask; payload: StockReplenishPayload }>();
+  for (const entry of entries) {
+    const prev = byKey.get(entry.payload.itemKey);
+    if (!prev) {
+      byKey.set(entry.payload.itemKey, entry);
+      continue;
+    }
+    const preferIncoming =
+      (!entry.payload.orderId && prev.payload.orderId) ||
+      (Boolean(entry.payload.orderId) === Boolean(prev.payload.orderId) &&
+        entry.payload.shortage > prev.payload.shortage);
+    if (preferIncoming) byKey.set(entry.payload.itemKey, entry);
+  }
+  return [...byKey.values()].sort((a, b) =>
+    a.payload.itemName.localeCompare(b.payload.itemName, 'es'),
+  );
+}
+
 export function StockReplenishSection({
   entries,
   onCompleted,
   lastSyncedAt,
 }: StockReplenishSectionProps) {
+  const grouped = useMemo(() => groupEntriesByItem(entries), [entries]);
   const totals = useMemo(() => {
     let needed = 0;
     let stock = 0;
     let shortage = 0;
-    for (const { payload } of entries) {
+    for (const { payload } of grouped) {
       needed += payload.needed;
       stock += payload.stockAlMomento;
       shortage += payload.shortage;
     }
     return { needed, stock, shortage };
-  }, [entries]);
+  }, [grouped]);
 
   if (!entries.length) return null;
 
@@ -144,8 +166,8 @@ export function StockReplenishSection({
           </div>
 
           <div className="divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-black/25">
-            {entries.map(({ task, payload }) => (
-              <ReplenishTaskRow key={task.id} task={task} payload={payload} onCompleted={onCompleted} />
+            {grouped.map(({ task, payload }) => (
+              <ReplenishTaskRow key={payload.itemKey} task={task} payload={payload} onCompleted={onCompleted} />
             ))}
           </div>
         </div>

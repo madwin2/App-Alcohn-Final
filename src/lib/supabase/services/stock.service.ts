@@ -352,7 +352,7 @@ export const consumeStockForOrderWhenTrackingSent = async (params: {
   checkSoldadorPower('SOLDADOR_ADAPTADO_200W', 'SOLDADOR_200W');
 
   if (missing.length) {
-    await createMissingStockTasks(params.orderId, params.orderLabel, missing);
+    await createMissingStockTasks(missing);
     return { ok: false, missing };
   }
 
@@ -461,9 +461,46 @@ export function parseStockReplenishTask(texto: string): StockReplenishPayload | 
   }
 }
 
+type ReplenishTaskRow = { id: string; texto: string; createdAt: string };
+
+const fetchReplenishRowsForUser = async (uid: string): Promise<ReplenishTaskRow[]> => {
+  const { data, error } = await supabase
+    .from('tareas_dashboard')
+    .select('id, texto, created_at')
+    .eq('asignado_a_user_id', uid)
+    .like('texto', `${STOCK_REPLENISH_MARKER}%`);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    texto: row.texto as string,
+    createdAt: String(row.created_at ?? ''),
+  }));
+};
+
+const groupReplenishRowsByItem = (rows: ReplenishTaskRow[]): Map<StockItemKey, ReplenishTaskRow[]> => {
+  const byKey = new Map<StockItemKey, ReplenishTaskRow[]>();
+  for (const row of rows) {
+    const parsed = parseStockReplenishTask(row.texto);
+    if (!parsed) continue;
+    const list = byKey.get(parsed.itemKey) ?? [];
+    list.push(row);
+    byKey.set(parsed.itemKey, list);
+  }
+  for (const list of byKey.values()) {
+    list.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  return byKey;
+};
+
+const deleteTasksByIds = async (ids: string[]): Promise<void> => {
+  if (!ids.length) return;
+  const { error } = await supabase.from('tareas_dashboard').delete().in('id', ids);
+  if (error) throw error;
+};
+
 /**
- * Tareas `[STOCK_REPLENISH]` sin `orderId`: reflejan faltante global vs pedidos pendientes de envío.
- * Las alertas con `orderId` (envío puntual sin stock) no se modifican acá.
+ * Una sola tarea `[STOCK_REPLENISH]` por ítem: faltante global vs pedidos pendientes de envío.
+ * También colapsa alertas viejas por pedido (`orderId`) para no repetir Mango/Varillas/etc.
  */
 export const syncStockReplenishTasksForCurrentUser = async (): Promise<void> => {
   const {
@@ -489,27 +526,7 @@ export const syncStockReplenishTasksForCurrentUser = async (): Promise<void> => 
     ),
   ];
 
-  const { data: existingRows, error: exErr } = await supabase
-    .from('tareas_dashboard')
-    .select('id, texto')
-    .eq('asignado_a_user_id', uid)
-    .like('texto', `${STOCK_REPLENISH_MARKER}%`);
-
-  if (exErr) throw exErr;
-
-  const generalByKey = new Map<StockItemKey, { id: string; texto: string }>();
-  for (const row of existingRows ?? []) {
-    const parsed = parseStockReplenishTask(row.texto);
-    if (!parsed || parsed.orderId) continue;
-    generalByKey.set(parsed.itemKey, { id: row.id, texto: row.texto });
-  }
-
-  const rmTask = async (id: string) => {
-    const { error: delErr } = await supabase.from('tareas_dashboard').delete().eq('id', id);
-    if (delErr) throw delErr;
-  };
-
-  const myKeySet = new Set(myKeys);
+  const existingByKey = groupReplenishRowsByItem(await fetchReplenishRowsForUser(uid));
 
   for (const key of myKeys) {
     const item = stockByKey.get(key);
@@ -518,14 +535,14 @@ export const syncStockReplenishTasksForCurrentUser = async (): Promise<void> => 
     const needed = demand[key] ?? 0;
     const stockAlMomento = item.quantity;
     const shortage = Math.max(0, needed - stockAlMomento);
-    const prev = generalByKey.get(key);
+    const rows = existingByKey.get(key) ?? [];
+    existingByKey.delete(key);
 
     if (needed <= 0 || shortage <= 0) {
-      if (prev) {
-        await rmTask(prev.id);
+      if (rows.length) {
+        await deleteTasksByIds(rows.map((r) => r.id));
         notifyStockBajoResuelto(key);
       }
-      generalByKey.delete(key);
       continue;
     }
 
@@ -537,11 +554,15 @@ export const syncStockReplenishTasksForCurrentUser = async (): Promise<void> => 
       shortage,
     };
     const texto = formatStockReplenishTaskText(payload);
+    const keep = rows[0];
 
-    if (prev && prev.texto !== texto) {
-      const { error: upErr } = await supabase.from('tareas_dashboard').update({ texto }).eq('id', prev.id);
-      if (upErr) throw upErr;
-    } else if (!prev) {
+    if (keep) {
+      if (keep.texto !== texto) {
+        const { error: upErr } = await supabase.from('tareas_dashboard').update({ texto }).eq('id', keep.id);
+        if (upErr) throw upErr;
+      }
+      await deleteTasksByIds(rows.slice(1).map((r) => r.id));
+    } else {
       const { error: insErr } = await supabase.from('tareas_dashboard').insert({
         asignado_a_user_id: uid,
         creado_por_user_id: uid,
@@ -554,10 +575,8 @@ export const syncStockReplenishTasksForCurrentUser = async (): Promise<void> => 
     }
   }
 
-  for (const [itemKey, row] of generalByKey.entries()) {
-    if (!myKeySet.has(itemKey)) {
-      await rmTask(row.id);
-    }
+  for (const rows of existingByKey.values()) {
+    if (rows.length) await deleteTasksByIds(rows.map((r) => r.id));
   }
 };
 
@@ -593,13 +612,19 @@ export const applyStockInboundFromReplenishTask = async (params: {
   });
   if (movErr) throw movErr;
 
-  const { error: delErr } = await supabase.from('tareas_dashboard').delete().eq('id', params.taskId);
-  if (delErr) throw delErr;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.id) {
+    const rows = groupReplenishRowsByItem(await fetchReplenishRowsForUser(user.id)).get(params.itemKey) ?? [];
+    const ids = rows.length ? rows.map((r) => r.id) : [params.taskId];
+    await deleteTasksByIds(ids);
+  } else {
+    await deleteTasksByIds([params.taskId]);
+  }
 };
 
 const createMissingStockTasks = async (
-  orderId: string,
-  orderLabel: string,
   missing: Array<{ key: StockItemKey; name: string; required: number; available: number }>,
 ) => {
   const keys = [...new Set(missing.map((m) => m.key))];
@@ -624,7 +649,24 @@ const createMissingStockTasks = async (
   const creatorId = user?.id;
   if (!creatorId) return;
 
+  const allTargets = [...new Set([...byKey.values()].flat())];
+  const existingPair = new Set<string>();
+  if (allTargets.length) {
+    const { data: existing, error: existingError } = await supabase
+      .from('tareas_dashboard')
+      .select('asignado_a_user_id, texto')
+      .in('asignado_a_user_id', allTargets)
+      .like('texto', `${STOCK_REPLENISH_MARKER}%`);
+    if (existingError) throw existingError;
+    for (const row of existing ?? []) {
+      const parsed = parseStockReplenishTask(String(row.texto ?? ''));
+      if (!parsed) continue;
+      existingPair.add(`${row.asignado_a_user_id}::${parsed.itemKey}`);
+    }
+  }
+
   const inserts: Array<Record<string, unknown>> = [];
+  const insertedKeys = new Set<StockItemKey>();
 
   for (const gap of missing) {
     const targets = [...new Set(byKey.get(gap.key) ?? [])];
@@ -639,13 +681,14 @@ const createMissingStockTasks = async (
       needed: gap.required,
       stockAlMomento: gap.available,
       shortage,
-      orderId,
-      pedidoEtiqueta: orderLabel,
     };
 
     const texto = formatStockReplenishTaskText(payload);
 
     for (const asignado of targets) {
+      const pairKey = `${asignado}::${gap.key}`;
+      if (existingPair.has(pairKey)) continue;
+      existingPair.add(pairKey);
       inserts.push({
         asignado_a_user_id: asignado,
         creado_por_user_id: creatorId,
@@ -653,6 +696,7 @@ const createMissingStockTasks = async (
         pos_x: 0,
         pos_y: 0,
       });
+      insertedKeys.add(gap.key);
     }
   }
 
@@ -661,6 +705,7 @@ const createMissingStockTasks = async (
   if (insertError) throw insertError;
 
   for (const gap of missing) {
+    if (!insertedKeys.has(gap.key)) continue;
     const shortage = gap.required - gap.available;
     if (shortage > 0) {
       notifyStockBajo({ itemKey: gap.key, itemName: gap.name, shortage });
