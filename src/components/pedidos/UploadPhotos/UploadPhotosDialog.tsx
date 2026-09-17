@@ -452,7 +452,7 @@ export function UploadPhotosDialog({ open, onOpenChange, onSuccess }: UploadPhot
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="relative flex max-h-[85vh] max-w-4xl flex-col overflow-hidden border border-white/20 shadow-[0_0_80px_rgba(255,255,255,0.075),0_0_150px_rgba(255,255,255,0.05),0_0_220px_rgba(255,255,255,0.025)]">
+      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col overflow-hidden border border-white/20 shadow-[0_0_80px_rgba(255,255,255,0.075),0_0_150px_rgba(255,255,255,0.05),0_0_220px_rgba(255,255,255,0.025)]">
         <DialogHeader className="pb-4 border-b shrink-0">
           <DialogTitle className="text-xl font-semibold">Subir Fotos</DialogTitle>
           <p className="text-sm text-muted-foreground mt-1">
