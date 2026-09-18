@@ -6,6 +6,7 @@ import {
   Link2,
   MessageCircle,
   MousePointerClick,
+  Package,
   RefreshCw,
   Search,
   Type,
@@ -150,6 +151,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'WhatsApp Bot, desde el menú',
         body: 'En WhatsApp Bot podés conectar la cuenta de WhatsApp Business de Alcohn con Meta. Todavía falta vincularla con el servidor del bot.',
         icon: MessageCircle,
+      },
+    ],
+  },
+  {
+    id: 7,
+    date: '2026-09-18',
+    title: 'Novedades',
+    version: '1.23',
+    slides: [
+      {
+        heading: 'Stock pendiente más compacto',
+        body: 'En el inicio, la tarjeta de reposición arranca chica. Tocála o los ítems para ver el detalle y cargar lo que falta.',
+        icon: Package,
       },
     ],
   },

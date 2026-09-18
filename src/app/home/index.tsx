@@ -1,5 +1,4 @@
 import { useMemo, useEffect, useState, useCallback, useRef, useDeferredValue } from 'react';
-import { Package } from 'lucide-react';
 import { AppMain } from '@/components/layout/AppMain';
 import { useOrdersState } from '@/lib/hooks/useOrders';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -24,7 +23,7 @@ import {
   syncStockReplenishTasksForCurrentUser,
   type StockReplenishPayload,
 } from '@/lib/supabase/services/stock.service';
-import { StockReplenishSection } from '@/components/home/StockReplenishSection';
+import { StockReplenishSection, StockAlDiaCard } from '@/components/home/StockReplenishSection';
 import stickyNoteAddSvg from '@/assets/sticky-notes/sticky-note-add.svg';
 import stickyNoteTaskSvg from '@/assets/sticky-notes/sticky-note-task.svg';
 import stickyNoteAddWorkmateSvg from '@/assets/sticky-notes/sticky-note-add-workmate.svg';
@@ -739,32 +738,20 @@ export default function HomePage() {
             <div className="flex-1 grid grid-cols-1 xl:grid-cols-3 gap-6 min-h-0 mt-4 relative">
               {/* Columna 1: Stock */}
               <div
-                className="rounded-2xl overflow-hidden border border-white/10 bg-card/50 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+                className="self-start overflow-visible transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
                 style={lateralCollapseStyle}
               >
-                <div className="h-full overflow-y-auto">
-                  {stockEmpty ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center px-6 py-10 gap-3">
-                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
-                        <Package className="h-7 w-7 text-emerald-300/90" strokeWidth={1.5} />
-                      </div>
-                      <div className="space-y-1">
-                        <h3 className="text-base font-semibold tracking-tight text-white">El stock está al día</h3>
-                        <p className="text-xs text-muted-foreground max-w-[260px] mx-auto">
-                          No hay tareas de reposición pendientes. Volvé a chequear cuando haya nuevos envíos.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <StockReplenishSection
-                      entries={stockReplenishVms}
-                      lastSyncedAt={stockReplenishSyncedAt}
-                      onCompleted={async () => {
-                        await fetchColleagueTasks();
-                      }}
-                    />
-                  )}
-                </div>
+                {stockEmpty ? (
+                  <StockAlDiaCard />
+                ) : (
+                  <StockReplenishSection
+                    entries={stockReplenishVms}
+                    lastSyncedAt={stockReplenishSyncedAt}
+                    onCompleted={async () => {
+                      await fetchColleagueTasks();
+                    }}
+                  />
+                )}
               </div>
 
               {/* Columna 2: Personaje grande, llega hasta el final del hero. Saludo superpuesto. */}

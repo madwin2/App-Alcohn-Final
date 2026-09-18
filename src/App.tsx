@@ -20,6 +20,7 @@ import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import WhatsNewSandboxPage from './app/dev/WhatsNewSandboxPage'
 import VectorizarTourSandboxPage from './app/dev/VectorizarTourSandboxPage'
 import AppUpdateSandboxPage from './app/dev/AppUpdateSandboxPage'
+import StockPendienteSandboxPage from './app/stock-pendiente/index'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { AppUpdatesHost } from './components/global/AppUpdatesHost'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -35,6 +36,7 @@ function App() {
         <AppUpdatesHost />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/stock-pendiente" element={<StockPendienteSandboxPage />} />
           <Route element={<AuthenticatedLayout />}>
             <Route element={<OrdersScopeLayout />}>
               <Route path="/" element={<HomePage />} />
