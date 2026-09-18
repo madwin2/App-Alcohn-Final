@@ -9,17 +9,45 @@ export interface Box {
 
 const DRAWABLE = new Set(['path', 'polygon', 'polyline', 'g', 'circle', 'ellipse', 'rect', 'line', 'use', 'image', 'text']);
 
-export function parseViewBox(svgEl: Element): { w: number; h: number } | null {
+export function parseViewBox(svgEl: Element): { x: number; y: number; w: number; h: number } | null {
   const raw = svgEl.getAttribute('viewBox');
   if (!raw) {
     const w = Number(svgEl.getAttribute('width'));
     const h = Number(svgEl.getAttribute('height'));
-    if (w > 0 && h > 0) return { w, h };
+    if (w > 0 && h > 0) return { x: 0, y: 0, w, h };
     return null;
   }
   const parts = raw.trim().split(/[\s,]+/).map(Number);
   if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null;
-  return { w: parts[2], h: parts[3] };
+  return { x: parts[0], y: parts[1], w: parts[2], h: parts[3] };
+}
+
+function dimCloseEnough(actual: number, expected: number): boolean {
+  const diff = Math.abs(actual - expected);
+  return diff <= Math.max(8, expected * 0.01);
+}
+
+/** Vectorizer.AI a veces achica 1–2 px (tope de píxeles). Reescalamos las celdas al viewBox real. */
+export function alignPlacementToViewBox(
+  placement: PackedSheet,
+  viewBox: { x: number; y: number; w: number; h: number },
+): PackedSheet {
+  const sx = viewBox.w / placement.width;
+  const sy = viewBox.h / placement.height;
+  const originShift = Math.abs(viewBox.x) > 1e-9 || Math.abs(viewBox.y) > 1e-9;
+  const scaleShift = Math.abs(sx - 1) > 1e-9 || Math.abs(sy - 1) > 1e-9;
+  if (!originShift && !scaleShift) return placement;
+  return {
+    width: viewBox.w,
+    height: viewBox.h,
+    cells: placement.cells.map((cell) => ({
+      imageId: cell.imageId,
+      x: cell.x * sx + viewBox.x,
+      y: cell.y * sy + viewBox.y,
+      w: cell.w * sx,
+      h: cell.h * sy,
+    })),
+  };
 }
 
 export function unionBoxes(boxes: Box[]): Box | null {
@@ -124,11 +152,12 @@ export function splitSheetSvg(svgText: string, placement: PackedSheet): Map<stri
   const svgEl = doc.documentElement as unknown as SVGSVGElement;
   const viewBox = parseViewBox(svgEl);
   if (!viewBox) throw new Error('El SVG no trae viewBox');
-  if (Math.abs(viewBox.w - placement.width) > 1.5 || Math.abs(viewBox.h - placement.height) > 1.5) {
+  if (!dimCloseEnough(viewBox.w, placement.width) || !dimCloseEnough(viewBox.h, placement.height)) {
     throw new Error(
       `El viewBox del SVG (${viewBox.w}×${viewBox.h}) no coincide con la hoja (${placement.width}×${placement.height})`,
     );
   }
+  const aligned = alignPlacementToViewBox(placement, viewBox);
 
   const host = typeof document !== 'undefined' ? hostSvg(document.importNode(svgEl, true) as unknown as SVGSVGElement) : null;
   const mounted = (host?.firstChild as SVGSVGElement | null) ?? svgEl;
@@ -142,7 +171,7 @@ export function splitSheetSvg(svgText: string, placement: PackedSheet): Map<stri
       if (!DRAWABLE.has(tag)) continue;
       const box = elementBBox(child as unknown as SVGGraphicsElement);
       if (!box) continue;
-      const cell = cellContainingPoint(placement, box.x + box.w / 2, box.y + box.h / 2);
+      const cell = cellContainingPoint(aligned, box.x + box.w / 2, box.y + box.h / 2);
       if (!cell) continue;
       if (
         box.x < cell.x - 0.5 ||
@@ -159,7 +188,7 @@ export function splitSheetSvg(svgText: string, placement: PackedSheet): Map<stri
     }
 
     const out = new Map<string, string>();
-    for (const cell of placement.cells) {
+    for (const cell of aligned.cells) {
       const bucket = grouped.get(cell.imageId);
       if (!bucket) continue;
       const union = unionBoxes(bucket.boxes);

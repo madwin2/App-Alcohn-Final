@@ -123,17 +123,53 @@ export function sheetUpscale(width: number, height: number, cap = UPSCALE_CAP): 
   return Math.min(Math.sqrt(SHEET_MAX_PIXELS / area), cap);
 }
 
-export function scalePlacement(sheet: PackedSheet, factor: number): PackedSheet {
-  if (factor === 1) return sheet;
+/** Baja 1 px de cada lado hasta entrar en el tope. El redondeo del upscale puede pasarse. */
+export function fitSheetToMaxPixels(sheet: PackedSheet): PackedSheet {
+  if (sheet.width <= 0 || sheet.height <= 0) return sheet;
+  if (sheet.width * sheet.height <= SHEET_MAX_PIXELS) return sheet;
+
+  const factor = Math.sqrt(SHEET_MAX_PIXELS / (sheet.width * sheet.height));
+  let width = Math.max(1, Math.floor(sheet.width * factor));
+  let height = Math.max(1, Math.floor(sheet.height * factor));
+  while (width * height > SHEET_MAX_PIXELS) {
+    if (width >= height) {
+      if (width <= 1) break;
+      width -= 1;
+    } else {
+      if (height <= 1) break;
+      height -= 1;
+    }
+  }
+
+  const sx = width / sheet.width;
+  const sy = height / sheet.height;
   return {
-    width: Math.round(sheet.width * factor),
-    height: Math.round(sheet.height * factor),
+    width,
+    height,
     cells: sheet.cells.map((cell) => ({
       imageId: cell.imageId,
-      x: Math.round(cell.x * factor),
-      y: Math.round(cell.y * factor),
-      w: Math.round(cell.w * factor),
-      h: Math.round(cell.h * factor),
+      x: Math.round(cell.x * sx),
+      y: Math.round(cell.y * sy),
+      w: Math.max(1, Math.round(cell.w * sx)),
+      h: Math.max(1, Math.round(cell.h * sy)),
     })),
   };
+}
+
+export function scalePlacement(sheet: PackedSheet, factor: number): PackedSheet {
+  const scaled =
+    factor === 1
+      ? sheet
+      : {
+          width: Math.round(sheet.width * factor),
+          height: Math.round(sheet.height * factor),
+          cells: sheet.cells.map((cell) => ({
+            imageId: cell.imageId,
+            x: Math.round(cell.x * factor),
+            y: Math.round(cell.y * factor),
+            w: Math.round(cell.w * factor),
+            h: Math.round(cell.h * factor),
+          })),
+        };
+  return fitSheetToMaxPixels(scaled);
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { packSheets, SHEET_GUTTER_PX, SHEET_MAX_ITEMS, SHEET_MAX_PIXELS } from './sheetPacking';
+import {
+  packSheets,
+  scalePlacement,
+  sheetUpscale,
+  SHEET_GUTTER_PX,
+  SHEET_MAX_ITEMS,
+  SHEET_MAX_PIXELS,
+} from './sheetPacking';
 
 function overlaps(
   a: { x: number; y: number; w: number; h: number },
@@ -55,5 +62,40 @@ describe('packSheets', () => {
     const sheets = packSheets(items);
     expect(sheets.length).toBeGreaterThan(1);
     expect(Math.max(...sheets.map((sheet) => sheet.cells.length))).toBeLessThanOrEqual(SHEET_MAX_ITEMS);
+  });
+});
+
+describe('scalePlacement', () => {
+  it('después de redondear el upscale no supera SHEET_MAX_PIXELS', () => {
+    const sheet = {
+      width: 1800,
+      height: 890,
+      cells: [{ imageId: 'a', x: 24, y: 24, w: 1752, h: 842 }],
+    };
+    const scaled = scalePlacement(sheet, sheetUpscale(sheet.width, sheet.height));
+    expect(scaled.width * scaled.height).toBeLessThanOrEqual(SHEET_MAX_PIXELS);
+  });
+
+  it('achica la hoja 2521×1248 que se pasa 380 px del tope', () => {
+    const sheet = {
+      width: 2521,
+      height: 1248,
+      cells: [{ imageId: 'a', x: 24, y: 24, w: 2473, h: 1200 }],
+    };
+    expect(sheet.width * sheet.height).toBeGreaterThan(SHEET_MAX_PIXELS);
+    const fitted = scalePlacement(sheet, 1);
+    expect(fitted.width * fitted.height).toBeLessThanOrEqual(SHEET_MAX_PIXELS);
+    expect(fitted.width).toBeGreaterThan(2500);
+    expect(fitted.height).toBeGreaterThan(1230);
+  });
+
+  it('ningún upscale redondeado se pasa del tope', () => {
+    for (let w = 400; w <= 2000; w += 73) {
+      for (let h = 400; h <= 1600; h += 67) {
+        const factor = sheetUpscale(w, h);
+        const scaled = scalePlacement({ width: w, height: h, cells: [] }, factor);
+        expect(scaled.width * scaled.height).toBeLessThanOrEqual(SHEET_MAX_PIXELS);
+      }
+    }
   });
 });
