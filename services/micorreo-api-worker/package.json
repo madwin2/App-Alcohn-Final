@@ -1,0 +1,27 @@
+{
+  "name": "@alcohn/micorreo-api-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Cliente y CLI local para la API MiCorreo (token, customerId, sucursales, cotización e import). Fase 1: sin servidor HTTP.",
+  "scripts": {
+    "token:get": "tsx src/scripts/cli-token.ts",
+    "customer:resolve": "tsx src/scripts/cli-customer.ts",
+    "agencies:list": "tsx src/scripts/cli-agencies.ts",
+    "rates:quote": "tsx src/scripts/cli-rates.ts",
+    "shipping:import": "tsx src/scripts/cli-import.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
