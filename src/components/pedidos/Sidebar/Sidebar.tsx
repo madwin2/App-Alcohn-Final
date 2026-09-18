@@ -26,6 +26,7 @@ import { useOrdersStore } from '@/lib/state/orders.store';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { isFbTestUser } from '@/lib/auth/access';
 import { useToast } from '@/components/ui/use-toast';
 import { useSidebarNotifications } from '@/lib/hooks/useSidebarNotifications';
 import { getUserProfileImage } from '@/lib/utils/userImages';
@@ -84,7 +85,8 @@ function SidebarInner() {
   };
 
   const userEmail = user?.email || 'usuario@empresa.com';
-  const isEconomiaUser = user?.email?.toLowerCase() === 'julian.475@hotmail.com';
+  const isRestrictedUser = isFbTestUser(user);
+  const isEconomiaUser = !isRestrictedUser && user?.email?.toLowerCase() === 'julian.475@hotmail.com';
   const userName = user?.user_metadata?.nombre 
     ? `${user.user_metadata.nombre} ${user.user_metadata.apellido || ''}`.trim()
     : 'Usuario Actual';
@@ -126,7 +128,9 @@ function SidebarInner() {
 
       {/* Navigation Items */}
       <nav className="flex-1 flex flex-col p-3 space-y-1 items-stretch">
-        {sidebarItems.map((item) => (
+        {sidebarItems.map((item) => {
+          const disabled = Boolean(item.disabled) || (isRestrictedUser && item.path !== '/whatsapp');
+          return (
           <div
             key={item.path}
             className="flex justify-start"
@@ -140,16 +144,17 @@ function SidebarInner() {
                   : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
               }
               isExpanded={isExpanded}
-              disabled={item.disabled}
-              badgeCount={badgeForPath(item.path)}
+              disabled={disabled}
+              badgeCount={disabled ? 0 : badgeForPath(item.path)}
               onClick={() => {
-                if (!item.disabled) {
+                if (!disabled) {
                   navigate(item.path);
                 }
               }}
             />
           </div>
-        ))}
+          );
+        })}
         {isEconomiaUser && (
           <>
             <div className="flex justify-start">
@@ -180,8 +185,10 @@ function SidebarInner() {
             label="Precios"
             isActive={location.pathname === '/precios'}
             isExpanded={isExpanded}
-            disabled={false}
-            onClick={() => navigate('/precios')}
+            disabled={isRestrictedUser}
+            onClick={() => {
+              if (!isRestrictedUser) navigate('/precios');
+            }}
           />
         </div>
         <div className="flex justify-start">
@@ -190,8 +197,10 @@ function SidebarInner() {
             label="Áreas"
             isActive={location.pathname === '/configuracion'}
             isExpanded={isExpanded}
-            disabled={false}
-            onClick={() => navigate('/configuracion')}
+            disabled={isRestrictedUser}
+            onClick={() => {
+              if (!isRestrictedUser) navigate('/configuracion');
+            }}
           />
         </div>
       </nav>

@@ -5,7 +5,9 @@ import { WhatsNewDialog } from '@/components/global/WhatsNewDialog';
 import { getLatestChangelogEntry } from '@/lib/changelog/entries';
 import { changelogToTourContent } from '@/lib/changelog/toTourContent';
 import { useAppVersionCheck } from '@/lib/hooks/useAppVersionCheck';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { useWhatsNew } from '@/lib/hooks/useWhatsNew';
+import { isFbTestUser } from '@/lib/auth/access';
 
 /**
  * Coordina los dos avisos globales para que nunca se muestren a la vez: mientras
@@ -14,10 +16,12 @@ import { useWhatsNew } from '@/lib/hooks/useWhatsNew';
  */
 export function AppUpdatesHost() {
   const location = useLocation();
-  const isLoginRoute = location.pathname === '/login';
+  const { user } = useAuth();
+  const isSandboxRoute = location.pathname === '/login' || location.pathname === '/stock-pendiente';
+  const isReviewerAccount = isFbTestUser(user);
 
   const { updateAvailable, isOutdated, dismiss, applyUpdate } = useAppVersionCheck();
-  const whatsNew = useWhatsNew({ enabled: !isOutdated && !isLoginRoute });
+  const whatsNew = useWhatsNew({ enabled: !isOutdated && !isSandboxRoute && !isReviewerAccount });
   const displayVersion = getLatestChangelogEntry()?.version ?? null;
   const tourContent = useMemo(
     () => (whatsNew.entry ? changelogToTourContent(whatsNew.entry) : null),
@@ -27,14 +31,14 @@ export function AppUpdatesHost() {
   return (
     <>
       <AppUpdateDialog
-        open={updateAvailable && !isLoginRoute}
+        open={updateAvailable && !isSandboxRoute && !isReviewerAccount}
         version={displayVersion}
         onSnooze={dismiss}
         onUpdate={applyUpdate}
       />
       <WhatsNewDialog
         content={tourContent}
-        open={whatsNew.open && !isOutdated && !isLoginRoute}
+        open={whatsNew.open && !isOutdated && !isSandboxRoute && !isReviewerAccount}
         onClose={whatsNew.close}
       />
     </>

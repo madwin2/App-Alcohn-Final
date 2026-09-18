@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, Session } from '@supabase/supabase-js';
+import { resolveLoginEmail } from '../auth/access';
 import { supabase } from '../supabase/client';
 
 export const useAuth = () => {
@@ -29,7 +30,7 @@ export const useAuth = () => {
 
   const signIn = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: resolveLoginEmail(email),
       password,
     });
 

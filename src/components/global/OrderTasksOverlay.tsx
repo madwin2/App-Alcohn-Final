@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { isFbTestUser } from '@/lib/auth/access';
 import {
   deleteOrderStickyTask,
   getOrderStickyTasksForUser,
@@ -24,21 +25,22 @@ export function OrderTasksOverlay() {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastPosRef = useRef({ x: 0, y: 0 });
 
-  const isLoginRoute = location.pathname === '/login';
+  const isLoginRoute = location.pathname === '/login' || location.pathname === '/stock-pendiente';
+  const isReviewerAccount = isFbTestUser(user);
 
   const fetchTasks = useCallback(async () => {
-    if (!user?.id || !isAuthenticated || isLoginRoute) return;
+    if (!user?.id || !isAuthenticated || isLoginRoute || isReviewerAccount) return;
     const nextTasks = await getOrderStickyTasksForUser(user.id);
     setTasks(nextTasks);
-  }, [user?.id, isAuthenticated, isLoginRoute]);
+  }, [user?.id, isAuthenticated, isLoginRoute, isReviewerAccount]);
 
   useEffect(() => {
-    if (authLoading || !user?.id || !isAuthenticated || isLoginRoute) return;
+    if (authLoading || !user?.id || !isAuthenticated || isLoginRoute || isReviewerAccount) return;
     fetchTasks();
-  }, [fetchTasks, user?.id, isAuthenticated, authLoading, isLoginRoute]);
+  }, [fetchTasks, user?.id, isAuthenticated, authLoading, isLoginRoute, isReviewerAccount]);
 
   useEffect(() => {
-    if (authLoading || !user?.id || !isAuthenticated || isLoginRoute) return;
+    if (authLoading || !user?.id || !isAuthenticated || isLoginRoute || isReviewerAccount) return;
 
     const interval = window.setInterval(() => {
       fetchTasks();
@@ -59,7 +61,7 @@ export function OrderTasksOverlay() {
       window.clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [fetchTasks, user?.id, isAuthenticated, authLoading, isLoginRoute]);
+  }, [fetchTasks, user?.id, isAuthenticated, authLoading, isLoginRoute, isReviewerAccount]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent, task: OrderStickyTask) => {
     e.preventDefault();
@@ -121,7 +123,7 @@ export function OrderTasksOverlay() {
     }
   }, []);
 
-  if (authLoading || !isAuthenticated || !user?.id || isLoginRoute || tasks.length === 0) {
+  if (authLoading || !isAuthenticated || !user?.id || isLoginRoute || isFbTestUser(user) || tasks.length === 0) {
     return null;
   }
 

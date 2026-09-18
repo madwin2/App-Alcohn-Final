@@ -1,20 +1,29 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { getPostLoginPath, isPathAllowedForUser } from '@/lib/auth/access';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
       navigate('/login');
     }
   }, [isAuthenticated, loading, navigate]);
+
+  useEffect(() => {
+    if (loading || !isAuthenticated || !user) return;
+    if (!isPathAllowedForUser(user, location.pathname)) {
+      navigate(getPostLoginPath(user), { replace: true });
+    }
+  }, [isAuthenticated, loading, location.pathname, navigate, user]);
 
   if (loading) {
     return (

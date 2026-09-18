@@ -3,19 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { SignUpForm } from '@/components/auth/SignUpForm';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { getPostLoginPath } from '@/lib/auth/access';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const [activeTab, setActiveTab] = useState('login');
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      navigate('/pedidos');
+      navigate(getPostLoginPath(user));
     }
-  }, [isAuthenticated, loading, navigate]);
+  }, [isAuthenticated, loading, navigate, user]);
 
   if (loading) {
     return (
@@ -31,10 +32,10 @@ export default function LoginPage() {
     return null; // El useEffect redirigirá
   }
 
-  const handleSuccess = () => {
+  const handleSuccess = (loggedUser?: { email?: string | null } | null) => {
     // Solo redirigir si es login, no si es registro
     if (activeTab === 'login') {
-      navigate('/pedidos');
+      navigate(getPostLoginPath(loggedUser ?? user));
     } else {
       // Para registro, solo mostrar mensaje y cambiar a login
       setActiveTab('login');

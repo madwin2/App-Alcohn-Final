@@ -1,5 +1,5 @@
+import { FB_TEST_EMAIL } from '@/lib/auth/access';
 import { supabase } from '../client';
-import { Database } from '../types';
 
 type SolicitudRegistroRow = {
   id: string;
@@ -135,7 +135,9 @@ export const getApprovedUsers = async (): Promise<Array<{ id: string; name: stri
     if (!data) return [];
 
     // Mapear a formato { id, name }
-    return data.map(user => ({
+    return data
+      .filter((user) => (user.email ?? '').toLowerCase() !== FB_TEST_EMAIL.toLowerCase())
+      .map(user => ({
       id: user.user_id,
       name: user.nombre && user.apellido 
         ? `${user.nombre} ${user.apellido}` 

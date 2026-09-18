@@ -7,17 +7,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { isFbTestIdentifier } from '@/lib/auth/access';
 import { Loader2 } from 'lucide-react';
 
-const loginSchema = z.object({
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
-});
+const loginSchema = z
+  .object({
+    email: z.string().trim().min(1, 'Ingresá usuario o email'),
+    password: z.string().min(1, 'Ingresá la contraseña'),
+  })
+  .superRefine((data, ctx) => {
+    const isFbTest = isFbTestIdentifier(data.email);
+    if (!isFbTest && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      ctx.addIssue({ code: 'custom', path: ['email'], message: 'Email inválido' });
+    }
+    if (!isFbTest && data.password.length < 6) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['password'],
+        message: 'La contraseña debe tener al menos 6 caracteres',
+      });
+    }
+  });
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
 interface LoginFormProps {
-  onSuccess?: () => void;
+  onSuccess?: (user?: { email?: string | null } | null) => void;
 }
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
@@ -36,12 +51,12 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   const onSubmit = async (data: LoginFormData) => {
     try {
       setIsLoading(true);
-      await signIn(data.email, data.password);
+      const result = await signIn(data.email, data.password);
       toast({
         title: '¡Bienvenido!',
         description: 'Has iniciado sesión correctamente',
       });
-      onSuccess?.();
+      onSuccess?.(result.user);
     } catch (error: any) {
       console.error('Error al iniciar sesión:', error);
       toast({
@@ -57,10 +72,11 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">Usuario o email</Label>
         <Input
           id="email"
-          type="email"
+          type="text"
+          autoComplete="username"
           placeholder="tu@email.com"
           {...register('email')}
           className={errors.email ? 'border-red-500' : ''}
