@@ -26,7 +26,8 @@ export default function ProgramasPage() {
     removeStamp,
     lockProgram,
     unlockProgram,
-    uploadVerifiedAspire,
+    syncProgramFromAspireFile,
+    applyProgramReconciliation,
     downloadPackage,
   } = usePrograms();
   const [showNewProgram, setShowNewProgram] = useState(false);
@@ -61,6 +62,7 @@ export default function ProgramasPage() {
           <ProgramsGrid
             programs={programs}
             onRefresh={() => fetchPrograms({ silent: true })}
+            onCreateProgram={async (program) => createProgram(program)}
             onAddStamps={async (programId, stampIds) => {
               await addStamps(programId, stampIds);
             }}
@@ -82,8 +84,11 @@ export default function ProgramasPage() {
             onUpdateProgram={async (programId, updates) => {
               await updateProgram(programId, updates);
             }}
-            onUploadVerifiedAspire={async (programId, file) => {
-              await uploadVerifiedAspire(programId, file);
+            onSyncAspireFile={async (programId, file) => {
+              return syncProgramFromAspireFile(programId, file);
+            }}
+            onApplyReconciliation={async (programId, decisions) => {
+              await applyProgramReconciliation(programId, decisions);
             }}
             onSetFabricationState={async (programId, state) => {
               await setFabricationStateForProgram(programId, state);

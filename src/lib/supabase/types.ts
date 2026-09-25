@@ -145,6 +145,8 @@ export interface Database {
           es_prioritario?: boolean | null;
           /** Solicitud de mockup web asociada (cuando el sello viene del wizard). */
           mockup_solicitud_id?: string | null;
+          motivo_salida_programa?: string | null;
+          no_importado_motivo?: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -220,6 +222,12 @@ export interface Database {
           archivo_aspire_url?: string | null;
           archivo_aspire_nombre?: string | null;
           archivo_aspire_subido_at?: string | null;
+          sync_at?: string | null;
+          sync_origen?: 'GADGET' | 'ARCHIVO_SUBIDO' | null;
+          sync_payload?: Record<string, unknown> | null;
+          maquinado_minutos?: number | null;
+          material_real_por_planchuela?: Record<string, number> | null;
+          preview_url?: string | null;
           dirty?: boolean | null;
           estado_programa?: 'BORRADOR' | 'LISTO' | 'BLOQUEADO' | 'EN_FABRICACION' | 'FINALIZADO' | null;
           created_at: string | null;

@@ -1,78 +1,48 @@
-import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { ProductionItem } from '@/lib/types/index';
-import { Input } from '@/components/ui/input';
 
 interface CellProgramaProps {
   item: ProductionItem;
-  onProgramaChange?: (itemId: string, newProgram: string) => void;
 }
 
-export function CellPrograma({ item, onProgramaChange }: CellProgramaProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [value, setValue] = useState(item.program || '');
-
-  // Sincronizar el valor cuando cambia el item
-  useEffect(() => {
-    if (!isEditing) {
-      setValue(item.program || '');
-    }
-  }, [item.program, isEditing]);
-
-  const handleBlur = () => {
-    setIsEditing(false);
-    if (value !== item.program && onProgramaChange) {
-      onProgramaChange(item.id, value);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleBlur();
-    } else if (e.key === 'Escape') {
-      setValue(item.program || '');
-      setIsEditing(false);
-    }
-  };
-
-  if (isEditing) {
+/**
+ * Solo lectura. El programa se asigna/quita en la pestaña Programas.
+ * - Con programId: chip link a /programas (programa real).
+ * - Solo nombre (histórico sin FK): chip apagado.
+ */
+export function CellPrograma({ item }: CellProgramaProps) {
+  const name = (item.program || '').trim();
+  if (!name) {
     return (
       <div className="flex justify-center">
-        <Input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          className="h-7 text-xs text-center w-24"
-          autoFocus
-          placeholder="Programa"
-        />
+        <span className="text-xs text-muted-foreground">—</span>
+      </div>
+    );
+  }
+
+  if (item.programId) {
+    return (
+      <div className="flex justify-center">
+        <Link
+          to="/programas"
+          title="Ver en Programas"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-primary/10 text-primary hover:bg-primary/15 underline-offset-2 hover:underline min-w-[60px] justify-center"
+        >
+          {name}
+        </Link>
       </div>
     );
   }
 
   return (
     <div className="flex justify-center">
-      <div
-        onClick={() => setIsEditing(true)}
-        className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 cursor-pointer min-w-[60px] justify-center"
-        title="Click para editar"
+      <span
+        className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-muted/50 text-muted-foreground/70 min-w-[60px] justify-center cursor-default"
+        title="Texto histórico sin programa vinculado"
       >
-        {item.program || '-'}
-      </div>
+        {name}
+      </span>
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

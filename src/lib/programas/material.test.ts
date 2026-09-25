@@ -4,6 +4,7 @@ import {
   MACHINE_SIZE_ELIGIBILITY,
   resolvePlanchuelaRef,
   validatePlanchuelaLengthLimit,
+  computeProgramLoad,
 } from './material';
 import { isEligibleStampForMachine } from './eligibility';
 
@@ -41,6 +42,35 @@ describe('MACHINE_SIZE_ELIGIBILITY', () => {
     expect(isPlanchuelaEligibleForMachine('C', dims)).toBe(false);
     expect(isPlanchuelaEligibleForMachine('G', dims)).toBe(false);
     expect(isPlanchuelaEligibleForMachine('XL', dims)).toBe(true);
+  });
+});
+
+describe('computeProgramLoad', () => {
+  it('C: 4×400mm; todas al 25% → carga global 25%', () => {
+    const load = computeProgramLoad('C', {
+      12: 100,
+      19: 100,
+      25: 100,
+      38: 100,
+    });
+    expect(load).not.toBeNull();
+    expect(load!.totalCapacityMm).toBe(1600);
+    expect(load!.totalUsedMm).toBe(400);
+    expect(load!.pct).toBe(25);
+    expect(load!.byPlanchuela).toHaveLength(4);
+    expect(load!.byPlanchuela.every((r) => r.pct === 25)).toBe(true);
+  });
+
+  it('XL: una sola planchuela 63 × 250mm', () => {
+    const load = computeProgramLoad('XL', { 63: 125 });
+    expect(load!.pct).toBe(50);
+    expect(load!.byPlanchuela).toEqual([
+      { tipo: 63, usedMm: 125, maxMm: 250, pct: 50 },
+    ]);
+  });
+
+  it('ABC no tiene tope → null', () => {
+    expect(computeProgramLoad('ABC', { 25: 100 })).toBeNull();
   });
 });
 

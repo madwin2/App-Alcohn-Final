@@ -6,20 +6,34 @@ import { storageFileKindFromUrl } from '@/lib/utils/storageFileKind';
 interface StampThumbProps {
   stamp: ProgramStamp;
   className?: string;
+  /**
+   * vector: solo preview de vector (sin foto).
+   * photo: prioriza foto_sello / mockup 3D.
+   * auto: vector → preview → foto.
+   */
+  prefer?: 'auto' | 'vector' | 'photo';
 }
 
 /** Elige la primera URL que el navegador pueda mostrar en <img>. */
-function pickThumbSrc(stamp: ProgramStamp): string | undefined {
-  const candidates = [stamp.vectorPreviewUrl, stamp.previewUrl, stamp.photoUrl].filter(
-    (u): u is string => Boolean(u && u.trim()),
-  );
+function pickThumbSrc(
+  stamp: ProgramStamp,
+  prefer: 'auto' | 'vector' | 'photo' = 'auto',
+): string | undefined {
+  const candidates =
+    prefer === 'vector'
+      ? [stamp.vectorPreviewUrl, stamp.previewUrl]
+      : prefer === 'photo'
+        ? [stamp.photoUrl, stamp.vectorPreviewUrl, stamp.previewUrl]
+        : [stamp.vectorPreviewUrl, stamp.previewUrl, stamp.photoUrl];
 
-  for (const url of candidates) {
+  const list = candidates.filter((u): u is string => Boolean(u && u.trim()));
+
+  for (const url of list) {
     const kind = storageFileKindFromUrl(url);
     if (kind === 'image' || kind === 'svg') return url;
   }
 
-  for (const url of candidates) {
+  for (const url of list) {
     const kind = storageFileKindFromUrl(url);
     if (kind !== 'eps' && kind !== 'pdf' && kind !== 'ai') return url;
   }
@@ -27,8 +41,12 @@ function pickThumbSrc(stamp: ProgramStamp): string | undefined {
   return undefined;
 }
 
-export function StampThumb({ stamp, className }: StampThumbProps) {
-  const src = pickThumbSrc(stamp);
+export function StampThumb({
+  stamp,
+  className,
+  prefer = 'auto',
+}: StampThumbProps) {
+  const src = pickThumbSrc(stamp, prefer);
   const [failed, setFailed] = useState(false);
   const dim = `${Math.round(stamp.widthMm)}×${Math.round(stamp.heightMm)}`;
 
@@ -39,20 +57,22 @@ export function StampThumb({ stamp, className }: StampThumbProps) {
   return (
     <div
       className={cn(
-        'border border-border rounded bg-white flex items-center justify-center overflow-hidden flex-shrink-0',
-        className ?? 'w-16 h-16',
+        'flex flex-shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-white',
+        className ?? 'h-16 w-16',
       )}
     >
       {src && !failed ? (
         <img
           src={src}
           alt={`Diseño de ${stamp.designName}`}
-          className="w-full h-full object-contain"
+          className="h-full w-full bg-transparent object-contain"
           loading="lazy"
           onError={() => setFailed(true)}
         />
       ) : (
-        <div className="text-[10px] text-muted-foreground text-center px-1 leading-tight">{dim}mm</div>
+        <div className="px-1 text-center text-[10px] leading-tight text-muted-foreground">
+          {dim}mm
+        </div>
       )}
     </div>
   );

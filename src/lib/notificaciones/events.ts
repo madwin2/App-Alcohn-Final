@@ -343,4 +343,49 @@ export function notifyTareaAsignada(params: {
   });
 }
 
+/** Sellos que el gadget no pudo importar (típicamente .eps). */
+export function notifySellosNoImportados(params: {
+  programId: string;
+  programName: string;
+  items: Array<{ selloId: string; diseno: string; motivo: string }>;
+}): void {
+  const { programId, programName, items } = params;
+  if (!items.length) return;
+
+  if (items.length === 1) {
+    const item = items[0];
+    emitNotificacionSafe({
+      tipo: 'p7_sello_no_importado',
+      area: 'produccion',
+      titulo: `No entró al Aspire: ${item.diseno} — ${programName}`,
+      cuerpo: item.motivo,
+      entidadTipo: 'programa',
+      entidadId: programId,
+      linkPath: '/programas',
+      severidad: 'warning',
+      dedupKey: `sello_no_importado:${programId}:${item.selloId}`,
+      metadata: {
+        diseno: item.diseno,
+        motivo: item.motivo,
+        selloId: item.selloId,
+        programName,
+      },
+    });
+    return;
+  }
+
+  emitNotificacionSafe({
+    tipo: 'p7_sello_no_importado',
+    area: 'produccion',
+    titulo: `${items.length} sellos no entraron al Aspire — ${programName}`,
+    cuerpo: items.map((i) => `${i.diseno}: ${i.motivo}`).join(' · '),
+    entidadTipo: 'programa',
+    entidadId: programId,
+    linkPath: '/programas',
+    severidad: 'warning',
+    dedupKey: `sello_no_importado:${programId}:${items.map((i) => i.selloId).sort().join(',')}`,
+    metadata: { programName, count: items.length },
+  });
+}
+
 export { clienteNombreFromParts };

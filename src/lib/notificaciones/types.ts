@@ -11,6 +11,7 @@ export type NotificacionTipo =
   | 'p4_vencimiento_proximo'
   | 'p4_vencimiento_vencido'
   | 'p6_stock_bajo'
+  | 'p7_sello_no_importado'
   | 'l1_direccion_post_etiqueta'
   | 'l1_etiqueta_duplicada'
   | 'l2_despacho_proximo'

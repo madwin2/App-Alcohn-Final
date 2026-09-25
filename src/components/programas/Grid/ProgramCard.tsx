@@ -28,11 +28,21 @@ import {
   canDownloadPackage,
   ProgramServiceError,
   getProgramEvents,
+  parseSellosNoImportados,
+  parseSellosEnOtraPlanchuela,
   ProgramEvent,
+  ProgramReconciliation,
+  SoloEnAppDecision,
+  SoloEnArchivoDecision,
+  SyncProgramFromFileResult,
 } from '@/lib/supabase/services/programs.service';
 import { toast } from '@/components/ui/use-toast';
 import { getFabricationLabel, formatDateTime, parseOrderDateLocal } from '@/lib/utils/format';
 import { DatePicker } from '@/components/ui/date-picker';
+import {
+  SyncReconcileDialog,
+  SyncReconcileConfirm,
+} from '../SyncReconcile/SyncReconcileDialog';
 
 interface ProgramCardProps {
   program: Program;
@@ -48,7 +58,14 @@ interface ProgramCardProps {
   onUnlock: (programId: string) => Promise<void>;
   onDownload: (programId: string) => Promise<void>;
   onUpdateProgram: (programId: string, updates: Partial<Program>) => Promise<void>;
-  onUploadVerifiedAspire: (programId: string, file: File) => Promise<void>;
+  onSyncAspireFile: (programId: string, file: File) => Promise<SyncProgramFromFileResult>;
+  onApplyReconciliation: (
+    programId: string,
+    decisions: {
+      soloEnApp: SoloEnAppDecision[];
+      soloEnArchivo: SoloEnArchivoDecision[];
+    },
+  ) => Promise<void>;
   onSetFabricationState: (programId: string, state: FabricationState) => Promise<void>;
   onSetStampFabricationStates: (
     programId: string,
@@ -102,6 +119,8 @@ const getMachineInfo = (machine: string) => {
 };
 
 const isLockedState = (program: Program) => Boolean(program.bloqueado);
+// Solo el candado manual (bloqueado). Un programa LISTO / descargado sigue
+// pudiendo recibir sellos hasta que alguien lo bloquee a propósito.
 
 const PROGRAM_FAB_OPTIONS: FabricationState[] = [
   'SIN_HACER',
@@ -138,6 +157,14 @@ const eventLabel = (ev: ProgramEvent): string => {
       return ev.detalle?.nombre
         ? `Aspire verificado subido: ${String(ev.detalle.nombre)}`
         : 'Aspire verificado subido';
+    case 'SINCRONIZADO':
+      return ev.detalle?.nombre
+        ? `Sincronizado con Aspire: ${String(ev.detalle.nombre)}`
+        : 'Sincronizado con Aspire';
+    case 'SELLO_NO_IMPORTADO':
+      return ev.detalle?.diseno
+        ? `No importó: ${String(ev.detalle.diseno)}${ev.detalle.motivo ? ` (${String(ev.detalle.motivo)})` : ''}`
+        : 'Sello no importado en Aspire';
     default:
       return ev.tipo;
   }
@@ -153,7 +180,8 @@ export function ProgramCard({
   onUnlock,
   onDownload,
   onUpdateProgram,
-  onUploadVerifiedAspire,
+  onSyncAspireFile,
+  onApplyReconciliation,
   onSetFabricationState,
   onSetStampFabricationStates,
 }: ProgramCardProps) {
@@ -172,6 +200,13 @@ export function ProgramCard({
   const [eventsLoading, setEventsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploadingAspire, setUploadingAspire] = useState(false);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [reconcileData, setReconcileData] = useState<{
+    reconciliation: ProgramReconciliation;
+    stampLabels: Record<string, string>;
+    parseError: string | null;
+    fileStampCount: number;
+  } | null>(null);
   const aspireInputRef = useRef<HTMLInputElement | null>(null);
 
   const locked = isLockedState(program);
@@ -179,6 +214,8 @@ export function ProgramCard({
   const showStaleZip = Boolean(program.archivoZipUrl) && program.dirty;
   const canDownload = canDownloadPackage(program.machine) && program.stamps.length > 0;
   const productionDateObj = parseOrderDateLocal(program.productionDate);
+  const sellosNoImportados = parseSellosNoImportados(program.syncPayload);
+  const sellosEnOtraPlanchuela = parseSellosEnOtraPlanchuela(program.syncPayload);
 
   const run = async (fn: () => Promise<void>, successMsg?: string) => {
     setBusy(true);
@@ -270,14 +307,59 @@ export function ProgramCard({
     if (!file) return;
     setUploadingAspire(true);
     try {
-      await run(
-        () => onUploadVerifiedAspire(program.id, file),
-        'Aspire verificado subido — programa bloqueado',
-      );
+      setBusy(true);
+      const result = await onSyncAspireFile(program.id, file);
+      if (result.parseError) {
+        setReconcileData({
+          reconciliation: result.reconciliation,
+          stampLabels: result.stampLabels,
+          parseError: result.parseError,
+          fileStampCount: result.reconciliation.enAmbos.length
+            + result.reconciliation.soloEnArchivo.length,
+        });
+        setReconcileOpen(true);
+        toast({
+          title: 'Archivo guardado',
+          description: 'No se pudo leer el contenido del Aspire',
+          variant: 'destructive',
+        });
+      } else if (result.needsAttention) {
+        setReconcileData({
+          reconciliation: result.reconciliation,
+          stampLabels: result.stampLabels,
+          parseError: null,
+          fileStampCount: result.reconciliation.enAmbos.length
+            + result.reconciliation.soloEnArchivo.length,
+        });
+        setReconcileOpen(true);
+        toast({ title: 'Aspire sincronizado — hay diferencias' });
+      } else {
+        toast({ title: 'Aspire sincronizado' });
+      }
+    } catch (e) {
+      toast({
+        title: 'Error',
+        description:
+          e instanceof ProgramServiceError || e instanceof Error ? e.message : 'Operación fallida',
+        variant: 'destructive',
+      });
+      try {
+        await onRefresh();
+      } catch {
+        /* ignore */
+      }
     } finally {
+      setBusy(false);
       setUploadingAspire(false);
       if (aspireInputRef.current) aspireInputRef.current.value = '';
     }
+  };
+
+  const handleReconcileConfirm = (decisions: SyncReconcileConfirm) => {
+    void run(
+      () => onApplyReconciliation(program.id, decisions),
+      'Conciliación aplicada',
+    );
   };
 
   useEffect(() => {
@@ -396,6 +478,62 @@ export function ProgramCard({
               </div>
             )}
 
+            {sellosNoImportados.length > 0 && (
+              <div className="mt-2 space-y-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-700">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {sellosNoImportados.length === 1
+                    ? '1 sello no entró al Aspire'
+                    : `${sellosNoImportados.length} sellos no entraron al Aspire`}
+                </div>
+                <ul className="space-y-1 pl-0.5">
+                  {sellosNoImportados.map((item) => (
+                    <li key={item.sello_id} className="text-[11px] leading-snug">
+                      <span className="font-medium">
+                        {item.diseno || item.sello_id.slice(0, 8)}
+                      </span>
+                      <span className="opacity-80"> — {item.motivo}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {sellosEnOtraPlanchuela.length > 0 && (
+              <div className="mt-2 space-y-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-700">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {sellosEnOtraPlanchuela.length === 1
+                    ? '1 sello en otra planchuela'
+                    : `${sellosEnOtraPlanchuela.length} sellos en otra planchuela`}
+                </div>
+                <ul className="space-y-1 pl-0.5">
+                  {sellosEnOtraPlanchuela.map((item) => (
+                    <li key={item.sello_id} className="text-[11px] leading-snug">
+                      <span className="font-medium">
+                        {item.diseno || item.sello_id.slice(0, 8)}
+                      </span>
+                      <span className="opacity-80">
+                        {' '}
+                        — fabricado en planchuela {item.real} (planificado en{' '}
+                        {item.planificada})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {program.previewUrl && (
+              <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                <img
+                  src={program.previewUrl}
+                  alt={`Preview de ${program.name}`}
+                  className="w-full max-h-36 object-contain rounded border border-border bg-white"
+                />
+              </div>
+            )}
+
             {program.archivoAspireUrl && (
               <div className="flex items-center gap-1.5 text-xs text-emerald-600 mt-2">
                 <FileCheck2 className="h-3.5 w-3.5 flex-shrink-0" />
@@ -405,9 +543,9 @@ export function ProgramCard({
                   rel="noreferrer"
                   className="truncate underline-offset-2 hover:underline"
                   onClick={(e) => e.stopPropagation()}
-                  title={program.archivoAspireNombre || 'Aspire verificado'}
+                  title={program.archivoAspireNombre || 'Archivo Aspire'}
                 >
-                  Aspire verificado
+                  Aspire sincronizado
                   {program.archivoAspireNombre ? `: ${program.archivoAspireNombre}` : ''}
                 </a>
               </div>
@@ -492,7 +630,7 @@ export function ProgramCard({
             </div>
 
             <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-              <div className="text-sm font-medium text-foreground">Aspire verificado</div>
+              <div className="text-sm font-medium text-foreground">Archivo Aspire</div>
               {program.archivoAspireUrl ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge
@@ -500,7 +638,7 @@ export function ProgramCard({
                     className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300"
                   >
                     <FileCheck2 className="h-3 w-3 mr-1" />
-                    Subido
+                    Sincronizado
                   </Badge>
                   <a
                     href={program.archivoAspireUrl}
@@ -541,11 +679,11 @@ export function ProgramCard({
                   ) : (
                     <Upload className="h-3.5 w-3.5" />
                   )}
-                  Subir Aspire chequeado
+                  Subir Aspire
                 </Button>
               )}
               <p className="text-[11px] text-muted-foreground">
-                Al subir el .crv3d el programa queda verificado y bloqueado.
+                Al subir el .crv3d se sincroniza el contenido. No bloquea ni marca como verificado.
               </p>
               <input
                 ref={aspireInputRef}
@@ -771,6 +909,23 @@ export function ProgramCard({
           void run(() => onSetFabricationState(program.id, state), `Sellos marcados como ${label}`);
         }}
       />
+
+      {reconcileData && (
+        <SyncReconcileDialog
+          open={reconcileOpen}
+          onOpenChange={(open) => {
+            setReconcileOpen(open);
+            if (!open) setReconcileData(null);
+          }}
+          programName={program.name}
+          appStampCount={program.stampCount}
+          fileStampCount={reconcileData.fileStampCount}
+          reconciliation={reconcileData.reconciliation}
+          stampLabels={reconcileData.stampLabels}
+          parseError={reconcileData.parseError}
+          onConfirm={handleReconcileConfirm}
+        />
+      )}
     </Card>
   );
 }

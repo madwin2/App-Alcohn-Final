@@ -1,5 +1,5 @@
 -- VECTRIC LUA SCRIPT
--- Armar Programa - Maquina XL -- TODO EN UN SOLO ARCHIVO
+-- Armar Programa - Maquina XL -- v2 (modos Actualizar / Rehacer / Solo recalcular)
 --
 -- Instalacion (una sola vez por PC, un solo paso):
 --   Copiar UNICAMENTE este archivo a la carpeta de Gadgets de Aspire de esa
@@ -11,9 +11,9 @@
 --   1. Abrir programa.crv3d (el .crv3d base que vino en el ZIP descargado).
 --   2. Correr este gadget (Toolpaths > Gadgets > Armar Programa XL).
 --   3. Elegir manifest.lua dentro de la carpeta del ZIP ya descomprimida.
---   4. Al terminar muestra un resumen: cuantos sellos se importaron bien,
---      a cuales se les corrigio la escala automaticamente, y cuales quedaron
---      con error para revisar a mano.
+--   4. Si el job ya tiene sellos, elegir modo: Actualizar / Rehacer / Solo recalcular.
+--   5. Al terminar muestra un resumen (errores arriba) y escribe ALCOHN_PROGRAMA_V1
+--      en JobParameters -- guarda el .crv3d para que la app lo lea.
 --
 -- Por que SVG y no DXF: Illustrator no exporta DXF de forma nativa, pero SVG
 -- si. El precio de usar SVG es que Aspire no garantiza documentalmente que
@@ -44,6 +44,8 @@ local KNOWN_LAYERS = {
   ["Offset 1 vector"] = true,
   ["Offset exterior vector"] = true,
   ["Offset exterior vector 3mm"] = true,
+  ["Planeado"] = true,
+  ["Rectangulo exterior"] = true,
   ["Dispositivo"] = true,
 }
 
@@ -58,14 +60,43 @@ local SCALE_TOLERANCE = 0.02
 local SCALE_MIN_SANE = 0.2
 local SCALE_MAX_SANE = 5.0
 
+local GADGET_VERSION = "2.0.0"
+-- URL de la Edge Function programa-sync (editar si cambia el proyecto Supabase).
+local SYNC_URL = "https://dgbyrejfcqearevvzdmf.supabase.co/functions/v1/programa-sync"
+-- Flags base de curl. --ssl-no-revoke omite la consulta CRL/OCSP (Windows a veces
+-- falla con CRYPT_E_NO_REVOCATION_CHECK); NO es -k/--insecure: el certificado
+-- sigue validandose. Reusar en 3.E/3.F (bajar paquete, subir .txt).
+local CURL_BASE_FLAGS = "-s -S --ssl-no-revoke --retry 3 --retry-delay 1 --retry-all-errors --max-time 60"
+-- Limite de planchuela: lo setea main() desde manifest.largo_maximo_mm (no hardcodear).
+local LARGO_MAXIMO_MM = nil
+
+-- Capas que el gadget genera y que se vacian SOLO en modo Rehacer desde cero.
+local GADGET_GENERATED_LAYERS = {
+  "VECTOR",
+  "VECTOR 3MM",
+  "Corte",
+  "Taladrado",
+  "Offset 1 vector",
+  "Offset exterior vector",
+  "Offset exterior vector 3mm",
+  "Planeado",
+  "Rectangulo exterior",
+}
+
 local CreateCopyOfSelectedContours = CreateCopyOfSelectedContours
 local GetDefaultContourTolerance = GetDefaultContourTolerance
 local CreateCadGroup = CreateCadGroup
 
 function DisplayMessage(message)
-  local safe = tostring(message):gsub("[^\x20-\x7E]", "")
+  local safe = tostring(message):gsub("[^\x20-\x7E\n]", "")
   DisplayMessageBox(safe)
   print(safe)
+end
+
+-- Red de seguridad: si algun control queda con class="LuaButton" sin handler
+-- propio, Aspire llama a OnLuaButton_XXXX. Debe devolver true (doc oficial).
+function OnLuaButton_XXXX(element_id, dialog)
+  return true
 end
 
 local function openRegistry()
@@ -101,6 +132,328 @@ local function pickManifestFolder()
   return dlg.Directory
 end
 
+local function htmlEscape(s)
+  return tostring(s or "")
+    :gsub("&", "&amp;")
+    :gsub("<", "&lt;")
+    :gsub(">", "&gt;")
+    :gsub('"', "&quot;")
+end
+
+local function extractJsonString(json, key)
+  local _, startAt = tostring(json):find('"' .. key .. '"%s*:%s*"')
+  if not startAt then return nil end
+  local i = startAt + 1
+  local out = {}
+  local s = tostring(json)
+  while i <= #s do
+    local c = s:sub(i, i)
+    if c == "\\" then
+      local n = s:sub(i + 1, i + 1)
+      if n == "n" then table.insert(out, "\n")
+      elseif n == "r" then table.insert(out, "\r")
+      elseif n == "t" then table.insert(out, "\t")
+      elseif n == '"' then table.insert(out, '"')
+      elseif n == "\\" then table.insert(out, "\\")
+      elseif n == "/" then table.insert(out, "/")
+      else table.insert(out, n) end
+      i = i + 2
+    elseif c == '"' then
+      break
+    else
+      table.insert(out, c)
+      i = i + 1
+    end
+  end
+  return table.concat(out)
+end
+
+local function parseProgramList(json)
+  local list = {}
+  local arr = tostring(json):match('"programas"%s*:%s*%[(.-)%]')
+  if not arr then return list end
+  for obj in arr:gmatch("%b{}") do
+    local id = obj:match('"id"%s*:%s*"([^"]+)"')
+    local nombre = obj:match('"nombre"%s*:%s*"(.-)"')
+    local fecha = obj:match('"fecha"%s*:%s*"([^"]*)"') or ""
+    if fecha == "" then
+      local nullFecha = obj:match('"fecha"%s*:%s*null')
+      if nullFecha then fecha = "" end
+    end
+    local cant = tonumber(obj:match('"cantidad_sellos"%s*:%s*(%-?%d+)')) or 0
+    local token = obj:match('"token"%s*:%s*"([^"]+)"') or ""
+    if id and nombre then
+      table.insert(list, {
+        id = id,
+        nombre = nombre,
+        fecha = fecha,
+        cantidad_sellos = cant,
+        token = token,
+      })
+    end
+  end
+  return list
+end
+
+local function parseVectores(json)
+  local list = {}
+  local arr = tostring(json):match('"vectores"%s*:%s*%[(.-)%]')
+  if not arr then return list end
+  for obj in arr:gmatch("%b{}") do
+    local archivo = obj:match('"archivo"%s*:%s*"([^"]+)"')
+    local url = obj:match('"url"%s*:%s*"([^"]+)"')
+    if archivo and url then
+      table.insert(list, { archivo = archivo, url = url })
+    end
+  end
+  return list
+end
+
+local function curlGetToFile(url, headers, outBody, outCode)
+  local hdr = ""
+  for _, h in ipairs(headers or {}) do
+    hdr = hdr .. " -H \"" .. h .. "\""
+  end
+  local cmd = string.format(
+    'curl.exe %s%s -o "%s" -w "%%{http_code}" "%s" > "%s" 2>&1',
+    CURL_BASE_FLAGS, hdr, outBody, url, outCode
+  )
+  os.execute(cmd)
+  local code = ""
+  local fc = io.open(outCode, "r")
+  if fc then code = tostring(fc:read("*a") or ""):gsub("%s", ""); fc:close() end
+  local body = ""
+  local fb = io.open(outBody, "r")
+  if fb then body = tostring(fb:read("*a") or ""); fb:close() end
+  return code, body
+end
+
+-- Host + path de la URL (sin query/token) para mensajes de error diagnósticos.
+local function urlHostPath(url)
+  local s = tostring(url or "")
+  local noq = s:match("^([^%?]*)") or s
+  local rest = noq:match("^https?://(.+)$")
+  return rest or noq
+end
+
+local function promptInstallKey()
+  local html = [[
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<style type="text/css">
+body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin: 14px; }
+p { margin: 0 0 10px 0; }
+</style>
+</head>
+<body bgcolor="#EEEEFF">
+<p><b>Clave de instalacion Alcohn</b> (una sola vez por PC).</p>
+<p>La pedis en Configuracion / al equipo. No va en el archivo del gadget.</p>
+<br>
+<input name="textfield" type="text" size="40" ID="sync_key">
+<br><br>
+<p align="center">
+ <BUTTON style="FONT-WEIGHT:bold; WIDTH:30%" ID="ButtonOK" type=button>OK</BUTTON>
+ &nbsp;&nbsp;&nbsp;
+ <BUTTON style="FONT-WEIGHT:bold; WIDTH:30%" ID="ButtonCancel" type=button>Cancel</BUTTON>
+</p>
+</body>
+</html>
+]]
+  local ok, dlg = pcall(HTML_Dialog, true, html, 460, 220, "Clave Alcohn - " .. MACHINE_LABEL)
+  if not ok or not dlg then return nil end
+  -- Patron oficial Dialog_Simple_Example: Add* antes de ShowDialog, Get* despues.
+  dlg:AddTextField("sync_key", "")
+  if not dlg:ShowDialog() then return nil end
+  local key = tostring(dlg:GetTextField("sync_key") or "")
+  key = key:gsub("^%s+", ""):gsub("%s+$", "")
+  if key == "" then return nil end
+  return key
+end
+
+local function ensureInstallKey()
+  local reg = openRegistry()
+  local key = regGetString(reg, "install_key", "")
+  if key ~= "" then return key end
+  key = promptInstallKey()
+  if not key then return nil end
+  regSetString(reg, "install_key", key)
+  return key
+end
+
+local function chooseProgramFromList(programas)
+  local radios = {}
+  for i, p in ipairs(programas) do
+    local fecha = tostring(p.fecha or "")
+    if #fecha > 10 then fecha = fecha:sub(1, 10) end
+    local label = string.format(
+      "%s  |  %d sellos  |  %s",
+      tostring(p.nombre or "?"),
+      tonumber(p.cantidad_sellos) or 0,
+      fecha
+    )
+    table.insert(radios, string.format(
+      '<input type="radio" name="prog"> %s<br><br>\n',
+      htmlEscape(label)
+    ))
+  end
+  table.insert(radios,
+    '<input type="radio" name="prog"> Elegir carpeta local (sin internet)<br><br>\n'
+  )
+
+  local height = math.min(520, 200 + (#programas + 1) * 36)
+  local html = [[
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<style type="text/css">
+body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin: 14px; }
+p { margin: 0 0 10px 0; }
+</style>
+</head>
+<body bgcolor="#EEEEFF">
+<p><b>Elegi el programa</b> (maquina ]] .. MACHINE_LABEL .. [[):</p>
+<br>
+]] .. table.concat(radios) .. [[
+<br>
+<p align="center">
+ <BUTTON style="FONT-WEIGHT:bold; WIDTH:30%" ID="ButtonOK" type=button>OK</BUTTON>
+ &nbsp;&nbsp;&nbsp;
+ <BUTTON style="FONT-WEIGHT:bold; WIDTH:30%" ID="ButtonCancel" type=button>Cancel</BUTTON>
+</p>
+</body>
+</html>
+]]
+
+  local ok, dlg = pcall(HTML_Dialog, true, html, 520, height, "Programas - " .. MACHINE_LABEL)
+  if not ok or not dlg then return nil end
+  dlg:AddRadioGroup("prog", 1)
+  if not dlg:ShowDialog() then return nil end
+  local idx = dlg:GetRadioIndex("prog")
+  if idx == #programas + 1 then return "LOCAL" end
+  if idx >= 1 and idx <= #programas then return programas[idx] end
+  return programas[1]
+end
+
+local function downloadProgramPackage(installKey, programaId)
+  local tempDir = os.getenv("TEMP") or "C:\\Windows\\Temp"
+  local stamp = tostring(os.time())
+  local folder = tempDir .. "\\alcohn_prog_" .. tostring(programaId):sub(1, 8) .. "_" .. stamp
+  os.execute('cmd /c mkdir "' .. folder .. '" 2>nul')
+  os.execute('cmd /c mkdir "' .. folder .. '\\vectores" 2>nul')
+
+  local tmp_body = folder .. "\\_paquete.json"
+  local tmp_code = folder .. "\\_paquete.code"
+  local url = SYNC_URL .. "?accion=paquete&programa_id=" .. tostring(programaId)
+  local code, body = curlGetToFile(
+    url,
+    { "X-Programa-Sync-Key: " .. installKey },
+    tmp_body,
+    tmp_code
+  )
+  pcall(function() os.remove(tmp_code) end)
+
+  if string.sub(code, 1, 1) ~= "2" then
+    return nil, "HTTP " .. tostring(code) .. " " .. string.sub(body or "", 1, 80)
+  end
+
+  local manifest_lua = extractJsonString(body, "manifest_lua")
+  if not manifest_lua or manifest_lua == "" then
+    return nil, "paquete sin manifest_lua"
+  end
+
+  local mf = io.open(folder .. "\\manifest.lua", "w")
+  if not mf then return nil, "no se pudo escribir manifest.lua" end
+  mf:write(manifest_lua)
+  mf:close()
+
+  local vectores = parseVectores(body)
+  if #vectores == 0 then
+    return nil, "paquete sin vectores"
+  end
+
+  for _, v in ipairs(vectores) do
+    local dest = folder .. "\\" .. tostring(v.archivo):gsub("/", "\\")
+    local parent = dest:match("^(.*)\\[^\\]+$")
+    if parent then os.execute('cmd /c mkdir "' .. parent .. '" 2>nul') end
+    local vcode_file = dest .. ".code"
+    local vcode, _ = curlGetToFile(v.url, {}, dest, vcode_file)
+    pcall(function() os.remove(vcode_file) end)
+    if string.sub(vcode, 1, 1) ~= "2" then
+      return nil, "fallo bajar " .. tostring(v.archivo)
+        .. " desde " .. urlHostPath(v.url)
+        .. " (HTTP " .. tostring(vcode) .. ")"
+    end
+  end
+
+  pcall(function() os.remove(tmp_body) end)
+  return folder, nil
+end
+
+local function fetchProgramList(installKey)
+  local tempDir = os.getenv("TEMP") or "C:\\Windows\\Temp"
+  local stamp = tostring(os.time())
+  local tmp_body = tempDir .. "\\alcohn_list_" .. stamp .. ".json"
+  local tmp_code = tempDir .. "\\alcohn_list_" .. stamp .. ".code"
+  local url = SYNC_URL .. "?accion=listar&maquina=" .. MACHINE_CODE
+  local code, body = curlGetToFile(
+    url,
+    { "X-Programa-Sync-Key: " .. installKey },
+    tmp_body,
+    tmp_code
+  )
+  pcall(function() os.remove(tmp_body) end)
+  pcall(function() os.remove(tmp_code) end)
+  if string.sub(code, 1, 1) ~= "2" then
+    return nil, "HTTP " .. tostring(code) .. " " .. string.sub(body or "", 1, 80)
+  end
+  return parseProgramList(body), nil
+end
+
+-- Baja el paquete desde la app, o cae al selector de carpeta local.
+local function resolveProgramFolder()
+  local installKey = ensureInstallKey()
+  if not installKey then
+    DisplayMessage("Sin clave de instalacion. Se abre el selector de carpeta.")
+    return pickManifestFolder()
+  end
+
+  local programas, list_err = fetchProgramList(installKey)
+  if not programas then
+    DisplayMessage(
+      "No se pudo listar programas (" .. tostring(list_err) .. ").\n" ..
+      "Se abre el selector de carpeta."
+    )
+    return pickManifestFolder()
+  end
+
+  if #programas == 0 then
+    DisplayMessage(
+      "No hay programas abiertos para maquina " .. MACHINE_LABEL .. ".\n" ..
+      "Se abre el selector de carpeta."
+    )
+    return pickManifestFolder()
+  end
+
+  local chosen = chooseProgramFromList(programas)
+  if not chosen then return nil end
+  if chosen == "LOCAL" then return pickManifestFolder() end
+
+  local folder, dl_err = downloadProgramPackage(installKey, chosen.id)
+  if not folder then
+    DisplayMessage(
+      "No se pudo bajar el paquete (" .. tostring(dl_err) .. ").\n" ..
+      "Se abre el selector de carpeta."
+    )
+    return pickManifestFolder()
+  end
+  return folder
+end
+
 local function loadManifest(folder)
   local path = folder .. "\\manifest.lua"
   local ok, manifest = pcall(dofile, path)
@@ -108,6 +461,374 @@ local function loadManifest(folder)
     return nil, "No se pudo leer manifest.lua en " .. path .. " (" .. tostring(manifest) .. ")"
   end
   return manifest, nil
+end
+
+local function stampLabel(s)
+  if type(s) ~= "table" then return "?" end
+  local d = s.diseno
+  if d and tostring(d) ~= "" then return tostring(d) end
+  return tostring(s.sello_id or "?")
+end
+
+-- Firma confirmada por sonda: CadObject usa ParameterList, GetString(nombre, default, crear_si_no_existe).
+local function sellosPresentes(job)
+  local presentes = {}
+  local corte = job.LayerManager:GetLayerWithName("Corte")
+  if corte then
+    local pos = corte:GetHeadPosition()
+    while pos do
+      local obj, newPos = corte:GetNext(pos)
+      pos = newPos
+      if obj then
+        local ok, id = pcall(function() return obj:GetString("ALCOHN_SELLO_ID", "", false) end)
+        if ok and id and id ~= "" then
+          presentes[string.lower(tostring(id))] = true
+        end
+      end
+    end
+  end
+  -- Compatibilidad: UUID en nombres de capa (programas armados antes del tag).
+  local lm = job.LayerManager
+  local lpos = lm:GetHeadPosition()
+  while lpos do
+    local layer, newPos = lm:GetNext(lpos)
+    lpos = newPos
+    if layer then
+      local okn, name = pcall(function() return layer.Name end)
+      if okn and name then
+        local uuid = string.match(string.lower(name),
+          "(%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x)")
+        if uuid then presentes[uuid] = true end
+      end
+    end
+  end
+  return presentes
+end
+
+local function countPresentes(presentes)
+  local n = 0
+  for _ in pairs(presentes) do n = n + 1 end
+  return n
+end
+
+local function vaciarCapa(job, nombre)
+  local layer = job.LayerManager:FindLayerWithName(nombre)
+  if not layer then return end
+  local objetos = {}
+  local pos = layer:GetHeadPosition()
+  while pos do
+    local obj, newPos = layer:GetNext(pos)
+    pos = newPos
+    if obj then table.insert(objetos, obj) end
+  end
+  for _, obj in ipairs(objetos) do
+    pcall(function() layer:RemoveObject(obj) end)
+  end
+end
+
+local function clearGadgetGeneratedLayers(job)
+  for _, nombre in ipairs(GADGET_GENERATED_LAYERS) do
+    vaciarCapa(job, nombre)
+  end
+  job:Refresh2DView()
+end
+
+local function countObjetosEnCorte(job)
+  local corte = job.LayerManager:GetLayerWithName("Corte")
+  if not corte then return 0 end
+  local n = 0
+  local pos = corte:GetHeadPosition()
+  while pos do
+    local obj, newPos = corte:GetNext(pos)
+    pos = newPos
+    if obj then n = n + 1 end
+  end
+  return n
+end
+
+local function countSellosTageados(job)
+  local corte = job.LayerManager:GetLayerWithName("Corte")
+  if not corte then return 0 end
+  local n = 0
+  local pos = corte:GetHeadPosition()
+  while pos do
+    local obj, newPos = corte:GetNext(pos)
+    pos = newPos
+    if obj then
+      local ok, id = pcall(function() return obj:GetString("ALCOHN_SELLO_ID", "", false) end)
+      if ok and id and id ~= "" then n = n + 1 end
+    end
+  end
+  return n
+end
+
+-- Selector 9.5: sellos que estaban en la corrida anterior y ya no estan en el archivo.
+local function chooseDeletedSellosAction(lista_texto)
+  local html = [[
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<style type="text/css">
+body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin: 14px; }
+p { margin: 0 0 10px 0; white-space: pre-wrap; }
+</style>
+</head>
+<body bgcolor="#EEEEFF">
+<p><b>Estos sellos estan en el programa pero no en el archivo:</b></p>
+<p>]] .. lista_texto .. [[</p>
+<br>
+<input type="radio" name="accion"> Los borre a proposito (no alcanzaba el material)<br><br>
+<input type="radio" name="accion"> Se perdieron por error (volver a importarlos ahora)<br><br>
+<input type="radio" name="accion"> Decidir despues (no hacer nada)<br><br>
+<br>
+<p align="center">
+ <BUTTON style="FONT-WEIGHT:bold; WIDTH:30%" ID="ButtonOK" type=button>OK</BUTTON>
+ &nbsp;&nbsp;&nbsp;
+ <BUTTON style="FONT-WEIGHT:bold; WIDTH:30%" ID="ButtonCancel" type=button>Cancel</BUTTON>
+</p>
+</body>
+</html>
+]]
+  local ok, dlg = pcall(HTML_Dialog, true, html, 480, 340, "Sellos faltantes - " .. MACHINE_LABEL)
+  if not ok or not dlg then return nil end
+  dlg:AddRadioGroup("accion", 1)
+  if not dlg:ShowDialog() then return nil end
+  local idx = dlg:GetRadioIndex("accion")
+  if idx == 2 then return "REIMPORT" end
+  if idx == 3 then return "LATER" end
+  return "SIN_MATERIAL"
+end
+
+-- Selector de modo (API oficial HTML_Dialog: radios + ButtonOK/Cancel).
+-- Devuelve "ARMAR" | "ACTUALIZAR" | "REHACER" | "SOLO_RECALCULAR", o nil si cancela.
+local function chooseMode(tiene_sellos)
+  if not tiene_sellos then return "ARMAR" end
+
+  local html = [[
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+<style type="text/css">
+body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; margin: 14px; }
+p { margin: 0 0 10px 0; }
+label { display: block; margin: 8px 0; }
+</style>
+</head>
+<body bgcolor="#EEEEFF">
+<p><b>Este programa ya tiene sellos.</b> Que queres hacer?</p>
+<br>
+<input type="radio" name="modo"> Actualizar (solo lo nuevo)<br><br>
+<input type="radio" name="modo"> Rehacer desde cero<br><br>
+<input type="radio" name="modo"> Solo recalcular<br><br>
+<br>
+<p align="center">
+ <BUTTON style="FONT-WEIGHT:bold; WIDTH:30%" ID="ButtonOK" type=button>OK</BUTTON>
+ &nbsp;&nbsp;&nbsp;
+ <BUTTON style="FONT-WEIGHT:bold; WIDTH:30%" ID="ButtonCancel" type=button>Cancel</BUTTON>
+</p>
+</body>
+</html>
+]]
+
+  local ok, dlg = pcall(HTML_Dialog, true, html, 420, 280, "Modo - Armar programa " .. MACHINE_LABEL)
+  if not ok or not dlg then
+    DisplayMessage("No se pudo abrir el selector de modo. Cancelado.")
+    return nil
+  end
+
+  dlg:AddRadioGroup("modo", 1)
+
+  if not dlg:ShowDialog() then
+    return nil
+  end
+
+  local idx = dlg:GetRadioIndex("modo")
+  if idx == 2 then return "REHACER" end
+  if idx == 3 then return "SOLO_RECALCULAR" end
+  return "ACTUALIZAR"
+end
+
+local function jsonEscape(str)
+  return tostring(str)
+    :gsub("\\", "\\\\")
+    :gsub('"', '\\"')
+    :gsub("\r", "\\r")
+    :gsub("\n", "\\n")
+    :gsub("\t", "\\t")
+end
+
+local function jsonString(str)
+  return '"' .. jsonEscape(str) .. '"'
+end
+
+local function jsonStringArray(list)
+  local parts = {}
+  for _, v in ipairs(list or {}) do
+    table.insert(parts, jsonString(v))
+  end
+  return "[" .. table.concat(parts, ",") .. "]"
+end
+
+local function jsonObjectArray(list, fields)
+  local parts = {}
+  for _, row in ipairs(list or {}) do
+    local fields_json = {}
+    for _, f in ipairs(fields) do
+      local val = row[f]
+      if val ~= nil then
+        if type(val) == "number" then
+          table.insert(fields_json, jsonString(f) .. ":" .. tostring(val))
+        else
+          table.insert(fields_json, jsonString(f) .. ":" .. jsonString(tostring(val)))
+        end
+      end
+    end
+    table.insert(parts, "{" .. table.concat(fields_json, ",") .. "}")
+  end
+  return "[" .. table.concat(parts, ",") .. "]"
+end
+
+local function makeEventId()
+  local t = os.time() or 0
+  local r = math.random(0, 0xffff)
+  return string.format("%s-%08x-%04x", MACHINE_CODE, t, r)
+end
+
+local function isoNow()
+  return os.date("!%Y-%m-%dT%H:%M:%S")
+end
+
+local function jsonNumberObject(obj)
+  if not obj or type(obj) ~= "table" then return "{}" end
+  local parts = {}
+  for k, v in pairs(obj) do
+    local n = tonumber(v)
+    if n then table.insert(parts, jsonString(tostring(k)) .. ":" .. tostring(n)) end
+  end
+  return "{" .. table.concat(parts, ",") .. "}"
+end
+
+local function buildReportJson(report)
+  local evento_id = report.evento_id or makeEventId()
+  local maquinado = report.maquinado_segundos
+  local maquinado_json = maquinado ~= nil and tostring(tonumber(maquinado) or 0) or "null"
+  return table.concat({
+    "{",
+    '"version":1,',
+    '"gadget_version":' .. jsonString(GADGET_VERSION) .. ",",
+    '"programa_id":' .. jsonString(report.programa_id or "") .. ",",
+    '"token":' .. jsonString(report.token or "") .. ",",
+    '"evento_id":' .. jsonString(evento_id) .. ",",
+    '"maquina":' .. jsonString(MACHINE_CODE) .. ",",
+    '"modo":' .. jsonString(report.modo or "") .. ",",
+    '"escrito_at":' .. jsonString(isoNow()) .. ",",
+    '"sellos_presentes":' .. jsonStringArray(report.sellos_presentes) .. ",",
+    '"sellos_importados_ahora":' .. jsonStringArray(report.sellos_importados_ahora) .. ",",
+    '"sellos_no_importados":' .. jsonObjectArray(report.sellos_no_importados, { "sello_id", "motivo", "diseno" }) .. ",",
+    '"sellos_borrados_en_maquina":' .. jsonObjectArray(report.sellos_borrados_en_maquina, { "sello_id", "motivo" }) .. ",",
+    '"sellos_en_otra_planchuela":' .. jsonObjectArray(report.sellos_en_otra_planchuela, { "sello_id", "diseno", "planificada", "real" }) .. ",",
+    '"sobrantes_no_identificados":' .. tostring(report.sobrantes_no_identificados or 0) .. ",",
+    '"material_por_planchuela":' .. jsonNumberObject(report.material_por_planchuela) .. ",",
+    -- segundos (NO minutos): la Edge Function divide por 60 al guardar maquinado_minutos
+    '"maquinado_segundos":' .. maquinado_json .. ",",
+    '"control":{"objetos_en_corte":' .. tostring(report.objetos_en_corte or 0) ..
+      ',"sellos_tageados":' .. tostring(report.sellos_tageados or 0) .. "}",
+    "}",
+  }), evento_id
+end
+
+local function readJobParamString(job, key)
+  local params = job.JobParameters
+  if not params then return nil end
+  local ok, v = pcall(function() return params:GetString(key, "", false) end)
+  if ok and v and v ~= "" then return v end
+  return nil
+end
+
+local function parseUuidListFromJsonArray(section)
+  local set = {}
+  if not section then return set end
+  for uuid in tostring(section):gmatch('"(%x%x%x%x%x%x%x%x%-[%x%-]+)"') do
+    set[string.lower(uuid)] = true
+  end
+  return set
+end
+
+local function parseSellosPresentesFromBlob(json)
+  if not json then return {} end
+  local section = json:match('"sellos_presentes"%s*:%s*%[(.-)%]')
+  return parseUuidListFromJsonArray(section)
+end
+
+local function loadExcluidosSet(job)
+  local raw = readJobParamString(job, "ALCOHN_EXCLUIDOS_V1")
+  if not raw then return {} end
+  return parseUuidListFromJsonArray(raw)
+end
+
+local function saveExcluidosSet(job, set)
+  local params = job.JobParameters
+  if not params then return false end
+  local list = {}
+  for id in pairs(set or {}) do table.insert(list, id) end
+  table.sort(list)
+  local ok, err = pcall(function()
+    params:SetString("ALCOHN_EXCLUIDOS_V1", jsonStringArray(list))
+  end)
+  return ok, err
+end
+
+local function writeSyncBlob(job, jsonPayload)
+  local params = job.JobParameters
+  if not params then return false, "JobParameters no disponible" end
+  local ok, err = pcall(function()
+    params:SetString("ALCOHN_PROGRAMA_V1", jsonPayload)
+  end)
+  if not ok then return false, tostring(err) end
+  return true, nil
+end
+
+local function postSyncReport(jsonPayload)
+  if not SYNC_URL or SYNC_URL == "" then return false, "sin URL" end
+  local tempDir = os.getenv("TEMP") or "C:\\Windows\\Temp"
+  local stamp = tostring(os.time())
+  local tmp_json = tempDir .. "\\alcohn_sync_" .. stamp .. ".json"
+  local tmp_body = tempDir .. "\\alcohn_sync_" .. stamp .. "_body.txt"
+  local tmp_code = tempDir .. "\\alcohn_sync_" .. stamp .. "_code.txt"
+
+  local f = io.open(tmp_json, "w")
+  if not f then return false, "no se pudo escribir el temporal" end
+  f:write(jsonPayload)
+  f:close()
+
+  local cmd = string.format(
+    'curl.exe ' .. CURL_BASE_FLAGS .. ' -X POST -H "Content-Type: application/json" '
+      .. '--data-binary "@%s" -o "%s" -w "%%{http_code}" "%s" > "%s" 2>&1',
+    tmp_json, tmp_body, SYNC_URL, tmp_code
+  )
+  os.execute(cmd)
+
+  local code = ""
+  local fc = io.open(tmp_code, "r")
+  if fc then code = tostring(fc:read("*a") or ""):gsub("%s", ""); fc:close() end
+
+  local body = ""
+  local fb = io.open(tmp_body, "r")
+  if fb then body = tostring(fb:read("*a") or ""); fb:close() end
+
+  pcall(function() os.remove(tmp_json) end)
+  pcall(function() os.remove(tmp_body) end)
+  pcall(function() os.remove(tmp_code) end)
+
+  if string.sub(code, 1, 1) == "2" then return true, nil end
+  if code == "" or code == "000" then
+    return false, "sin conexion con la app"
+  end
+  return false, "HTTP " .. code .. " " .. string.sub(body, 1, 80)
 end
 
 local function snapshotLayerNames(job)
@@ -182,7 +903,7 @@ local function validateAndFixScale(job, expected_ancho_mm, expected_largo_mm)
 
   if ratio < SCALE_MIN_SANE or ratio > SCALE_MAX_SANE then
     return false, string.format(
-      "escala muy distinta a la esperada (importado ~%.1fmm, esperado %.1fmm) -- no se corrige solo, revisar a mano",
+      "escala muy distinta (~%.0fmm vs %.0fmm)",
       actual_major, expected_major
     )
   end
@@ -194,14 +915,11 @@ local function validateAndFixScale(job, expected_ancho_mm, expected_largo_mm)
     selection:Transform(scaleMatrix)
   end)
   if not ok then
-    return false, "no se pudo corregir la escala automaticamente: " .. tostring(err)
+    return false, "no se pudo corregir la escala"
   end
   job:Refresh2DView()
 
-  return true, string.format(
-    "escala corregida automaticamente x%.3f (importado ~%.1fmm, ajustado a %.1fmm)",
-    ratio, actual_major, expected_major
-  )
+  return true, string.format("escala corregida (x%.3f)", ratio)
 end
 
 local function copySelectionToLayer(vector_layer_name)
@@ -305,7 +1023,7 @@ end
 
 -- Version XL: columna unica, sin seleccion de columna ni rotacion (igual a
 -- CreateAdditionalElementsXL del script original).
-local function createAdditionalElementsXL(bbox)
+local function createAdditionalElementsXL(bbox, sello_id)
   if not bbox then return end
   local job = VectricJob()
   local layer_manager = job.LayerManager
@@ -325,7 +1043,12 @@ local function createAdditionalElementsXL(bbox)
     newLineContour:AppendPoint(Point2D(lineX1, lineY))
     newLineContour:LineTo(Point2D(lineX2, lineY))
     local cad_line = CreateCadContour(newLineContour)
-    if cad_line then corteLayer:AddObject(cad_line, true) end
+    if cad_line then
+      corteLayer:AddObject(cad_line, true)
+      if sello_id and tostring(sello_id) ~= "" then
+        pcall(function() cad_line:SetString("ALCOHN_SELLO_ID", tostring(sello_id)) end)
+      end
+    end
   end)
 
   local radius = 3
@@ -348,7 +1071,7 @@ end
 
 -- Version XL: sin seleccion de columna ni rotacion, siempre centrado en
 -- XL_COLUMN_X, apilado hacia abajo en Y (igual al script original).
-local function processSingleObject(obj)
+local function processSingleObject(obj, sello_id)
   local job = VectricJob()
   local selection = job.Selection
 
@@ -356,7 +1079,7 @@ local function processSingleObject(obj)
   selection:Add(obj, true, false)
   if selection.IsEmpty then
     DisplayMessage("Error: no se pudo seleccionar objeto")
-    return false
+    return false, "no se pudo seleccionar objeto"
   end
 
   if not job:GroupSelection() then
@@ -364,7 +1087,7 @@ local function processSingleObject(obj)
   end
 
   local bbox = selection:GetBoundingBox()
-  if not bbox then return false end
+  if not bbox then return false, "sin bounding box" end
 
   local centerX = (bbox.MinX + bbox.MaxX) / 2
   local refP1 = Point2D(centerX, 0)
@@ -382,7 +1105,7 @@ local function processSingleObject(obj)
   job:Refresh2DView()
 
   bbox = selection:GetBoundingBox()
-  if not bbox then return false end
+  if not bbox then return false, "sin bounding box tras espejo" end
 
   local groupWidth = bbox.MaxX - bbox.MinX
   if groupWidth > XL_COLUMN_WIDTH then
@@ -408,6 +1131,20 @@ local function processSingleObject(obj)
     end
   end
 
+  local groupHeight = bbox.MaxY - bbox.MinY
+
+  -- Validar largo ANTES de apilar (5.5). largo_maximo_mm viene del manifest.
+  if LARGO_MAXIMO_MM and type(LARGO_MAXIMO_MM) == "number" then
+    local bottom_y = targetTopY - groupHeight
+    local used_mm = -bottom_y
+    if used_mm > LARGO_MAXIMO_MM + 1e-6 then
+      return false, string.format(
+        "supera el largo maximo de planchuela (%.1f mm > %.0f mm). No se apilo.",
+        used_mm, LARGO_MAXIMO_MM
+      )
+    end
+  end
+
   local groupCenterX = (bbox.MinX + bbox.MaxX) / 2
   local dx = XL_COLUMN_X - groupCenterX
   local dy = targetTopY - bbox.MaxY
@@ -417,10 +1154,10 @@ local function processSingleObject(obj)
 
   local updated_bbox = selection:GetBoundingBox()
   if updated_bbox then
-    createAdditionalElementsXL(updated_bbox)
+    createAdditionalElementsXL(updated_bbox, sello_id)
   end
 
-  return true
+  return true, nil, XL_COLUMN_WIDTH
 end
 
 local function offsetOperations(vector_layer_name, offset_ext_layer_name)
@@ -524,7 +1261,9 @@ local function ungroupLayers(layer_names)
   return true
 end
 
-local function runTypeAutomation(tipo)
+-- Corre la automatizacion completa (equivalente al viejo main() de cada
+-- script de tipo) sobre la seleccion actual (el vector recien importado).
+local function runTypeAutomation(tipo, sello_id)
   local job = VectricJob()
   if not job.Exists then return false, "no hay trabajo activo" end
 
@@ -557,8 +1296,9 @@ local function runTypeAutomation(tipo)
   end
 
   local latest_obj = vector_objects[#vector_objects]
-  if not processSingleObject(latest_obj) then
-    return false, "error procesando el objeto"
+  local ok_pos, pos_err, col_nom = processSingleObject(latest_obj, sello_id)
+  if not ok_pos then
+    return false, pos_err or "error procesando el objeto"
   end
 
   if not offsetOperations(vector_layer_name, offset_ext_layer_name) then
@@ -566,47 +1306,79 @@ local function runTypeAutomation(tipo)
   end
 
   ungroupLayers(ungroup_layers)
-  return true, nil
+  return true, nil, col_nom
+end
+
+-- =====================================================================
+-- Import + validacion de escala + orquestacion del programa completo
+-- =====================================================================
+-- Normaliza nom de columna (12.7) a tamaño de planchuela del manifest (12).
+local function displayPlanchuela(n)
+  local v = tonumber(n)
+  if not v then return nil end
+  if math.abs(v - 12.7) < 0.15 then return 12 end
+  return math.floor(v + 0.5)
 end
 
 local function processStamp(job, folder, s)
+  local label = stampLabel(s)
   local archivo = tostring(s.archivo or "")
   local vector_path = folder .. "\\" .. archivo
   local lower = string.lower(archivo)
   local warning = nil
+  local otra_planchuela = nil
 
   if string.match(lower, "%.svg$") then
     local before = snapshotLayerNames(job)
     if not job:ImportSVG(vector_path) then
-      return false, (s.sello_id or "?") .. ": no se pudo importar " .. vector_path, nil
+      return false, "no se pudo importar el vector", nil, nil
     end
     if not selectObjectsFromNewLayers(job, before) then
-      return false, (s.sello_id or "?") ..
-        ": se importo " .. vector_path .. " pero no se pudo identificar que quedo seleccionado", nil
+      return false, "importo pero no se pudo seleccionar", nil, nil
     end
   elseif string.match(lower, "%.dxf$") or string.match(lower, "%.dwg$") then
     if not job:ImportDxfDwg(vector_path) then
-      return false, (s.sello_id or "?") .. ": no se pudo importar " .. vector_path, nil
+      return false, "no se pudo importar el vector", nil, nil
     end
   else
-    return false, (s.sello_id or "?") .. ": formato no soportado (" .. archivo ..
-      "). Se necesita .svg o .dxf.", nil
+    local ext = string.match(lower, "%.([%w]+)$") or "?"
+    return false, "el vector esta en ." .. ext .. ", re-vectorizalo.", nil, nil
   end
 
   local scale_ok, scale_msg = validateAndFixScale(job, s.ancho_mm, s.largo_mm)
   if not scale_ok then
-    return false, (s.sello_id or "?") .. ": " .. tostring(scale_msg), nil
+    return false, tostring(scale_msg), nil, nil
   end
   if scale_msg then
-    warning = (s.sello_id or "?") .. ": " .. scale_msg
+    warning = label .. ": " .. scale_msg
   end
 
-  local step_ok, step_err = runTypeAutomation(s.tipo)
+  local step_ok, step_err, col_nom = runTypeAutomation(s.tipo, s.sello_id)
   if not step_ok then
-    return false, (s.sello_id or "?") .. ": " .. tostring(step_err), warning
+    return false, tostring(step_err), warning, nil
   end
 
-  return true, nil, warning
+  local planificada = displayPlanchuela(s.tipo_planchuela)
+  local real = displayPlanchuela(col_nom)
+  if planificada and real and planificada ~= real then
+    local msg = string.format(
+      "%s: va en planchuela %d (planificado en %d).",
+      label, real, planificada
+    )
+    if warning then
+      warning = warning .. "\n" .. msg
+    else
+      warning = msg
+    end
+    otra_planchuela = {
+      sello_id = tostring(s.sello_id or ""),
+      diseno = label,
+      planificada = planificada,
+      real = real,
+    }
+  end
+
+  return true, nil, warning, otra_planchuela
 end
 
 -- Paso 3: por cada columna con al menos un sello posicionado (busca en la
@@ -615,14 +1387,20 @@ end
 -- al final recalcula todas las trayectorias del job.
 local PASO3_COLUMNS = { { nom = XL_COLUMN_WIDTH, xpos = XL_COLUMN_X } }
 
+-- Devuelve: err_msg_or_nil, material_por_planchuela { ["63"]=120.5, ... }
 local function runPaso3AndRecalculate(job)
+  -- Vaciar capas 100% generadas para no duplicar rectangulos al re-correr (5.4).
+  vaciarCapa(job, "Planeado")
+  vaciarCapa(job, "Rectangulo exterior")
+
+  local material = {}
   local layer_manager = job.LayerManager
   local vectorLayer = layer_manager:GetLayerWithName("Corte")
   local planeadoLayer = layer_manager:GetLayerWithName("Planeado")
   local rectExtLayer = layer_manager:GetLayerWithName("Rectangulo exterior")
 
   if not vectorLayer or not planeadoLayer or not rectExtLayer then
-    return "Paso 3 NO ejecutado: faltan capas en el .crv3d base (Corte / Planeado / Rectangulo exterior)."
+    return "Paso 3 NO ejecutado: faltan capas en el .crv3d base (Corte / Planeado / Rectangulo exterior).", material
   end
 
   local tol = 1.0
@@ -650,6 +1428,10 @@ local function runPaso3AndRecalculate(job)
     if minY then
       local topY = 0
       local bottomY = minY - 3
+      local largo_mm = math.abs(XL_START_Y - minY)
+      if largo_mm > 0 then
+        material[tostring(col.nom)] = math.floor(largo_mm * 10 + 0.5) / 10
+      end
 
       local function addRect(width, layer)
         local halfWidth = width / 2
@@ -674,34 +1456,51 @@ local function runPaso3AndRecalculate(job)
   job:Refresh2DView()
 
   if columnas_procesadas == 0 then
-    return "Paso 3: no se encontro ninguna columna con sellos, no se crearon rectangulos."
+    return "Paso 3: sin columnas con sellos.", material
   end
 
   local tm = ToolpathManager()
   local ok, calc_result = pcall(function() return tm:RecalculateAllToolpaths() end)
   if ok and calc_result then
-    return string.format(
-      "Paso 3: %d columna(s) con rectangulos creados. Trayectorias recalculadas OK.",
-      columnas_procesadas
-    )
+    return nil, material
   else
-    return string.format(
-      "Paso 3: %d columna(s) con rectangulos creados. ATENCION: fallo el recalculo de trayectorias, revisar a mano.",
-      columnas_procesadas
-    )
+    return "Paso 3: fallo el recalculo de trayectorias.", material
   end
 end
 
+-- Suma MachiningTime(true) de todos los toolpaths (segundos). Llamar despues de recalcular.
+local function sumMachiningSeconds()
+  local total = 0
+  local ok = pcall(function()
+    local tm = ToolpathManager()
+    local pos = tm:GetHeadPosition()
+    while pos do
+      local toolpath, newPos = tm:GetNext(pos)
+      pos = newPos
+      if toolpath then
+        local okt, t = pcall(function() return toolpath:MachiningTime(true) end)
+        if okt and type(t) == "number" then
+          total = total + t
+        end
+      end
+    end
+  end)
+  if not ok then return nil end
+  return total
+end
+
 function main()
+  math.randomseed(os.time() or 1)
+
   local job = VectricJob()
   if not job.Exists then
     DisplayMessage("Abri primero el programa.crv3d de la maquina " .. MACHINE_LABEL .. " antes de correr este gadget.")
     return true
   end
 
-  local folder = pickManifestFolder()
+  local folder = resolveProgramFolder()
   if not folder then
-    DisplayMessage("Cancelado: no se eligio la carpeta del programa (manifest.lua).")
+    DisplayMessage("Cancelado: no se eligio programa ni carpeta.")
     return true
   end
 
@@ -713,43 +1512,211 @@ function main()
 
   if manifest.maquina and manifest.maquina ~= MACHINE_CODE then
     DisplayMessage(
-      "Atencion: este gadget es para maquina " .. MACHINE_LABEL ..
-      " y el programa elegido es de maquina " .. tostring(manifest.maquina) .. ". Cancelado."
+      "Atencion: este gadget es para maquina " .. MACHINE_LABEL .. " (" .. MACHINE_CODE ..
+      ") y el programa elegido es de maquina " .. tostring(manifest.maquina) .. ". Cancelado."
     )
     return true
   end
 
-  local ok_count, fail_count = 0, 0
+  LARGO_MAXIMO_MM = tonumber(manifest.largo_maximo_mm)
+
+  local presentes = sellosPresentes(job)
+  local modo = chooseMode(countPresentes(presentes) > 0)
+  if not modo then
+    DisplayMessage("Cancelado.")
+    return true
+  end
+
+  if modo == "REHACER" then
+    clearGadgetGeneratedLayers(job)
+    presentes = {}
+  end
+
+  local ok_count, fail_count, skip_count = 0, 0, 0
   local errors = {}
   local warnings = {}
+  local sellos_importados_ahora = {}
+  local sellos_no_importados = {}
+  local sellos_en_otra_planchuela = {}
 
-  for _, s in ipairs(manifest.sellos or {}) do
-    local ok, err, warn = processStamp(job, folder, s)
-    if ok then
-      ok_count = ok_count + 1
-      if warn then table.insert(warnings, warn) end
-    else
-      fail_count = fail_count + 1
-      table.insert(errors, err)
+  local excluidos = loadExcluidosSet(job)
+  local prev_presentes = parseSellosPresentesFromBlob(readJobParamString(job, "ALCOHN_PROGRAMA_V1"))
+  local sellos_borrados_en_maquina = {}
+
+  if modo ~= "REHACER" and modo ~= "ARMAR" then
+    local missing = {}
+    for _, s in ipairs(manifest.sellos or {}) do
+      local sid = string.lower(tostring(s.sello_id or ""))
+      if sid ~= "" and prev_presentes[sid] and not presentes[sid] and not excluidos[sid] then
+        table.insert(missing, s)
+      end
+    end
+    if #missing > 0 then
+      local label_lines = {}
+      for _, s in ipairs(missing) do table.insert(label_lines, "- " .. stampLabel(s)) end
+      local action = chooseDeletedSellosAction(table.concat(label_lines, "\n"))
+      if action == "SIN_MATERIAL" then
+        for _, s in ipairs(missing) do
+          local sid = string.lower(tostring(s.sello_id or ""))
+          excluidos[sid] = true
+          table.insert(sellos_borrados_en_maquina, {
+            sello_id = tostring(s.sello_id),
+            motivo = "SIN_MATERIAL",
+          })
+        end
+        saveExcluidosSet(job, excluidos)
+      elseif action == "REIMPORT" then
+        for _, s in ipairs(missing) do
+          local ok_r, err_r, warn_r, otra_r = processStamp(job, folder, s)
+          if ok_r then
+            if s.sello_id then presentes[string.lower(tostring(s.sello_id))] = true end
+            if warn_r then table.insert(warnings, warn_r) end
+            if otra_r then table.insert(sellos_en_otra_planchuela, otra_r) end
+          else
+            table.insert(errors, stampLabel(s) .. ": " .. tostring(err_r or "error"))
+            table.insert(sellos_no_importados, {
+              sello_id = tostring(s.sello_id or ""),
+              motivo = tostring(err_r or "error"),
+              diseno = stampLabel(s),
+            })
+          end
+        end
+      end
     end
   end
 
-  local paso3_msg = runPaso3AndRecalculate(job)
+  if modo ~= "SOLO_RECALCULAR" then
+    for _, s in ipairs(manifest.sellos or {}) do
+      local sid = string.lower(tostring(s.sello_id or ""))
+      if modo == "ACTUALIZAR" and sid ~= "" and (presentes[sid] or excluidos[sid]) then
+        -- Ya esta: no re-importar ni re-automatizar (conserva correcciones manuales).
+        skip_count = skip_count + 1
+      else
+        local ok, err, warn, otra = processStamp(job, folder, s)
+        if ok then
+          ok_count = ok_count + 1
+          if s.sello_id then table.insert(sellos_importados_ahora, tostring(s.sello_id)) end
+          if warn then table.insert(warnings, warn) end
+          if otra then table.insert(sellos_en_otra_planchuela, otra) end
+        else
+          fail_count = fail_count + 1
+          table.insert(errors, stampLabel(s) .. ": " .. tostring(err or "error"))
+          table.insert(sellos_no_importados, {
+            sello_id = tostring(s.sello_id or ""),
+            motivo = tostring(err or "error"),
+            diseno = stampLabel(s),
+          })
+        end
+      end
+    end
+  end
 
-  local summary = string.format(
-    "Programa '%s': %d sello(s) OK, %d con error.",
-    tostring(manifest.programa_nombre or manifest.programa_id or "?"),
-    ok_count, fail_count
-  )
+  local paso3_msg, material_por_planchuela = runPaso3AndRecalculate(job)
+  material_por_planchuela = material_por_planchuela or {}
+  local maquinado_segundos = sumMachiningSeconds()
+
+  -- Recalcular presentes al final para el blob.
+  presentes = sellosPresentes(job)
+  local presentes_list = {}
+  for id, _ in pairs(presentes) do table.insert(presentes_list, id) end
+  table.sort(presentes_list)
+
+  local objetos_corte = countObjetosEnCorte(job)
+  local tageados = countSellosTageados(job)
+  -- Sin piezas tageadas = programa viejo (antes del tag): no reportar sobrantes.
+  local sobrantes = 0
+  if tageados > 0 then
+    sobrantes = math.max(0, objetos_corte - tageados)
+  end
+
+  local json_payload = buildReportJson({
+    programa_id = tostring(manifest.programa_id or ""),
+    token = tostring(manifest.token or ""),
+    modo = modo,
+    sellos_presentes = presentes_list,
+    sellos_importados_ahora = sellos_importados_ahora,
+    sellos_no_importados = sellos_no_importados,
+    sellos_borrados_en_maquina = sellos_borrados_en_maquina,
+    sellos_en_otra_planchuela = sellos_en_otra_planchuela,
+    sobrantes_no_identificados = sobrantes,
+    material_por_planchuela = material_por_planchuela,
+    maquinado_segundos = maquinado_segundos,
+    objetos_en_corte = objetos_corte,
+    sellos_tageados = tageados,
+  })
+
+  local blob_ok, blob_err = writeSyncBlob(job, json_payload)
+  local post_ok, post_err = false, nil
+  if blob_ok then
+    post_ok, post_err = postSyncReport(json_payload)
+  end
+
+  local function clipLine(s, maxLen)
+    maxLen = maxLen or 60
+    s = tostring(s or "")
+    if #s <= maxLen then return s end
+    return string.sub(s, 1, maxLen - 3) .. "..."
+  end
+
+  local function modoLabel(m)
+    if m == "ACTUALIZAR" then return "Actualizar" end
+    if m == "REHACER" then return "Rehacer" end
+    if m == "SOLO_RECALCULAR" then return "Solo recalcular" end
+    return "Armar"
+  end
+
+  local summary_parts = {}
+
+  if fail_count > 0 then
+    if fail_count == 1 then
+      table.insert(summary_parts, "1 SELLO NO ENTRO")
+    else
+      table.insert(summary_parts, string.format("%d SELLOS NO ENTRARON", fail_count))
+    end
+    for _, e in ipairs(errors) do
+      table.insert(summary_parts, "  " .. clipLine(e, 58))
+    end
+    table.insert(summary_parts, "")
+  end
+
+  if modo == "SOLO_RECALCULAR" then
+    table.insert(summary_parts, "Solo recalcular: listo.")
+  else
+    table.insert(summary_parts, string.format(
+      "%s: %d nuevos, %d ya estaban.",
+      modoLabel(modo), ok_count, skip_count
+    ))
+  end
+
+  for _, w in ipairs(warnings) do
+    table.insert(summary_parts, clipLine(w, 60))
+  end
+
   if paso3_msg then
-    summary = summary .. "\n\n" .. paso3_msg
+    table.insert(summary_parts, "")
+    table.insert(summary_parts, clipLine(paso3_msg, 60))
   end
-  if #warnings > 0 then
-    summary = summary .. "\n\nAvisos (revisar, se corrigieron solos):\n" .. table.concat(warnings, "\n")
+
+  if sobrantes > 0 then
+    table.insert(summary_parts, "")
+    table.insert(summary_parts, string.format(
+      "ATENCION: %d pieza(s) en Corte sin sello.",
+      sobrantes
+    ))
   end
-  if #errors > 0 then
-    summary = summary .. "\n\nErrores (revisar a mano):\n" .. table.concat(errors, "\n")
+
+  table.insert(summary_parts, "")
+  if not blob_ok then
+    table.insert(summary_parts, "No se pudo escribir el reporte en el archivo.")
+  elseif not post_ok then
+    table.insert(summary_parts, "No se pudo avisar a la app.")
+    table.insert(summary_parts, clipLine(tostring(post_err or "error"), 60))
+    table.insert(summary_parts, "Subi el archivo desde Programas.")
+  else
+    table.insert(summary_parts, "App actualizada.")
   end
-  DisplayMessage(summary)
+  table.insert(summary_parts, "Guarda el archivo (Ctrl+S).")
+
+  DisplayMessage(table.concat(summary_parts, "\n"))
   return true
 end

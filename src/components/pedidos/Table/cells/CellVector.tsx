@@ -433,13 +433,13 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   </div>
                 )}
-                <div className={`h-full w-full ${previewUsableAsImage && isEps ? 'bg-white' : ''}`}>
+                <div className="h-full w-full bg-white">
                   {displayUrl ? (
                     <>
                       <img
                         src={displayUrl}
                         alt={isEps ? 'Vector EPS Preview' : 'Vector'}
-                        className={`h-full w-full ${previewUsableAsImage && isEps ? 'object-contain' : 'object-cover'}`}
+                        className="h-full w-full object-contain"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                           const fb = e.currentTarget.nextElementSibling as HTMLElement | null;

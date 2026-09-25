@@ -20,6 +20,9 @@ import TestEtiquetasPdfPage from './app/dev/TestEtiquetasPdfPage'
 import WhatsNewSandboxPage from './app/dev/WhatsNewSandboxPage'
 import VectorizarTourSandboxPage from './app/dev/VectorizarTourSandboxPage'
 import AppUpdateSandboxPage from './app/dev/AppUpdateSandboxPage'
+import ProgramasCardSandboxPage from './app/dev/ProgramasCardSandboxPage'
+import ProgramasBoardSandboxPage from './app/dev/ProgramasBoardSandboxPage'
+import ProgramasTourSandboxPage from './app/dev/ProgramasTourSandboxPage'
 import StockPendienteSandboxPage from './app/stock-pendiente/index'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { AppUpdatesHost } from './components/global/AppUpdatesHost'
@@ -65,6 +68,9 @@ function App() {
               <Route path="/dev/whats-new" element={<WhatsNewSandboxPage />} />
               <Route path="/dev/vectorizar-tour" element={<VectorizarTourSandboxPage />} />
               <Route path="/dev/app-update" element={<AppUpdateSandboxPage />} />
+              <Route path="/dev/programas-card" element={<ProgramasCardSandboxPage />} />
+              <Route path="/dev/programas" element={<ProgramasBoardSandboxPage />} />
+              <Route path="/dev/programas-tour" element={<ProgramasTourSandboxPage />} />
             </>
           ) : null}
         </Routes>

@@ -258,7 +258,14 @@ export interface ProductionItem {
   productionState: ProductionState;
   isPriority: boolean;
   vectorizationState: VectorizationState;
-  program: string; // Cambiado de ProgramType a string para permitir texto libre
+  /** Nombre del programa (programa_nombre). Solo lectura en Producción. */
+  program: string;
+  /** FK real a programa. Null = texto histórico o pieza suelta. */
+  programId?: string | null;
+  /** Por qué salió del último programa (SIN_MATERIAL, etc.). */
+  motivoSalidaPrograma?: string | null;
+  /** Motivo de fallo de importación en Aspire; se limpia al reimportar bien. */
+  noImportadoMotivo?: string | null;
   aspireState?: AspireState | null;
   machine?: MachineType | null;
   notes?: string;
@@ -299,6 +306,8 @@ export interface ProgramStamp {
   /** Nota del pedido/sello (texto completo). */
   notes?: string | null;
   isPriority?: boolean;
+  /** Fecha de pedido del sello (columna fecha), YYYY-MM-DD. */
+  orderDate?: string;
   deadlineAt?: string;
   createdAt?: string;
   tipoPlanchuela?: PlanchuelaSize | null;
@@ -338,6 +347,12 @@ export interface Program {
   archivoAspireUrl?: string | null;
   archivoAspireNombre?: string | null;
   archivoAspireSubidoAt?: string | null;
+  /** Miniatura 2D extraída del .crv3d (bucket programas-preview). */
+  previewUrl?: string | null;
+  syncAt?: string | null;
+  syncOrigen?: 'GADGET' | 'ARCHIVO_SUBIDO' | null;
+  /** Último reporte crudo del gadget / parseo del .crv3d. */
+  syncPayload?: Record<string, unknown> | null;
   createdAt: string;
   lastUpdated: string;
   createdBy: string;

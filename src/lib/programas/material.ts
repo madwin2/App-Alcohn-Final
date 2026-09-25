@@ -111,3 +111,52 @@ export function formatLengthByPlanchuela(lengths: ProgramLengthByPlanchuela): st
     .filter((ref) => (lengths[ref] || 0) > 0)
     .map((ref) => `${ref}mm: ${Math.round(lengths[ref] || 0)}mm`);
 }
+
+export type ProgramLoadPlanchuela = {
+  tipo: PlanchuelaSize;
+  usedMm: number;
+  maxMm: number;
+  /** 0–100+ (puede pasar de 100 si hay overshoot). */
+  pct: number;
+};
+
+export type ProgramLoad = {
+  /** Capacidad total = N planchuelas elegibles × maxMm. */
+  totalCapacityMm: number;
+  totalUsedMm: number;
+  /** Carga global del programa (0–100+). */
+  pct: number;
+  maxMm: number;
+  byPlanchuela: ProgramLoadPlanchuela[];
+};
+
+/**
+ * Carga del programa vs capacidad de la máquina.
+ * Ej. C: 4 planchuelas × 400mm. Si cada una está al 25%, pct global = 25%.
+ * ABC no tiene tope → null.
+ */
+export function computeProgramLoad(
+  machine: ProgramMachineType,
+  lengths: ProgramLengthByPlanchuela,
+  maxOverrides?: Partial<Record<'C' | 'G' | 'XL', number>>,
+): ProgramLoad | null {
+  const maxMm = getMaxLengthMmForMachine(machine, maxOverrides);
+  if (maxMm == null || machine === 'ABC') return null;
+
+  const tipos = MACHINE_SIZE_ELIGIBILITY[machine];
+  const byPlanchuela: ProgramLoadPlanchuela[] = tipos.map((tipo) => {
+    const usedMm = lengths[tipo] || 0;
+    return {
+      tipo,
+      usedMm,
+      maxMm,
+      pct: maxMm > 0 ? (usedMm / maxMm) * 100 : 0,
+    };
+  });
+
+  const totalCapacityMm = tipos.length * maxMm;
+  const totalUsedMm = byPlanchuela.reduce((sum, row) => sum + row.usedMm, 0);
+  const pct = totalCapacityMm > 0 ? (totalUsedMm / totalCapacityMm) * 100 : 0;
+
+  return { totalCapacityMm, totalUsedMm, pct, maxMm, byPlanchuela };
+}

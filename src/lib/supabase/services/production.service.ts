@@ -93,7 +93,10 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         updated_at,
         es_prioritario,
         estado_vectorizacion,
+        programa_id,
         programa_nombre,
+        motivo_salida_programa,
+        no_importado_motivo,
         item_config,
         mockup_solicitud_id,
         ordenes!inner (
@@ -218,9 +221,11 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         vectorizationState = (sello as any).estado_vectorizacion as 'BASE' | 'VECTORIZADO' | 'DESCARGADO' | 'EN_PROCESO' | 'ERROR';
       }
 
-      // Obtener programa desde el campo programa_nombre
-      // IMPORTANTE: NO inferir el programa desde la máquina - debe estar vacío hasta que se complete manualmente
-      let program = (sello as any).programa_nombre || '';
+      // Programa: nombre + FK real (solo lectura en UI; se asigna en Programas)
+      const program = (sello as any).programa_nombre || '';
+      const programId = (sello as any).programa_id ?? null;
+      const motivoSalidaPrograma = (sello as any).motivo_salida_programa ?? null;
+      const noImportadoMotivo = (sello as any).no_importado_motivo ?? null;
 
       const dateStr = sello.fecha
         ? (typeof sello.fecha === 'string' ? sello.fecha : (sello.fecha as any)?.toISOString?.()?.slice(0, 10) ?? null)
@@ -249,6 +254,9 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         isPriority: (sello as any).es_prioritario === true || (sello as any).es_prioritario === 'true',
         vectorizationState,
         program,
+        programId,
+        motivoSalidaPrograma,
+        noImportadoMotivo,
         aspireState: (sello as any).estado_aspire || null,
         machine: sello.maquina || null,
         notes: sello.nota || undefined,
@@ -377,18 +385,14 @@ export const updateProductionItem = async (
 
     if (updates.machine !== undefined) {
       updateData.maquina = updates.machine || null;
-      // IMPORTANTE: No actualizar programa automáticamente cuando se cambia la máquina
-      // El programa solo se actualiza si se pasa explícitamente en updates.program
     }
 
     if (updates.deadline !== undefined) {
       updateData.fecha_limite = updates.deadline ? updates.deadline.split('T')[0] : null;
     }
 
-    if (updates.program !== undefined) {
-      (updateData as any).programa_nombre = updates.program || null;
-    }
-    // Si program NO está en updates, NO tocar programa_nombre en la BD
+    // programa_nombre / programa_id: solo se escriben desde Programas (add/remove stamps).
+    // Producción no edita el programa.
 
     // Guardar isPriority en la columna es_prioritario (separada del estado de fabricación)
     if (updates.isPriority !== undefined) {
@@ -487,17 +491,11 @@ export const updateProductionItem = async (
       vectorizationState = currentVectorizationState;
     }
 
-    // Obtener programa desde el campo programa_nombre
-    // IMPORTANTE: NUNCA inferir el programa desde la máquina al actualizar
-    // Solo usar el valor que está en la BD, o el valor explícitamente pasado en updates
-    let program = (updatedSello as any).programa_nombre || '';
-    
-    // Si el programa fue explícitamente actualizado en los updates, usar ese valor
-    if (updates.program !== undefined) {
-      program = updates.program || '';
-    }
-    // Si no hay programa en la BD y no se pasó en updates, dejar vacío
-    // NO usar mapeo basado en máquina aquí para evitar cambios automáticos
+    // Programa: solo lectura desde BD (no se escribe desde Producción)
+    const program = (updatedSello as any).programa_nombre || '';
+    const programId = (updatedSello as any).programa_id ?? null;
+    const motivoSalidaPrograma = (updatedSello as any).motivo_salida_programa ?? null;
+    const noImportadoMotivo = (updatedSello as any).no_importado_motivo ?? null;
 
     // Obtener tareas de la orden (solo tareas de producción)
     const { data: tareas } = await supabase
@@ -549,6 +547,9 @@ export const updateProductionItem = async (
       isPriority: (updatedSello as any).es_prioritario === true || (updatedSello as any).es_prioritario === 'true',
       vectorizationState,
       program,
+      programId,
+      motivoSalidaPrograma,
+      noImportadoMotivo,
       aspireState: (updatedSello as any).estado_aspire || null,
       machine: updatedSello.maquina || null,
       notes: updatedSello.nota || undefined,

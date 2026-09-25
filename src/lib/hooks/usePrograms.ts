@@ -154,15 +154,30 @@ export const usePrograms = () => {
     return updated;
   };
 
+  const syncProgramFromAspireFile = async (
+    programId: string,
+    file: File,
+  ): Promise<programsService.SyncProgramFromFileResult> => {
+    const result = await programsService.syncProgramFromAspireFile(programId, file);
+    setPrograms((prev) => prev.map((p) => (p.id === programId ? result.program : p)));
+    return result;
+  };
+
+  const applyProgramReconciliation = async (
+    programId: string,
+    decisions: {
+      soloEnApp: programsService.SoloEnAppDecision[];
+      soloEnArchivo: programsService.SoloEnArchivoDecision[];
+    },
+  ): Promise<Program> => {
+    const updated = await programsService.applyProgramReconciliation(programId, decisions);
+    setPrograms((prev) => prev.map((p) => (p.id === programId ? updated : p)));
+    return updated;
+  };
+
   const downloadPackage = async (programId: string): Promise<void> => {
-    await generateAndDownloadProgramPackage(programId);
-    try {
-      const updated = await programsService.lockProgram(programId);
-      setPrograms((prev) => prev.map((p) => (p.id === programId ? updated : p)));
-    } catch (e) {
-      console.warn('Paquete descargado pero no se pudo bloquear automáticamente:', e);
-      await fetchPrograms({ silent: true });
-    }
+    const updated = await generateAndDownloadProgramPackage(programId);
+    setPrograms((prev) => prev.map((p) => (p.id === programId ? updated : p)));
   };
 
   const getEligibleStamps = async (
@@ -187,6 +202,8 @@ export const usePrograms = () => {
     lockProgram,
     unlockProgram,
     uploadVerifiedAspire,
+    syncProgramFromAspireFile,
+    applyProgramReconciliation,
     downloadPackage,
     getEligibleStamps,
   };

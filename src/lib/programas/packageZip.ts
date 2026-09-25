@@ -3,11 +3,10 @@ import { supabase } from '@/lib/supabase/client';
 import {
   canDownloadPackage,
   getBaseFileUrl,
-  getGadgetFileUrl,
+  getMachineMaxLengthMm,
+  getOrCreateProgramSyncToken,
   getProgramById,
   markProgramPackageReady,
-  PROGRAM_GADGET_FILENAME,
-  ProgramBaseMachine,
   ProgramServiceError,
 } from '@/lib/supabase/services/programs.service';
 import { vectorUrlFromPreview } from '@/lib/utils/vectorUrlFromPreview';
@@ -42,15 +41,22 @@ function toolpathTemplatesFor(stamp: ProgramStamp): string[] {
   return [`roughing_${tipo}.ToolpathTemplate`, `profile_${tipo}.ToolpathTemplate`];
 }
 
-function buildManifestLua(program: Program, vectorFiles: { stamp: ProgramStamp; archivo: string }[]): string {
+function buildManifestLua(
+  program: Program,
+  vectorFiles: { stamp: ProgramStamp; archivo: string }[],
+  syncToken: string,
+): string {
+  const largoMaximoMm = getMachineMaxLengthMm(program.machine);
   const sellosLua = vectorFiles
     .map(({ stamp, archivo }, index) => {
       const templates = toolpathTemplatesFor(stamp)
         .map((t) => `"${t}"`)
         .join(', ');
+      const diseno = (stamp.designName || '').replace(/"/g, '\\"');
       return `    {
       orden = ${index + 1},
       sello_id = "${stamp.id}",
+      diseno = "${diseno}",
       archivo = "${archivo}",
       ancho_mm = ${(stamp.widthMm || 0).toFixed(1)},
       largo_mm = ${(stamp.heightMm || 0).toFixed(1)},
@@ -64,8 +70,10 @@ function buildManifestLua(program: Program, vectorFiles: { stamp: ProgramStamp; 
 
   return `return {
   programa_id = "${program.id}",
+  token = "${syncToken}",
   programa_nombre = "${program.name.replace(/"/g, '\\"')}",
   maquina = "${program.machine}",
+  largo_maximo_mm = ${largoMaximoMm ?? 'nil'},
   sellos = {
 ${sellosLua}
   },
@@ -102,11 +110,12 @@ function triggerBrowserDownload(blob: Blob, filename: string) {
 }
 
 /**
- * Genera el paquete ZIP del programa (vectores + manifest + .crv3d base + gadget .lua),
+ * Genera el paquete ZIP del programa (vectores + manifest + .crv3d base),
  * lo sube a Storage, marca el programa LISTO y dispara la descarga en el navegador.
  *
+ * El gadget .lua NO va en el ZIP: se instala una vez por PC desde Storage.
  * Nota: por ahora se incluyen los vectores en el formato disponible (EPS/preview).
- * La conversión a DXF hace falta para que el gadget importe sin intervención manual.
+ * La conversión a DXF/SVG hace falta para que el gadget importe sin intervención manual.
  */
 export async function generateAndDownloadProgramPackage(programId: string): Promise<Program> {
   const program = await getProgramById(programId);
@@ -152,7 +161,8 @@ export async function generateAndDownloadProgramPackage(programId: string): Prom
     throw new ProgramServiceError(`No se pudo armar el ZIP:\n${failures.join('\n')}`);
   }
 
-  zip.file('manifest.lua', buildManifestLua(program, vectorMeta));
+  const syncToken = await getOrCreateProgramSyncToken(programId);
+  zip.file('manifest.lua', buildManifestLua(program, vectorMeta, syncToken));
 
   const downloadBase = safeDownloadBasename(program.name);
   const crv3dName = `${downloadBase}.crv3d`;
@@ -176,22 +186,8 @@ export async function generateAndDownloadProgramPackage(programId: string): Prom
       'LEEME.txt',
       'No hay .crv3d base registrado para esta máquina en programa_archivos_base.\n'
         + 'Subí el archivo base desde la UI de Programas para incluirlo en futuros paquetes.\n'
-        + 'Por ahora el ZIP trae vectores + manifest.lua + gadget.\n',
+        + 'Por ahora el ZIP trae vectores + manifest.lua.\n',
     );
-  }
-
-  const machine = program.machine as ProgramBaseMachine;
-  const gadgetUrl = await getGadgetFileUrl(machine);
-  const gadgetName = PROGRAM_GADGET_FILENAME[machine];
-  if (gadgetUrl) {
-    try {
-      const gadgetBytes = await fetchBinary(gadgetUrl);
-      zip.file(gadgetName, gadgetBytes);
-    } catch (e) {
-      failures.push(
-        `Gadget ${gadgetName}: ${e instanceof Error ? e.message : 'no se pudo descargar'}`,
-      );
-    }
   }
 
   if (failures.length) {

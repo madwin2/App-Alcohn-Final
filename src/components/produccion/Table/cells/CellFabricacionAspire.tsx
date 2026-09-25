@@ -1,6 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProductionItem, ProductionState, AspireState } from '@/lib/types/index';
-import { getFabricationStateColor, getFabricationChipVisual, getFabricationLabel } from '@/lib/utils/format';
+import { getFabricationChipVisual, getFabricationLabel } from '@/lib/utils/format';
 
 interface CellFabricacionAspireProps {
   item: ProductionItem;
@@ -138,6 +138,41 @@ export function CellFabricacionAspire({ item, onFabricacionChange, onAspireChang
   // La prioridad la tiene el estado de aspire sobre programado
   const displayState = item.aspireState ? `ASPIRE_${item.aspireState.replace(/\s+/g, '_')}` : fabricationState;
   const isAspireState = !!item.aspireState;
+
+  const renderChip = () => {
+    if (isAspireState && item.aspireState) {
+      const visual = getAspireChipVisual(item.aspireState);
+      return (
+        <span
+          className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
+          style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}
+        >
+          {getAspireLabel(item.aspireState)}
+        </span>
+      );
+    }
+    const visual = getFabricationChipVisual(fabricationState, item.isPriority);
+    return (
+      <span
+        className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
+        style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}
+      >
+        {getFabricationLabel(fabricationState, item.isPriority)}
+      </span>
+    );
+  };
+
+  // En programa: el estado lo manda la sync / pestaña Programas — no pisar desde acá.
+  if (item.programId) {
+    return (
+      <div
+        className="w-full h-12 flex items-center justify-center"
+        title="Este sello está en un programa. El estado se sincroniza desde Aspire / Programas."
+      >
+        {renderChip()}
+      </div>
+    );
+  }
   
   const handleValueChange = (value: string) => {
     // Si el valor empieza con "ASPIRE_", es un estado de aspire
@@ -173,29 +208,7 @@ export function CellFabricacionAspire({ item, onFabricacionChange, onAspireChang
       <Select value={displayState} onValueChange={handleValueChange}>
         <SelectTrigger className="w-full h-12 text-xs [&>svg]:hidden border-none bg-transparent rounded-lg p-3 overflow-visible flex items-center justify-center [&:hover]:bg-transparent">
           <SelectValue>
-            {(() => {
-              if (isAspireState && item.aspireState) {
-                const visual = getAspireChipVisual(item.aspireState);
-                return (
-                  <span
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
-                    style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}
-                  >
-                    {getAspireLabel(item.aspireState)}
-                  </span>
-                );
-              } else {
-                const visual = getFabricationChipVisual(fabricationState, item.isPriority);
-                return (
-                  <span
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs border ${visual.textClass}`}
-                    style={{ backgroundImage: visual.backgroundImage, backgroundColor: visual.backgroundColor, boxShadow: visual.boxShadow, borderColor: visual.borderColor, backdropFilter: 'saturate(140%) blur(3px)', color: visual.textColor, width: visual.width }}
-                  >
-                    {getFabricationLabel(fabricationState, item.isPriority)}
-                  </span>
-                );
-              }
-            })()}
+            {renderChip()}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>

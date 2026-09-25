@@ -422,28 +422,6 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
       });
     }
   };
-  const handleProgramaChange = useCallback(async (itemId: string, newProgram: string) => {
-    try {
-      // Si hay filas seleccionadas, aplicar a todas las seleccionadas
-      // Si no hay filas seleccionadas, aplicar solo a la fila clickeada
-      const itemsToUpdate = selectedRows.size > 0
-        ? Array.from(selectedRows)
-        : [itemId];
-
-      // Actualizar todas las filas seleccionadas
-      await Promise.all(
-        itemsToUpdate.map(id => updateItem(id, { program: newProgram }))
-      );
-
-      const count = itemsToUpdate.length;
-      toast({ 
-        title: 'Programa actualizado', 
-        description: `Programa cambiado a "${newProgram}" para ${count} item${count > 1 ? 's' : ''}` 
-      });
-    } catch (error) {
-      toast({ title: 'Error', description: 'No se pudo actualizar el programa', variant: 'destructive' });
-    }
-  }, [selectedRows, updateItem, toast]);
 
   const handleDateChange = (_itemId: string, newDate: Date) => {
     toast({ title: 'Fecha actualizada', description: `${newDate.toLocaleDateString('es-ES')}` });
@@ -592,7 +570,6 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
       onFabricacionChange: handleFabricacionChange,
       onRequestRehacer: handleRequestRehacer,
       onVectorizadoChange: handleVectorizadoChange,
-      onProgramaChange: handleProgramaChange,
       onAspireChange: handleAspireChange,
       onDateChange: handleDateChange,
       onDeadlineChange: handleDeadlineChange,
@@ -605,7 +582,7 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
       onOpenOrderInfo: setOrderInfoItem,
       itemCountByOrderId: resolvedItemCountByOrderId,
     });
-  }, [editingRowId, handleFabricacionChange, handleRequestRehacer, handleVectorizadoChange, handleProgramaChange, handleAspireChange, handleDeadlineChange, updateItem, resolvedItemCountByOrderId]);
+  }, [editingRowId, handleFabricacionChange, handleRequestRehacer, handleVectorizadoChange, handleAspireChange, handleDeadlineChange, updateItem, resolvedItemCountByOrderId]);
 
   // Sistema unificado de columnas con redimensionamiento y reordenamiento
   const sortedColumns = useMemo(() => {

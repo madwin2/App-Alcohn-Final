@@ -24,7 +24,8 @@ import { nextAutoProgramName } from '../../programas/programName';
 import { ELIGIBLE_FAB_STATES, isEligibleStampForMachine } from '../../programas/eligibility';
 import { fetchLatestFabricacionParams } from './fabricacionParametros.service';
 import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
-import { notifySellosHechos } from '@/lib/notificaciones/events';
+import { notifySellosHechos, notifySellosNoImportados } from '@/lib/notificaciones/events';
+import { Crv3dInfo, Crv3dParseError, parseCrv3d } from '../../programas/crv3d';
 
 type ProgramaRow = Database['public']['Tables']['programa']['Row'];
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
@@ -174,6 +175,11 @@ function mapSelloToProgramStamp(sello: SelloRow, perdidaCorteCm: number): Progra
     photoUrl: sello.foto_sello || undefined,
     notes: sello.nota || null,
     isPriority: Boolean((sello as any).es_prioritario) || sello.estado_fabricacion === 'Prioridad',
+    orderDate: sello.fecha
+      ? typeof sello.fecha === 'string'
+        ? sello.fecha.slice(0, 10)
+        : (sello.fecha as any)?.toISOString?.()?.slice(0, 10)
+      : undefined,
     deadlineAt: sello.fecha_limite || undefined,
     createdAt: sello.created_at || undefined,
     tipoPlanchuela: resolvePlanchuelaRef(dims),
@@ -198,7 +204,11 @@ export type ProgramEventTipo =
   | 'ESTADO_CAMBIADO'
   | 'SELLO_AGREGADO'
   | 'SELLO_QUITADO'
-  | 'ASPIRE_SUBIDO';
+  | 'ASPIRE_SUBIDO'
+  | 'SINCRONIZADO'
+  | 'SELLO_NO_IMPORTADO'
+  | 'SELLO_BORRADO_EN_MAQUINA'
+  | 'TRAYECTORIAS_SUBIDAS';
 
 export type ProgramEvent = {
   id: string;
@@ -340,6 +350,10 @@ function mapProgramaToProgram(
     archivoAspireUrl: (programa as any).archivo_aspire_url ?? null,
     archivoAspireNombre: (programa as any).archivo_aspire_nombre ?? null,
     archivoAspireSubidoAt: (programa as any).archivo_aspire_subido_at ?? null,
+    previewUrl: (programa as any).preview_url ?? null,
+    syncAt: (programa as any).sync_at ?? null,
+    syncOrigen: (programa as any).sync_origen ?? null,
+    syncPayload: ((programa as any).sync_payload as Record<string, unknown> | null) ?? null,
     createdAt: programa.created_at || new Date().toISOString(),
     lastUpdated: programa.updated_at || new Date().toISOString(),
     createdBy: 'system',
@@ -843,9 +857,10 @@ export const getEligibleStamps = async (opts: {
 
   filtered.sort((a, b) => {
     if (Boolean(a.isPriority) !== Boolean(b.isPriority)) return a.isPriority ? -1 : 1;
-    const da = a.deadlineAt ? new Date(a.deadlineAt).getTime() : Number.POSITIVE_INFINITY;
-    const db = b.deadlineAt ? new Date(b.deadlineAt).getTime() : Number.POSITIVE_INFINITY;
-    if (da !== db) return da - db;
+    // Más viejos primero (fecha de pedido ascendente)
+    const oa = a.orderDate ? new Date(a.orderDate).getTime() : Number.POSITIVE_INFINITY;
+    const ob = b.orderDate ? new Date(b.orderDate).getTime() : Number.POSITIVE_INFINITY;
+    if (oa !== ob) return oa - ob;
     const ca = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const cb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return ca - cb;
@@ -1080,8 +1095,454 @@ function safeAspireFilename(name: string): string {
   return cleaned || 'programa-verificado.crv3d';
 }
 
+export type ProgramReconciliation = {
+  enAmbos: string[];
+  soloEnApp: string[];
+  soloEnArchivo: string[];
+  noIdentificados: number;
+  avisos: string[];
+};
+
+export type SyncProgramFromFileResult = {
+  program: Program;
+  reconciliation: ProgramReconciliation;
+  /** id → nombre de diseño (para la UI de conciliación). */
+  stampLabels: Record<string, string>;
+  parseError: string | null;
+  needsAttention: boolean;
+};
+
+export type SoloEnAppDecision =
+  | { selloId: string; action: 'KEEP' }
+  | {
+      selloId: string;
+      action: 'REMOVE';
+      restoreMode: RemoveStampRestoreMode;
+      newFabricationState?: FabricationState;
+    };
+
+export type SoloEnArchivoDecision =
+  | { selloId: string; action: 'ADD' }
+  | { selloId: string; action: 'IGNORE' };
+
+function fileSelloIdsFromInfo(info: Crv3dInfo): { ids: string[]; avisos: string[] } {
+  const avisos: string[] = [];
+  const fromLayers = info.selloIds.map((id) => id.toLowerCase());
+  const raw = info.parameters.ALCOHN_PROGRAMA_V1;
+  if (!raw) return { ids: fromLayers, avisos };
+
+  try {
+    const parsed = JSON.parse(raw) as { sellos_presentes?: unknown };
+    if (!Array.isArray(parsed.sellos_presentes)) {
+      return { ids: fromLayers, avisos };
+    }
+    const fromReport = parsed.sellos_presentes
+      .map((x) => String(x).toLowerCase())
+      .filter(Boolean);
+    const setReport = new Set(fromReport);
+    const setLayers = new Set(fromLayers);
+    if (
+      setReport.size !== setLayers.size
+      || [...setReport].some((id) => !setLayers.has(id))
+    ) {
+      avisos.push(
+        `El reporte del gadget dice ${fromReport.length} sello(s); las capas del archivo muestran ${fromLayers.length}.`,
+      );
+    }
+    return { ids: fromReport, avisos };
+  } catch {
+    avisos.push('No se pudo leer ALCOHN_PROGRAMA_V1 del archivo.');
+    return { ids: fromLayers, avisos };
+  }
+}
+
+export const reconcileProgramWithFile = async (
+  programId: string,
+  info: Crv3dInfo,
+): Promise<ProgramReconciliation> => {
+  const { data: sellos, error } = await supabase
+    .from('sellos')
+    .select('id')
+    .eq('programa_id', programId);
+
+  if (error) throw error;
+
+  const appIds = new Set((sellos || []).map((s) => String(s.id).toLowerCase()));
+  const { ids: fileIds, avisos } = fileSelloIdsFromInfo(info);
+  const fileSet = new Set(fileIds);
+
+  const enAmbos: string[] = [];
+  const soloEnApp: string[] = [];
+  const soloEnArchivo: string[] = [];
+
+  for (const id of appIds) {
+    if (fileSet.has(id)) enAmbos.push(id);
+    else soloEnApp.push(id);
+  }
+  for (const id of fileSet) {
+    if (!appIds.has(id)) soloEnArchivo.push(id);
+  }
+
+  const noIdentificados =
+    info.piezasEnCorte != null ? Math.max(0, info.piezasEnCorte - fileIds.length) : 0;
+
+  if (noIdentificados > 0) {
+    avisos.push(
+      `Hay ${noIdentificados} pieza(s) en la capa Corte sin sello identificable.`,
+    );
+  }
+
+  return { enAmbos, soloEnApp, soloEnArchivo, noIdentificados, avisos };
+};
+
+function reconciliationNeedsAttention(r: ProgramReconciliation): boolean {
+  return (
+    r.soloEnApp.length > 0
+    || r.soloEnArchivo.length > 0
+    || r.noIdentificados > 0
+    || r.avisos.length > 0
+  );
+}
+
+async function loadStampLabels(ids: string[]): Promise<Record<string, string>> {
+  if (!ids.length) return {};
+  const { data } = await supabase.from('sellos').select('id, diseno').in('id', ids);
+  const labels: Record<string, string> = {};
+  for (const row of data || []) {
+    labels[String(row.id).toLowerCase()] = (row.diseno as string) || String(row.id);
+  }
+  return labels;
+}
+
+async function uploadPreviewGif(
+  programId: string,
+  gif: Uint8Array,
+): Promise<string | null> {
+  const path = `${programId}/${Date.now()}-preview.gif`;
+  const copy = new Uint8Array(gif.byteLength);
+  copy.set(gif);
+  const blob = new Blob([copy.buffer], { type: 'image/gif' });
+  const { error } = await supabase.storage.from('programas-preview').upload(path, blob, {
+    contentType: 'image/gif',
+    upsert: true,
+  });
+  if (error) {
+    console.warn('[programas] no se pudo subir preview:', error);
+    return null;
+  }
+  const { data } = supabase.storage.from('programas-preview').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export type SelloNoImportadoItem = {
+  sello_id: string;
+  motivo: string;
+  diseno?: string;
+};
+
+/** Extrae sellos_no_importados del blob ALCOHN_PROGRAMA_V1 o del sync_payload. */
+export function parseSellosNoImportados(
+  source: Record<string, unknown> | null | undefined,
+): SelloNoImportadoItem[] {
+  if (!source) return [];
+  const raw = source.sellos_no_importados;
+  if (!Array.isArray(raw)) return [];
+  const out: SelloNoImportadoItem[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const row = entry as Record<string, unknown>;
+    const sello_id = String(row.sello_id ?? row.selloId ?? '').trim();
+    const motivo = String(row.motivo ?? '').trim();
+    if (!sello_id) continue;
+    const disenoRaw = row.diseno ?? row.designName;
+    out.push({
+      sello_id,
+      motivo: motivo || 'sin motivo',
+      diseno: disenoRaw != null ? String(disenoRaw) : undefined,
+    });
+  }
+  return out;
+}
+
+export type SelloEnOtraPlanchuelaItem = {
+  sello_id: string;
+  diseno?: string;
+  planificada: number;
+  real: number;
+};
+
+/** Extrae sellos_en_otra_planchuela del sync_payload (gadget avisó columna ≠ planificada). */
+export function parseSellosEnOtraPlanchuela(
+  source: Record<string, unknown> | null | undefined,
+): SelloEnOtraPlanchuelaItem[] {
+  if (!source) return [];
+  const raw = source.sellos_en_otra_planchuela;
+  if (!Array.isArray(raw)) return [];
+  const out: SelloEnOtraPlanchuelaItem[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const row = entry as Record<string, unknown>;
+    const sello_id = String(row.sello_id ?? row.selloId ?? '').trim();
+    if (!sello_id) continue;
+    const planificada = Number(row.planificada);
+    const real = Number(row.real);
+    if (!Number.isFinite(planificada) || !Number.isFinite(real)) continue;
+    const disenoRaw = row.diseno ?? row.designName;
+    out.push({
+      sello_id,
+      planificada,
+      real,
+      diseno: disenoRaw != null ? String(disenoRaw) : undefined,
+    });
+  }
+  return out;
+}
+
+function extractSellosNoImportadosFromCrv3d(info: Crv3dInfo): SelloNoImportadoItem[] {
+  const raw = info.parameters.ALCOHN_PROGRAMA_V1;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return parseSellosNoImportados(parsed);
+  } catch {
+    return [];
+  }
+}
+
+async function recordSellosNoImportados(
+  programId: string,
+  programName: string,
+  items: SelloNoImportadoItem[],
+  stampLabels: Record<string, string>,
+): Promise<void> {
+  if (!items.length) return;
+
+  const enriched = items.map((item) => ({
+    selloId: item.sello_id,
+    diseno:
+      item.diseno
+      || stampLabels[item.sello_id.toLowerCase()]
+      || item.sello_id,
+    motivo: item.motivo,
+  }));
+
+  for (const item of enriched) {
+    await logProgramEvent(programId, 'SELLO_NO_IMPORTADO', {
+      sello_id: item.selloId,
+      diseno: item.diseno,
+      motivo: item.motivo,
+    });
+  }
+
+  notifySellosNoImportados({
+    programId,
+    programName,
+    items: enriched,
+  });
+}
+
+/**
+ * Sube un .crv3d, lo parsea y sincroniza el estado del programa con el archivo.
+ * No marca verificado ni bloquea: sincronizar no es terminar.
+ */
+export const syncProgramFromAspireFile = async (
+  programId: string,
+  file: File,
+): Promise<SyncProgramFromFileResult> => {
+  const program = await getProgramById(programId);
+  if (!program) throw new ProgramServiceError('Programa no encontrado');
+
+  const lower = file.name.toLowerCase();
+  if (!lower.endsWith('.crv3d') && !lower.endsWith('.crv') && !lower.endsWith('.zip')) {
+    throw new ProgramServiceError('Subí un archivo Aspire (.crv3d) o un ZIP.');
+  }
+
+  const safeName = safeAspireFilename(file.name);
+  const path = `${programId}/${Date.now()}-${safeName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('programas-aspire')
+    .upload(path, file, {
+      contentType: file.type || 'application/octet-stream',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw new ProgramServiceError(`No se pudo subir el Aspire: ${uploadError.message}`);
+  }
+
+  const { data: publicData } = supabase.storage.from('programas-aspire').getPublicUrl(path);
+  const url = publicData.publicUrl;
+  const now = new Date().toISOString();
+
+  if (program.archivoAspireUrl) {
+    try {
+      const match = program.archivoAspireUrl.match(/programas-aspire\/(.+)$/);
+      if (match?.[1]) {
+        await supabase.storage.from('programas-aspire').remove([decodeURIComponent(match[1])]);
+      }
+    } catch (e) {
+      console.warn('No se pudo borrar Aspire anterior:', e);
+    }
+  }
+
+  let parseError: string | null = null;
+  let info: Crv3dInfo | null = null;
+  let reconciliation: ProgramReconciliation = {
+    enAmbos: [],
+    soloEnApp: [],
+    soloEnArchivo: [],
+    noIdentificados: 0,
+    avisos: [],
+  };
+  let previewUrl: string | null = (program as any).previewUrl ?? null;
+  let stampLabels: Record<string, string> = {};
+  let sellosNoImportados: SelloNoImportadoItem[] = [];
+
+  try {
+    const bytes = await file.arrayBuffer();
+    info = parseCrv3d(bytes);
+    reconciliation = await reconcileProgramWithFile(programId, info);
+    sellosNoImportados = extractSellosNoImportadosFromCrv3d(info);
+    stampLabels = await loadStampLabels([
+      ...reconciliation.enAmbos,
+      ...reconciliation.soloEnApp,
+      ...reconciliation.soloEnArchivo,
+      ...sellosNoImportados.map((s) => s.sello_id),
+    ]);
+
+    if (info.previewGif) {
+      const uploaded = await uploadPreviewGif(programId, info.previewGif);
+      if (uploaded) {
+        if (previewUrl) {
+          try {
+            const prevMatch = previewUrl.match(/programas-preview\/(.+)$/);
+            if (prevMatch?.[1]) {
+              await supabase.storage
+                .from('programas-preview')
+                .remove([decodeURIComponent(prevMatch[1])]);
+            }
+          } catch {
+            /* best effort */
+          }
+        }
+        previewUrl = uploaded;
+      }
+    }
+  } catch (e) {
+    parseError =
+      e instanceof Crv3dParseError || e instanceof Error
+        ? e.message
+        : 'No se pudo leer el contenido del Aspire';
+    console.warn('[programas] parseo .crv3d falló:', e);
+  }
+
+  const syncPayload = info
+    ? {
+        version: info.version,
+        selloIds: info.selloIds,
+        piezasEnCorte: info.piezasEnCorte,
+        parameters: info.parameters,
+        reconciliation,
+        archivo: file.name,
+        ...(sellosNoImportados.length > 0
+          ? {
+              sellos_no_importados: sellosNoImportados.map((s) => ({
+                sello_id: s.sello_id,
+                motivo: s.motivo,
+                diseno:
+                  s.diseno
+                  || stampLabels[s.sello_id.toLowerCase()]
+                  || undefined,
+              })),
+            }
+          : {}),
+      }
+    : { archivo: file.name, parseError };
+
+  const { error } = await supabase
+    .from('programa')
+    .update({
+      archivo_aspire_url: url,
+      archivo_aspire_nombre: file.name,
+      archivo_aspire_subido_at: now,
+      sync_at: now,
+      sync_origen: 'ARCHIVO_SUBIDO',
+      sync_payload: syncPayload,
+      preview_url: previewUrl,
+      updated_at: now,
+    } as any)
+    .eq('id', programId);
+
+  if (error) throw error;
+
+  await logProgramEvent(programId, 'SINCRONIZADO', {
+    nombre: file.name,
+    url,
+    parseError,
+    enAmbos: reconciliation.enAmbos.length,
+    soloEnApp: reconciliation.soloEnApp.length,
+    soloEnArchivo: reconciliation.soloEnArchivo.length,
+  });
+
+  if (sellosNoImportados.length > 0) {
+    await recordSellosNoImportados(
+      programId,
+      program.name,
+      sellosNoImportados,
+      stampLabels,
+    );
+  }
+
+  const result = await getProgramById(programId);
+  if (!result) throw new ProgramServiceError('Programa no encontrado tras sincronizar Aspire');
+
+  return {
+    program: result,
+    reconciliation,
+    stampLabels,
+    parseError,
+    needsAttention: Boolean(parseError) || reconciliationNeedsAttention(reconciliation),
+  };
+};
+
+/**
+ * Aplica las decisiones del diálogo de conciliación (sacar / agregar sellos).
+ */
+export const applyProgramReconciliation = async (
+  programId: string,
+  decisions: {
+    soloEnApp: SoloEnAppDecision[];
+    soloEnArchivo: SoloEnArchivoDecision[];
+  },
+): Promise<Program> => {
+  for (const d of decisions.soloEnApp) {
+    if (d.action !== 'REMOVE') continue;
+    await removeStampFromProgram(programId, d.selloId, {
+      restoreMode: d.restoreMode,
+      newFabricationState: d.newFabricationState,
+    });
+    await supabase
+      .from('sellos')
+      .update({ motivo_salida_programa: 'DECISION_OPERARIO' } as any)
+      .eq('id', d.selloId);
+  }
+
+  const toAdd = decisions.soloEnArchivo
+    .filter((d) => d.action === 'ADD')
+    .map((d) => d.selloId);
+  if (toAdd.length > 0) {
+    await addStampsToProgram(programId, toAdd);
+  }
+
+  const result = await getProgramById(programId);
+  if (!result) throw new ProgramServiceError('Programa no encontrado');
+  return result;
+};
+
 /**
  * Sube el .crv3d Aspire ya chequeado: marca el programa como verificado y bloqueado.
+ * @deprecated Preferí syncProgramFromAspireFile — sincronizar no debe bloquear ni verificar.
  */
 export const uploadVerifiedAspire = async (
   programId: string,
@@ -1339,6 +1800,39 @@ export const uploadProgramGadgetFile = async (
 
   return data as ProgramBaseFileInfo;
 };
+
+const SYNC_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Token de sync para el manifest / gadget. Reusa el vigente o crea uno nuevo (30 días). */
+export async function getOrCreateProgramSyncToken(programId: string): Promise<string> {
+  const now = new Date();
+  const { data: existing, error: readErr } = await supabase
+    .from('programa_sync_token')
+    .select('token, expires_at')
+    .eq('programa_id', programId)
+    .maybeSingle();
+
+  if (readErr) {
+    throw new ProgramServiceError(`No se pudo leer token de sync: ${readErr.message}`);
+  }
+
+  if (existing?.token) {
+    const exp = new Date(existing.expires_at);
+    if (exp > now) return existing.token;
+  }
+
+  const token = crypto.randomUUID();
+  const expires_at = new Date(now.getTime() + SYNC_TOKEN_TTL_MS).toISOString();
+  const { error: upsertErr } = await supabase.from('programa_sync_token').upsert(
+    { programa_id: programId, token, expires_at } as any,
+    { onConflict: 'programa_id' },
+  );
+
+  if (upsertErr) {
+    throw new ProgramServiceError(`No se pudo guardar token de sync: ${upsertErr.message}`);
+  }
+  return token;
+}
 
 export const markProgramPackageReady = async (
   programId: string,
