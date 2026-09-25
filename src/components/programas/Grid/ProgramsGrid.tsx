@@ -521,7 +521,7 @@ export function ProgramsGrid({
       }}
     >
       <div ref={boardWrapRef}>
-      <div className="grid grid-cols-1 gap-6 pt-20 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(16rem,18rem)]">
+      <div className="grid grid-cols-1 items-start gap-6 pt-20 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(16rem,18rem)]">
         {byMachine.map((col) => (
           <section key={col.machine} className="min-w-0">
             <MachineColumnHeader
