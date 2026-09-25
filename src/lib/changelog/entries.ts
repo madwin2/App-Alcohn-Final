@@ -295,6 +295,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 15,
+    date: '2026-09-25',
+    title: 'Novedades',
+    version: '1.33',
+    slides: [
+      {
+        heading: 'Planchuela 25 bien contada',
+        body: 'En Chica, los sellos de ~2 cm ya no se suman a la de 19 (stock 20 mm). Van a la de 25, como en Aspire.',
+        icon: Layers,
+      },
+      {
+        heading: 'Notas y medida en la hoja',
+        body: 'En la hoja abierta, el ! muestra la nota del pedido y al pasar el mouse por el vector ves su medida en mm.',
+        icon: MousePointerClick,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

@@ -17,6 +17,7 @@ import {
   LARGO_MAXIMO_PLANCHUELA_MM,
   resolvePlanchuelaRef,
   stampLengthAlongMm,
+  type StampDimsForMaterial,
   validatePlanchuelaLengthLimit,
 } from '../../programas/material';
 import { deriveLifecycleFromStamps } from '../../programas/lifecycle';
@@ -151,16 +152,28 @@ async function loadMaterialParams(): Promise<{
   }
 }
 
+function stampDimsFromSello(sello: {
+  ancho_real?: number | string | null;
+  largo_real?: number | string | null;
+  ancho_fabricacion_mm?: number | string | null;
+  largo_fabricacion_mm?: number | string | null;
+  tipo_planchuela?: number | string | null;
+}): StampDimsForMaterial {
+  return {
+    anchoRealCm: sello.ancho_real != null ? Number(sello.ancho_real) : null,
+    largoRealCm: sello.largo_real != null ? Number(sello.largo_real) : null,
+    anchoFabricacionMm: sello.ancho_fabricacion_mm != null ? Number(sello.ancho_fabricacion_mm) : null,
+    largoFabricacionMm: sello.largo_fabricacion_mm != null ? Number(sello.largo_fabricacion_mm) : null,
+    tipoPlanchuela: sello.tipo_planchuela != null ? (Number(sello.tipo_planchuela) as PlanchuelaSize) : null,
+  };
+}
+
 function mapSelloToProgramStamp(sello: SelloRow, perdidaCorteCm: number): ProgramStamp {
   const anchoCm = sello.ancho_real != null ? Number(sello.ancho_real) : null;
   const largoCm = sello.largo_real != null ? Number(sello.largo_real) : null;
   const anchoFabricacionMm = sello.ancho_fabricacion_mm != null ? Number(sello.ancho_fabricacion_mm) : null;
   const largoFabricacionMm = sello.largo_fabricacion_mm != null ? Number(sello.largo_fabricacion_mm) : null;
-  const dims = {
-    anchoRealCm: anchoCm,
-    largoRealCm: largoCm,
-    tipoPlanchuela: sello.tipo_planchuela as PlanchuelaSize | null,
-  };
+  const dims = stampDimsFromSello(sello);
 
   return {
     id: sello.id,
@@ -317,6 +330,8 @@ function mapProgramaToProgram(
     stamps.map((s) => ({
       anchoRealCm: s.anchoRealCm,
       largoRealCm: s.largoRealCm,
+      fabricationWidthMm: s.fabricationWidthMm,
+      fabricationHeightMm: s.fabricationHeightMm,
       tipoPlanchuela: s.tipoPlanchuela,
     })),
     perdidaCorteCm,
@@ -400,11 +415,7 @@ async function markProgramDirtyAfterEdit(programId: string, hadZip: boolean): Pr
 async function recalculateAndPersistLengths(programId: string, perdidaCorteCm: number): Promise<void> {
   const { data: sellos } = await supabase.from('sellos').select('*').eq('programa_id', programId);
   const lengths = accumulateLengthByPlanchuela(
-    (sellos || []).map((s) => ({
-      anchoRealCm: s.ancho_real,
-      largoRealCm: s.largo_real,
-      tipoPlanchuela: s.tipo_planchuela as PlanchuelaSize | null,
-    })),
+    (sellos || []).map((s) => stampDimsFromSello(s)),
     perdidaCorteCm,
   );
 
@@ -516,11 +527,7 @@ export const createProgram = async (program: Partial<Program>): Promise<Program>
     if (checkErr) throw checkErr;
 
     const lengthsPreview = accumulateLengthByPlanchuela(
-      (sellosCheck || []).map((s) => ({
-        anchoRealCm: s.ancho_real,
-        largoRealCm: s.largo_real,
-        tipoPlanchuela: s.tipo_planchuela as PlanchuelaSize | null,
-      })),
+      (sellosCheck || []).map((s) => stampDimsFromSello(s)),
       perdidaCorteCm,
     );
 
@@ -891,11 +898,7 @@ export const addStampsToProgram = async (
 
   const { data: existingSellos } = await supabase.from('sellos').select('*').eq('programa_id', programId);
   const currentLengths = accumulateLengthByPlanchuela(
-    (existingSellos || []).map((s) => ({
-      anchoRealCm: s.ancho_real,
-      largoRealCm: s.largo_real,
-      tipoPlanchuela: s.tipo_planchuela as PlanchuelaSize | null,
-    })),
+    (existingSellos || []).map((s) => stampDimsFromSello(s)),
     perdidaCorteCm,
   );
 
@@ -927,11 +930,7 @@ export const addStampsToProgram = async (
       );
     }
 
-    const dims = {
-      anchoRealCm: sello.ancho_real,
-      largoRealCm: sello.largo_real,
-      tipoPlanchuela: sello.tipo_planchuela as PlanchuelaSize | null,
-    };
+    const dims = stampDimsFromSello(sello);
     const ref = resolvePlanchuelaRef(dims);
     const extraMm = stampLengthAlongMm(dims, perdidaCorteCm);
     if (ref && extraMm > 0) {

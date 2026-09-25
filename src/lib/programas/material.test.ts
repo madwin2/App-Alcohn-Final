@@ -14,12 +14,32 @@ describe('resolvePlanchuelaRef', () => {
     expect(resolvePlanchuelaRef({ tipoPlanchuela: 63 })).toBe(63);
   });
 
-  it('mapea por el lado menor en cm', () => {
+  it('mapea por el lado menor en cm (19 = usable 18 mm / stock 20 mm)', () => {
     expect(resolvePlanchuelaRef({ anchoRealCm: 1.2, largoRealCm: 5 })).toBe(12);
-    expect(resolvePlanchuelaRef({ anchoRealCm: 2.0, largoRealCm: 5 })).toBe(19);
+    expect(resolvePlanchuelaRef({ anchoRealCm: 1.8, largoRealCm: 5 })).toBe(19);
+    expect(resolvePlanchuelaRef({ anchoRealCm: 2.0, largoRealCm: 5 })).toBe(25);
     expect(resolvePlanchuelaRef({ anchoRealCm: 2.5, largoRealCm: 5 })).toBe(25);
     expect(resolvePlanchuelaRef({ anchoRealCm: 4.0, largoRealCm: 5 })).toBe(38);
     expect(resolvePlanchuelaRef({ anchoRealCm: 4.1, largoRealCm: 5 })).toBe(63);
+  });
+
+  it('prefiere medida de fabricación sobre pedido', () => {
+    expect(
+      resolvePlanchuelaRef({
+        anchoRealCm: 2.0,
+        largoRealCm: 4.0,
+        anchoFabricacionMm: 15.64,
+        largoFabricacionMm: 40,
+      }),
+    ).toBe(19);
+    expect(
+      resolvePlanchuelaRef({
+        anchoRealCm: 2.0,
+        largoRealCm: 2.8,
+        anchoFabricacionMm: 20.08,
+        largoFabricacionMm: 28,
+      }),
+    ).toBe(25);
   });
 });
 

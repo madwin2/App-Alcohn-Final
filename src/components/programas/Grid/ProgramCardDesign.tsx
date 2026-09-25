@@ -50,9 +50,20 @@ import {
 } from '@/lib/supabase/services/programs.service';
 import { parseOrderDateLocal } from '@/lib/utils/format';
 import { toast } from '@/components/ui/use-toast';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+
+function formatStampSizeMm(stamp: ProgramStamp): string | null {
+  if (!(stamp.widthMm > 0) || !(stamp.heightMm > 0)) return null;
+  return `${Math.round(stamp.widthMm)} × ${Math.round(stamp.heightMm)} mm`;
+}
 
 function prefersReducedMotion() {
   if (typeof window === 'undefined') return false;
@@ -1453,13 +1464,61 @@ function HojaBody({
             Diseños
           </p>
           {full ? (
+            <TooltipProvider delayDuration={200}>
             <div className="flex w-full flex-wrap gap-3">
-              {program.stamps.map((s) => (
+              {program.stamps.map((s) => {
+                const note = s.notes?.trim() || '';
+                const sizeLabel = formatStampSizeMm(s);
+                return (
                 <div key={s.id} className="group/stamp relative">
-                  <StampThumb
-                    stamp={s}
-                    className="h-[4.75rem] w-[4.75rem] rounded-md border-0 bg-transparent"
-                  />
+                  {sizeLabel ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="cursor-help">
+                          <StampThumb
+                            stamp={s}
+                            className="h-[4.75rem] w-[4.75rem] rounded-md border-0 bg-transparent"
+                          />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="border-zinc-800 bg-zinc-900 text-xs text-white"
+                      >
+                        {sizeLabel}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <StampThumb
+                      stamp={s}
+                      className="h-[4.75rem] w-[4.75rem] rounded-md border-0 bg-transparent"
+                    />
+                  )}
+                  {note ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          role="img"
+                          aria-label="Tiene nota del pedido"
+                          className={cn(
+                            'absolute -left-1.5 -top-1.5 z-[3] flex h-4 w-4 cursor-help',
+                            'items-center justify-center rounded-full bg-zinc-900',
+                            'text-[10px] font-bold leading-none text-white',
+                            'ring-2 ring-white shadow-sm',
+                          )}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          !
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="max-w-[16rem] border-zinc-800 bg-zinc-900 whitespace-pre-wrap text-left text-xs leading-snug text-white"
+                      >
+                        {note}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
                   {onRemoveStampClick && !pickingStamps && (
                     <button
                       type="button"
@@ -1468,14 +1527,15 @@ function HojaBody({
                         onRemoveStampClick(s);
                       }}
                       disabled={actionBusy}
-                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-white opacity-0 shadow transition-opacity group-hover/stamp:opacity-100 disabled:opacity-40"
+                      className="absolute -right-1 -top-1 z-[2] flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-white opacity-0 shadow transition-opacity group-hover/stamp:opacity-100 disabled:opacity-40"
                       aria-label={`Quitar ${s.designName}`}
                     >
                       <X className="h-3 w-3" />
                     </button>
                   )}
                 </div>
-              ))}
+                );
+              })}
               {onAddStampsClick ? (
                 <button
                   type="button"
@@ -1510,6 +1570,7 @@ function HojaBody({
                 <span className="text-xs text-zinc-500">Sin sellos</span>
               )}
             </div>
+            </TooltipProvider>
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {program.stamps.slice(0, 6).map((s) => (

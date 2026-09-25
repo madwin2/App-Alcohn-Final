@@ -9,6 +9,8 @@ export type EligibleStampRow = {
   tipo?: string | null;
   ancho_real?: number | string | null;
   largo_real?: number | string | null;
+  ancho_fabricacion_mm?: number | string | null;
+  largo_fabricacion_mm?: number | string | null;
   tipo_planchuela?: number | string | null;
 };
 
@@ -23,6 +25,8 @@ export function isEligibleStampForMachine(
   return isPlanchuelaEligibleForMachine(machine, {
     anchoRealCm: stamp.ancho_real != null ? Number(stamp.ancho_real) : null,
     largoRealCm: stamp.largo_real != null ? Number(stamp.largo_real) : null,
+    anchoFabricacionMm: stamp.ancho_fabricacion_mm != null ? Number(stamp.ancho_fabricacion_mm) : null,
+    largoFabricacionMm: stamp.largo_fabricacion_mm != null ? Number(stamp.largo_fabricacion_mm) : null,
     tipoPlanchuela: stamp.tipo_planchuela != null ? Number(stamp.tipo_planchuela) as PlanchuelaSize : null,
   });
 }

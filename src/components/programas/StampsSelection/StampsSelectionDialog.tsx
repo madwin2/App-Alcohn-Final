@@ -64,6 +64,8 @@ export function suggestStampSelection(
     const dims = {
       anchoRealCm: stamp.anchoRealCm,
       largoRealCm: stamp.largoRealCm,
+      fabricationWidthMm: stamp.fabricationWidthMm,
+      fabricationHeightMm: stamp.fabricationHeightMm,
       tipoPlanchuela: stamp.tipoPlanchuela,
     };
     const ref = resolvePlanchuelaRef(dims);

@@ -16,26 +16,57 @@ export const MACHINE_SIZE_ELIGIBILITY: Record<'C' | 'G' | 'XL', PlanchuelaSize[]
   XL: [63],
 };
 
+/**
+ * Umbral del lado menor (cm) para code 19.
+ * Code 19 = stock 20 mm con usable/Aspire eff 18 mm — no 20 mm.
+ * Sellos de ~2.0 cm van a planchuela 25.
+ */
+export const PLANCHUELA_19_MAX_MINOR_CM = 1.8;
+
 export type StampDimsForMaterial = {
   anchoRealCm?: number | null;
   largoRealCm?: number | null;
+  /** Preferidas sobre pedido cuando están seteadas (mm). */
+  anchoFabricacionMm?: number | null;
+  largoFabricacionMm?: number | null;
+  /** Alias de ProgramStamp. */
+  fabricationWidthMm?: number | null;
+  fabricationHeightMm?: number | null;
   tipoPlanchuela?: number | null;
 };
 
-/** Misma lógica que el trigger de bronce_consumo: menor = ancho planchuela, mayor = largo a lo largo. */
+/** Dimensiones efectivas en cm: fabricación si hay, si no pedido. */
+export function effectiveStampDimsCm(stamp: StampDimsForMaterial): {
+  anchoCm: number;
+  largoCm: number;
+} {
+  const fabAncho = Number(stamp.anchoFabricacionMm ?? stamp.fabricationWidthMm) || 0;
+  const fabLargo = Number(stamp.largoFabricacionMm ?? stamp.fabricationHeightMm) || 0;
+  if (fabAncho > 0 && fabLargo > 0) {
+    return { anchoCm: fabAncho / 10, largoCm: fabLargo / 10 };
+  }
+  return {
+    anchoCm: Number(stamp.anchoRealCm) || 0,
+    largoCm: Number(stamp.largoRealCm) || 0,
+  };
+}
+
+/**
+ * Misma lógica que el trigger de bronce_consumo.
+ * Umbrales alineados a Aspire (eff) / KNOWN_MAX_FABRICATION_MM: 19 → ≤18 mm.
+ */
 export function resolvePlanchuelaRef(stamp: StampDimsForMaterial): PlanchuelaSize | null {
   if (stamp.tipoPlanchuela === 12 || stamp.tipoPlanchuela === 19 || stamp.tipoPlanchuela === 25
     || stamp.tipoPlanchuela === 38 || stamp.tipoPlanchuela === 63) {
     return stamp.tipoPlanchuela;
   }
 
-  const ancho = Number(stamp.anchoRealCm) || 0;
-  const largo = Number(stamp.largoRealCm) || 0;
-  if (ancho <= 0 || largo <= 0) return null;
+  const { anchoCm, largoCm } = effectiveStampDimsCm(stamp);
+  if (anchoCm <= 0 || largoCm <= 0) return null;
 
-  const minorCm = Math.min(ancho, largo);
+  const minorCm = Math.min(anchoCm, largoCm);
   if (minorCm <= 1.2) return 12;
-  if (minorCm <= 2.0) return 19;
+  if (minorCm <= PLANCHUELA_19_MAX_MINOR_CM) return 19;
   if (minorCm <= 2.5) return 25;
   if (minorCm <= 4.0) return 38;
   return 63;
@@ -57,10 +88,9 @@ export function stampLengthAlongMm(
   stamp: StampDimsForMaterial,
   perdidaCorteCm: number = DEFAULT_PERDIDA_CORTE_CM,
 ): number {
-  const ancho = Number(stamp.anchoRealCm) || 0;
-  const largo = Number(stamp.largoRealCm) || 0;
-  if (ancho <= 0 || largo <= 0) return 0;
-  const majorCm = Math.max(ancho, largo);
+  const { anchoCm, largoCm } = effectiveStampDimsCm(stamp);
+  if (anchoCm <= 0 || largoCm <= 0) return 0;
+  const majorCm = Math.max(anchoCm, largoCm);
   return (majorCm + perdidaCorteCm) * 10;
 }
 

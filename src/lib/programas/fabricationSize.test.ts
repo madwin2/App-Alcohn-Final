@@ -32,11 +32,20 @@ describe('resolveFabricationSize', () => {
     expect(result.heightMm).toBeCloseTo(36.5, 5);
   });
 
-  it('50×20 medido 50×20 (tope 18) → recorta al tope con proporción del SVG', () => {
+  it('50×20 medido 50×20 → planchuela 25 (tope 24), entra sin popup', () => {
     const result = resolveFabricationSize(50, 20, { widthMm: 50, heightMm: 20 });
+    expect(result.tipoPlanchuela).toBe(25);
+    expect(result.needsReview).toBe(false);
+    expect(result.widthMm).toBeCloseTo(50, 5);
+    expect(result.heightMm).toBeCloseTo(20, 5);
+  });
+
+  it('50×18 medido 50×19 (tope 18 de planchuela 19) → recorta al tope', () => {
+    const result = resolveFabricationSize(50, 18, { widthMm: 50, heightMm: 19 });
+    expect(result.tipoPlanchuela).toBe(19);
     expect(result.needsReview).toBe(true);
     expect(result.heightMm).toBeCloseTo(18, 5);
-    expect(result.widthMm).toBeCloseTo(18 * (50 / 20), 5);
+    expect(result.widthMm).toBeCloseTo(18 * (50 / 19), 5);
   });
 
   it('25×11 pedido, medido 23.3×11.6 (tope 11.5) → sugiere ~23.1×11.5 sin deformar', () => {

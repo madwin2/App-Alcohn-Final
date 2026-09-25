@@ -81,6 +81,8 @@ export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgra
       selectedStamps.map((s) => ({
         anchoRealCm: s.anchoRealCm,
         largoRealCm: s.largoRealCm,
+        fabricationWidthMm: s.fabricationWidthMm,
+        fabricationHeightMm: s.fabricationHeightMm,
         tipoPlanchuela: s.tipoPlanchuela,
       })),
       DEFAULT_PERDIDA_CORTE_CM,
@@ -290,6 +292,8 @@ export function NewProgramForm({ onSuccess, onCancel, createProgram }: NewProgra
             selectedStamps.map((s) => ({
               anchoRealCm: s.anchoRealCm,
               largoRealCm: s.largoRealCm,
+              fabricationWidthMm: s.fabricationWidthMm,
+              fabricationHeightMm: s.fabricationHeightMm,
               tipoPlanchuela: s.tipoPlanchuela,
             })),
             DEFAULT_PERDIDA_CORTE_CM,
