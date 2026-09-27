@@ -220,7 +220,9 @@ export function ProgramCard({
   const locked = isLockedState(program);
   const lengthLines = formatLengthByPlanchuela(program.lengthByPlanchuela);
   const showStaleZip = Boolean(program.archivoZipUrl) && program.dirty;
-  const canDownload = canDownloadPackage(program.machine) && program.stamps.length > 0;
+  const canDownload =
+    Boolean(program.archivoAspireUrl)
+    || (canDownloadPackage(program.machine) && program.stamps.length > 0);
   const productionDateObj = parseOrderDateLocal(program.productionDate);
   const sellosNoImportados = parseSellosNoImportados(program.syncPayload);
   const sellosEnOtraPlanchuela = parseSellosEnOtraPlanchuela(program.syncPayload);
@@ -799,15 +801,20 @@ export function ProgramCard({
             onClick={(e) => {
               e.stopPropagation();
               if (!canDownload) return;
-              void run(() => onDownload(program.id), 'Paquete descargado');
+              void run(
+                () => onDownload(program.id),
+                program.archivoAspireUrl ? 'Aspire descargado' : 'Paquete descargado',
+              );
             }}
             disabled={!canDownload || busy}
             title={
-              !canDownloadPackage(program.machine)
-                ? 'ABC no genera paquete ZIP'
-                : program.stamps.length === 0
-                  ? 'Agregá sellos para descargar'
-                  : 'Descargar programa'
+              program.archivoAspireUrl
+                ? 'Descargar Aspire'
+                : !canDownloadPackage(program.machine)
+                  ? 'ABC no genera paquete ZIP'
+                  : program.stamps.length === 0
+                    ? 'Agregá sellos para descargar'
+                    : 'Descargar paquete'
             }
           >
             <Download className="h-4 w-4" />

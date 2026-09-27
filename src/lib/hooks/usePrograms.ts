@@ -186,6 +186,16 @@ export const usePrograms = () => {
   };
 
   const downloadPackage = async (programId: string): Promise<void> => {
+    const program = programs.find((p) => p.id === programId)
+      ?? (await programsService.getProgramById(programId));
+    if (!program) throw new Error('Programa no encontrado');
+
+    // Si ya hay Aspire subido (gadget / sync), bajamos ese archivo — no el pack base.
+    if (program.archivoAspireUrl) {
+      await programsService.downloadProgramAspireFile(program);
+      return;
+    }
+
     const updated = await generateAndDownloadProgramPackage(programId);
     setPrograms((prev) => prev.map((p) => (p.id === programId ? updated : p)));
   };

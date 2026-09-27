@@ -1938,6 +1938,36 @@ export const markProgramPackageReady = async (
   return result;
 };
 
+/** Descarga el .crv3d / .zip Aspire ya subido (gadget o sync manual). */
+export async function downloadProgramAspireFile(
+  program: Pick<Program, 'id' | 'name' | 'archivoAspireUrl' | 'archivoAspireNombre'>,
+): Promise<void> {
+  const url = program.archivoAspireUrl;
+  if (!url) {
+    throw new ProgramServiceError('Este programa no tiene archivo Aspire subido.');
+  }
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new ProgramServiceError(`No se pudo descargar el Aspire (HTTP ${res.status}).`);
+  }
+  const blob = await res.blob();
+  const filename =
+    program.archivoAspireNombre
+    || `${(program.name || 'programa').replace(/[^\w.\-]+/g, '_').slice(0, 80)}.crv3d`;
+
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+
+  await logProgramEvent(program.id, 'ASPIRE_DESCARGADO', { nombre: filename, url });
+}
+
 export const releaseStampFromAnyProgram = async (stampId: string): Promise<void> => {
   const { data: sello } = await supabase
     .from('sellos')

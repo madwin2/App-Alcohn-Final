@@ -525,7 +525,9 @@ export function ProgramCardDesign({
   const loadPctLabel =
     load == null ? null : `${Math.round(Math.min(999, load.pct))}%`;
   const showStaleZip = Boolean(program.archivoZipUrl) && program.dirty;
-  const canDownload = canDownloadPackage(program.machine) && program.stamps.length > 0;
+  const canDownload =
+    Boolean(program.archivoAspireUrl)
+    || (canDownloadPackage(program.machine) && program.stamps.length > 0);
   const productionDateObj = parseOrderDateLocal(program.productionDate);
   const sellosNoImportados = parseSellosNoImportados(program.syncPayload);
   const sellosEnOtraPlanchuela = parseSellosEnOtraPlanchuela(program.syncPayload);
@@ -576,7 +578,10 @@ export function ProgramCardDesign({
     actionBusy,
     onDownload: onDownload
       ? () => {
-          void runAction(() => onDownload(program.id), 'Paquete descargado');
+          void runAction(
+            () => onDownload(program.id),
+            program.archivoAspireUrl ? 'Aspire descargado' : 'Paquete descargado',
+          );
         }
       : undefined,
     onToggleLock:
@@ -1709,7 +1714,13 @@ function HojaBody({
               'hover:border-green-500/50 hover:bg-green-50 hover:text-green-700',
               'disabled:opacity-40',
             )}
-            title={canDownload ? 'Descargar' : 'No disponible'}
+            title={
+              program.archivoAspireUrl
+                ? 'Descargar Aspire'
+                : canDownload
+                  ? 'Descargar paquete'
+                  : 'No disponible'
+            }
           >
             <Download className={full ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
           </button>
@@ -1984,7 +1995,9 @@ export function ProgramSheetDragPreview({
   const lengthLines = formatLengthByPlanchuela(program.lengthByPlanchuela);
   const load = computeProgramLoad(program.machine, program.lengthByPlanchuela);
   const showStaleZip = Boolean(program.archivoZipUrl) && program.dirty;
-  const canDownload = canDownloadPackage(program.machine) && program.stamps.length > 0;
+  const canDownload =
+    Boolean(program.archivoAspireUrl)
+    || (canDownloadPackage(program.machine) && program.stamps.length > 0);
   const productionDateObj = parseOrderDateLocal(program.productionDate);
   const sellosNoImportados = parseSellosNoImportados(program.syncPayload);
   const sellosEnOtraPlanchuela = parseSellosEnOtraPlanchuela(program.syncPayload);
