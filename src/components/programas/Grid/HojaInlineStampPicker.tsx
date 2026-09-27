@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Check,
-  Clock,
   Loader2,
   Search,
   Sparkles,
   X,
 } from 'lucide-react';
 import {
+  PlanchuelaSize,
   ProgramLengthByPlanchuela,
   ProgramMachineType,
   ProgramStamp,
@@ -30,7 +30,7 @@ import { toast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO, isValid } from 'date-fns';
 
-const FILTERS: Array<StampType | 'ALL'> = [
+const TYPE_FILTERS: Array<StampType | 'ALL'> = [
   'ALL',
   'CLASICO',
   '3MM',
@@ -38,6 +38,8 @@ const FILTERS: Array<StampType | 'ALL'> = [
   'ABC',
   'LACRE',
 ];
+
+const PLANCHUELA_ORDER: PlanchuelaSize[] = [12, 19, 25, 38, 63];
 
 function stampPlanchuelaLabel(stamp: ProgramStamp): string | null {
   const ref = resolvePlanchuelaRef(stamp);
@@ -89,6 +91,7 @@ export function HojaInlineStampPicker({
 }: HojaInlineStampPickerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<StampType | 'ALL'>('ALL');
+  const [filterPlanchuela, setFilterPlanchuela] = useState<PlanchuelaSize | 'ALL'>('ALL');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [available, setAvailable] = useState<ProgramStamp[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +139,15 @@ export function HojaInlineStampPicker({
     onSelectionChange?.(pool.filter((s) => ids.includes(s.id)));
   };
 
+  const planchuelaOptions = useMemo(() => {
+    const present = new Set<PlanchuelaSize>();
+    for (const stamp of available) {
+      const ref = resolvePlanchuelaRef(stamp);
+      if (ref) present.add(ref);
+    }
+    return PLANCHUELA_ORDER.filter((size) => present.has(size));
+  }, [available]);
+
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     return available
@@ -145,10 +157,13 @@ export function HojaInlineStampPicker({
           stamp.designName.toLowerCase().includes(q) ||
           (stamp.notes || '').toLowerCase().includes(q);
         const matchesType = filterType === 'ALL' || stamp.stampType === filterType;
-        return matchesSearch && matchesType;
+        const matchesPlanchuela =
+          filterPlanchuela === 'ALL'
+          || resolvePlanchuelaRef(stamp) === filterPlanchuela;
+        return matchesSearch && matchesType && matchesPlanchuela;
       })
       .sort(compareEligibleStamps);
-  }, [available, searchQuery, filterType]);
+  }, [available, searchQuery, filterType, filterPlanchuela]);
 
   const toggle = (id: string) => {
     setSuggestHint(null);
@@ -230,7 +245,7 @@ export function HojaInlineStampPicker({
       </div>
 
       <div className="flex gap-1 overflow-x-auto pb-0.5">
-        {FILTERS.map((type) => (
+        {TYPE_FILTERS.map((type) => (
           <button
             key={type}
             type="button"
@@ -245,6 +260,36 @@ export function HojaInlineStampPicker({
             {type === 'ALL' ? 'Todos' : type}
           </button>
         ))}
+        {planchuelaOptions.length > 0 && (
+          <>
+            <span
+              aria-hidden
+              className="mx-0.5 self-center h-4 w-px shrink-0 bg-zinc-300"
+            />
+            {planchuelaOptions.map((size) => (
+              <button
+                key={size}
+                type="button"
+                onClick={() =>
+                  setFilterPlanchuela((prev) => (prev === size ? 'ALL' : size))
+                }
+                className={cn(
+                  'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium tabular-nums transition-colors',
+                  filterPlanchuela === size
+                    ? 'bg-zinc-800 text-white'
+                    : 'bg-white text-zinc-500 ring-1 ring-zinc-200 hover:text-zinc-700',
+                )}
+                title={
+                  filterPlanchuela === size
+                    ? 'Quitar filtro de planchuela'
+                    : `Solo planchuela ${size} mm`
+                }
+              >
+                {`P${size}`}
+              </button>
+            ))}
+          </>
+        )}
       </div>
 
       {suggestHint && (
@@ -284,19 +329,56 @@ export function HojaInlineStampPicker({
                     'ring-1 ring-inset',
                     selected
                       ? 'bg-zinc-100 ring-zinc-900'
-                      : 'bg-white ring-zinc-200/80 hover:ring-zinc-300',
+                      : priority
+                        ? 'bg-red-50/80 ring-red-500/70 hover:ring-red-600'
+                        : 'bg-white ring-zinc-200/80 hover:ring-zinc-300',
                     'disabled:opacity-40',
                   )}
                   title={stamp.designName}
                 >
+                  {priority ? (
+                    <>
+                      <span
+                        aria-hidden
+                        className="absolute inset-x-0 top-0 z-[1] h-1.5 rounded-t-[5px] bg-red-600"
+                      />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            role="img"
+                            aria-label="Prioritario"
+                            title="Prioritario"
+                            className={cn(
+                              'absolute -right-1.5 -top-1.5 z-[3] flex h-[1.15rem] min-w-[1.15rem] px-1 cursor-help',
+                              'items-center justify-center rounded-full bg-red-600 text-white',
+                              'text-[8px] font-bold uppercase leading-none tracking-wide',
+                              'ring-2 ring-white shadow-sm',
+                            )}
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            P
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="border-red-800 bg-red-700 text-xs text-white"
+                        >
+                          Prioritario
+                        </TooltipContent>
+                      </Tooltip>
+                    </>
+                  ) : null}
                   {note ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span
                           role="img"
-                          aria-label="Tiene nota del pedido"
+                          aria-label={`Nota: ${note}`}
+                          title={note}
                           className={cn(
-                            'absolute -left-1.5 -top-1.5 z-[3] flex h-4 w-4 cursor-help',
+                            'absolute z-[3] flex h-4 w-4 cursor-help',
+                            priority ? '-left-1.5 top-2' : '-left-1.5 -top-1.5',
                             'items-center justify-center rounded-full bg-zinc-900',
                             'text-[10px] font-bold leading-none text-white',
                             'ring-2 ring-white shadow-sm',
@@ -312,31 +394,6 @@ export function HojaInlineStampPicker({
                         className="max-w-[16rem] border-zinc-800 bg-zinc-900 whitespace-pre-wrap text-left text-xs leading-snug text-white"
                       >
                         {note}
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : null}
-                  {priority ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span
-                          role="img"
-                          aria-label="Prioritario"
-                          className={cn(
-                            'absolute -right-1.5 -top-1.5 z-[3] flex h-4 w-4 cursor-help',
-                            'items-center justify-center rounded-full bg-zinc-900 text-white',
-                            'ring-2 ring-white shadow-sm',
-                          )}
-                          onClick={(e) => e.stopPropagation()}
-                          onPointerDown={(e) => e.stopPropagation()}
-                        >
-                          <Clock className="h-2.5 w-2.5" strokeWidth={2.5} />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="border-zinc-800 bg-zinc-900 text-xs text-white"
-                      >
-                        Prioritario
                       </TooltipContent>
                     </Tooltip>
                   ) : null}

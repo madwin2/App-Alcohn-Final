@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Plus, Clock, AlertCircle, Calendar, Loader2, Sparkles } from 'lucide-react';
 import {
+  PlanchuelaSize,
   ProgramLengthByPlanchuela,
   ProgramMachineType,
   ProgramStamp,
@@ -19,6 +20,9 @@ import {
   validatePlanchuelaLengthLimit,
 } from '@/lib/programas/material';
 import { toast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
+
+const PLANCHUELA_ORDER: PlanchuelaSize[] = [12, 19, 25, 38, 63];
 
 interface StampsSelectionDialogProps {
   isOpen: boolean;
@@ -104,6 +108,7 @@ export function StampsSelectionDialog({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStamps, setSelectedStamps] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<StampType | 'ALL'>('ALL');
+  const [filterPlanchuela, setFilterPlanchuela] = useState<PlanchuelaSize | 'ALL'>('ALL');
   const [availableStamps, setAvailableStamps] = useState<ProgramStamp[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -135,6 +140,15 @@ export function StampsSelectionDialog({
     };
   }, [isOpen, machine, excludeStampIds.join(',')]);
 
+  const planchuelaOptions = useMemo(() => {
+    const present = new Set<PlanchuelaSize>();
+    for (const stamp of availableStamps) {
+      const ref = resolvePlanchuelaRef(stamp);
+      if (ref) present.add(ref);
+    }
+    return PLANCHUELA_ORDER.filter((size) => present.has(size));
+  }, [availableStamps]);
+
   const filteredStamps = availableStamps.filter((stamp) => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
@@ -142,7 +156,10 @@ export function StampsSelectionDialog({
       stamp.designName.toLowerCase().includes(q) ||
       (stamp.notes || '').toLowerCase().includes(q);
     const matchesType = filterType === 'ALL' || stamp.stampType === filterType;
-    return matchesSearch && matchesType;
+    const matchesPlanchuela =
+      filterPlanchuela === 'ALL'
+      || resolvePlanchuelaRef(stamp) === filterPlanchuela;
+    return matchesSearch && matchesType && matchesPlanchuela;
   });
 
   const canSuggest =
@@ -182,6 +199,7 @@ export function StampsSelectionDialog({
     setSelectedStamps([]);
     setSearchQuery('');
     setFilterType('ALL');
+    setFilterPlanchuela('ALL');
     setSuggestHint(null);
     onClose();
   };
@@ -233,6 +251,24 @@ export function StampsSelectionDialog({
                   {type === 'ALL' ? 'Todos' : type}
                 </Button>
               ))}
+              {planchuelaOptions.map((size) => (
+                <Button
+                  key={`P${size}`}
+                  variant={filterPlanchuela === size ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() =>
+                    setFilterPlanchuela((prev) => (prev === size ? 'ALL' : size))
+                  }
+                  className="text-xs tabular-nums"
+                  title={
+                    filterPlanchuela === size
+                      ? 'Quitar filtro de planchuela'
+                      : `Solo planchuela ${size} mm`
+                  }
+                >
+                  {`P${size}`}
+                </Button>
+              ))}
             </div>
           </div>
 
@@ -260,13 +296,23 @@ export function StampsSelectionDialog({
                 {filteredStamps.map((stamp) => (
                   <div
                     key={stamp.id}
-                    className={`border rounded-lg p-3 cursor-pointer transition-all hover:shadow-md ${
+                    className={cn(
+                      'relative border rounded-lg p-3 cursor-pointer transition-all hover:shadow-md',
                       selectedStamps.includes(stamp.id)
                         ? 'border-primary bg-primary/5 shadow-md'
-                        : 'border-border hover:border-primary/50'
-                    }`}
+                        : stamp.isPriority
+                          ? 'border-red-500/70 bg-red-50/50 hover:border-red-600'
+                          : 'border-border hover:border-primary/50',
+                    )}
                     onClick={() => handleStampToggle(stamp.id)}
                   >
+                    {stamp.isPriority ? (
+                      <span
+                        aria-label="Prioritario"
+                        title="Prioritario"
+                        className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg bg-red-600"
+                      />
+                    ) : null}
                     <div className="flex items-start gap-3">
                       <Checkbox
                         checked={selectedStamps.includes(stamp.id)}
@@ -280,7 +326,13 @@ export function StampsSelectionDialog({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-1">
                           {stamp.isPriority && (
-                            <AlertCircle className="w-3.5 h-3.5 text-orange-600 flex-shrink-0" />
+                            <span
+                              title="Prioritario"
+                              className="inline-flex items-center gap-0.5 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
+                            >
+                              <AlertCircle className="w-3 h-3" />
+                              Prioridad
+                            </span>
                           )}
                           <h4 className="font-medium text-sm truncate">{stamp.designName}</h4>
                           <StampTypeIcon
@@ -295,7 +347,10 @@ export function StampsSelectionDialog({
                         </div>
 
                         {stamp.notes?.trim() ? (
-                          <p className="text-xs text-blue-400 whitespace-pre-wrap break-words mb-1.5">
+                          <p
+                            title={stamp.notes.trim()}
+                            className="text-xs text-blue-400 whitespace-pre-wrap break-words mb-1.5 line-clamp-3"
+                          >
                             {stamp.notes.trim()}
                           </p>
                         ) : null}

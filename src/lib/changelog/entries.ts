@@ -3,6 +3,7 @@ import {
   Archive,
   Bell,
   FileText,
+  Filter,
   Flag,
   Layers,
   Link2,
@@ -336,6 +337,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Después del gadget queda Listo',
         body: 'Cuando Aspire sube el archivo, la hoja pasa a Listo y arma el preview sola (aunque el .crv3d sea grande).',
         icon: FileText,
+      },
+    ],
+  },
+  {
+    id: 18,
+    date: '2026-09-27',
+    title: 'Novedades',
+    version: '1.36',
+    slides: [
+      {
+        heading: 'Prioridad más visible al armar',
+        body: 'Los sellos prioritarios se marcan en rojo. Si hay nota, al pasar el mouse por el ! se lee el texto.',
+        icon: Flag,
+      },
+      {
+        heading: 'Filtro por planchuela',
+        body: 'Al agregar diseños podés filtrar por P12, P19, P25… sin perder el orden por prioridad y fecha.',
+        icon: Filter,
       },
     ],
   },
