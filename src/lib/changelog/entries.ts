@@ -313,6 +313,32 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 16,
+    date: '2026-09-25',
+    title: 'Novedades',
+    version: '1.34',
+    slides: [
+      {
+        heading: 'Aspire sube solo el archivo',
+        body: 'Al terminar el gadget, la app recibe el .crv3d y el preview. En la hoja ves Aspire OK sin arrastrar el archivo a mano.',
+        icon: Upload,
+      },
+    ],
+  },
+  {
+    id: 17,
+    date: '2026-09-25',
+    title: 'Novedades',
+    version: '1.35',
+    slides: [
+      {
+        heading: 'Después del gadget queda Listo',
+        body: 'Cuando Aspire sube el archivo, la hoja pasa a Listo y arma el preview sola (aunque el .crv3d sea grande).',
+        icon: FileText,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

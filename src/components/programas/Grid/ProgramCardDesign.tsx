@@ -121,8 +121,12 @@ export interface ProgramCardDesignProps {
   ) => Promise<void>;
 }
 
-const lifecycleLabel = (estado: ProgramLifecycleState, dirty: boolean): string => {
-  if (estado === 'LISTO' && dirty) return 'Editado, falta regenerar';
+const lifecycleLabel = (
+  estado: ProgramLifecycleState,
+  dirty: boolean,
+  hasZip = false,
+): string => {
+  if (estado === 'LISTO' && dirty && hasZip) return 'Editado, falta regenerar';
   const map: Record<ProgramLifecycleState, string> = {
     BORRADOR: 'Borrador',
     LISTO: 'Listo',
@@ -139,8 +143,9 @@ const lifecycleLabel = (estado: ProgramLifecycleState, dirty: boolean): string =
 function lifecycleStatusTone(
   estado: ProgramLifecycleState,
   dirty: boolean,
+  hasZip = false,
 ): { sheet: string; text: string; edge: string } {
-  if (dirty && (estado === 'LISTO' || estado === 'BORRADOR')) {
+  if (dirty && hasZip && (estado === 'LISTO' || estado === 'BORRADOR')) {
     return {
       sheet: 'bg-[#d4a84a]',
       text: 'text-[#2a2110]',
@@ -182,9 +187,15 @@ function lifecycleStatusTone(
   }
 }
 
-function lifecycleTabLabel(estado: ProgramLifecycleState, dirty: boolean): string {
-  if (dirty && (estado === 'LISTO' || estado === 'BORRADOR')) return 'Falta regenerar';
-  return lifecycleLabel(estado, dirty);
+function lifecycleTabLabel(
+  estado: ProgramLifecycleState,
+  dirty: boolean,
+  hasZip = false,
+): string {
+  if (dirty && hasZip && (estado === 'LISTO' || estado === 'BORRADOR')) {
+    return 'Falta regenerar';
+  }
+  return lifecycleLabel(estado, dirty, hasZip);
 }
 
 /**
@@ -193,17 +204,19 @@ function lifecycleTabLabel(estado: ProgramLifecycleState, dirty: boolean): strin
 function LifecycleStatusSheet({
   estado,
   dirty,
+  hasZip = false,
   size = 'peek',
   motion = false,
 }: {
   estado: ProgramLifecycleState;
   dirty: boolean;
+  hasZip?: boolean;
   size?: 'peek' | 'full';
   motion?: boolean;
 }) {
-  const tone = lifecycleStatusTone(estado, dirty);
-  const label = lifecycleTabLabel(estado, dirty);
-  const fullLabel = lifecycleLabel(estado, dirty);
+  const tone = lifecycleStatusTone(estado, dirty, hasZip);
+  const label = lifecycleTabLabel(estado, dirty, hasZip);
+  const fullLabel = lifecycleLabel(estado, dirty, hasZip);
   const full = size === 'full';
   const reduce = prefersReducedMotion();
 
@@ -284,6 +297,7 @@ function HojaStack({
       <LifecycleStatusSheet
         estado={program.estadoPrograma}
         dirty={program.dirty}
+        hasZip={Boolean(program.archivoZipUrl)}
         size={size}
         motion={statusMotion}
       />
@@ -935,7 +949,7 @@ export function ProgramCardDesign({
           data-program-peek={program.id}
           role="button"
           tabIndex={0}
-          aria-label={`Abrir hoja de producción ${program.name}. Estado: ${lifecycleLabel(program.estadoPrograma, program.dirty)}`}
+          aria-label={`Abrir hoja de producción ${program.name}. Estado: ${lifecycleLabel(program.estadoPrograma, program.dirty, Boolean(program.archivoZipUrl))}`}
           aria-expanded={flyerOn}
           onClick={(e) => {
             e.stopPropagation();

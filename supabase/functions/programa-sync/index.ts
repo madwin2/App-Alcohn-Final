@@ -1,10 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import * as CFB from "npm:cfb@1.2.2";
+import { unzipSync } from "npm:fflate@0.8.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-programa-sync-key",
+    "authorization, x-client-info, apikey, content-type, x-programa-sync-key, x-programa-id, x-programa-token, x-filename",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
@@ -34,6 +36,16 @@ type SyncReport = {
   /** Segundos (suma MachiningTime). Se divide por 60 al guardar en maquinado_minutos. */
   maquinado_segundos?: number | null;
   control?: { objetos_en_corte?: number; sellos_tageados?: number };
+};
+
+type UploadRequest = {
+  accion?: string;
+  programa_id?: string;
+  token?: string;
+  filename?: string;
+  path?: string;
+  /** Tamaño en bytes (hint del gadget). Si es grande, no bajamos el archivo a la edge. */
+  size?: number;
 };
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -570,6 +582,386 @@ async function handlePostReport(
   });
 }
 
+async function assertProgramToken(
+  supabase: SupabaseClient,
+  programId: string,
+  token: string,
+): Promise<Response | null> {
+  if (!programId || !token) {
+    return jsonResponse({ error: "Faltan programa_id o token" }, 400);
+  }
+
+  const { data: tokenRow, error: tokenErr } = await supabase
+    .from("programa_sync_token")
+    .select("programa_id, token, expires_at")
+    .eq("programa_id", programId)
+    .eq("token", token)
+    .maybeSingle();
+
+  if (tokenErr || !tokenRow) {
+    return jsonResponse({ error: "Token inválido" }, 401);
+  }
+
+  const expiresAt = new Date(tokenRow.expires_at);
+  if (Number.isNaN(expiresAt.getTime()) || expiresAt < new Date()) {
+    return jsonResponse({ error: "Token vencido" }, 401);
+  }
+
+  return null;
+}
+
+const safeAspireFilename = (name: string): string => {
+  const cleaned = name.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/_+/g, "_");
+  const lower = cleaned.toLowerCase();
+  if (
+    lower.endsWith(".crv3d") ||
+    lower.endsWith(".crv") ||
+    lower.endsWith(".zip")
+  ) {
+    return cleaned.slice(0, 160);
+  }
+  return `${(cleaned || "programa").slice(0, 140)}.crv3d`;
+};
+
+const OLE2_MAGIC = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0]);
+const ZIP_MAGIC = new Uint8Array([0x50, 0x4b]); // PK
+
+const isZipBytes = (bytes: Uint8Array): boolean =>
+  bytes.length >= 2 && bytes[0] === ZIP_MAGIC[0] && bytes[1] === ZIP_MAGIC[1];
+
+/** Si llegó un .zip (gadget comprime .crv3d grandes), extrae el .crv3d. */
+function resolveCrv3dBytes(
+  bytes: Uint8Array,
+  filename: string,
+): { bytes: Uint8Array; filename: string } {
+  const lower = filename.toLowerCase();
+  if (!lower.endsWith(".zip") && !isZipBytes(bytes)) {
+    return { bytes, filename };
+  }
+  try {
+    const files = unzipSync(bytes);
+    for (const [name, data] of Object.entries(files)) {
+      if (
+        name.toLowerCase().endsWith(".crv3d") &&
+        data &&
+        data.byteLength > 100
+      ) {
+        const base =
+          name.split(/[/\\]/).pop() ||
+          filename.replace(/\.zip$/i, ".crv3d") ||
+          "programa.crv3d";
+        return { bytes: data, filename: safeAspireFilename(base) };
+      }
+    }
+  } catch (e) {
+    console.warn("[programa-sync] unzip falló:", e);
+  }
+  throw new Error("ZIP sin .crv3d válido");
+}
+
+function extractPreviewGif(bytes: Uint8Array): Uint8Array | null {
+  if (bytes.length < 8) return null;
+  for (let i = 0; i < 4; i++) {
+    if (bytes[i] !== OLE2_MAGIC[i]) return null;
+  }
+
+  try {
+    const cfb = CFB.parse(bytes);
+    const candidates = [
+      "PreviewData/Preview2D_GIF",
+      "/PreviewData/Preview2D_GIF",
+      "Root Entry/PreviewData/Preview2D_GIF",
+      "PreviewData\\Preview2D_GIF",
+      "\\PreviewData\\Preview2D_GIF",
+    ];
+    for (const candidate of candidates) {
+      const entry = CFB.find(cfb, candidate);
+      if (!entry?.content || !(entry.size > 0)) continue;
+      const content = entry.content;
+      if (content instanceof Uint8Array) return content;
+      if (Array.isArray(content)) return new Uint8Array(content as number[]);
+      if (content instanceof ArrayBuffer) return new Uint8Array(content);
+    }
+  } catch (e) {
+    console.warn("[programa-sync] no se pudo extraer preview:", e);
+  }
+  return null;
+}
+
+async function handlePedirUpload(
+  supabase: SupabaseClient,
+  payload: UploadRequest,
+): Promise<Response> {
+  const programId = asString(payload.programa_id);
+  const token = asString(payload.token);
+  const authErr = await assertProgramToken(supabase, programId, token);
+  if (authErr) return authErr;
+
+  const { data: programa, error: progErr } = await supabase
+    .from("programa")
+    .select("id, nombre")
+    .eq("id", programId)
+    .maybeSingle();
+
+  if (progErr || !programa) {
+    return jsonResponse({ error: "Programa no encontrado" }, 404);
+  }
+
+  const filename = safeAspireFilename(
+    asString(payload.filename) || `${asString(programa.nombre) || "programa"}.crv3d`,
+  );
+  const path = `${programId}/${Date.now()}-${filename}`;
+
+  const { data, error } = await supabase.storage
+    .from("programas-aspire")
+    .createSignedUploadUrl(path, { upsert: true });
+
+  if (error || !data?.signedUrl) {
+    console.error("[programa-sync] createSignedUploadUrl:", error);
+    return jsonResponse({ error: "No se pudo preparar la subida" }, 500);
+  }
+
+  return jsonResponse({
+    ok: true,
+    path: data.path || path,
+    signedUrl: data.signedUrl,
+    token: data.token ?? null,
+    filename,
+  });
+}
+
+async function handleConfirmarUpload(
+  supabase: SupabaseClient,
+  payload: UploadRequest,
+): Promise<Response> {
+  const programId = asString(payload.programa_id);
+  const token = asString(payload.token);
+  const storagePath = asString(payload.path);
+  const filename = safeAspireFilename(asString(payload.filename) || "programa.crv3d");
+  const sizeHint = Number(payload.size);
+  const knownSize = Number.isFinite(sizeHint) && sizeHint > 0 ? sizeHint : 0;
+
+  const authErr = await assertProgramToken(supabase, programId, token);
+  if (authErr) return authErr;
+
+  if (!storagePath || !storagePath.startsWith(`${programId}/`)) {
+    return jsonResponse({ error: "path inválido" }, 400);
+  }
+
+  const { data: programa, error: progErr } = await supabase
+    .from("programa")
+    .select("id, nombre, archivo_aspire_url, preview_url, estado_programa")
+    .eq("id", programId)
+    .maybeSingle();
+
+  if (progErr || !programa) {
+    return jsonResponse({ error: "Programa no encontrado" }, 404);
+  }
+
+  // Tope para bajar+parsear en la edge (WORKER_RESOURCE_LIMIT con .crv3d/zip grandes).
+  // Por encima: solo linkeamos el archivo ya subido; el preview queda para después.
+  const PREVIEW_MAX_BYTES = 18 * 1024 * 1024;
+
+  const displayName = filename;
+  const finalPath = storagePath;
+  const { data: publicData } = supabase.storage
+    .from("programas-aspire")
+    .getPublicUrl(finalPath);
+  const archivoUrl = publicData.publicUrl;
+  const now = new Date().toISOString();
+
+  let previewUrl: string | null =
+    (programa as { preview_url?: string | null }).preview_url ?? null;
+  let previewOk = false;
+  let previewSkipped = knownSize > PREVIEW_MAX_BYTES ||
+    filename.toLowerCase().endsWith(".zip");
+
+  if (!previewSkipped) {
+    try {
+      const { data: fileBlob, error: dlErr } = await supabase.storage
+        .from("programas-aspire")
+        .download(storagePath);
+
+      if (dlErr || !fileBlob) {
+        console.warn("[programa-sync] download aspire (preview):", dlErr);
+      } else {
+        const uploadedBytes = new Uint8Array(await fileBlob.arrayBuffer());
+        // Zip o archivo grande: no descomprimir ni parsear OLE en la edge.
+        if (
+          uploadedBytes.byteLength > PREVIEW_MAX_BYTES ||
+          isZipBytes(uploadedBytes)
+        ) {
+          previewSkipped = true;
+        } else {
+          const resolved = resolveCrv3dBytes(uploadedBytes, filename);
+          const previewGif = extractPreviewGif(resolved.bytes);
+          if (previewGif && previewGif.length > 0) {
+            const previewPath = `${programId}/${Date.now()}-preview.gif`;
+            const previewCopy = new Uint8Array(previewGif.byteLength);
+            previewCopy.set(previewGif);
+            const { error: previewUpErr } = await supabase.storage
+              .from("programas-preview")
+              .upload(previewPath, previewCopy, {
+                contentType: "image/gif",
+                upsert: true,
+              });
+            if (!previewUpErr) {
+              const { data: previewPublic } = supabase.storage
+                .from("programas-preview")
+                .getPublicUrl(previewPath);
+              const oldPreview = previewUrl;
+              previewUrl = previewPublic.publicUrl;
+              previewOk = true;
+              if (oldPreview) {
+                try {
+                  const m = oldPreview.match(/programas-preview\/(.+)$/);
+                  if (m?.[1]) {
+                    await supabase.storage
+                      .from("programas-preview")
+                      .remove([decodeURIComponent(m[1])]);
+                  }
+                } catch {
+                  /* best effort */
+                }
+              }
+            } else {
+              console.warn("[programa-sync] preview upload:", previewUpErr);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[programa-sync] preview omitido:", e);
+      previewSkipped = true;
+    }
+  }
+
+  const oldAspire = (programa as { archivo_aspire_url?: string | null }).archivo_aspire_url;
+  if (oldAspire) {
+    try {
+      const m = oldAspire.match(/programas-aspire\/(.+)$/);
+      if (m?.[1]) {
+        const oldPath = decodeURIComponent(m[1]);
+        if (oldPath !== finalPath && oldPath !== storagePath) {
+          await supabase.storage.from("programas-aspire").remove([oldPath]);
+        }
+      }
+    } catch {
+      /* best effort */
+    }
+  }
+
+  const currentEstado = asString(
+    (programa as { estado_programa?: string | null }).estado_programa,
+  );
+  const programPatch: Record<string, unknown> = {
+    archivo_aspire_url: archivoUrl,
+    archivo_aspire_nombre: displayName,
+    archivo_aspire_subido_at: now,
+    preview_url: previewUrl,
+    // El .crv3d del gadget es la fuente de verdad: ya no "falta regenerar".
+    dirty: false,
+    updated_at: now,
+  };
+  if (!currentEstado || currentEstado === "BORRADOR") {
+    programPatch.estado_programa = "LISTO";
+  }
+
+  const { error: updErr } = await supabase
+    .from("programa")
+    .update(programPatch)
+    .eq("id", programId);
+
+  if (updErr) {
+    console.error("[programa-sync] update archivo aspire:", updErr);
+    return jsonResponse({ error: "No se pudo guardar el archivo en el programa" }, 500);
+  }
+
+  await supabase.from("programa_eventos").insert({
+    programa_id: programId,
+    tipo: "ASPIRE_SUBIDO",
+    detalle: {
+      origen: "GADGET",
+      archivo: displayName,
+      path: finalPath,
+      preview: previewOk,
+      preview_skipped: previewSkipped,
+      size: knownSize || null,
+    },
+    usuario_email: null,
+  });
+
+  return jsonResponse({
+    ok: true,
+    archivo_aspire_url: archivoUrl,
+    preview_url: previewUrl,
+    preview: previewOk,
+    preview_skipped: previewSkipped,
+  });
+}
+
+async function handleSubirArchivo(
+  supabase: SupabaseClient,
+  req: Request,
+): Promise<Response> {
+  const programId = asString(
+    req.headers.get("x-programa-id") || req.headers.get("X-Programa-Id"),
+  );
+  const token = asString(
+    req.headers.get("x-programa-token") || req.headers.get("X-Programa-Token"),
+  );
+  const filename = safeAspireFilename(
+    asString(req.headers.get("x-filename") || req.headers.get("X-Filename")) ||
+      "programa.crv3d",
+  );
+
+  const authErr = await assertProgramToken(supabase, programId, token);
+  if (authErr) return authErr;
+
+  const { data: programa, error: progErr } = await supabase
+    .from("programa")
+    .select("id, nombre, archivo_aspire_url, preview_url")
+    .eq("id", programId)
+    .maybeSingle();
+
+  if (progErr || !programa) {
+    return jsonResponse({ error: "Programa no encontrado" }, 404);
+  }
+
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (bytes.byteLength < 100) {
+    return jsonResponse({ error: "Archivo vacío o demasiado chico" }, 400);
+  }
+  // Límite práctico de Edge Functions (~body size).
+  if (bytes.byteLength > 45 * 1024 * 1024) {
+    return jsonResponse({
+      error: "Archivo demasiado grande para subir por la app (>45MB)",
+    }, 413);
+  }
+
+  const storagePath = `${programId}/${Date.now()}-${filename}`;
+  const { error: upErr } = await supabase.storage
+    .from("programas-aspire")
+    .upload(storagePath, bytes, {
+      contentType: "application/octet-stream",
+      upsert: true,
+    });
+
+  if (upErr) {
+    console.error("[programa-sync] service upload:", upErr);
+    return jsonResponse({ error: `No se pudo guardar en storage: ${upErr.message}` }, 500);
+  }
+
+  // Reusa la confirmación (preview + columnas programa).
+  return handleConfirmarUpload(supabase, {
+    accion: "confirmar-upload",
+    programa_id: programId,
+    token,
+    path: storagePath,
+    filename,
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -599,13 +991,28 @@ Deno.serve(async (req) => {
   }
 
   if (req.method === "POST") {
-    // Mutaciones: token por programa en el body (sin install key).
-    let payload: SyncReport;
+    const postAccion = accion;
+    // Subida binaria del .crv3d (headers + body raw). No es JSON.
+    if (postAccion === "subir-archivo") {
+      return handleSubirArchivo(supabase, req);
+    }
+
+    // Mutaciones JSON: token por programa en el body (sin install key).
+    let payload: SyncReport & UploadRequest;
     try {
       payload = await req.json();
     } catch {
       return jsonResponse({ error: "JSON inválido" }, 400);
     }
+
+    const jsonAccion = postAccion || asString(payload.accion);
+    if (jsonAccion === "pedir-upload") {
+      return handlePedirUpload(supabase, payload);
+    }
+    if (jsonAccion === "confirmar-upload") {
+      return handleConfirmarUpload(supabase, payload);
+    }
+
     return handlePostReport(supabase, payload);
   }
 

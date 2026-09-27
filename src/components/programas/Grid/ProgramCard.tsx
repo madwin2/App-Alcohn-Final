@@ -73,8 +73,12 @@ interface ProgramCardProps {
   ) => Promise<void>;
 }
 
-const lifecycleLabel = (estado: ProgramLifecycleState, dirty: boolean): string => {
-  if (estado === 'LISTO' && dirty) return 'Editado, falta regenerar';
+const lifecycleLabel = (
+  estado: ProgramLifecycleState,
+  dirty: boolean,
+  hasZip = false,
+): string => {
+  if (estado === 'LISTO' && dirty && hasZip) return 'Editado, falta regenerar';
   const map: Record<ProgramLifecycleState, string> = {
     BORRADOR: 'Borrador',
     LISTO: 'Listo',
@@ -85,8 +89,12 @@ const lifecycleLabel = (estado: ProgramLifecycleState, dirty: boolean): string =
   return map[estado] || estado;
 };
 
-const lifecycleBadgeClass = (estado: ProgramLifecycleState, dirty: boolean): string => {
-  if (dirty && (estado === 'LISTO' || estado === 'BORRADOR')) {
+const lifecycleBadgeClass = (
+  estado: ProgramLifecycleState,
+  dirty: boolean,
+  hasZip = false,
+): string => {
+  if (dirty && hasZip && (estado === 'LISTO' || estado === 'BORRADOR')) {
     return 'bg-amber-100 text-amber-900 border-amber-300';
   }
   switch (estado) {
@@ -747,18 +755,18 @@ export function ProgramCard({
             >
               <Badge
                 variant="outline"
-                className={`text-[10px] cursor-pointer ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
+                className={`text-[10px] cursor-pointer ${lifecycleBadgeClass(program.estadoPrograma, program.dirty, Boolean(program.archivoZipUrl))}`}
               >
-                {lifecycleLabel(program.estadoPrograma, program.dirty)}
+                {lifecycleLabel(program.estadoPrograma, program.dirty, Boolean(program.archivoZipUrl))}
                 <ChevronDown className="h-3 w-3 ml-0.5 inline-block align-middle" />
               </Badge>
             </button>
           ) : (
             <Badge
               variant="outline"
-              className={`text-[10px] ${lifecycleBadgeClass(program.estadoPrograma, program.dirty)}`}
+              className={`text-[10px] ${lifecycleBadgeClass(program.estadoPrograma, program.dirty, Boolean(program.archivoZipUrl))}`}
             >
-              {lifecycleLabel(program.estadoPrograma, program.dirty)}
+              {lifecycleLabel(program.estadoPrograma, program.dirty, Boolean(program.archivoZipUrl))}
             </Badge>
           )}
 

@@ -27,6 +27,7 @@ import { fetchLatestFabricacionParams } from './fabricacionParametros.service';
 import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
 import { notifySellosHechos, notifySellosNoImportados } from '@/lib/notificaciones/events';
 import { Crv3dInfo, Crv3dParseError, parseCrv3d } from '../../programas/crv3d';
+import JSZip from 'jszip';
 
 type ProgramaRow = Database['public']['Tables']['programa']['Row'];
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
@@ -1232,6 +1233,88 @@ async function uploadPreviewGif(
   const { data } = supabase.storage.from('programas-preview').getPublicUrl(path);
   return data.publicUrl;
 }
+
+const OLE2_MAGIC_0 = 0xd0;
+const isZipBuffer = (bytes: Uint8Array): boolean =>
+  bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b;
+
+const isOle2Buffer = (bytes: Uint8Array): boolean =>
+  bytes.length >= 4 && bytes[0] === OLE2_MAGIC_0 && bytes[1] === 0xcf;
+
+/** Si el Aspire subido es .zip, saca el .crv3d de adentro. */
+async function bytesToCrv3dArrayBuffer(bytes: Uint8Array): Promise<ArrayBuffer> {
+  if (isOle2Buffer(bytes)) {
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  }
+  if (!isZipBuffer(bytes)) {
+    throw new ProgramServiceError('El archivo Aspire no es .crv3d ni ZIP.');
+  }
+  const zip = await JSZip.loadAsync(bytes);
+  const entryName = Object.keys(zip.files).find((n) =>
+    n.toLowerCase().endsWith('.crv3d'),
+  );
+  if (!entryName) {
+    throw new ProgramServiceError('El ZIP no contiene un .crv3d.');
+  }
+  const crv = await zip.files[entryName].async('uint8array');
+  return crv.buffer.slice(crv.byteOffset, crv.byteOffset + crv.byteLength);
+}
+
+/**
+ * Si hay archivo Aspire pero no preview (p. ej. subida grande desde el gadget),
+ * lo baja en el navegador, extrae el GIF y lo guarda. Evita OOM en la edge.
+ */
+export const ensureProgramAspirePreview = async (
+  programId: string,
+): Promise<Program | null> => {
+  const program = await getProgramById(programId);
+  if (!program) return null;
+  if (program.previewUrl || !program.archivoAspireUrl) return program;
+
+  try {
+    const res = await fetch(program.archivoAspireUrl);
+    if (!res.ok) {
+      console.warn('[programas] no se pudo bajar Aspire para preview:', res.status);
+      return program;
+    }
+    const raw = new Uint8Array(await res.arrayBuffer());
+    const crvBuf = await bytesToCrv3dArrayBuffer(raw);
+    const info = parseCrv3d(crvBuf);
+    if (!info.previewGif || info.previewGif.length === 0) return program;
+
+    const uploaded = await uploadPreviewGif(programId, info.previewGif);
+    if (!uploaded) return program;
+
+    if (program.previewUrl) {
+      try {
+        const prevMatch = program.previewUrl.match(/programas-preview\/(.+)$/);
+        if (prevMatch?.[1]) {
+          await supabase.storage
+            .from('programas-preview')
+            .remove([decodeURIComponent(prevMatch[1])]);
+        }
+      } catch {
+        /* best effort */
+      }
+    }
+
+    const { error } = await supabase
+      .from('programa')
+      .update({
+        preview_url: uploaded,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq('id', programId);
+    if (error) {
+      console.warn('[programas] no se pudo guardar preview_url:', error);
+      return program;
+    }
+    return (await getProgramById(programId)) ?? program;
+  } catch (e) {
+    console.warn('[programas] ensureProgramAspirePreview:', e);
+    return program;
+  }
+};
 
 export type SelloNoImportadoItem = {
   sello_id: string;

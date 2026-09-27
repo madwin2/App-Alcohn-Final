@@ -19,6 +19,16 @@ export const usePrograms = () => {
       setError(null);
       const data = await programsService.getPrograms();
       setPrograms(data);
+      // Preview de Aspire grandes (zip del gadget) se arma en el browser.
+      const needingPreview = data.filter((p) => p.archivoAspireUrl && !p.previewUrl);
+      for (const p of needingPreview) {
+        void programsService.ensureProgramAspirePreview(p.id).then((updated) => {
+          if (!updated?.previewUrl) return;
+          setPrograms((prev) =>
+            prev.map((row) => (row.id === p.id ? { ...row, previewUrl: updated.previewUrl } : row)),
+          );
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Error al cargar programas'));
       console.error('Error fetching programs:', err);

@@ -12,8 +12,8 @@
 --   2. Correr este gadget (Toolpaths > Gadgets > Armar Programa Chica).
 --   3. Elegir manifest.lua dentro de la carpeta del ZIP ya descomprimida.
 --   4. Si el job ya tiene sellos, elegir modo: Actualizar / Rehacer / Solo recalcular.
---   5. Al terminar muestra un resumen (errores arriba) y escribe ALCOHN_PROGRAMA_V1
---      en JobParameters -- guarda el .crv3d para que la app lo lea.
+--   5. Al terminar: avisa a la app, guarda el .crv3d y lo sube (preview + Aspire OK).
+--      Si Aspire no encuentra la ruta del archivo, pide elegirlo una vez.
 --
 -- Por que SVG y no DXF: Illustrator no exporta DXF de forma nativa, pero SVG
 -- si. El precio de usar SVG es que Aspire no garantiza documentalmente que
@@ -71,13 +71,15 @@ local SCALE_TOLERANCE = 0.02
 local SCALE_MIN_SANE = 0.2
 local SCALE_MAX_SANE = 5.0
 
-local GADGET_VERSION = "2.0.0"
+local GADGET_VERSION = "2.1.6"
 -- URL de la Edge Function programa-sync (editar si cambia el proyecto Supabase).
 local SYNC_URL = "https://dgbyrejfcqearevvzdmf.supabase.co/functions/v1/programa-sync"
 -- Flags base de curl. --ssl-no-revoke omite la consulta CRL/OCSP (Windows a veces
 -- falla con CRYPT_E_NO_REVOCATION_CHECK); NO es -k/--insecure: el certificado
 -- sigue validandose. Reusar en 3.E/3.F (bajar paquete, subir .txt).
 local CURL_BASE_FLAGS = "-s -S --ssl-no-revoke --retry 3 --retry-delay 1 --retry-all-errors --max-time 60"
+-- Subida del .crv3d puede ser grande: timeout mas holgado.
+local CURL_UPLOAD_FLAGS = "-s -S --ssl-no-revoke --retry 2 --retry-delay 2 --retry-all-errors --max-time 300"
 -- Limite de planchuela: lo setea main() desde manifest.largo_maximo_mm (no hardcodear).
 local LARGO_MAXIMO_MM = nil
 
@@ -492,8 +494,22 @@ local function stampLabel(s)
 end
 
 -- Firma confirmada por sonda: CadObject usa ParameterList, GetString(nombre, default, crear_si_no_existe).
+local function layerHasObjects(layer)
+  if not layer then return false end
+  local ok, pos = pcall(function() return layer:GetHeadPosition() end)
+  if not ok or not pos then return false end
+  local obj = layer:GetNext(pos)
+  return obj ~= nil
+end
+
 local function sellosPresentes(job)
-  local presentes = {}
+  -- Modo Actualizar: si hay tags en Corte, esos son "ya esta".
+  -- No exigir tambien capa UUID: despues del armado el vector vive en
+  -- VECTOR / VECTOR 3MM sin el UUID en el nombre, y reimportaba TODO.
+  -- Capas UUID solo como fallback en jobs viejos sin ningun tag.
+  local tagged = {}
+  local with_layer = {}
+
   local corte = job.LayerManager:GetLayerWithName("Corte")
   if corte then
     local pos = corte:GetHeadPosition()
@@ -503,27 +519,34 @@ local function sellosPresentes(job)
       if obj then
         local ok, id = pcall(function() return obj:GetString("ALCOHN_SELLO_ID", "", false) end)
         if ok and id and id ~= "" then
-          presentes[string.lower(tostring(id))] = true
+          tagged[string.lower(tostring(id))] = true
         end
       end
     end
   end
-  -- Compatibilidad: UUID en nombres de capa (programas armados antes del tag).
+
   local lm = job.LayerManager
   local lpos = lm:GetHeadPosition()
   while lpos do
     local layer, newPos = lm:GetNext(lpos)
     lpos = newPos
-    if layer then
+    if layer and layerHasObjects(layer) then
       local okn, name = pcall(function() return layer.Name end)
       if okn and name then
         local uuid = string.match(string.lower(name),
           "(%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x)")
-        if uuid then presentes[uuid] = true end
+        if uuid then with_layer[uuid] = true end
       end
     end
   end
-  return presentes
+
+  local any_tagged = false
+  for _ in pairs(tagged) do any_tagged = true; break end
+
+  if any_tagged then
+    return tagged
+  end
+  return with_layer
 end
 
 local function countPresentes(presentes)
@@ -545,6 +568,35 @@ local function vaciarCapa(job, nombre)
   for _, obj in ipairs(objetos) do
     pcall(function() layer:RemoveObject(obj) end)
   end
+end
+
+-- Borra capas nuevas de un ImportSVG fallido (ej. escala mala).
+local function removeNewLayers(job, before_names)
+  local lm = job.LayerManager
+  local to_remove = {}
+  local pos = lm:GetHeadPosition()
+  while pos do
+    local layer, newPos = lm:GetNext(pos)
+    pos = newPos
+    if layer then
+      local ok, name = pcall(function() return layer.Name end)
+      if ok and name and not before_names[name] and not KNOWN_LAYERS[name] then
+        table.insert(to_remove, name)
+      end
+    end
+  end
+  for _, name in ipairs(to_remove) do
+    vaciarCapa(job, name)
+    pcall(function()
+      local layer = lm:GetLayerWithName(name) or lm:FindLayerWithName(name)
+      if layer and lm.RemoveLayer then
+        lm:RemoveLayer(layer)
+      elseif layer and lm.DeleteLayer then
+        lm:DeleteLayer(layer)
+      end
+    end)
+  end
+  pcall(function() job:Refresh2DView() end)
 end
 
 local function clearGadgetGeneratedLayers(job)
@@ -860,9 +912,340 @@ local function postSyncReport(jsonPayload)
   return false, "HTTP " .. code .. " " .. string.sub(body, 1, 80)
 end
 
+local function fileExists(path)
+  if not path or path == "" then return false end
+  local f = io.open(path, "rb")
+  if not f then return false end
+  f:close()
+  return true
+end
+
+local function pickCrv3dFile(preferredName, startDir)
+  local dlg = FileDialog()
+  if startDir and startDir ~= "" then
+    dlg.InitialDirectory = startDir
+  end
+  local defaultName = tostring(preferredName or "programa")
+  if not defaultName:lower():match("%.crv3d$") then
+    defaultName = defaultName .. ".crv3d"
+  end
+  local ok = dlg:FileOpen(
+    "crv3d",
+    defaultName,
+    "Aspire (*.crv3d)|*.crv3d|Todos (*.*)|*.*||"
+  )
+  if not ok then return nil end
+  local path = dlg.PathName
+  if (not path or path == "") and dlg.Directory and dlg.FileName then
+    path = tostring(dlg.Directory) .. "\\" .. tostring(dlg.FileName)
+  end
+  if path and path ~= "" and fileExists(path) then return path end
+  return nil
+end
+
+-- Aspire no expone la ruta del job abierto. Guardamos, buscamos candidatos
+-- y si hace falta pedimos el .crv3d una sola vez (queda en el registro).
+local function resolveCrv3dPath(job, folder)
+  local jobName = tostring(job.Name or "programa")
+  local reg = openRegistry()
+  local remembered = regGetString(reg, "last_crv3d_path", "")
+  if remembered ~= "" and fileExists(remembered) then
+    local base = remembered:match("([^\\/]+)$") or ""
+    if base:lower() == (jobName:lower() .. ".crv3d")
+      or base:lower() == "programa.crv3d"
+      or remembered:lower():find(jobName:lower(), 1, true)
+    then
+      return remembered
+    end
+  end
+
+  local candidates = {
+    folder and (folder .. "\\" .. jobName .. ".crv3d") or nil,
+    folder and (folder .. "\\programa.crv3d") or nil,
+  }
+  local lastDir = regGetString(reg, "last_manifest_dir", "")
+  if lastDir ~= "" then
+    table.insert(candidates, lastDir .. "\\" .. jobName .. ".crv3d")
+    table.insert(candidates, lastDir .. "\\programa.crv3d")
+  end
+  for _, p in ipairs(candidates) do
+    if p and fileExists(p) then
+      regSetString(reg, "last_crv3d_path", p)
+      return p
+    end
+  end
+
+  -- Busqueda liviana: archivos .crv3d tocados hace poco con el nombre del job.
+  local tempDir = os.getenv("TEMP") or "C:\\Windows\\Temp"
+  local outFile = tempDir .. "\\alcohn_crv_path.txt"
+  local psFile = tempDir .. "\\alcohn_find_crv.ps1"
+  local roots = {}
+  if folder and folder ~= "" then table.insert(roots, folder) end
+  if lastDir ~= "" then table.insert(roots, lastDir) end
+  table.insert(roots, (os.getenv("USERPROFILE") or "") .. "\\Downloads")
+  table.insert(roots, (os.getenv("USERPROFILE") or "") .. "\\Desktop")
+  table.insert(roots, (os.getenv("USERPROFILE") or "") .. "\\Documents")
+
+  local pf = io.open(psFile, "w")
+  if pf then
+    pf:write("$ErrorActionPreference='SilentlyContinue'\n")
+    pf:write("$cutoff=(Get-Date).AddMinutes(-15)\n")
+    pf:write(string.format("$want=@('%s.crv3d','programa.crv3d')\n", jobName:gsub("'", "''")))
+    pf:write("$hits=@()\n")
+    for _, root in ipairs(roots) do
+      if root and root ~= "" then
+        pf:write(string.format(
+          "if(Test-Path -LiteralPath '%s'){ Get-ChildItem -LiteralPath '%s' -Filter '*.crv3d' -File -Recurse -Depth 2 | Where-Object { $_.LastWriteTime -gt $cutoff -and ($want -contains $_.Name) } | ForEach-Object { $hits += $_ } }\n",
+          root:gsub("'", "''"),
+          root:gsub("'", "''")
+        ))
+      end
+    end
+    pf:write("$best=$hits | Sort-Object LastWriteTime -Descending | Select-Object -First 1\n")
+    pf:write(string.format(
+      "if($best){ Set-Content -Path '%s' -Value $best.FullName -Encoding ASCII } else { Set-Content -Path '%s' -Value '' -Encoding ASCII }\n",
+      outFile:gsub("'", "''"),
+      outFile:gsub("'", "''")
+    ))
+    pf:close()
+    os.execute(string.format(
+      'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%s" >nul 2>&1',
+      psFile
+    ))
+    local of = io.open(outFile, "r")
+    if of then
+      local found = tostring(of:read("*l") or ""):gsub("%s+$", "")
+      of:close()
+      if found ~= "" and fileExists(found) then
+        regSetString(reg, "last_crv3d_path", found)
+        pcall(function() os.remove(psFile) end)
+        pcall(function() os.remove(outFile) end)
+        return found
+      end
+    end
+    pcall(function() os.remove(psFile) end)
+    pcall(function() os.remove(outFile) end)
+  end
+
+  local picked = pickCrv3dFile(jobName .. ".crv3d", folder or lastDir)
+  if picked then
+    regSetString(reg, "last_crv3d_path", picked)
+    return picked
+  end
+  return nil
+end
+
+local function postJson(url, jsonPayload)
+  local tempDir = os.getenv("TEMP") or "C:\\Windows\\Temp"
+  local stamp = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
+  local tmp_json = tempDir .. "\\alcohn_up_" .. stamp .. ".json"
+  local tmp_body = tempDir .. "\\alcohn_up_" .. stamp .. "_body.txt"
+  local tmp_code = tempDir .. "\\alcohn_up_" .. stamp .. "_code.txt"
+
+  local f = io.open(tmp_json, "w")
+  if not f then return false, "", "no se pudo escribir temporal" end
+  f:write(jsonPayload)
+  f:close()
+
+  local cmd = string.format(
+    'curl.exe ' .. CURL_BASE_FLAGS .. ' -X POST -H "Content-Type: application/json" '
+      .. '--data-binary "@%s" -o "%s" -w "%%{http_code}" "%s" > "%s" 2>&1',
+    tmp_json, tmp_body, url, tmp_code
+  )
+  os.execute(cmd)
+
+  local code = ""
+  local fc = io.open(tmp_code, "r")
+  if fc then code = tostring(fc:read("*a") or ""):gsub("%s", ""); fc:close() end
+  local body = ""
+  local fb = io.open(tmp_body, "r")
+  if fb then body = tostring(fb:read("*a") or ""); fb:close() end
+
+  pcall(function() os.remove(tmp_json) end)
+  pcall(function() os.remove(tmp_body) end)
+  pcall(function() os.remove(tmp_code) end)
+
+  return string.sub(code, 1, 1) == "2", body, code
+end
+
+local function uploadAspireFile(programaId, token, filepath)
+  if not filepath or not fileExists(filepath) then
+    return false, "archivo no encontrado"
+  end
+  local filename = filepath:match("([^\\/]+)$") or "programa.crv3d"
+
+  local tempDir = os.getenv("TEMP") or "C:\\Windows\\Temp"
+  local stamp = tostring(os.time())
+  -- Copiar: Aspire deja el .crv3d abierto/bloqueado.
+  local copyPath = tempDir .. "\\alcohn_upload_" .. stamp .. ".crv3d"
+  local zipPath = tempDir .. "\\alcohn_upload_" .. stamp .. ".zip"
+  local copyBase = "alcohn_upload_" .. stamp .. ".crv3d"
+  os.execute(string.format('cmd /c copy /Y "%s" "%s" >nul 2>&1', filepath, copyPath))
+  if not fileExists(copyPath) then
+    return false, "no se pudo copiar el .crv3d (cerralo o Ctrl+S)"
+  end
+
+  local function fileSize(path)
+    local cf = io.open(path, "rb")
+    if not cf then return 0 end
+    local n = cf:seek("end") or 0
+    cf:close()
+    return n
+  end
+
+  local size = fileSize(copyPath)
+  if size < 100 then
+    pcall(function() os.remove(copyPath) end)
+    return false, "copia del .crv3d vacia o muy chica (" .. tostring(size) .. " bytes)"
+  end
+
+  -- Storage Free: tope global ~50MB. Si el .crv3d es grande, lo zippeamos
+  -- (OLE comprime bien) y la edge lo descomprime al confirmar.
+  local STORAGE_SOFT_LIMIT = 45 * 1024 * 1024
+  local uploadPath = copyPath
+  local uploadFilename = filename
+  local usedZip = false
+  if size > STORAGE_SOFT_LIMIT then
+    pcall(function() os.remove(zipPath) end)
+    os.execute(string.format(
+      'tar.exe -a -cf "%s" -C "%s" "%s" >nul 2>&1',
+      zipPath, tempDir, copyBase
+    ))
+    local zsize = fileSize(zipPath)
+    if zsize > 100 then
+      uploadPath = zipPath
+      uploadFilename = (filename:gsub("%.[^%.]+$", "") or "programa") .. ".zip"
+      usedZip = true
+      size = zsize
+    end
+  end
+
+  if size > STORAGE_SOFT_LIMIT then
+    local mb = string.format("%.1f", size / (1024 * 1024))
+    pcall(function() os.remove(copyPath) end)
+    pcall(function() os.remove(zipPath) end)
+    return false, "archivo muy grande (" .. mb .. " MB). Subilo desde Programas o achicalo."
+  end
+
+  local bodyFile = tempDir .. "\\alcohn_upload_" .. stamp .. "_body.txt"
+  local codeFile = tempDir .. "\\alcohn_upload_" .. stamp .. "_code.txt"
+  local confFile = tempDir .. "\\alcohn_upload_" .. stamp .. "_curl.txt"
+  local uploadPathCurl = uploadPath:gsub("\\", "/")
+  local bodyFileCurl = bodyFile:gsub("\\", "/")
+
+  -- 1) Pedir URL firmada (archivos grandes no entran por la edge → 413).
+  local pedir = string.format(
+    '{"accion":"pedir-upload","programa_id":"%s","token":"%s","filename":"%s"}',
+    tostring(programaId):gsub('"', ""),
+    tostring(token):gsub('"', ""),
+    tostring(uploadFilename):gsub('"', "")
+  )
+  local ok1, body1, code1 = postJson(SYNC_URL .. "?accion=pedir-upload", pedir)
+  if not ok1 then
+    pcall(function() os.remove(copyPath) end)
+    pcall(function() os.remove(zipPath) end)
+    return false, "pedir-upload HTTP " .. tostring(code1) .. " " .. string.sub(tostring(body1), 1, 80)
+  end
+  local signedUrl = extractJsonString(body1, "signedUrl")
+  local storagePath = extractJsonString(body1, "path")
+  if not signedUrl or signedUrl == "" or not storagePath or storagePath == "" then
+    pcall(function() os.remove(copyPath) end)
+    pcall(function() os.remove(zipPath) end)
+    return false, "respuesta pedir-upload incompleta"
+  end
+
+  -- 2) curl -K: la URL va en archivo (cmd no la rompe con &/=).
+  local cf = io.open(confFile, "wb")
+  if not cf then
+    pcall(function() os.remove(copyPath) end)
+    pcall(function() os.remove(zipPath) end)
+    return false, "no se pudo escribir config curl"
+  end
+  cf:write('url = "' .. signedUrl .. '"\n')
+  cf:write('request = "PUT"\n')
+  cf:write('upload-file = "' .. uploadPathCurl .. '"\n')
+  cf:write('header = "Content-Type: application/octet-stream"\n')
+  cf:write('output = "' .. bodyFileCurl .. '"\n')
+  cf:write('write-out = "%{http_code}"\n')
+  cf:write("silent\n")
+  cf:write("show-error\n")
+  cf:close()
+
+  os.execute(string.format(
+    'curl.exe ' .. CURL_UPLOAD_FLAGS .. ' -K "%s" > "%s" 2>&1',
+    confFile, codeFile
+  ))
+
+  local putCode = ""
+  local pc = io.open(codeFile, "r")
+  if pc then putCode = tostring(pc:read("*a") or ""):gsub("%s", ""); pc:close() end
+  local putBody = ""
+  local pb = io.open(bodyFile, "r")
+  if pb then putBody = tostring(pb:read("*a") or ""); pb:close() end
+
+  pcall(function() os.remove(copyPath) end)
+  pcall(function() os.remove(zipPath) end)
+  pcall(function() os.remove(bodyFile) end)
+  pcall(function() os.remove(codeFile) end)
+  pcall(function() os.remove(confFile) end)
+
+  if string.sub(putCode, 1, 1) ~= "2" then
+    local mb = string.format("%.1f", size / (1024 * 1024))
+    if string.find(tostring(putBody), "413") or putCode == "413" then
+      return false, "archivo muy grande (" .. mb .. " MB" .. (usedZip and ", zip" or "") .. "). Subilo desde Programas."
+    end
+    return false, "subida storage HTTP " .. tostring(putCode) .. " " .. string.sub(putBody, 1, 100)
+  end
+
+  -- 3) Confirmar: marca Aspire OK en la app (preview solo si el archivo es chico).
+  local confirmar = string.format(
+    '{"accion":"confirmar-upload","programa_id":"%s","token":"%s","path":"%s","filename":"%s","size":%d}',
+    tostring(programaId):gsub('"', ""),
+    tostring(token):gsub('"', ""),
+    tostring(storagePath):gsub('"', ""),
+    tostring(uploadFilename):gsub('"', ""),
+    tonumber(size) or 0
+  )
+  local ok3, body3, code3 = postJson(SYNC_URL .. "?accion=confirmar-upload", confirmar)
+  if not ok3 then
+    return false, "confirmar-upload HTTP " .. tostring(code3) .. " " .. string.sub(tostring(body3), 1, 80)
+  end
+  return true, nil
+end
+
+local function saveAndUploadAspire(job, folder, programaId, token)
+  local saveOk = false
+  local saveErr = nil
+  if type(SaveCurrentJob) == "function" then
+    local ok, err = pcall(SaveCurrentJob)
+    saveOk = ok
+    if not ok then saveErr = tostring(err) end
+  else
+    saveErr = "SaveCurrentJob no disponible"
+  end
+
+  local path = resolveCrv3dPath(job, folder)
+  if not path then
+    return false, "No se encontro el .crv3d. Guardalo (Ctrl+S) y elegilo."
+  end
+
+  -- Si save fallo pero encontramos archivo viejo, igual intentamos subir
+  -- (puede estar desactualizado). Preferimos avisar.
+  local upOk, upErr = uploadAspireFile(programaId, token, path)
+  if not upOk then
+    return false, upErr or "fallo al subir"
+  end
+  if not saveOk then
+    return true, "subido (aviso: " .. tostring(saveErr or "no se pudo SaveCurrentJob") .. ")"
+  end
+  return true, nil
+end
+
 -- =====================================================================
--- Deteccion de "que se acaba de importar" para SVG (ImportSVG no
--- garantiza dejar la seleccion activa, a diferencia de ImportDxfDwg).
+-- Deteccion de "que se acaba de importar" para SVG.
+-- ImportSVG suele dejar la seleccion activa; NO hay que borrarla antes
+-- de comprobarla (si el SVG cae en una capa ya existente, "capas nuevas"
+-- falla y el vector queda tirado en el origen sin automatizar).
 -- =====================================================================
 local function snapshotLayerNames(job)
   local names = {}
@@ -882,6 +1265,51 @@ local function snapshotLayerNames(job)
   return names
 end
 
+local function snapshotLayerObjectCounts(job)
+  local counts = {}
+  local lm = job.LayerManager
+  local ok, pos = pcall(function() return lm:GetHeadPosition() end)
+  if not ok then return counts end
+  while pos do
+    local layer, newPos = lm:GetNext(pos)
+    pos = newPos
+    if layer then
+      local ok2, name = pcall(function() return layer.Name end)
+      if ok2 and name then
+        local n = 0
+        local lpos = layer:GetHeadPosition()
+        while lpos do
+          local obj, newLpos = layer:GetNext(lpos)
+          lpos = newLpos
+          if obj then n = n + 1 end
+        end
+        counts[name] = n
+      end
+    end
+  end
+  return counts
+end
+
+local function selectionHasObjects(job)
+  local ok, bbox = pcall(function() return job.Selection:GetBoundingBox() end)
+  return ok and bbox ~= nil
+end
+
+local function selectAllOnLayer(job, layer)
+  local added = 0
+  if not layer then return 0 end
+  local lpos = layer:GetHeadPosition()
+  while lpos do
+    local obj, newLpos = layer:GetNext(lpos)
+    lpos = newLpos
+    if obj then
+      job.Selection:Add(obj, true, false)
+      added = added + 1
+    end
+  end
+  return added
+end
+
 local function selectObjectsFromNewLayers(job, before_names)
   local lm = job.LayerManager
   job.Selection:Clear()
@@ -897,20 +1325,51 @@ local function selectObjectsFromNewLayers(job, before_names)
       local is_known = name and KNOWN_LAYERS[name]
       local is_new = name and not before_names[name]
       if is_new and not is_known then
-        local lpos = layer:GetHeadPosition()
-        while lpos do
-          local obj, newLpos = layer:GetNext(lpos)
-          lpos = newLpos
-          if obj then
-            job.Selection:Add(obj, true, false)
-            added = added + 1
-          end
-        end
+        added = added + selectAllOnLayer(job, layer)
       end
     end
   end
 
   return added > 0
+end
+
+-- Capas que estaban vacias (o no existian) y ahora tienen objetos: todo
+-- lo que hay ahi es del import. Seguro aunque el nombre ya existiera.
+local function selectObjectsFromGrownEmptyLayers(job, before_counts)
+  local lm = job.LayerManager
+  job.Selection:Clear()
+  local added = 0
+  local pos = lm:GetHeadPosition()
+  while pos do
+    local layer, newPos = lm:GetNext(pos)
+    pos = newPos
+    if layer then
+      local ok, name = pcall(function() return layer.Name end)
+      if ok and name then
+        local before_n = before_counts[name] or 0
+        if before_n == 0 then
+          added = added + selectAllOnLayer(job, layer)
+        end
+      end
+    end
+  end
+  return added > 0
+end
+
+local function selectImportedSvg(job, before_names, before_counts)
+  -- 1) Lo que ImportSVG dejo seleccionado (caso normal segun docs Vectric).
+  if selectionHasObjects(job) then
+    return true
+  end
+  -- 2) Capas con nombre nuevo.
+  if selectObjectsFromNewLayers(job, before_names) then
+    return true
+  end
+  -- 3) Capas que crecieron desde vacio (SVG cayo en capa existente vacia).
+  if selectObjectsFromGrownEmptyLayers(job, before_counts) then
+    return true
+  end
+  return false
 end
 
 local function validateAndFixScale(job, expected_ancho_mm, expected_largo_mm)
@@ -1387,8 +1846,32 @@ local function displayPlanchuela(n)
   return math.floor(v + 0.5)
 end
 
+-- Quita marcas huerfanas en Corte (rayita con ALCOHN_SELLO_ID) si se va a reimportar.
+local function clearCorteTagsForSello(job, sello_id)
+  local sid = string.lower(tostring(sello_id or ""))
+  if sid == "" then return end
+  local corte = job.LayerManager:GetLayerWithName("Corte")
+  if not corte then return end
+  local to_remove = {}
+  local pos = corte:GetHeadPosition()
+  while pos do
+    local obj, newPos = corte:GetNext(pos)
+    pos = newPos
+    if obj then
+      local ok, id = pcall(function() return obj:GetString("ALCOHN_SELLO_ID", "", false) end)
+      if ok and id and string.lower(tostring(id)) == sid then
+        table.insert(to_remove, obj)
+      end
+    end
+  end
+  for _, obj in ipairs(to_remove) do
+    pcall(function() corte:RemoveObject(obj) end)
+  end
+end
+
 local function processStamp(job, folder, s)
   local label = stampLabel(s)
+  clearCorteTagsForSello(job, s.sello_id)
   local archivo = tostring(s.archivo or "")
   local vector_path = folder .. "\\" .. archivo
   local lower = string.lower(archivo)
@@ -1397,27 +1880,37 @@ local function processStamp(job, folder, s)
 
   if string.match(lower, "%.svg$") then
     local before = snapshotLayerNames(job)
+    local before_counts = snapshotLayerObjectCounts(job)
     if not job:ImportSVG(vector_path) then
+      removeNewLayers(job, before)
       return false, "no se pudo importar el vector", nil, nil
     end
-    if not selectObjectsFromNewLayers(job, before) then
+    if not selectImportedSvg(job, before, before_counts) then
+      removeNewLayers(job, before)
       return false, "importo pero no se pudo seleccionar", nil, nil
+    end
+    local scale_ok, scale_msg = validateAndFixScale(job, s.ancho_mm, s.largo_mm)
+    if not scale_ok then
+      removeNewLayers(job, before)
+      return false, tostring(scale_msg), nil, nil
+    end
+    if scale_msg then
+      warning = label .. ": " .. scale_msg
     end
   elseif string.match(lower, "%.dxf$") or string.match(lower, "%.dwg$") then
     if not job:ImportDxfDwg(vector_path) then
       return false, "no se pudo importar el vector", nil, nil
     end
+    local scale_ok, scale_msg = validateAndFixScale(job, s.ancho_mm, s.largo_mm)
+    if not scale_ok then
+      return false, tostring(scale_msg), nil, nil
+    end
+    if scale_msg then
+      warning = label .. ": " .. scale_msg
+    end
   else
     local ext = string.match(lower, "%.([%w]+)$") or "?"
     return false, "el vector esta en ." .. ext .. ", re-vectorizalo.", nil, nil
-  end
-
-  local scale_ok, scale_msg = validateAndFixScale(job, s.ancho_mm, s.largo_mm)
-  if not scale_ok then
-    return false, tostring(scale_msg), nil, nil
-  end
-  if scale_msg then
-    warning = label .. ": " .. scale_msg
   end
 
   local step_ok, step_err, col_nom = runTypeAutomation(s.tipo, s.sello_id)
@@ -1718,6 +2211,16 @@ function main()
     post_ok, post_err = postSyncReport(json_payload)
   end
 
+  local upload_ok, upload_err = false, nil
+  if blob_ok and post_ok then
+    upload_ok, upload_err = saveAndUploadAspire(
+      job,
+      folder,
+      tostring(manifest.programa_id or ""),
+      tostring(manifest.token or "")
+    )
+  end
+
   local function clipLine(s, maxLen)
     maxLen = maxLen or 60
     s = tostring(s or "")
@@ -1781,8 +2284,17 @@ function main()
     table.insert(summary_parts, "Subi el archivo desde Programas.")
   else
     table.insert(summary_parts, "App actualizada.")
+    if upload_ok then
+      table.insert(summary_parts, "Archivo Aspire subido (preview OK).")
+      if upload_err then
+        table.insert(summary_parts, clipLine(tostring(upload_err), 60))
+      end
+    else
+      table.insert(summary_parts, "No se pudo subir el .crv3d.")
+      table.insert(summary_parts, clipLine(tostring(upload_err or "error"), 60))
+      table.insert(summary_parts, "Subilo desde Programas si hace falta.")
+    end
   end
-  table.insert(summary_parts, "Guarda el archivo (Ctrl+S).")
 
   DisplayMessage(table.concat(summary_parts, "\n"))
   return true
