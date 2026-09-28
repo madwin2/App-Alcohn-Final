@@ -134,10 +134,14 @@ const getAspireLabel = (state: AspireState | null): string => {
 export function CellFabricacionAspire({ item, onFabricacionChange, onAspireChange, onRequestRehacer }: CellFabricacionAspireProps) {
   const fabricationState = productionToFabricationMap[item.productionState];
   
-  // Determinar qué mostrar: si tiene aspire state, mostrar ese; si no, mostrar fabrication state
-  // La prioridad la tiene el estado de aspire sobre programado
-  const displayState = item.aspireState ? `ASPIRE_${item.aspireState.replace(/\s+/g, '_')}` : fabricationState;
-  const isAspireState = !!item.aspireState;
+  // Aspire solo se muestra si el ítem sigue "pendiente/programado".
+  // Si ya está Haciendo/Hecho/etc., el chip Aspire no debe tapar el estado real
+  // (aunque quede un estado_aspire viejo en la base).
+  const showAspireChip = Boolean(item.aspireState) && item.productionState === 'PENDIENTE';
+  const displayState = showAspireChip && item.aspireState
+    ? `ASPIRE_${item.aspireState.replace(/\s+/g, '_')}`
+    : fabricationState;
+  const isAspireState = showAspireChip;
 
   const renderChip = () => {
     if (isAspireState && item.aspireState) {

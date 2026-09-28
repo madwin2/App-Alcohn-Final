@@ -257,7 +257,11 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         programId,
         motivoSalidaPrograma,
         noImportadoMotivo,
-        aspireState: (sello as any).estado_aspire || null,
+        // Aspire solo aplica en Programado; si el sello ya pasó a Haciendo/Hecho/etc., no tapar el estado.
+        aspireState:
+          sello.estado_fabricacion === 'Programado'
+            ? ((sello as any).estado_aspire || null)
+            : null,
         machine: sello.maquina || null,
         notes: sello.nota || undefined,
         deadline: sello.fecha_limite ? `${sello.fecha_limite}T00:00:00Z` : null,
@@ -550,7 +554,10 @@ export const updateProductionItem = async (
       programId,
       motivoSalidaPrograma,
       noImportadoMotivo,
-      aspireState: (updatedSello as any).estado_aspire || null,
+      aspireState:
+        updatedSello.estado_fabricacion === 'Programado'
+          ? ((updatedSello as any).estado_aspire || null)
+          : null,
       machine: updatedSello.maquina || null,
       notes: updatedSello.nota || undefined,
       deadline: updatedSello.fecha_limite ? `${updatedSello.fecha_limite}T00:00:00Z` : null,
