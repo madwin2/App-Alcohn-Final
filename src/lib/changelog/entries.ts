@@ -405,6 +405,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 21,
+    date: '2026-09-27',
+    title: 'Novedades',
+    version: '1.39',
+    slides: [
+      {
+        heading: 'Clic derecho en programas',
+        body: 'En la tarjeta de un programa podés abrir el menú: eliminar, o cambiar el estado a Haciendo, Rehacer o Hecho. Hecho lo manda a la carpeta Terminados.',
+        icon: MousePointerClick,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

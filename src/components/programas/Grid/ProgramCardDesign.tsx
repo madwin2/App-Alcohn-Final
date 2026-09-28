@@ -39,6 +39,11 @@ import {
   type RemoveStampChoice,
 } from '@/components/programas/RemoveStamp/RemoveStampDialog';
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
+import { ProgramContextMenu } from '@/components/programas/Grid/ProgramContextMenu';
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import {
   canDownloadPackage,
   parseSellosNoImportados,
@@ -457,9 +462,11 @@ export function ProgramCardDesign({
   onRefresh,
   onAddStamps,
   onRemoveStamp,
+  onDelete,
   onLock,
   onUnlock,
   onDownload,
+  onSetFabricationState,
 }: ProgramCardDesignProps) {
   /**
    * Fase A (en el bolsillo): la hoja sube detrás del labio.
@@ -470,6 +477,8 @@ export function ProgramCardDesign({
   const [flyerOn, setFlyerOn] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showDeleteEmptyDialog, setShowDeleteEmptyDialog] = useState(false);
   const [stampToRemove, setStampToRemove] = useState<ProgramStamp | null>(null);
   const [pickingStamps, setPickingStamps] = useState(false);
 
@@ -570,6 +579,43 @@ export function ProgramCardDesign({
     } finally {
       setActionBusy(false);
     }
+  };
+
+  const openDeleteFromMenu = () => {
+    if (locked || actionBusy || busy) {
+      if (locked) {
+        toast({
+          title: 'No se puede borrar',
+          description: 'Desbloqueá el programa primero.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+    if (!onDelete) return;
+    if (program.stamps.length === 0) setShowDeleteEmptyDialog(true);
+    else setShowDeleteDialog(true);
+  };
+
+  const handleMenuSetFabricationState = (state: FabricationState) => {
+    if (!onSetFabricationState || actionBusy || busy) return;
+    if (program.stamps.length === 0) {
+      toast({
+        title: 'Sin sellos',
+        description: 'Agregá sellos al programa para cambiar el estado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const messages: Partial<Record<FabricationState, string>> = {
+      HACIENDO: 'Programa en Haciendo',
+      REHACER: 'Programa en Rehacer',
+      HECHO: 'Programa marcado como Hecho',
+    };
+    void runAction(
+      () => onSetFabricationState(program.id, state),
+      messages[state] ?? 'Estado actualizado',
+    );
   };
 
   const hojaProps: HojaBodyProps = {
@@ -944,15 +990,17 @@ export function ProgramCardDesign({
 
   return (
     <>
-      <div
-        ref={pocketRef}
-        data-program-pocket={program.id}
-        className={cn(
-          'group/pocket relative w-full overflow-visible',
-          POCKET_H,
-          className,
-        )}
-      >
+      <ContextMenu>
+        <ContextMenuTrigger asChild disabled={sheetGone || flyerOn}>
+          <div
+            ref={pocketRef}
+            data-program-pocket={program.id}
+            className={cn(
+              'group/pocket relative w-full overflow-visible',
+              POCKET_H,
+              className,
+            )}
+          >
         <PocketBack
           className="pointer-events-none absolute inset-0 z-0"
           style={{ filter: POCKET_BACK_FILTER }}
@@ -1091,7 +1139,20 @@ export function ProgramCardDesign({
             }}
           />
         )}
-      </div>
+          </div>
+        </ContextMenuTrigger>
+        {(onDelete || onSetFabricationState) && (
+          <ProgramContextMenu
+            locked={locked}
+            busy={actionBusy || busy}
+            hasStamps={program.stamps.length > 0}
+            onDelete={onDelete ? openDeleteFromMenu : undefined}
+            onSetFabricationState={
+              onSetFabricationState ? handleMenuSetFabricationState : undefined
+            }
+          />
+        )}
+      </ContextMenu>
 
       {flyerOn &&
         createPortal(
@@ -1159,6 +1220,40 @@ export function ProgramCardDesign({
           onConfirm={() =>
             void runAction(() => onUnlock(program.id), 'Programa desbloqueado')
           }
+        />
+      )}
+
+      {onDelete && (
+        <RemoveStampDialog
+          open={showDeleteDialog}
+          onOpenChange={setShowDeleteDialog}
+          bulkCount={program.stamps.length || 1}
+          title="Eliminar programa"
+          description={`¿Eliminar «${program.name}»? Se liberarán ${program.stamps.length} sello${program.stamps.length === 1 ? '' : 's'} y se quitará la máquina asignada. Elegí qué estado de fabricación dejar en cada uno.`}
+          confirmLabel="Eliminar"
+          confirmVariant="destructive"
+          onConfirm={(choice) => {
+            setShowDeleteDialog(false);
+            void runAction(() => onDelete(program.id, choice), 'Programa eliminado');
+          }}
+        />
+      )}
+
+      {onDelete && (
+        <ConfirmDialog
+          open={showDeleteEmptyDialog}
+          onOpenChange={setShowDeleteEmptyDialog}
+          title="Eliminar programa"
+          description={`¿Eliminar «${program.name}»? Esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar"
+          variant="destructive"
+          onConfirm={() => {
+            setShowDeleteEmptyDialog(false);
+            void runAction(
+              () => onDelete(program.id, { mode: 'PREVIOUS' }),
+              'Programa eliminado',
+            );
+          }}
         />
       )}
     </>
