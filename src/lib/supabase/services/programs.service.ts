@@ -655,16 +655,32 @@ export const setFabricationStateForProgram = async (
       .map((s) => s.id as string);
   }
 
-  const { error } = await supabase
+  // Aspire solo aplica en "Programado": al pasar a Haciendo/Hecho/Rehacer hay que limpiarlo
+  // (igual que en Producción). Si no, el chip Aspire en Producción tapa el estado nuevo.
+  const { data: updatedRows, error } = await supabase
     .from('sellos')
     .update({
       estado_fabricacion: mapFabricationStateToDB(state),
+      estado_aspire: null,
       ...(state === 'REHACER' ? { es_prioritario: true } : {}),
       updated_at: new Date().toISOString(),
     } as any)
-    .eq('programa_id', programId);
+    .eq('programa_id', programId)
+    .select('id');
 
   if (error) throw error;
+  if (!updatedRows?.length) {
+    throw new ProgramServiceError('No se pudieron actualizar los sellos del programa');
+  }
+
+  const { error: programError } = await supabase
+    .from('programa')
+    .update({
+      estado_fabricacion: mapFabricationStateToDB(state),
+      updated_at: new Date().toISOString(),
+    } as any)
+    .eq('id', programId);
+  if (programError) throw programError;
 
   if (state === 'HECHO' && pendingHechoIds.length > 0) {
     if (pendingHechoIds.length === 1) {
@@ -719,6 +735,8 @@ export const setStampFabricationStates = async (
       .from('sellos')
       .update({
         estado_fabricacion: mapFabricationStateToDB(state),
+        // Aspire solo aplica en Programado; al cambiar fabricación a mano por sello, limpiarlo.
+        ...(state !== 'PROGRAMADO' ? { estado_aspire: null } : {}),
         ...(state === 'REHACER' ? { es_prioritario: true } : {}),
         updated_at: now,
       } as any)
