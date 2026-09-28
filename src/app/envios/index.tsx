@@ -172,9 +172,11 @@ const isAndreaniShipping = (order: Order): boolean => order.shipping?.carrier ==
 
 const isViaCargoShipping = (order: Order): boolean => order.shipping?.carrier === 'VIA_CARGO';
 
-/** Flujo Correo Argentino / MiCorreo (excluye Andreani y Via Cargo). */
+const isDhlShipping = (order: Order): boolean => order.shipping?.carrier === 'DHL';
+
+/** Flujo Correo Argentino / MiCorreo (excluye Andreani, Via Cargo y DHL). */
 const isCorreoShippingFlow = (order: Order): boolean =>
-  !isAndreaniShipping(order) && !isViaCargoShipping(order);
+  !isAndreaniShipping(order) && !isViaCargoShipping(order) && !isDhlShipping(order);
 
 interface ShippingFormData {
   fullName: string;

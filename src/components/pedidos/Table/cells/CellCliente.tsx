@@ -1,5 +1,6 @@
 import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
+import { CountryFlag } from '@/components/shared/CountryFlag';
 
 interface CellClienteProps {
   order: Order;
@@ -31,7 +32,13 @@ export function CellCliente({ order, editingRowId, onUpdate, onOpenProfile }: Ce
 
   const content = (
     <>
-      <p className="text-sm font-medium truncate">
+      <p className="text-sm font-medium truncate flex items-center gap-1.5">
+        {order.international ? (
+          <CountryFlag
+            iso2={order.international.iso2}
+            title={`Pedido internacional · ${order.international.nombre}`}
+          />
+        ) : null}
         {customer.firstName}
       </p>
       <p className="text-xs text-muted-foreground truncate">

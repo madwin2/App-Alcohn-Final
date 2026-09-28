@@ -8,7 +8,7 @@ export type ShippingState =
   | 'ETIQUETA_LISTA'
   | 'DESPACHADO'
   | 'SEGUIMIENTO_ENVIADO';
-export type ShippingCarrier = 'ANDREANI' | 'CORREO_ARGENTINO' | 'VIA_CARGO' | 'OTRO' | 'RETIRO_EN_PERSONA';
+export type ShippingCarrier = 'ANDREANI' | 'CORREO_ARGENTINO' | 'VIA_CARGO' | 'OTRO' | 'RETIRO_EN_PERSONA' | 'DHL';
 export type ShippingServiceDest = 'DOMICILIO' | 'SUCURSAL';
 export type ShippingOption = 
   | 'ANDREANI_DOMICILIO' 
@@ -19,6 +19,7 @@ export type ShippingOption =
   | 'VIA_CARGO_SUCURSAL' 
   | 'OTRO'
   | 'RETIRO_EN_PERSONA'
+  | 'DHL'
   | 'NONE';
 export type ShippingOriginMethod = 'RETIRO_EN_ORIGEN' | 'ENTREGA_EN_SUCURSAL';
 export type StampType = '3MM' | 'ALIMENTO' | 'CLASICO' | 'ABC' | 'LACRE';
@@ -151,6 +152,12 @@ export interface Order {
   progressStep?: ProgressStep;
   /** Cargos extra ligados a un Rehacer (informativos; no suman al restante). */
   reworkCharges?: ReworkCharge[];
+  /** País del pedido internacional (null = pedido nacional). Los montos del pedido están en su moneda. */
+  international?: import('@/lib/internacional').PaisInternacional | null;
+  /** Envío DHL cobrado al cliente, en moneda local. */
+  internationalShipping?: number | null;
+  /** Datos de destino DHL (notas_web.international.shippingForm). */
+  internationalAddress?: Record<string, string> | null;
 }
 
 export type LabelState = 'pendiente' | 'generando' | 'generada' | 'pagando' | 'pagada' | 'error';

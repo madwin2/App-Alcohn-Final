@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/format';
+import { formatMontoPedido } from '@/lib/internacional';
 import { Order } from '@/lib/types/index';
 import { getShippingCost } from '@/lib/supabase/services/orders.service';
 
@@ -54,7 +55,7 @@ export function CellRestante({ order }: CellRestanteProps) {
     return (
       <div>
         <span className={`text-sm font-medium ${isDebt ? 'text-red-500' : 'text-green-500'}`}>
-          {formatCurrency(restanteFinal)}
+          {formatMontoPedido(order, restanteFinal)}
         </span>
         {shippingCost > 0 && !envioYaIncluido && (
           <span className="text-xs text-muted-foreground block">
@@ -78,7 +79,7 @@ export function CellRestante({ order }: CellRestanteProps) {
     return (
       <div>
         <span className={`text-sm font-medium ${isDebt ? 'text-red-500' : 'text-green-500'}`}>
-          {formatCurrency(restanteFinal)}
+          {formatMontoPedido(order, restanteFinal)}
         </span>
         {shippingCost > 0 && !envioYaIncluido && (
           <span className="text-xs text-muted-foreground block">
@@ -100,7 +101,7 @@ export function CellRestante({ order }: CellRestanteProps) {
   return (
     <div>
       <span className={`text-sm font-medium ${isDebt ? 'text-red-500' : 'text-green-500'}`}>
-        {formatCurrency(restanteFinal)}
+        {formatMontoPedido(order, restanteFinal)}
       </span>
       {shippingCost > 0 && !envioYaIncluido && (
         <span className="text-xs text-muted-foreground block">

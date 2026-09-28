@@ -6,6 +6,7 @@ const CARRIER_LABELS: Record<ShippingCarrier, string> = {
   VIA_CARGO: 'Vía Cargo',
   OTRO: 'Otro',
   RETIRO_EN_PERSONA: 'Retiro en Persona',
+  DHL: 'DHL',
 };
 
 /** Prefijos conocidos que permiten detectar empresa desde el número de seguimiento. */
@@ -23,7 +24,7 @@ export function trackingMatchesCarrier(
 ): boolean {
   const detected = detectCarrierFromTracking(value);
   if (!detected) return true; // número genérico/desconocido → sin conflicto
-  if (!carrier || carrier === 'OTRO' || carrier === 'RETIRO_EN_PERSONA' || carrier === 'VIA_CARGO') {
+  if (!carrier || carrier === 'OTRO' || carrier === 'RETIRO_EN_PERSONA' || carrier === 'VIA_CARGO' || carrier === 'DHL') {
     // Si la empresa actual no tiene prefijo propio, cualquier prefijo conocido es conflicto
     return false;
   }

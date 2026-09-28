@@ -63,7 +63,7 @@ const orderSchema = z.object({
     depositValue: z.number().min(0, 'La seña debe ser mayor o igual a 0'),
   }),
   shipping: z.object({
-    carrier: z.enum(['ANDREANI', 'CORREO_ARGENTINO', 'VIA_CARGO', 'OTRO', 'RETIRO_EN_PERSONA']).optional(),
+    carrier: z.enum(['ANDREANI', 'CORREO_ARGENTINO', 'VIA_CARGO', 'OTRO', 'RETIRO_EN_PERSONA', 'DHL']).optional(),
     service: z.enum(['DOMICILIO', 'SUCURSAL']).optional(),
   }),
   states: z.object({

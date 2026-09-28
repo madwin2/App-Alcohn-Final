@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/lib/utils/format';
+import { formatMontoPedido } from '@/lib/internacional';
 import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
 
@@ -18,7 +18,7 @@ export function CellSena({ order, editingRowId, onUpdate }: CellSenaProps) {
     return (
       <div>
         <span className="text-sm font-medium text-gray-400">
-          {formatCurrency(order.depositValueOrder || 0)}
+          {formatMontoPedido(order, order.depositValueOrder || 0)}
         </span>
       </div>
     );
@@ -48,7 +48,7 @@ export function CellSena({ order, editingRowId, onUpdate }: CellSenaProps) {
   return (
     <div>
       <span className="text-sm font-medium text-gray-400">
-        {formatCurrency(depositValue)}
+        {formatMontoPedido(order, depositValue)}
       </span>
     </div>
   );

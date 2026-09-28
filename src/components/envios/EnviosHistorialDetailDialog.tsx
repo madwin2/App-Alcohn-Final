@@ -25,6 +25,7 @@ function carrierLabel(carrier: ShippingCarrier | null): string | null {
   if (carrier === 'ANDREANI') return 'Andreani';
   if (carrier === 'CORREO_ARGENTINO') return 'Correo Argentino';
   if (carrier === 'VIA_CARGO') return 'Vía Cargo';
+  if (carrier === 'DHL') return 'DHL';
   if (carrier === 'RETIRO_EN_PERSONA') return 'Retiro en persona';
   if (carrier === 'OTRO') return 'Otro';
   return null;

@@ -18,6 +18,7 @@ import { formatDate, formatDateTime } from '@/lib/utils/format';
 import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
 import { enviosTable, enviosTd, enviosTh, enviosThead, enviosThumb, enviosTr } from '@/components/envios/enviosTableStyles';
 import type { ShippingCarrier } from '@/lib/types';
+import type { EnvioHistorialRow } from '@/lib/supabase/services/enviosHistorialTabla.service';
 
 function carrierIconName(
   carrier: ShippingCarrier | null,
@@ -28,6 +29,7 @@ function carrierIconName(
   if (carrier === 'ANDREANI') return `ANDREANI ${dest}`;
   if (carrier === 'CORREO_ARGENTINO') return `CORREO ARGENTINO ${dest}`;
   if (carrier === 'VIA_CARGO') return `VIA CARGO ${dest}`;
+  if (carrier === 'DHL') return null;
   if (carrier === 'OTRO') return 'ANDREANI DOMICILIO';
   return null;
 }
@@ -43,12 +45,14 @@ function carrierTitle(
         ? 'Correo Argentino'
         : carrier === 'VIA_CARGO'
           ? 'Vía Cargo'
-          : carrier === 'RETIRO_EN_PERSONA'
+          : carrier === 'DHL'
+            ? 'DHL'
+            : carrier === 'RETIRO_EN_PERSONA'
             ? 'Retiro en persona'
             : carrier === 'OTRO'
               ? 'Otro'
               : 'Sin empresa';
-  if (!shippingType || shippingType === 'Retiro' || carrier === 'RETIRO_EN_PERSONA') return name;
+  if (!shippingType || shippingType === 'Retiro' || carrier === 'RETIRO_EN_PERSONA' || carrier === 'DHL') return name;
   return `${name} ${shippingType}`;
 }
 
@@ -62,6 +66,9 @@ function CarrierIcon({
   const icon = carrierIconName(carrier, shippingType);
   if (carrier === 'RETIRO_EN_PERSONA') {
     return <span className="text-xs font-medium">Retiro</span>;
+  }
+  if (carrier === 'DHL') {
+    return <span className="text-xs font-medium text-amber-800">DHL</span>;
   }
   if (!icon) return <span className="text-muted-foreground">—</span>;
   return (

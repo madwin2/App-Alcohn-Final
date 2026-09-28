@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/lib/utils/format';
+import { formatMontoPedido } from '@/lib/internacional';
 import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
 
@@ -18,7 +18,7 @@ export function CellValor({ order, editingRowId, onUpdate }: CellValorProps) {
     return (
       <div>
         <span className="text-sm font-medium">
-          {formatCurrency(order.totalValue || 0)}
+          {formatMontoPedido(order, order.totalValue || 0)}
         </span>
       </div>
     );
@@ -48,7 +48,7 @@ export function CellValor({ order, editingRowId, onUpdate }: CellValorProps) {
   return (
     <div>
       <span className="text-sm font-medium">
-        {formatCurrency(itemValue)}
+        {formatMontoPedido(order, itemValue)}
       </span>
     </div>
   );

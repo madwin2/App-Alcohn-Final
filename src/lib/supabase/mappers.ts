@@ -1,4 +1,5 @@
 import { Order, OrderItem, Customer, FabricationState, SaleState, ShippingState, ShippingCarrier, ShippingServiceDest, ShippingOriginMethod, StampType, ProgressStep, Task, ItemType } from '../types/index';
+import { paisDesdeNotasWeb } from '@/lib/internacional';
 import { Database } from './types';
 import { todayArgentinaDateKey } from '../utils/argentinaDate';
 import { vectorUrlFromPreview } from '../utils/vectorUrlFromPreview';
@@ -92,6 +93,7 @@ export const mapShippingCarrier = (empresa: string | null): ShippingCarrier | nu
     'Via Cargo': 'VIA_CARGO',
     'Retiro': 'OTRO',
     'Retiro en Persona': 'RETIRO_EN_PERSONA',
+    'DHL': 'DHL',
   };
   return mapping[empresa] || 'OTRO';
 };
@@ -103,6 +105,7 @@ export const mapShippingCarrierToDB = (carrier: ShippingCarrier): string => {
     'VIA_CARGO': 'Via Cargo',
     'OTRO': 'Retiro',
     'RETIRO_EN_PERSONA': 'Retiro en Persona',
+    'DHL': 'DHL',
   };
   return mapping[carrier];
 };
@@ -357,6 +360,9 @@ export const mapOrdenToOrder = (
       origin,
       trackingNumber: orden.seguimiento || undefined,
     },
+    international: paisDesdeNotasWeb(orden.notas_web),
+    internationalShipping: Number((orden.notas_web as { international?: { shipping?: number } } | null)?.international?.shipping ?? 0) || null,
+    internationalAddress: ((orden.notas_web as { international?: { shippingForm?: Record<string, string> } } | null)?.international?.shippingForm as Record<string, string>) ?? null,
     items,
     tasks: tareas.map(mapTareaToTask),
     progressStep: mapProgressStep(orden.estado_orden, orden.estado_envio),
@@ -417,7 +423,7 @@ export const mapOrderToOrden = (
 ) => ({
   cliente_id: clienteId,
   direccion_id: direccionId || null,
-  empresa_envio: order.shipping?.carrier ? mapShippingCarrierToDB(order.shipping.carrier) as 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' | 'Retiro en Persona' : null,
+  empresa_envio: order.shipping?.carrier ? mapShippingCarrierToDB(order.shipping.carrier) as 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' | 'Retiro en Persona' | 'DHL' : null,
   tipo_envio: order.shipping?.service ? mapShippingServiceToDB(order.shipping.service) as 'Domicilio' | 'Sucursal' | 'Retiro' : null,
   seguimiento: order.shipping?.trackingNumber || null,
   estado_orden: order.saleStateOrder ? mapSaleStateToDB(order.saleStateOrder) as 'Señado' | 'Hecho' | 'Foto' | 'Transferido' | 'Hacer Etiqueta' | 'Etiqueta Lista' | 'Despachado' | 'Seguimiento Enviado' : null,

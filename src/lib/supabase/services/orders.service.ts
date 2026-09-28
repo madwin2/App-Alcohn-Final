@@ -1523,8 +1523,8 @@ export const getShippingCost = async (
   carrier: ShippingCarrier | null | undefined,
   service: ShippingServiceDest | null | undefined
 ): Promise<number> => {
-  // Si no hay empresa seleccionada, es retiro/otro, o no hay servicio, retornar 0
-  if (!carrier || carrier === 'OTRO' || carrier === 'RETIRO_EN_PERSONA' || !service) {
+  // Si no hay empresa seleccionada, es retiro/otro/DHL, o no hay servicio, retornar 0
+  if (!carrier || carrier === 'OTRO' || carrier === 'RETIRO_EN_PERSONA' || carrier === 'DHL' || !service) {
     return 0;
   }
 
@@ -1536,6 +1536,7 @@ export const getShippingCost = async (
       'VIA_CARGO': 'Via Cargo',
       'OTRO': 'Retiro',
       'RETIRO_EN_PERSONA': 'Retiro en Persona',
+      'DHL': 'DHL',
     };
 
     // Mapear el service del frontend al formato de la base de datos

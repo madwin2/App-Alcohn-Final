@@ -1,5 +1,6 @@
 import { Order } from '@/lib/types';
 import { formatDate } from '@/lib/utils/format';
+import { formatMontoPedido } from '@/lib/internacional';
 import { CellCliente } from './cells/CellCliente';
 import { CellContacto } from './cells/CellContacto';
 import { CellEnvio } from './cells/CellEnvio';
@@ -75,21 +76,21 @@ export function OrderSummaryRow({ order }: OrderSummaryRowProps) {
       {/* Seña */}
       <div className="w-17 px-2">
         <span className="text-xs font-medium">
-          ${totalDeposit.toLocaleString()}
+          {formatMontoPedido(order, totalDeposit)}
         </span>
       </div>
       
       {/* Valor */}
       <div className="w-17 px-2">
         <span className="text-xs font-medium">
-          ${totalValue.toLocaleString()}
+          {formatMontoPedido(order, totalValue)}
         </span>
       </div>
       
       {/* Restante */}
       <div className="w-25 px-2">
         <span className={`text-xs font-medium ${totalRemaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-          ${totalRemaining.toLocaleString()}
+          {formatMontoPedido(order, totalRemaining)}
         </span>
       </div>
       

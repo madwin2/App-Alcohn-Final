@@ -13,6 +13,7 @@ import { useOrdersStore } from '@/lib/state/orders.store';
 import { useTableViewPersistence } from '@/lib/hooks/useTableViewPersistence';
 import { FabricationState } from '@/lib/types/index';
 import { exportVentasToCsv } from '@/lib/utils/exportVentas';
+import { pedidoEnPesos } from '@/lib/internacional';
 
 export default function PedidosPage() {
   const searchAcrossDatabase = useOrdersStore((s) => s.searchAcrossDatabase);
@@ -83,7 +84,7 @@ export default function PedidosPage() {
               onSort={() => setShowSorter(true)}
               onUploadPhotos={() => setShowUploadPhotos(true)}
               onUploadTracking={() => setShowUploadTracking(true)}
-              onExportVentas={() => exportVentasToCsv(orders)}
+              onExportVentas={() => exportVentasToCsv(orders.map((o) => (o.international ? pedidoEnPesos(o) : o)))}
               onStateFilter={handleStateFilter}
               activeStates={activeStates}
             />

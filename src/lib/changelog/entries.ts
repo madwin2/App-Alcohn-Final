@@ -418,6 +418,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 22,
+    date: '2026-09-28',
+    title: 'Novedades',
+    version: '1.40',
+    slides: [
+      {
+        heading: 'Pedidos internacionales',
+        body: 'México, Colombia, Perú y Chile se ven con su bandera, montos en moneda local y envío DHL. En Economía se pasan a pesos solos.',
+        icon: Flag,
+      },
+      {
+        heading: 'Dirección DHL a un clic',
+        body: 'En la columna de envío de un pedido DHL podés copiar la dirección completa para armar el despacho.',
+        icon: Truck,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Order } from '@/lib/types';
-import { formatCurrency, formatDate, calculateOrderFabricationState, getFabricationLabel } from '@/lib/utils/format';
+import { formatDate, calculateOrderFabricationState, getFabricationLabel } from '@/lib/utils/format';
+import { formatMontoPedido } from '@/lib/internacional';
 
 interface CellSummaryProps {
   order: Order;
@@ -87,6 +88,7 @@ export function CellSummary({ order, columnId }: CellSummaryProps) {
         if (!order.shipping?.carrier) return '—';
         if (order.shipping.carrier === 'OTRO') return 'Otro';
         if (order.shipping.carrier === 'RETIRO_EN_PERSONA') return 'Retiro en Persona';
+        if (order.shipping.carrier === 'DHL') return 'DHL Internacional';
         const carrierName = order.shipping.carrier === 'ANDREANI' ? 'Andreani' :
                            order.shipping.carrier === 'CORREO_ARGENTINO' ? 'Correo Argentino' :
                            order.shipping.carrier === 'VIA_CARGO' ? 'Vía Cargo' : '';
@@ -103,21 +105,21 @@ export function CellSummary({ order, columnId }: CellSummaryProps) {
     case 'sena':
       return (
         <span className="text-xs text-muted-foreground">
-          {formatCurrency(totalDeposit)}
+          {formatMontoPedido(order, totalDeposit)}
         </span>
       );
     
     case 'valor':
       return (
         <span className="text-xs text-muted-foreground">
-          {formatCurrency(totalValue)}
+          {formatMontoPedido(order, totalValue)}
         </span>
       );
     
     case 'restante':
       return (
         <span className={`text-xs font-medium ${totalRemaining > 0 ? 'text-red-500' : 'text-green-500'}`}>
-          {formatCurrency(totalRemaining)}
+          {formatMontoPedido(order, totalRemaining)}
         </span>
       );
     

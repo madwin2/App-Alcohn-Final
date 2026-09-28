@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { AppMain } from '@/components/layout/AppMain';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useOrders } from '@/lib/hooks/useOrders';
+import { aPesos, pedidoEnPesos } from '@/lib/internacional';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -369,9 +370,10 @@ function PendingPieChart({
 
 export default function EconomiaPage() {
   const { user, loading: authLoading } = useAuth();
-  const { orders, loading, loadingFullCatalog, fullCatalogLoaded, ensureFullCatalog } = useOrders({
+  const { orders: ordersRaw, loading, loadingFullCatalog, fullCatalogLoaded, ensureFullCatalog } = useOrders({
     useFullCatalog: true,
   });
+  const orders = useMemo(() => ordersRaw.map(pedidoEnPesos), [ordersRaw]);
   const { toast } = useToast();
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
@@ -582,9 +584,11 @@ export default function EconomiaPage() {
       row.pedidos += 1;
       const fab = Number(order.fabricationCostTotal || 0);
       const envioImputadoVentas = economiaPedidoListoParaImputarEnvio(order)
-        ? orderHasShippingCarrierAndService(order)
-          ? (shippingCostByOrderId[order.id] ?? ECONOMIA_ENVIO_SIN_TIPO_ARS)
-          : ECONOMIA_ENVIO_SIN_TIPO_ARS
+        ? order.international
+          ? aPesos(Number(order.internationalShipping || 0), order.international)
+          : orderHasShippingCarrierAndService(order)
+            ? (shippingCostByOrderId[order.id] ?? ECONOMIA_ENVIO_SIN_TIPO_ARS)
+            : ECONOMIA_ENVIO_SIN_TIPO_ARS
         : 0;
       row.ventasBrutas += Number(order.totalValue || 0) + envioImputadoVentas;
       row.costosVentas += fab;

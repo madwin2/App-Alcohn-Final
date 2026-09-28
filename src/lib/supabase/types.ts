@@ -42,7 +42,7 @@ export interface Database {
           id: string;
           cliente_id: string;
           direccion_id: string | null;
-          empresa_envio: 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' | 'Retiro en Persona' | null;
+          empresa_envio: 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' | 'Retiro en Persona' | 'DHL' | null;
           tipo_envio: 'Domicilio' | 'Sucursal' | 'Retiro' | null;
           cantidad_sellos: number | null;
           senia_total: number | null;
