@@ -170,9 +170,18 @@ export const createColumns = ({
       return (
         <div className="flex flex-col gap-0.5">
           <EditableInline value={item?.designName || ''} onCommit={(v) => onUpdate?.(o.id, { items: [{ ...item, designName: v }] })} />
-          <EditableInline value={`${item?.requestedWidthMm || 0}×${item?.requestedHeightMm || 0}mm`} onCommit={(v) => {
-            const [width, height] = v.replace('mm', '').split('×');
-            onUpdate?.(o.id, { items: [{ ...item, requestedWidthMm: parseInt(width), requestedHeightMm: parseInt(height) }] });
+          <EditableInline value={`${Math.max(item?.requestedWidthMm || 0, item?.requestedHeightMm || 0)}×${Math.min(item?.requestedWidthMm || 0, item?.requestedHeightMm || 0)}mm`} onCommit={(v) => {
+            const parts = v.replace(/mm/gi, '').split(/[xX×]/);
+            const a = parseInt(parts[0] || '0', 10);
+            const b = parseInt(parts[1] || parts[0] || '0', 10);
+            if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return;
+            onUpdate?.(o.id, {
+              items: [{
+                ...item,
+                requestedWidthMm: Math.max(a, b),
+                requestedHeightMm: Math.min(a, b),
+              }],
+            });
           }} className="text-muted-foreground" />
           <EditableInline value={item?.notes || ''} onCommit={(v) => onUpdate?.(o.id, { items: [{ ...item, notes: v }] })} className="text-blue-400" />
         </div>

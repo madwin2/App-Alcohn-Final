@@ -1016,17 +1016,36 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
           selloData.archivo_vector_preview = storedUrl;
           selloData.estado_vectorizacion = storedUrl ? 'VECTORIZADO' : 'BASE';
         }
-        if (item.requestedWidthMm !== undefined) {
-          selloData.ancho_real = item.requestedWidthMm ? (item.requestedWidthMm / 10).toString() : null;
+        if (item.requestedWidthMm !== undefined || item.requestedHeightMm !== undefined) {
+          const w = item.requestedWidthMm ?? (currentSello?.ancho_real != null ? Number(currentSello.ancho_real) * 10 : null);
+          const h = item.requestedHeightMm ?? (currentSello?.largo_real != null ? Number(currentSello.largo_real) * 10 : null);
+          if (w && h) {
+            const ordered = { widthMm: Math.max(w, h), heightMm: Math.min(w, h) };
+            selloData.ancho_real = (ordered.widthMm / 10).toString();
+            selloData.largo_real = (ordered.heightMm / 10).toString();
+          } else {
+            if (item.requestedWidthMm !== undefined) {
+              selloData.ancho_real = item.requestedWidthMm ? (item.requestedWidthMm / 10).toString() : null;
+            }
+            if (item.requestedHeightMm !== undefined) {
+              selloData.largo_real = item.requestedHeightMm ? (item.requestedHeightMm / 10).toString() : null;
+            }
+          }
         }
-        if (item.requestedHeightMm !== undefined) {
-          selloData.largo_real = item.requestedHeightMm ? (item.requestedHeightMm / 10).toString() : null;
-        }
-        if (item.fabricationWidthMm !== undefined) {
-          selloData.ancho_fabricacion_mm = item.fabricationWidthMm ?? null;
-        }
-        if (item.fabricationHeightMm !== undefined) {
-          selloData.largo_fabricacion_mm = item.fabricationHeightMm ?? null;
+        if (item.fabricationWidthMm !== undefined || item.fabricationHeightMm !== undefined) {
+          const w = item.fabricationWidthMm !== undefined ? item.fabricationWidthMm : currentSello?.ancho_fabricacion_mm;
+          const h = item.fabricationHeightMm !== undefined ? item.fabricationHeightMm : currentSello?.largo_fabricacion_mm;
+          if (w != null && h != null) {
+            selloData.ancho_fabricacion_mm = Math.max(Number(w), Number(h));
+            selloData.largo_fabricacion_mm = Math.min(Number(w), Number(h));
+          } else {
+            if (item.fabricationWidthMm !== undefined) {
+              selloData.ancho_fabricacion_mm = item.fabricationWidthMm ?? null;
+            }
+            if (item.fabricationHeightMm !== undefined) {
+              selloData.largo_fabricacion_mm = item.fabricationHeightMm ?? null;
+            }
+          }
         }
 
         // Actualizar fecha_limite si viene en el item (aunque normalmente viene en deadlineAt de la orden)

@@ -69,7 +69,8 @@ function ReviewCard({
               {item.designName} — {item.clienteNombre}
             </p>
             <p className="text-xs text-muted-foreground">
-              {(item.requestedWidthMm / 10).toFixed(1)} × {(item.requestedHeightMm / 10).toFixed(1)} cm
+              {(Math.max(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} ×{' '}
+              {(Math.min(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} cm
             </p>
           </div>
           <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">

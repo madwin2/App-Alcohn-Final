@@ -11,6 +11,7 @@ import {
   MessageCircle,
   MousePointerClick,
   Package,
+  Ruler,
   RefreshCw,
   Search,
   Type,
@@ -355,6 +356,52 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Filtro por planchuela',
         body: 'Al agregar diseños podés filtrar por P12, P19, P25… sin perder el orden por prioridad y fecha.',
         icon: Filter,
+      },
+    ],
+  },
+  {
+    id: 19,
+    date: '2026-09-27',
+    title: 'Novedades',
+    version: '1.37',
+    slides: [
+      {
+        heading: 'Grande solo con P12 y P38',
+        body: 'En la máquina Grande ya no aparecen sellos de 19 o 25: solo entran planchuelas de 12 y 38 mm.',
+        icon: Filter,
+      },
+      {
+        heading: 'Vectores se actualizan al toque',
+        body: 'Cuando metés un diseño en un programa, desaparece del panel Vectores sin tener que recargar la página.',
+        icon: RefreshCw,
+      },
+      {
+        heading: 'Listo para Fabricar',
+        body: 'El estado verde de la hoja ahora se llama «Listo para Fabricar», para dejar claro que ya se puede mandar a producción.',
+        icon: FileText,
+      },
+    ],
+  },
+  {
+    id: 20,
+    date: '2026-09-27',
+    title: 'Novedades',
+    version: '1.38',
+    slides: [
+      {
+        heading: 'Aviso si el vector no es SVG',
+        body: 'Al subir o guardar un vector en otro formato (EPS, PDF, AI…), Pedidos te avisa antes de continuar para que puedas corregirlo.',
+        icon: AlertTriangle,
+      },
+      {
+        heading: 'Medidas siempre largo × corto',
+        body: 'Las medidas de los vectores se muestran como lado más largo × lado más corto, sin importar si el diseño está horizontal o vertical.',
+        icon: Ruler,
+      },
+      {
+        heading: 'Seguís donde estabas en Pedidos',
+        body: 'Si ya habías cargado más pedidos y editás uno, la lista no vuelve al principio: se mantiene lo que tenías visible.',
+        icon: RefreshCw,
       },
     ],
   },

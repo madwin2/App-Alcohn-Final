@@ -4,10 +4,12 @@ import { NewOrderFormData, Order, OrderItem } from '@/lib/types/index';
 import { useToast } from '@/components/ui/use-toast';
 import { useSound } from '@/lib/hooks/useSound';
 import { useOrders } from '@/lib/hooks/useOrders';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { notifyOrderRegistered } from '@/lib/supabase/services/orders.service';
 import { itemConfigFromForm } from '@/lib/abecedario/abecedarioConfig';
 import type { SavedDesignData } from './newOrderDesignUtils';
+import { NonSvgVectorConfirmDialog } from '@/components/shared/NonSvgVectorConfirmDialog';
+import { isSvgFileName } from '@/lib/utils/vectorFileFormat';
 
 interface NewOrderDialogProps {
   open: boolean;
@@ -52,6 +54,19 @@ export function NewOrderDialog({
   const [skipConfirmationWebhook, setSkipConfirmationWebhook] = useState(false);
   const [designs, setDesigns] = useState<SavedDesignData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingNonSvgFileName, setPendingNonSvgFileName] = useState<string | null>(null);
+  const pendingSubmitRef = useRef<{
+    designs: SavedDesignData[];
+    customer: NewOrderFormData['customer'];
+  } | null>(null);
+
+  const findFirstNonSvgVector = (list: SavedDesignData[]): File | null => {
+    for (const design of list) {
+      const vector = design.files?.vector;
+      if (vector && !isSvgFileName(vector.name)) return vector;
+    }
+    return null;
+  };
 
   const handleStepSubmit = (stepData: { customer?: NewOrderFormData['customer']; skipConfirmationWebhook?: boolean }, step: number) => {
     if (step === 1) {
@@ -97,6 +112,7 @@ export function NewOrderDialog({
   const handleFinalSubmitWithDesigns = async (
     designsToUse: SavedDesignData[],
     customerToUse: NewOrderFormData['customer'],
+    options?: { skipNonSvgCheck?: boolean },
   ) => {
     if (!customerToUse || designsToUse.length === 0) {
       toast({
@@ -105,6 +121,15 @@ export function NewOrderDialog({
         variant: 'destructive',
       });
       return;
+    }
+
+    if (!options?.skipNonSvgCheck) {
+      const nonSvg = findFirstNonSvgVector(designsToUse);
+      if (nonSvg) {
+        pendingSubmitRef.current = { designs: designsToUse, customer: customerToUse };
+        setPendingNonSvgFileName(nonSvg.name);
+        return;
+      }
     }
 
     try {
@@ -232,33 +257,59 @@ export function NewOrderDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-8 border border-white/20 shadow-[0_0_80px_rgba(255,255,255,0.075),0_0_150px_rgba(255,255,255,0.05),0_0_220px_rgba(255,255,255,0.025)]">
-        <DialogHeader className="pb-6 border-b">
-          <DialogTitle className="text-xl">
-            Nuevo Pedido - Paso {currentStep} de {currentStep === 1 ? 3 : currentStep === 2 ? 3 : 'Final'}
-            {designs.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                ({designs.length} diseño{designs.length > 1 ? 's' : ''} agregado{designs.length > 1 ? 's' : ''})
-              </span>
-            )}
-          </DialogTitle>
-        </DialogHeader>
-        <NewOrderStepForm
-          currentStep={currentStep}
-          onStepSubmit={handleStepSubmit}
-          onDesignSave={handleDesignSave}
-          onCancel={handleCancel}
-          onBack={handleBack}
-          onCreateOrder={handleCreateOrder}
-          initialData={{
-            ...(customerData ? { customer: customerData } : {}),
-            skipConfirmationWebhook,
-          }}
-          savedDesigns={designs}
-          isSubmitting={isSubmitting}
-        />
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-8 border border-white/20 shadow-[0_0_80px_rgba(255,255,255,0.075),0_0_150px_rgba(255,255,255,0.05),0_0_220px_rgba(255,255,255,0.025)]">
+          <DialogHeader className="pb-6 border-b">
+            <DialogTitle className="text-xl">
+              Nuevo Pedido - Paso {currentStep} de {currentStep === 1 ? 3 : currentStep === 2 ? 3 : 'Final'}
+              {designs.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  ({designs.length} diseño{designs.length > 1 ? 's' : ''} agregado{designs.length > 1 ? 's' : ''})
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <NewOrderStepForm
+            currentStep={currentStep}
+            onStepSubmit={handleStepSubmit}
+            onDesignSave={handleDesignSave}
+            onCancel={handleCancel}
+            onBack={handleBack}
+            onCreateOrder={handleCreateOrder}
+            initialData={{
+              ...(customerData ? { customer: customerData } : {}),
+              skipConfirmationWebhook,
+            }}
+            savedDesigns={designs}
+            isSubmitting={isSubmitting}
+          />
+        </DialogContent>
+      </Dialog>
+      <NonSvgVectorConfirmDialog
+        open={Boolean(pendingNonSvgFileName)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setPendingNonSvgFileName(null);
+            pendingSubmitRef.current = null;
+          }
+        }}
+        fileName={pendingNonSvgFileName ?? ''}
+        onConfirm={() => {
+          const pending = pendingSubmitRef.current;
+          setPendingNonSvgFileName(null);
+          pendingSubmitRef.current = null;
+          if (pending) {
+            void handleFinalSubmitWithDesigns(pending.designs, pending.customer, {
+              skipNonSvgCheck: true,
+            });
+          }
+        }}
+        onCancel={() => {
+          setPendingNonSvgFileName(null);
+          pendingSubmitRef.current = null;
+        }}
+      />
+    </>
   );
 }

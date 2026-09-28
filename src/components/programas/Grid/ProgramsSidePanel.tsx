@@ -782,6 +782,8 @@ function TrashDropIcon({ id }: { id: string }) {
 
 interface ProgramsSidePanelProps {
   finishedPrograms: Program[];
+  /** IDs ya asignados a algún programa (ocultarlos del pool al toque). */
+  assignedStampIds?: Iterable<string>;
   refreshKey?: number;
   /** Si se pasa, no pega a Supabase (sandbox /dev). */
   loadEligibleEntries?: () => Promise<EligibleEntry[]>;
@@ -790,6 +792,7 @@ interface ProgramsSidePanelProps {
 
 export function ProgramsSidePanel({
   finishedPrograms,
+  assignedStampIds,
   refreshKey = 0,
   loadEligibleEntries,
   onOpenFinished,
@@ -797,6 +800,11 @@ export function ProgramsSidePanel({
   const [entries, setEntries] = useState<EligibleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const assignedSet = useMemo(
+    () => new Set(assignedStampIds ? Array.from(assignedStampIds) : []),
+    [assignedStampIds],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -823,7 +831,9 @@ export function ProgramsSidePanel({
 
   const finishedCount = finishedPrograms.length;
   const list = useMemo(() => {
-    return [...entries].sort((a, b) => {
+    return entries
+      .filter((e) => !assignedSet.has(e.stamp.id))
+      .sort((a, b) => {
       if (Boolean(a.stamp.isPriority) !== Boolean(b.stamp.isPriority)) {
         return a.stamp.isPriority ? -1 : 1;
       }
@@ -838,7 +848,7 @@ export function ProgramsSidePanel({
       const cb = b.stamp.createdAt ? new Date(b.stamp.createdAt).getTime() : 0;
       return ca - cb;
     });
-  }, [entries]);
+  }, [entries, assignedSet]);
 
   return (
     <aside

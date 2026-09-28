@@ -941,7 +941,7 @@ export function NewOrderStepForm({
                     <p className="text-xs text-muted-foreground">Subir archivo</p>
                     <input
                       type="file"
-                      accept="image/*,.pdf,.ai,.eps"
+                      accept="image/*,.svg,.pdf,.ai,.eps,image/svg+xml"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleFileChange(type, file);

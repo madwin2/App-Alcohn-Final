@@ -210,7 +210,14 @@ export function ProgramsGrid({
       await onAddStamps(programId, stampIds);
       setPoolKey((k) => k + 1);
     },
-    onRemoveStamp,
+    onRemoveStamp: async (
+      programId: string,
+      stampId: string,
+      choice: Parameters<ProgramsGridProps['onRemoveStamp']>[2],
+    ) => {
+      await onRemoveStamp(programId, stampId, choice);
+      setPoolKey((k) => k + 1);
+    },
     onDelete,
     onLock,
     onUnlock,
@@ -221,6 +228,14 @@ export function ProgramsGrid({
     onSetFabricationState,
     onSetStampFabricationStates,
   };
+
+  const assignedStampIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const p of programs) {
+      for (const s of p.stamps) ids.push(s.id);
+    }
+    return ids;
+  }, [programs]);
 
   const { activePrograms, finishedPrograms, otherPrograms } = useMemo(() => {
     const finished: Program[] = [];
@@ -574,6 +589,7 @@ export function ProgramsGrid({
 
         <ProgramsSidePanel
           finishedPrograms={finishedPrograms}
+          assignedStampIds={assignedStampIds}
           refreshKey={poolKey}
           loadEligibleEntries={loadEligibleEntries}
           onOpenFinished={openFinished}

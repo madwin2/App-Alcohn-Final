@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Order, StampType, FabricationState, SaleState, ShippingState, ItemType, SoldadorPower } from '@/lib/types/index';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Upload, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { fetchPreciosResolverInputForCotizacion } from '@/lib/supabase/services/preciosPro.service';
@@ -21,6 +21,8 @@ import {
   writeAbecedarioFields,
   type AbecedarioFormFields,
 } from '@/lib/abecedario/abecedarioConfig';
+import { NonSvgVectorConfirmDialog } from '@/components/shared/NonSvgVectorConfirmDialog';
+import { isSvgFileName } from '@/lib/utils/vectorFileFormat';
 
 const addStampSchema = z.object({
   itemType: z.enum(['SELLO', 'ABECEDARIO', 'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA']),
@@ -114,6 +116,8 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
   }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [measureInput, setMeasureInput] = useState('');
+  const [pendingNonSvgFileName, setPendingNonSvgFileName] = useState<string | null>(null);
+  const pendingAddStampRef = useRef<AddStampFormData | null>(null);
 
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset, control } = useForm<AddStampFormData>({
     resolver: zodResolver(addStampSchema),
@@ -228,19 +232,19 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
     setFiles(prev => ({ ...prev, [type]: file }));
   };
 
-  const onSubmit = async (data: AddStampFormData) => {
+  const submitAddStamp = async (data: AddStampFormData) => {
     try {
       setIsSubmitting(true);
-      
+
       let width = 1;
       let height = 1;
       if (data.itemType === 'SELLO') {
         const parsed = parseMedidaMmAString(measureInput);
         if (!parsed) {
           toast({
-            title: "Error",
-            description: "Formato de medida inválido. Usá milímetros, ej: 40×40 o 35",
-            variant: "destructive",
+            title: 'Error',
+            description: 'Formato de medida inválido. Usá milímetros, ej: 40×40 o 35',
+            variant: 'destructive',
           });
           setIsSubmitting(false);
           return;
@@ -248,46 +252,50 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
         width = parsed.anchoMm;
         height = parsed.altoMm;
       }
-      
-      await onAddStamp(order.id, {
-        itemType: data.itemType,
-        designName: data.itemType === 'SELLO' ? (data.designName || '') : '',
-        requestedWidthMm: width,
-        requestedHeightMm: height,
-        stampType: data.stampType,
-        itemConfig: itemConfigFromForm(data.itemType, data),
-        notes: data.notes,
-        itemValue: data.itemValue,
-        depositValueItem: data.depositValueItem,
-        restPaidAmountItem: restante,
-        paidAmountItemCached: data.depositValueItem,
-        balanceItemCached: restante,
-        fabricationState: data.fabricationState,
-        saleState: data.saleState,
-        shippingState: data.shippingState,
-        isPriority: data.isPriority,
-        files: {},
-        contact: {
-          channel: order.items[0]?.contact?.channel || 'OTRO',
-          phoneE164: order.customer.phoneE164,
-        },
-      }, files);
 
-      const itemLabel = data.itemType === 'ABECEDARIO'
-        ? 'abecedario'
-        : data.itemType === 'SOLDADOR'
-        ? 'soldador'
-        : data.itemType === 'MANGO_GOLPE'
-        ? 'mango de golpe'
-        : data.itemType === 'BASE_REMACHADORA'
-        ? 'base remachadora'
-        : 'sello';
+      await onAddStamp(
+        order.id,
+        {
+          itemType: data.itemType,
+          designName: data.itemType === 'SELLO' ? data.designName || '' : '',
+          requestedWidthMm: width,
+          requestedHeightMm: height,
+          stampType: data.stampType,
+          itemConfig: itemConfigFromForm(data.itemType, data),
+          notes: data.notes,
+          itemValue: data.itemValue,
+          depositValueItem: data.depositValueItem,
+          restPaidAmountItem: restante,
+          paidAmountItemCached: data.depositValueItem,
+          balanceItemCached: restante,
+          fabricationState: data.fabricationState,
+          saleState: data.saleState,
+          shippingState: data.shippingState,
+          isPriority: data.isPriority,
+          files: {},
+          contact: {
+            channel: order.items[0]?.contact?.channel || 'OTRO',
+            phoneE164: order.customer.phoneE164,
+          },
+        },
+        files,
+      );
+
+      const itemLabel =
+        data.itemType === 'ABECEDARIO'
+          ? 'abecedario'
+          : data.itemType === 'SOLDADOR'
+            ? 'soldador'
+            : data.itemType === 'MANGO_GOLPE'
+              ? 'mango de golpe'
+              : data.itemType === 'BASE_REMACHADORA'
+                ? 'base remachadora'
+                : 'sello';
       toast({
-        title: "¡Ítem agregado!",
+        title: '¡Ítem agregado!',
         description: `Se ha agregado ${itemLabel} al pedido`,
       });
 
-      // Reset form
       reset();
       setFiles({});
       setMeasureInput('');
@@ -295,16 +303,26 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
     } catch (error) {
       console.error('Error adding stamp:', error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "No se pudo agregar el sello",
-        variant: "destructive",
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo agregar el sello',
+        variant: 'destructive',
       });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const onSubmit = async (data: AddStampFormData) => {
+    if (files.vector && !isSvgFileName(files.vector.name)) {
+      pendingAddStampRef.current = data;
+      setPendingNonSvgFileName(files.vector.name);
+      return;
+    }
+    await submitAddStamp(data);
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-8">
         <DialogHeader className="pb-6">
@@ -564,7 +582,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                         <p className="text-sm text-muted-foreground">Subir archivo</p>
                         <input
                           type="file"
-                          accept={type === 'photo' ? 'image/*' : 'image/*,.pdf,.ai,.eps'}
+                          accept={type === 'photo' ? 'image/*' : 'image/*,.svg,.pdf,.ai,.eps,image/svg+xml'}
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) handleFileChange(type, file);
@@ -600,6 +618,27 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
         </form>
       </DialogContent>
     </Dialog>
+    <NonSvgVectorConfirmDialog
+      open={Boolean(pendingNonSvgFileName)}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setPendingNonSvgFileName(null);
+          pendingAddStampRef.current = null;
+        }
+      }}
+      fileName={pendingNonSvgFileName ?? ''}
+      onConfirm={() => {
+        const pending = pendingAddStampRef.current;
+        setPendingNonSvgFileName(null);
+        pendingAddStampRef.current = null;
+        if (pending) void submitAddStamp(pending);
+      }}
+      onCancel={() => {
+        setPendingNonSvgFileName(null);
+        pendingAddStampRef.current = null;
+      }}
+    />
+    </>
   );
 }
 

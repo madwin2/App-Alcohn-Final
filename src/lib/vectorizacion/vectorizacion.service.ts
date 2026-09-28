@@ -48,8 +48,8 @@ export async function fetchPendientes(includeRehacerPrioridad: boolean): Promise
       archivoBase: (row.archivo_base as string) || '',
       archivoBaseMejorado: ((row as { archivo_base_mejorado?: string | null }).archivo_base_mejorado) ?? null,
       mockupSolicitudId: (row.mockup_solicitud_id as string | null) ?? null,
-      requestedWidthMm: Number(row.ancho_real ?? 0) * 10,
-      requestedHeightMm: Number(row.largo_real ?? 0) * 10,
+      requestedWidthMm: Math.max(Number(row.ancho_real ?? 0) * 10, Number(row.largo_real ?? 0) * 10),
+      requestedHeightMm: Math.min(Number(row.ancho_real ?? 0) * 10, Number(row.largo_real ?? 0) * 10),
       estadoFabricacion: (row.estado_fabricacion as string) || 'Sin Hacer',
       esPrioritario: Boolean(row.es_prioritario),
       fechaLimite: (row.fecha_limite as string | null) ?? null,
@@ -71,8 +71,13 @@ export async function setSelloVectorState(
     patch.archivo_vector_preview = extra.vectorUrl;
     patch.error_vectorizacion_mensaje = null;
   }
-  if (extra?.widthMm != null) patch.ancho_fabricacion_mm = extra.widthMm;
-  if (extra?.heightMm != null) patch.largo_fabricacion_mm = extra.heightMm;
+  if (extra?.widthMm != null && extra?.heightMm != null) {
+    patch.ancho_fabricacion_mm = Math.max(extra.widthMm, extra.heightMm);
+    patch.largo_fabricacion_mm = Math.min(extra.widthMm, extra.heightMm);
+  } else {
+    if (extra?.widthMm != null) patch.ancho_fabricacion_mm = extra.widthMm;
+    if (extra?.heightMm != null) patch.largo_fabricacion_mm = extra.heightMm;
+  }
   const { error } = await supabase.from('sellos').update(patch as never).eq('id', selloId);
   if (error) throw error;
 }

@@ -43,6 +43,7 @@ import {
   canDownloadPackage,
   parseSellosNoImportados,
   parseSellosEnOtraPlanchuela,
+  parseSellosSobrantesEnAspire,
   ProgramServiceError,
   type SoloEnAppDecision,
   type SoloEnArchivoDecision,
@@ -129,7 +130,7 @@ const lifecycleLabel = (
   if (estado === 'LISTO' && dirty && hasZip) return 'Editado, falta regenerar';
   const map: Record<ProgramLifecycleState, string> = {
     BORRADOR: 'Borrador',
-    LISTO: 'Listo',
+    LISTO: 'Listo para Fabricar',
     BLOQUEADO: 'Bloqueado',
     EN_FABRICACION: 'En fabricación',
     FINALIZADO: 'Finalizado',
@@ -250,8 +251,8 @@ function LifecycleStatusSheet({
         <span
           title={fullLabel}
           className={cn(
-            'truncate font-semibold uppercase leading-none tracking-[0.12em]',
-            full ? 'text-[10px]' : 'text-[9px]',
+            'truncate font-semibold uppercase leading-none',
+            full ? 'text-[10px] tracking-[0.08em]' : 'text-[8px] tracking-[0.06em]',
           )}
         >
           {label}
@@ -531,6 +532,10 @@ export function ProgramCardDesign({
   const productionDateObj = parseOrderDateLocal(program.productionDate);
   const sellosNoImportados = parseSellosNoImportados(program.syncPayload);
   const sellosEnOtraPlanchuela = parseSellosEnOtraPlanchuela(program.syncPayload);
+  const sellosSobrantesEnAspire = parseSellosSobrantesEnAspire(
+    program.syncPayload,
+    program.stamps.map((s) => s.id),
+  );
   const dateLabel = Number.isNaN(productionDateObj.getTime())
     ? '—'
     : format(productionDateObj, 'dd/MM/yyyy');
@@ -538,7 +543,10 @@ export function ProgramCardDesign({
     ? '—'
     : format(productionDateObj, 'dd MMM', { locale: es }).toUpperCase();
   const hasAlert =
-    showStaleZip || sellosNoImportados.length > 0 || sellosEnOtraPlanchuela.length > 0;
+    showStaleZip
+    || sellosNoImportados.length > 0
+    || sellosEnOtraPlanchuela.length > 0
+    || sellosSobrantesEnAspire.length > 0;
 
   const runAction = async (fn: () => Promise<void>, successMsg?: string) => {
     setActionBusy(true);
@@ -572,6 +580,7 @@ export function ProgramCardDesign({
     showStaleZip,
     sellosNoImportados,
     sellosEnOtraPlanchuela,
+    sellosSobrantesEnAspire,
     load,
     lengthLines,
     canDownload,
@@ -1166,6 +1175,7 @@ type HojaBodyProps = {
   showStaleZip: boolean;
   sellosNoImportados: ReturnType<typeof parseSellosNoImportados>;
   sellosEnOtraPlanchuela: ReturnType<typeof parseSellosEnOtraPlanchuela>;
+  sellosSobrantesEnAspire: string[];
   load: ProgramLoad | null;
   lengthLines: string[];
   canDownload: boolean;
@@ -1198,6 +1208,7 @@ function HojaBody({
   showStaleZip,
   sellosNoImportados,
   sellosEnOtraPlanchuela,
+  sellosSobrantesEnAspire,
   load,
   lengthLines,
   canDownload,
@@ -1472,6 +1483,13 @@ function HojaBody({
                 {sellosEnOtraPlanchuela.length === 1
                   ? `${sellosEnOtraPlanchuela[0].diseno}: planchuela ${sellosEnOtraPlanchuela[0].real} (plan. ${sellosEnOtraPlanchuela[0].planificada})`
                   : `${sellosEnOtraPlanchuela.length} sellos en otra planchuela`}
+              </AlertLine>
+            )}
+            {sellosSobrantesEnAspire.length > 0 && (
+              <AlertLine>
+                {sellosSobrantesEnAspire.length === 1
+                  ? '1 sello sacado sigue en el Aspire: correr Actualizar'
+                  : `${sellosSobrantesEnAspire.length} sellos sacados siguen en el Aspire: correr Actualizar`}
               </AlertLine>
             )}
           </div>
@@ -2001,11 +2019,18 @@ export function ProgramSheetDragPreview({
   const productionDateObj = parseOrderDateLocal(program.productionDate);
   const sellosNoImportados = parseSellosNoImportados(program.syncPayload);
   const sellosEnOtraPlanchuela = parseSellosEnOtraPlanchuela(program.syncPayload);
+  const sellosSobrantesEnAspire = parseSellosSobrantesEnAspire(
+    program.syncPayload,
+    program.stamps.map((s) => s.id),
+  );
   const dateLabel = Number.isNaN(productionDateObj.getTime())
     ? '—'
     : format(productionDateObj, 'dd/MM/yyyy');
   const hasAlert =
-    showStaleZip || sellosNoImportados.length > 0 || sellosEnOtraPlanchuela.length > 0;
+    showStaleZip
+    || sellosNoImportados.length > 0
+    || sellosEnOtraPlanchuela.length > 0
+    || sellosSobrantesEnAspire.length > 0;
 
   return (
     <HojaStack
@@ -2027,6 +2052,7 @@ export function ProgramSheetDragPreview({
         showStaleZip={showStaleZip}
         sellosNoImportados={sellosNoImportados}
         sellosEnOtraPlanchuela={sellosEnOtraPlanchuela}
+        sellosSobrantesEnAspire={sellosSobrantesEnAspire}
         load={load}
         lengthLines={lengthLines}
         canDownload={canDownload}

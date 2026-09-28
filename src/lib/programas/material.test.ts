@@ -44,9 +44,9 @@ describe('resolvePlanchuelaRef', () => {
 });
 
 describe('MACHINE_SIZE_ELIGIBILITY', () => {
-  it('C y G cubren hasta 38; XL solo 63', () => {
+  it('C cubre 12/19/25/38; G solo 12 y 38; XL solo 63', () => {
     expect(MACHINE_SIZE_ELIGIBILITY.C).toEqual([12, 19, 25, 38]);
-    expect(MACHINE_SIZE_ELIGIBILITY.G).toEqual([12, 19, 25, 38]);
+    expect(MACHINE_SIZE_ELIGIBILITY.G).toEqual([12, 38]);
     expect(MACHINE_SIZE_ELIGIBILITY.XL).toEqual([63]);
   });
 
@@ -55,6 +55,13 @@ describe('MACHINE_SIZE_ELIGIBILITY', () => {
     expect(isPlanchuelaEligibleForMachine('C', dims)).toBe(true);
     expect(isPlanchuelaEligibleForMachine('G', dims)).toBe(true);
     expect(isPlanchuelaEligibleForMachine('XL', dims)).toBe(false);
+  });
+
+  it('un sello de 19 o 25 entra en C, no en G', () => {
+    expect(isPlanchuelaEligibleForMachine('C', { tipoPlanchuela: 19 })).toBe(true);
+    expect(isPlanchuelaEligibleForMachine('G', { tipoPlanchuela: 19 })).toBe(false);
+    expect(isPlanchuelaEligibleForMachine('C', { tipoPlanchuela: 25 })).toBe(true);
+    expect(isPlanchuelaEligibleForMachine('G', { tipoPlanchuela: 25 })).toBe(false);
   });
 
   it('un sello de 63 solo entra en XL', () => {

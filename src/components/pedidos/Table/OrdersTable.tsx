@@ -96,9 +96,11 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
 
   const deferredOrders = useDeferredValue(orders);
 
+  // Solo resetear al cambiar búsqueda/filtros/orden — no al actualizar un pedido
+  // (antes deferredOrders en las deps volvía la lista a los primeros 40 tras cada edit).
   useEffect(() => {
     setVisibleCount(ORDERS_PAGE_SIZE);
-  }, [deferredOrders, searchQuery, filters, sort, searchAcrossDatabase]);
+  }, [searchQuery, filters, sort, searchAcrossDatabase]);
 
   const filteredOrders = useMemo(() => {
     return filterOrders(deferredOrders, searchQuery, filters, sort, searchAcrossDatabase);

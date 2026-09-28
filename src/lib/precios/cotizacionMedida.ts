@@ -170,7 +170,10 @@ export function clasificarGrupoSelloRectangularMm(
   return inferirGrupoPorSemillas(as, ls) ?? grupoPorSemillaMasCercana2D(as, ls);
 }
 
-/** Parse "40×40", "35,5×25" o "40" (cuadrado) en **milímetros** → `requestedWidthMm` / `requestedHeightMm`. */
+/**
+ * Parse "40×40", "35,5×25" o "40" (cuadrado) en **milímetros** → `requestedWidthMm` / `requestedHeightMm`.
+ * Convención Alcohn: siempre lado largo × lado corto (el orden al escribir no importa).
+ */
 export function parseMedidaMmAString(raw: string): { anchoMm: number; altoMm: number } | null {
   const t = raw.trim().replace(/,/g, '.').replace(/\s/g, '');
   const m = t.match(/^(\d+(?:\.\d+)?)(?:[xX×](\d+(?:\.\d+)?))?$/);
@@ -178,9 +181,11 @@ export function parseMedidaMmAString(raw: string): { anchoMm: number; altoMm: nu
   const wMm = parseFloat(m[1]);
   const hMm = m[2] !== undefined ? parseFloat(m[2]) : wMm;
   if (!Number.isFinite(wMm) || !Number.isFinite(hMm) || wMm <= 0 || hMm <= 0) return null;
+  const a = Math.max(1, Math.round(wMm));
+  const b = Math.max(1, Math.round(hMm));
   return {
-    anchoMm: Math.max(1, Math.round(wMm)),
-    altoMm: Math.max(1, Math.round(hMm)),
+    anchoMm: Math.max(a, b),
+    altoMm: Math.min(a, b),
   };
 }
 

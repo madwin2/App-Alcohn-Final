@@ -30,6 +30,7 @@ import {
   getProgramEvents,
   parseSellosNoImportados,
   parseSellosEnOtraPlanchuela,
+  parseSellosSobrantesEnAspire,
   ProgramEvent,
   ProgramReconciliation,
   SoloEnAppDecision,
@@ -81,7 +82,7 @@ const lifecycleLabel = (
   if (estado === 'LISTO' && dirty && hasZip) return 'Editado, falta regenerar';
   const map: Record<ProgramLifecycleState, string> = {
     BORRADOR: 'Borrador',
-    LISTO: 'Listo',
+    LISTO: 'Listo para Fabricar',
     BLOQUEADO: 'Bloqueado',
     EN_FABRICACION: 'En fabricación',
     FINALIZADO: 'Finalizado',
@@ -226,6 +227,10 @@ export function ProgramCard({
   const productionDateObj = parseOrderDateLocal(program.productionDate);
   const sellosNoImportados = parseSellosNoImportados(program.syncPayload);
   const sellosEnOtraPlanchuela = parseSellosEnOtraPlanchuela(program.syncPayload);
+  const sellosSobrantesEnAspire = parseSellosSobrantesEnAspire(
+    program.syncPayload,
+    program.stamps.map((s) => s.id),
+  );
 
   const run = async (fn: () => Promise<void>, successMsg?: string) => {
     setBusy(true);
@@ -506,6 +511,15 @@ export function ProgramCard({
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+
+            {sellosSobrantesEnAspire.length > 0 && (
+              <div className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs font-medium text-amber-950 dark:bg-amber-950/40 dark:text-amber-100 dark:border-amber-700">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                {sellosSobrantesEnAspire.length === 1
+                  ? '1 sello sacado del programa sigue en el Aspire: correr Actualizar'
+                  : `${sellosSobrantesEnAspire.length} sellos sacados del programa siguen en el Aspire: correr Actualizar`}
               </div>
             )}
 

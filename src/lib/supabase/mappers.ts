@@ -3,6 +3,7 @@ import { Database } from './types';
 import { todayArgentinaDateKey } from '../utils/argentinaDate';
 import { vectorUrlFromPreview } from '../utils/vectorUrlFromPreview';
 import { baseFileUtil } from '@/lib/vectorizacion/baseFile';
+import { ordenMedidaLargoCortoMm } from '@/lib/utils/medidaOrientacion';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -206,18 +207,24 @@ export const mapClienteToCustomer = (cliente: ClienteRow): Customer => ({
 
 // Mapear Sello a OrderItem
 export const mapSelloToOrderItem = (sello: SelloRow, cliente: ClienteRow): OrderItem => {
-  // Calcular medidas desde largo_real y ancho_real, o usar valores por defecto
-  const widthMm = sello.ancho_real ? Number(sello.ancho_real) * 10 : 50; // Convertir de cm a mm
-  const heightMm = sello.largo_real ? Number(sello.largo_real) * 10 : 30;
+  // Calcular medidas desde largo_real y ancho_real, o usar valores por defecto.
+  // Convención Alcohn: siempre lado largo × lado corto (independiente de la orientación del archivo).
+  const rawW = sello.ancho_real ? Number(sello.ancho_real) * 10 : 50; // cm → mm
+  const rawH = sello.largo_real ? Number(sello.largo_real) * 10 : 30;
+  const requested = ordenMedidaLargoCortoMm(rawW, rawH);
+  const fabRawW = sello.ancho_fabricacion_mm != null ? Number(sello.ancho_fabricacion_mm) : null;
+  const fabRawH = sello.largo_fabricacion_mm != null ? Number(sello.largo_fabricacion_mm) : null;
+  const fabrication =
+    fabRawW != null && fabRawH != null ? ordenMedidaLargoCortoMm(fabRawW, fabRawH) : null;
 
   return {
     id: sello.id,
     orderId: sello.orden_id,
     designName: sello.diseno || 'Sin diseño',
-    requestedWidthMm: widthMm,
-    requestedHeightMm: heightMm,
-    fabricationWidthMm: sello.ancho_fabricacion_mm != null ? Number(sello.ancho_fabricacion_mm) : null,
-    fabricationHeightMm: sello.largo_fabricacion_mm != null ? Number(sello.largo_fabricacion_mm) : null,
+    requestedWidthMm: requested.widthMm,
+    requestedHeightMm: requested.heightMm,
+    fabricationWidthMm: fabrication?.widthMm ?? null,
+    fabricationHeightMm: fabrication?.heightMm ?? null,
     itemType: mapItemType((sello as any).item_type),
     stampType: mapStampType(sello.tipo),
     itemConfig: ((sello as any).item_config as Record<string, any> | null) || undefined,
@@ -370,26 +377,38 @@ export const mapOrderItemToSello = (
   item: OrderItem,
   ordenId: string,
   cliente: ClienteRow
-) => ({
-  orden_id: ordenId,
-  item_type: item.itemType || 'SELLO',
-  item_config: item.itemConfig || {},
-  tipo: mapStampTypeToDB(item.stampType || 'CLASICO') as 'Clasico' | '3mm' | 'Lacre' | 'Alimento' | 'ABC',
-  diseno: item.designName,
-  nota: item.notes || null,
-  valor: item.itemValue || 0,
-  senia: item.depositValueItem || 0,
-  estado_fabricacion: mapFabricationStateToDB(item.fabricationState) as 'Sin Hacer' | 'Haciendo' | 'Hecho' | 'Rehacer' | 'Retocar' | 'Prioridad' | 'Verificar',
-  es_prioritario: item.isPriority === true,
-  estado_venta: mapSaleStateToDB(item.saleState) as 'Señado' | 'Foto' | 'Transferido',
-  archivo_base: item.files?.baseUrl || null,
-  foto_sello: item.files?.photoUrl || null,
-  ancho_real: item.requestedWidthMm ? (item.requestedWidthMm / 10).toString() : null, // Convertir de mm a cm
-  largo_real: item.requestedHeightMm ? (item.requestedHeightMm / 10).toString() : null,
-  ancho_fabricacion_mm: item.fabricationWidthMm ?? null,
-  largo_fabricacion_mm: item.fabricationHeightMm ?? null,
-  fecha_limite: null, // Se puede agregar después
-});
+) => {
+  const requested =
+    item.requestedWidthMm && item.requestedHeightMm
+      ? ordenMedidaLargoCortoMm(item.requestedWidthMm, item.requestedHeightMm)
+      : null;
+  const fabrication =
+    item.fabricationWidthMm != null && item.fabricationHeightMm != null
+      ? ordenMedidaLargoCortoMm(item.fabricationWidthMm, item.fabricationHeightMm)
+      : null;
+
+  return {
+    orden_id: ordenId,
+    item_type: item.itemType || 'SELLO',
+    item_config: item.itemConfig || {},
+    tipo: mapStampTypeToDB(item.stampType || 'CLASICO') as 'Clasico' | '3mm' | 'Lacre' | 'Alimento' | 'ABC',
+    diseno: item.designName,
+    nota: item.notes || null,
+    valor: item.itemValue || 0,
+    senia: item.depositValueItem || 0,
+    estado_fabricacion: mapFabricationStateToDB(item.fabricationState) as 'Sin Hacer' | 'Haciendo' | 'Hecho' | 'Rehacer' | 'Retocar' | 'Prioridad' | 'Verificar',
+    es_prioritario: item.isPriority === true,
+    estado_venta: mapSaleStateToDB(item.saleState) as 'Señado' | 'Foto' | 'Transferido',
+    archivo_base: item.files?.baseUrl || null,
+    foto_sello: item.files?.photoUrl || null,
+    // mm → cm; siempre largo × corto
+    ancho_real: requested ? (requested.widthMm / 10).toString() : null,
+    largo_real: requested ? (requested.heightMm / 10).toString() : null,
+    ancho_fabricacion_mm: fabrication?.widthMm ?? item.fabricationWidthMm ?? null,
+    largo_fabricacion_mm: fabrication?.heightMm ?? item.fabricationHeightMm ?? null,
+    fecha_limite: null, // Se puede agregar después
+  };
+};
 
 export const mapOrderToOrden = (
   order: Partial<Order>,

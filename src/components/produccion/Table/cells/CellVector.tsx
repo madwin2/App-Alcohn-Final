@@ -1,5 +1,5 @@
 import { Upload, FileType2, Download, Loader2, Trash2, Ruler } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { storageFileKindFromUrl, storageFileKindLabel } from '@/lib/utils/storageFileKind';
 import { ProductionItem } from '@/lib/types/index';
 import { useProductionStore } from '@/lib/state/production.store';
@@ -24,6 +24,10 @@ import { useImagePreviewLightbox } from '@/hooks/useImagePreviewLightbox';
 import { measureSvgFile } from '@/lib/utils/svgBoundingBox';
 import { resolveFabricationSize } from '@/lib/programas/fabricationSize';
 import { useFabricationSizeDialogStore } from '@/lib/state/fabricationSizeDialog.store';
+import { NonSvgVectorConfirmDialog } from '@/components/shared/NonSvgVectorConfirmDialog';
+import { getFileExtension, isSvgFileName } from '@/lib/utils/vectorFileFormat';
+import { formatDimensions } from '@/lib/utils/format';
+import { ordenMedidaLargoCortoMm } from '@/lib/utils/medidaOrientacion';
 
 interface CellVectorProps {
   item: ProductionItem;
@@ -35,6 +39,7 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
   const { toast } = useToast();
   const { preview, openPreview, closePreview } = useImagePreviewLightbox();
   const [uploading, setUploading] = useState(false);
+  const [pendingNonSvgFile, setPendingNonSvgFile] = useState<File | null>(null);
   const openFabricationSizeDialog = useFabricationSizeDialogStore((s) => s.open);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,18 +74,127 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
   const fabricationBadge = fabricationConfirmed ? (
     <span
       className="absolute top-0.5 left-0.5 z-10 rounded-full bg-emerald-500 p-0.5 text-white shadow"
-      title={`Medida de fabricación confirmada: ${Number(item.fabricationWidthMm).toFixed(1)} × ${Number(item.fabricationHeightMm).toFixed(1)} mm`}
+      title={`Medida de fabricación confirmada: ${formatDimensions(
+        Number(Number(item.fabricationWidthMm).toFixed(1)),
+        Number(Number(item.fabricationHeightMm).toFixed(1)),
+      )}`}
     >
       <Ruler className="size-2.5" aria-hidden />
     </span>
   ) : null;
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadVectorFile = useCallback(
+    async (file: File) => {
+      if (!onUpdateItem) return;
+
+      const fileExtension = getFileExtension(file.name);
+      setUploading(true);
+      try {
+        const filePath = generateFilePath(item.orderId, 'vector', file.name, item.id);
+        const isEpsFile = fileExtension === '.eps';
+
+        let result: { originalUrl: string; previewUrl?: string };
+        if (isEpsFile) {
+          toast({
+            title: 'Subiendo EPS...',
+            description:
+              'Intentando generar vista previa (si la API alcanza el límite, igual queda guardado para descargar).',
+          });
+          try {
+            result = await uploadVectorFileWithPreview('vector', file, filePath);
+          } catch {
+            const fileUrl = await uploadFile('vector', file, filePath);
+            result = { originalUrl: fileUrl };
+            toast({
+              title: 'EPS guardado sin preview',
+              description: 'No se pudo convertir el EPS; igual podés descargarlo con el ícono o clic derecho.',
+              variant: 'destructive',
+            });
+          }
+        } else {
+          const fileUrl = await uploadFile('vector', file, filePath);
+          result = { originalUrl: fileUrl, previewUrl: fileUrl };
+        }
+
+        await onUpdateItem(item.id, {
+          files: {
+            ...item.files,
+            vectorUrl: result.originalUrl,
+            vectorPreviewUrl: result.previewUrl ?? result.originalUrl,
+          },
+          vectorizationState: 'VECTORIZADO',
+        });
+
+        toast({
+          title: 'Archivo subido',
+          description:
+            isEpsFile && result.previewUrl
+              ? 'El vector y la vista previa se subieron correctamente.'
+              : isEpsFile
+                ? 'El EPS quedó guardado; si no ves miniatura, descargalo con el ícono.'
+                : 'El archivo vector se subió correctamente',
+        });
+
+        if (fileExtension === '.svg') {
+          const measurement = await measureSvgFile(file);
+          const resolution = resolveFabricationSize(
+            item.requestedWidthMm,
+            item.requestedHeightMm,
+            measurement ? { widthMm: measurement.widthMm, heightMm: measurement.heightMm } : null,
+          );
+          const itemId = item.id;
+
+          if (!resolution.needsReview) {
+            const ordered = ordenMedidaLargoCortoMm(resolution.widthMm, resolution.heightMm);
+            await onUpdateItem(itemId, {
+              fabricationWidthMm: ordered.widthMm,
+              fabricationHeightMm: ordered.heightMm,
+            });
+            toast({
+              title: 'Medida OK',
+              description: 'No hace falta ajustar — el vector ya entra bien en la planchuela.',
+            });
+          } else {
+            openFabricationSizeDialog({
+              fileName: file.name,
+              previewUrl: result.previewUrl ?? result.originalUrl,
+              requestedWidthMm: item.requestedWidthMm,
+              requestedHeightMm: item.requestedHeightMm,
+              resolution,
+              svgAspectRatio: measurement?.aspectRatio ?? null,
+              onConfirm: async ({ widthMm, heightMm }) => {
+                const ordered = ordenMedidaLargoCortoMm(widthMm, heightMm);
+                await onUpdateItem(itemId, {
+                  fabricationWidthMm: ordered.widthMm,
+                  fabricationHeightMm: ordered.heightMm,
+                });
+              },
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error uploading file:', error);
+        toast({
+          title: 'Error al subir archivo',
+          description: error instanceof Error ? error.message : 'No se pudo subir el archivo',
+          variant: 'destructive',
+        });
+      } finally {
+        setUploading(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    },
+    [item, onUpdateItem, openFabricationSizeDialog, toast],
+  );
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !onUpdateItem) return;
 
     const allowedExtensions = ['.svg', '.eps', '.pdf', '.ai'];
-    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+    const fileExtension = getFileExtension(file.name);
 
     if (!allowedExtensions.includes(fileExtension)) {
       toast({
@@ -88,104 +202,16 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
         description: 'Solo se permiten archivos SVG, EPS, PDF o AI',
         variant: 'destructive',
       });
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
-    setUploading(true);
-    try {
-      const filePath = generateFilePath(item.orderId, 'vector', file.name, item.id);
-      const isEpsFile = fileExtension === '.eps';
-
-      let result: { originalUrl: string; previewUrl?: string };
-      if (isEpsFile) {
-        toast({
-          title: 'Subiendo EPS...',
-          description:
-            'Intentando generar vista previa (si la API alcanza el límite, igual queda guardado para descargar).',
-        });
-        try {
-          result = await uploadVectorFileWithPreview('vector', file, filePath);
-        } catch {
-          const fileUrl = await uploadFile('vector', file, filePath);
-          result = { originalUrl: fileUrl };
-          toast({
-            title: 'EPS guardado sin preview',
-            description: 'No se pudo convertir el EPS; igual podés descargarlo con el ícono o clic derecho.',
-            variant: 'destructive',
-          });
-        }
-      } else {
-        const fileUrl = await uploadFile('vector', file, filePath);
-        result = { originalUrl: fileUrl, previewUrl: fileUrl };
-      }
-
-      await onUpdateItem(item.id, {
-        files: {
-          ...item.files,
-          vectorUrl: result.originalUrl,
-          vectorPreviewUrl: result.previewUrl ?? result.originalUrl,
-        },
-        vectorizationState: 'VECTORIZADO',
-      });
-
-      toast({
-        title: 'Archivo subido',
-        description:
-          isEpsFile && result.previewUrl
-            ? 'El vector y la vista previa se subieron correctamente.'
-            : isEpsFile
-              ? 'El EPS quedó guardado; si no ves miniatura, descargalo con el ícono.'
-              : 'El archivo vector se subió correctamente',
-      });
-
-      if (fileExtension === '.svg') {
-        const measurement = await measureSvgFile(file);
-        const resolution = resolveFabricationSize(
-          item.requestedWidthMm,
-          item.requestedHeightMm,
-          measurement ? { widthMm: measurement.widthMm, heightMm: measurement.heightMm } : null,
-        );
-        const itemId = item.id;
-
-        if (!resolution.needsReview) {
-          await onUpdateItem(itemId, {
-            fabricationWidthMm: resolution.widthMm,
-            fabricationHeightMm: resolution.heightMm,
-          });
-          toast({
-            title: 'Medida OK',
-            description: 'No hace falta ajustar — el vector ya entra bien en la planchuela.',
-          });
-        } else {
-          openFabricationSizeDialog({
-            fileName: file.name,
-            previewUrl: result.previewUrl ?? result.originalUrl,
-            requestedWidthMm: item.requestedWidthMm,
-            requestedHeightMm: item.requestedHeightMm,
-            resolution,
-            svgAspectRatio: measurement?.aspectRatio ?? null,
-            onConfirm: async ({ widthMm, heightMm }) => {
-              await onUpdateItem(itemId, {
-                fabricationWidthMm: widthMm,
-                fabricationHeightMm: heightMm,
-              });
-            },
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      toast({
-        title: 'Error al subir archivo',
-        description: error instanceof Error ? error.message : 'No se pudo subir el archivo',
-        variant: 'destructive',
-      });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+    if (!isSvgFileName(file.name)) {
+      setPendingNonSvgFile(file);
+      return;
     }
+
+    void uploadVectorFile(file);
   };
 
   const handleClick = () => {
@@ -493,6 +519,25 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
   return (
     <>
       {content}
+      <NonSvgVectorConfirmDialog
+        open={Boolean(pendingNonSvgFile)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingNonSvgFile(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }
+        }}
+        fileName={pendingNonSvgFile?.name ?? ''}
+        onConfirm={() => {
+          const file = pendingNonSvgFile;
+          setPendingNonSvgFile(null);
+          if (file) void uploadVectorFile(file);
+        }}
+        onCancel={() => {
+          setPendingNonSvgFile(null);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }}
+      />
     </>
   );
 }

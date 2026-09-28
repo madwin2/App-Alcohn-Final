@@ -44,7 +44,7 @@ export function ConfirmDialog({
             variant="outline"
             onClick={() => {
               if (onCancel) onCancel();
-              else onOpenChange(false);
+              onOpenChange(false);
             }}
           >
             {cancelLabel}
@@ -52,8 +52,9 @@ export function ConfirmDialog({
           <Button
             variant={variant === 'destructive' ? 'destructive' : 'default'}
             onClick={() => {
-              onOpenChange(false);
+              // Confirmar antes de cerrar: el padre puede leer estado aún abierto.
               onConfirm();
+              onOpenChange(false);
             }}
           >
             {confirmLabel}

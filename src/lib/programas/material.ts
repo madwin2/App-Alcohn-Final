@@ -9,10 +9,12 @@ export const LARGO_MAXIMO_PLANCHUELA_MM: Record<'C' | 'G' | 'XL', number> = {
 
 export const DEFAULT_PERDIDA_CORTE_CM = 0.8;
 
-/** Tamaños de planchuela que cada máquina puede fabricar (C y G hasta 38; XL solo 63). */
+/** Tamaños de planchuela que cada máquina puede fabricar.
+ *  C: 12/19/25/38 · G: solo 12 y 38 · XL: solo 63.
+ */
 export const MACHINE_SIZE_ELIGIBILITY: Record<'C' | 'G' | 'XL', PlanchuelaSize[]> = {
   C: [12, 19, 25, 38],
-  G: [12, 19, 25, 38],
+  G: [12, 38],
   XL: [63],
 };
 

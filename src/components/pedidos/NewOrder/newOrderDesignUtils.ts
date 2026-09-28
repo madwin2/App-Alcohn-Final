@@ -30,5 +30,6 @@ export function measureInputFromDesign(order: SavedDesignData['order']): string 
   const h = order.requestedHeightMm;
   if (!w || !h || (w === 1 && h === 1)) return '';
   if (w === h) return String(w);
-  return `${w}×${h}`;
+  // Convención Alcohn: siempre lado largo × lado corto
+  return `${Math.max(w, h)}×${Math.min(w, h)}`;
 }

@@ -48,8 +48,11 @@ export const formatPhone = (phoneE164: string): string => {
   return phoneE164;
 };
 
+/** Siempre lado más largo × lado más corto (convención producción Alcohn). */
 export const formatDimensions = (width: number, height: number): string => {
-  return `${width}×${height}mm`;
+  const largo = Math.max(width, height);
+  const corto = Math.min(width, height);
+  return `${largo}×${corto}mm`;
 };
 
 export const isDeadlineNear = (deadlineAt?: string | null): boolean => {

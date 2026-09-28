@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseSellosEnOtraPlanchuela,
   parseSellosNoImportados,
+  parseSellosSobrantesEnAspire,
 } from '@/lib/supabase/services/programs.service';
 
 describe('parseSellosNoImportados', () => {
@@ -41,5 +42,21 @@ describe('parseSellosEnOtraPlanchuela', () => {
   it('devuelve vacío si no hay datos', () => {
     expect(parseSellosEnOtraPlanchuela(null)).toEqual([]);
     expect(parseSellosEnOtraPlanchuela({})).toEqual([]);
+  });
+});
+
+describe('parseSellosSobrantesEnAspire', () => {
+  it('devuelve los presentes en Aspire que ya no están en el programa', () => {
+    const ids = parseSellosSobrantesEnAspire(
+      { sellos_presentes: ['aaa-1', 'BBB-2', 'ccc-3', 'ccc-3'] },
+      ['aaa-1', 'bbb-2'],
+    );
+    expect(ids).toEqual(['ccc-3']);
+  });
+
+  it('devuelve vacío sin reporte o sin sellos_presentes', () => {
+    expect(parseSellosSobrantesEnAspire(null, ['a'])).toEqual([]);
+    expect(parseSellosSobrantesEnAspire({}, ['a'])).toEqual([]);
+    expect(parseSellosSobrantesEnAspire({ sellos_presentes: ['a'] }, ['a'])).toEqual([]);
   });
 });

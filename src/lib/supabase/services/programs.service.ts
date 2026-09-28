@@ -1380,6 +1380,27 @@ export function parseSellosEnOtraPlanchuela(
   return out;
 }
 
+/**
+ * Sellos que el gadget reportó presentes en el .crv3d (sync_payload.sellos_presentes)
+ * pero que ya no están en el programa de la app: se sacaron después de armar el
+ * Aspire y siguen en la planchuela hasta correr "Actualizar" en el gadget.
+ */
+export function parseSellosSobrantesEnAspire(
+  source: Record<string, unknown> | null | undefined,
+  programStampIds: readonly string[],
+): string[] {
+  if (!source) return [];
+  const raw = source.sellos_presentes;
+  if (!Array.isArray(raw)) return [];
+  const enPrograma = new Set(programStampIds.map((id) => id.trim().toLowerCase()));
+  const out: string[] = [];
+  for (const entry of raw) {
+    const id = String(entry ?? '').trim().toLowerCase();
+    if (id && !enPrograma.has(id) && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
 function extractSellosNoImportadosFromCrv3d(info: Crv3dInfo): SelloNoImportadoItem[] {
   const raw = info.parameters.ALCOHN_PROGRAMA_V1;
   if (!raw) return [];
