@@ -12,6 +12,12 @@ interface StampThumbProps {
    * auto: vector → preview → foto.
    */
   prefer?: 'auto' | 'vector' | 'photo';
+  /**
+   * default: fondo blanco (diálogos, drag).
+   * paper: sin fondo; el blanco del archivo se funde con la hoja (multiply).
+   * dark: sin fondo; trazo negro → blanco sobre panel oscuro.
+   */
+  surface?: 'default' | 'paper' | 'dark';
 }
 
 /** Elige la primera URL que el navegador pueda mostrar en <img>. */
@@ -45,6 +51,7 @@ export function StampThumb({
   stamp,
   className,
   prefer = 'auto',
+  surface = 'default',
 }: StampThumbProps) {
   const src = pickThumbSrc(stamp, prefer);
   const [failed, setFailed] = useState(false);
@@ -57,7 +64,10 @@ export function StampThumb({
   return (
     <div
       className={cn(
-        'flex flex-shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-white',
+        'flex flex-shrink-0 items-center justify-center overflow-hidden rounded',
+        surface === 'default' && 'border border-border bg-white',
+        surface === 'paper' && 'border border-zinc-900/15 bg-transparent',
+        surface === 'dark' && 'border-0 bg-transparent',
         className ?? 'h-16 w-16',
       )}
     >
@@ -65,12 +75,22 @@ export function StampThumb({
         <img
           src={src}
           alt={`Diseño de ${stamp.designName}`}
-          className="h-full w-full bg-transparent object-contain"
+          className={cn(
+            'h-full w-full bg-transparent object-contain',
+            surface === 'paper' && 'mix-blend-multiply',
+            // Blanco del archivo → oscuro; negro → blanco; screen lo funde en el panel.
+            surface === 'dark' && 'invert mix-blend-screen',
+          )}
           loading="lazy"
           onError={() => setFailed(true)}
         />
       ) : (
-        <div className="px-1 text-center text-[10px] leading-tight text-muted-foreground">
+        <div
+          className={cn(
+            'px-1 text-center text-[10px] leading-tight',
+            surface === 'dark' ? 'text-zinc-500' : 'text-muted-foreground',
+          )}
+        >
           {dim}mm
         </div>
       )}

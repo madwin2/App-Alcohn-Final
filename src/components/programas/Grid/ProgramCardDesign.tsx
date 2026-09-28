@@ -1609,7 +1609,9 @@ function HojaBody({
                         <div className="cursor-help">
                           <StampThumb
                             stamp={s}
-                            className="h-[4.75rem] w-[4.75rem] rounded-md border-0 bg-transparent"
+                            prefer="vector"
+                            surface="paper"
+                            className="h-[4.75rem] w-[4.75rem] rounded-md border-0"
                           />
                         </div>
                       </TooltipTrigger>
@@ -1623,7 +1625,9 @@ function HojaBody({
                   ) : (
                     <StampThumb
                       stamp={s}
-                      className="h-[4.75rem] w-[4.75rem] rounded-md border-0 bg-transparent"
+                      prefer="vector"
+                      surface="paper"
+                      className="h-[4.75rem] w-[4.75rem] rounded-md border-0"
                     />
                   )}
                   {note ? (
@@ -1706,7 +1710,13 @@ function HojaBody({
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {program.stamps.slice(0, 6).map((s) => (
-                <StampThumb key={s.id} stamp={s} className="h-11 w-11" />
+                <StampThumb
+                  key={s.id}
+                  stamp={s}
+                  prefer="vector"
+                  surface="paper"
+                  className="h-11 w-11 border-0"
+                />
               ))}
               {program.stamps.length > 6 && (
                 <span className="flex h-11 w-11 items-center justify-center rounded border border-zinc-200 text-[10px] text-zinc-500">

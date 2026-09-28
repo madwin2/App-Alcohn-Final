@@ -400,7 +400,9 @@ export function HojaInlineStampPicker({
                   <div className="relative">
                     <StampThumb
                       stamp={stamp}
-                      className="h-14 w-14 rounded border-0 bg-transparent"
+                      prefer="vector"
+                      surface="paper"
+                      className="h-14 w-14 rounded border-0"
                     />
                     {selected && (
                       <span className="absolute -right-1 -bottom-1 z-[2] flex h-4 w-4 items-center justify-center rounded-full bg-zinc-900 text-white shadow">

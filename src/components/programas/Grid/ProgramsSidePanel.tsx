@@ -210,8 +210,9 @@ function DraggableStamp({
       <div className="relative mx-auto aspect-square w-full max-w-[4.5rem]">
         <StampThumb
           stamp={entry.stamp}
-          prefer="photo"
-          className="h-full w-full rounded-md border-0 bg-white"
+          prefer="vector"
+          surface="dark"
+          className="h-full w-full rounded-md"
         />
         <div
           className="pointer-events-none absolute -right-0.5 -top-0.5 z-10 flex flex-col items-end gap-0.5"
