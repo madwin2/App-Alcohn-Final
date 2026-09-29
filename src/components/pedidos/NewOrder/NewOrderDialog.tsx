@@ -7,6 +7,7 @@ import { useOrders } from '@/lib/hooks/useOrders';
 import { useRef, useState } from 'react';
 import { notifyOrderRegistered } from '@/lib/supabase/services/orders.service';
 import { itemConfigFromForm } from '@/lib/abecedario/abecedarioConfig';
+import type { PaisInternacional } from '@/lib/internacional';
 import type { SavedDesignData } from './newOrderDesignUtils';
 import { NonSvgVectorConfirmDialog } from '@/components/shared/NonSvgVectorConfirmDialog';
 import { isSvgFileName } from '@/lib/utils/vectorFileFormat';
@@ -52,6 +53,7 @@ export function NewOrderDialog({
   const [currentStep, setCurrentStep] = useState(1);
   const [customerData, setCustomerData] = useState<NewOrderFormData['customer'] | null>(null);
   const [skipConfirmationWebhook, setSkipConfirmationWebhook] = useState(false);
+  const [internationalCountryIso2, setInternationalCountryIso2] = useState<PaisInternacional['iso2'] | null>(null);
   const [designs, setDesigns] = useState<SavedDesignData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingNonSvgFileName, setPendingNonSvgFileName] = useState<string | null>(null);
@@ -68,10 +70,18 @@ export function NewOrderDialog({
     return null;
   };
 
-  const handleStepSubmit = (stepData: { customer?: NewOrderFormData['customer']; skipConfirmationWebhook?: boolean }, step: number) => {
+  const handleStepSubmit = (
+    stepData: {
+      customer?: NewOrderFormData['customer'];
+      skipConfirmationWebhook?: boolean;
+      internationalCountryIso2?: PaisInternacional['iso2'] | null;
+    },
+    step: number,
+  ) => {
     if (step === 1) {
       setCustomerData(stepData.customer!);
       setSkipConfirmationWebhook(stepData.skipConfirmationWebhook === true);
+      setInternationalCountryIso2(stepData.internationalCountryIso2 ?? null);
       setCurrentStep(2);
     }
   };
@@ -138,6 +148,7 @@ export function NewOrderDialog({
       const firstDesign = designsToUse[0];
       const orderData: NewOrderFormData = {
         customer: customerToUse,
+        internationalCountryIso2,
         order: {
           ...firstDesign.order,
           requestedHeightMm: firstDesign.order.requestedHeightMm || firstDesign.order.requestedWidthMm,
@@ -206,6 +217,7 @@ export function NewOrderDialog({
       setCurrentStep(1);
       setCustomerData(null);
       setSkipConfirmationWebhook(false);
+      setInternationalCountryIso2(null);
       setDesigns([]);
       onOpenChange(false);
     } catch (error) {
@@ -224,6 +236,7 @@ export function NewOrderDialog({
     setCurrentStep(1);
     setCustomerData(null);
     setSkipConfirmationWebhook(false);
+    setInternationalCountryIso2(null);
     setDesigns([]);
     onOpenChange(false);
   };
@@ -280,6 +293,7 @@ export function NewOrderDialog({
             initialData={{
               ...(customerData ? { customer: customerData } : {}),
               skipConfirmationWebhook,
+              internationalCountryIso2,
             }}
             savedDesigns={designs}
             isSubmitting={isSubmitting}

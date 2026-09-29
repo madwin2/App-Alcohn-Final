@@ -19,6 +19,7 @@ import { Database } from '../types';
 import { uploadFile, generateFilePath, uploadVectorFileWithPreview } from './storage.service';
 import { runMigrations } from '../migrations';
 import { itemConfigFromForm } from '@/lib/abecedario/abecedarioConfig';
+import { PAISES_INTERNACIONALES } from '@/lib/internacional';
 import { getSixMonthsCutoffDate } from '../../utils/orderLifecycle';
 import { todayArgentinaDateKey } from '../../utils/argentinaDate';
 import { isVectorAutoEnabled, vectorizationStateAfterBaseUpload } from '../../config/vectorAuto';
@@ -43,6 +44,7 @@ import {
 } from './andreani.service';
 import { fetchReworkChargesForOrders } from './rehacer.service';
 import { invokeBotWebhook } from './botWebhook.service';
+import { formatDimensions } from '@/lib/utils/format';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -110,9 +112,30 @@ const orderWebhookNombre = (order: Order): string =>
   order.customer.firstName ||
   'Cliente';
 
+/** Resumen de ítems para plantillas de WhatsApp (pedido_registrado / pedido_actualizado). */
+const orderWebhookItems = (order: Order): Record<string, unknown>[] =>
+  order.items.map((item) => {
+    const itemType = item.itemType || 'SELLO';
+    const entry: Record<string, unknown> = {
+      item_type: itemType,
+      valor_item: Number(item.itemValue ?? 0),
+    };
+    if (itemType === 'SELLO' || itemType === 'ABECEDARIO') {
+      entry.diseno = item.designName || '';
+      const w = Number(item.requestedWidthMm || 0);
+      const h = Number(item.requestedHeightMm || 0);
+      if (w > 0 && h > 0) {
+        entry.medida = formatDimensions(w, h);
+      }
+    }
+    return entry;
+  });
+
 const orderWebhookDatos = (order: Order): Record<string, unknown> => {
   const datos: Record<string, unknown> = {
     numero_pedido: order.id,
+    senia_total: Number(order.depositValueOrder ?? 0),
+    items: orderWebhookItems(order),
   };
   if (order.shipping?.carrier === 'ANDREANI' && order.andreaniLinkUrl) {
     datos.link_andreani = order.andreaniLinkUrl;
@@ -642,9 +665,14 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
     const takenByUserId = user?.id || null;
 
     // 3. Crear orden
+    const shippingForOrden =
+      formData.internationalCountryIso2 && !formData.shipping?.carrier
+        ? { ...formData.shipping, carrier: 'DHL' as const, service: formData.shipping?.service ?? ('DOMICILIO' as const) }
+        : formData.shipping;
+
     const ordenData = mapOrderToOrden(
       {
-        shipping: formData.shipping,
+        shipping: shippingForOrden,
         saleStateOrder: 'SEÑADO',
         orderDate: todayArgentinaDateKey(),
       },
@@ -654,6 +682,21 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
     // Agregar taken_by si existe usuario
     if (takenByUserId) {
       (ordenData as any).taken_by = takenByUserId;
+    }
+
+    const iso = formData.internationalCountryIso2;
+    if (iso && iso in PAISES_INTERNACIONALES) {
+      (ordenData as { notas_web?: Record<string, unknown> }).notas_web = {
+        international: {
+          countryIso2: iso,
+          currency: PAISES_INTERNACIONALES[iso].moneda,
+        },
+      };
+      if (!(ordenData as { empresa_envio?: string | null }).empresa_envio) {
+        (ordenData as { empresa_envio?: string | null }).empresa_envio = 'DHL';
+        (ordenData as { tipo_envio?: string | null }).tipo_envio =
+          (ordenData as { tipo_envio?: string | null }).tipo_envio ?? 'Domicilio';
+      }
     }
 
     const { data: orden, error: ordenError } = await supabase
@@ -828,6 +871,8 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
     const p1Items: Array<{ selloId: string; campos: string[]; estadoFabricacion: string }> = [];
     const p3SelloIds: string[] = [];
     const v3SelloIds: string[] = [];
+    /** Cambio de ítems/seña/diseño → WhatsApp pedido_actualizado con resumen. */
+    let shouldNotifyPedidoActualizado = false;
     // Solo cargar la orden existente si realmente se va a actualizar cliente.
     // Esto evita una lectura completa extra para updates simples de estados.
     let existingOrder: Order | null = null;
@@ -946,15 +991,24 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
         }
         if (item.designName !== undefined) {
           selloData.diseno = item.designName;
+          if (currentSello && !valuesEqual(currentSello.diseno, item.designName)) {
+            shouldNotifyPedidoActualizado = true;
+          }
         }
         if (item.notes !== undefined) {
           selloData.nota = item.notes || null;
         }
         if (item.itemValue !== undefined) {
           selloData.valor = item.itemValue;
+          if (currentSello && !valuesEqual(currentSello.valor, item.itemValue)) {
+            shouldNotifyPedidoActualizado = true;
+          }
         }
         if (item.depositValueItem !== undefined) {
           selloData.senia = item.depositValueItem;
+          if (currentSello && !valuesEqual(currentSello.senia, item.depositValueItem)) {
+            shouldNotifyPedidoActualizado = true;
+          }
         }
         
         // El restante se calcula automáticamente por el trigger de la base de datos
@@ -1229,6 +1283,10 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
         clienteNombre,
         diseno: v3SelloIds.length === 1 ? disenoDe(v3SelloIds[0]) : undefined,
       });
+    }
+
+    if (shouldNotifyPedidoActualizado) {
+      void notifyOrderUpdated(finalOrder);
     }
 
     return finalOrder;

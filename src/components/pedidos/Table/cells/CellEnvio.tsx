@@ -38,7 +38,7 @@ const shippingOptions: { value: ShippingOption; carrier: ShippingCarrier | null;
   { value: 'CORREO_ARGENTINO_SUCURSAL', carrier: 'CORREO_ARGENTINO', service: 'SUCURSAL', iconName: 'CORREO ARGENTINO SUCURSAL', label: 'Correo Argentino Sucursal' },
   { value: 'VIA_CARGO_DOMICILIO', carrier: 'VIA_CARGO', service: 'DOMICILIO', iconName: 'VIA CARGO DOMICILIO', label: 'Vía Cargo Domicilio' },
   { value: 'VIA_CARGO_SUCURSAL', carrier: 'VIA_CARGO', service: 'SUCURSAL', iconName: 'VIA CARGO SUCURSAL', label: 'Vía Cargo Sucursal' },
-  { value: 'DHL', carrier: 'DHL', service: null, iconName: '', label: 'DHL Internacional' },
+  { value: 'DHL', carrier: 'DHL', service: null, iconName: 'DHL', label: 'DHL Internacional' },
   { value: 'RETIRO_EN_PERSONA', carrier: 'RETIRO_EN_PERSONA', service: null, iconName: '', label: 'Retiro en Persona' },
   { value: 'OTRO', carrier: 'OTRO', service: null, iconName: 'ANDREANI DOMICILIO', label: 'Otro' },
   { value: 'NONE', carrier: null, service: null, iconName: '', label: '—' },
@@ -104,19 +104,14 @@ export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
         <SelectTrigger className="w-auto h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors flex justify-center items-center px-2">
           <SelectValue>
             <span className="flex items-center justify-center">
-              {isDhl ? (
-                <span
-                  className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
-                  title={dhlAddress || 'DHL Internacional'}
-                >
-                  DHL
+              {getIconForOption(currentOption) ? (
+                <span title={isDhl ? (dhlAddress || 'DHL Internacional') : undefined}>
+                  <SvgIcon
+                    name={getIconForOption(currentOption)!}
+                    size={20}
+                    className="flex-shrink-0 object-contain"
+                  />
                 </span>
-              ) : getIconForOption(currentOption) ? (
-                <SvgIcon 
-                  name={getIconForOption(currentOption)!} 
-                  size={20}
-                  className="flex-shrink-0"
-                />
               ) : currentOption === 'RETIRO_EN_PERSONA' ? (
                 <span className="text-xs font-medium">Retiro</span>
               ) : (

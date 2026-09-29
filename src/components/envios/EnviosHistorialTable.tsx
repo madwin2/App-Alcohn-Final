@@ -29,7 +29,7 @@ function carrierIconName(
   if (carrier === 'ANDREANI') return `ANDREANI ${dest}`;
   if (carrier === 'CORREO_ARGENTINO') return `CORREO ARGENTINO ${dest}`;
   if (carrier === 'VIA_CARGO') return `VIA CARGO ${dest}`;
-  if (carrier === 'DHL') return null;
+  if (carrier === 'DHL') return 'DHL';
   if (carrier === 'OTRO') return 'ANDREANI DOMICILIO';
   return null;
 }
@@ -67,13 +67,10 @@ function CarrierIcon({
   if (carrier === 'RETIRO_EN_PERSONA') {
     return <span className="text-xs font-medium">Retiro</span>;
   }
-  if (carrier === 'DHL') {
-    return <span className="text-xs font-medium text-amber-800">DHL</span>;
-  }
   if (!icon) return <span className="text-muted-foreground">—</span>;
   return (
     <span className="flex justify-center" title={carrierTitle(carrier, shippingType)}>
-      <SvgIcon name={icon} size={22} className="flex-shrink-0" />
+      <SvgIcon name={icon} size={22} className="flex-shrink-0 object-contain" />
     </span>
   );
 }

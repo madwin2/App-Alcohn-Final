@@ -14,29 +14,48 @@ import {
   writeAbecedarioFields,
   type AbecedarioFormFields,
 } from '@/lib/abecedario/abecedarioConfig';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Upload, X } from 'lucide-react';
 import { findCustomer } from '@/lib/supabase/services/orders.service';
 import { normalizePhoneDigitsCliente } from '@/lib/utils/phoneNormalization';
 import { fetchPreciosResolverInputForCotizacion } from '@/lib/supabase/services/preciosPro.service';
 import type { PreciosResolverInput } from '@/lib/precios/resolverPrecioSello';
 import { cotizarSelloRectangularCm, mmPedidoAcm, parseMedidaMmAString } from '@/lib/precios/cotizacionMedida';
+import {
+  formatMontoInternacional,
+  PAISES_INTERNACIONALES,
+  type PaisInternacional,
+} from '@/lib/internacional';
 import { NewOrderDesignTabs } from './NewOrderDesignTabs';
 import { measureInputFromDesign, type SavedDesignData } from './newOrderDesignUtils';
 import type { SaveDesignOptions } from './NewOrderDialog';
 
+const internationalCountryIso2Schema = z.enum(['MX', 'CO', 'PE', 'CL']);
+
 // Schema para el paso 1 (Información del cliente)
-const customerSchema = z.object({
-  customer: z.object({
-    firstName: z.string().min(1, 'El nombre es requerido'),
-    lastName: z.string().min(1, 'El apellido es requerido'),
-    phoneE164: z.string().min(1, 'El teléfono es requerido'),
-    email: z.string().email('Email inválido').optional().or(z.literal('')),
-    channel: z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'WEB', 'OTRO']),
-  }),
-  /** No enviar webhook de pedido registrado (alta tardía manual). */
-  skipConfirmationWebhook: z.boolean().optional(),
-});
+const customerSchema = z
+  .object({
+    customer: z.object({
+      firstName: z.string().min(1, 'El nombre es requerido'),
+      lastName: z.string().min(1, 'El apellido es requerido'),
+      phoneE164: z.string().min(1, 'El teléfono es requerido'),
+      email: z.string().email('Email inválido').optional().or(z.literal('')),
+      channel: z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'WEB', 'OTRO']),
+    }),
+    /** No enviar webhook de pedido registrado (alta tardía manual). */
+    skipConfirmationWebhook: z.boolean().optional(),
+    isInternational: z.boolean().optional(),
+    internationalCountryIso2: internationalCountryIso2Schema.optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.isInternational && !data.internationalCountryIso2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Seleccioná el país',
+        path: ['internationalCountryIso2'],
+      });
+    }
+  });
 
 // Schema para el paso 2 (Información del pedido)
 const orderSchema = z.object({
@@ -96,17 +115,20 @@ interface NewOrderStepFormProps {
   isSubmitting?: boolean;
 }
 
-const emptyDesignFormValues = {
+const buildEmptyDesignFormValues = (pais: PaisInternacional | null) => ({
   order: {
     itemType: 'SELLO' as ItemType,
     stampType: 'CLASICO' as StampType,
     requestedWidthMm: 1,
     requestedHeightMm: 1,
   },
-  values: { totalValue: 0, depositValue: 20000 },
-  shipping: { carrier: 'ANDREANI' as ShippingCarrier, service: 'DOMICILIO' as ShippingServiceDest },
+  values: { totalValue: 0, depositValue: pais ? 0 : 20000 },
+  shipping: {
+    carrier: (pais ? 'DHL' : 'ANDREANI') as ShippingCarrier,
+    service: 'DOMICILIO' as ShippingServiceDest,
+  },
   states: { fabrication: 'SIN_HACER' as FabricationState, isPriority: false, deadline: undefined },
-};
+});
 
 const channelOptions = [
   { value: 'WHATSAPP', label: 'WhatsApp' },
@@ -152,6 +174,7 @@ const carrierOptions: {
   { value: 'VIA_CARGO_DOMICILIO', label: 'Vía Cargo - Domicilio', carrier: 'VIA_CARGO', service: 'DOMICILIO' },
   { value: 'VIA_CARGO_SUCURSAL', label: 'Vía Cargo - Sucursal', carrier: 'VIA_CARGO', service: 'SUCURSAL' },
   { value: 'RETIRO_EN_PERSONA', label: 'Retiro en Persona', carrier: 'RETIRO_EN_PERSONA' },
+  { value: 'DHL', label: 'DHL Internacional', carrier: 'DHL', service: 'DOMICILIO' },
   { value: 'OTRO', label: 'Otro', carrier: 'OTRO' },
 ];
 
@@ -216,6 +239,22 @@ export function NewOrderStepForm({
   const [preciosCotizacion, setPreciosCotizacion] = useState<PreciosResolverInput | null>(null);
   const [preciosFetchHecho, setPreciosFetchHecho] = useState(false);
 
+  const paisInternacional = useMemo(() => {
+    const iso = initialData.internationalCountryIso2;
+    return iso ? PAISES_INTERNACIONALES[iso] : null;
+  }, [initialData.internationalCountryIso2]);
+
+  const emptyDesignFormValues = useMemo(
+    () => buildEmptyDesignFormValues(paisInternacional),
+    [paisInternacional],
+  );
+
+  const arsAMonedaPedido = useCallback(
+    (ars: number) =>
+      paisInternacional ? Math.round(ars / paisInternacional.arsPorUnidad) : ars,
+    [paisInternacional],
+  );
+
   // Formulario para el paso 1 (Cliente)
   const customerForm = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
@@ -225,8 +264,12 @@ export function NewOrderStepForm({
         ...initialData.customer,
       },
       skipConfirmationWebhook: initialData.skipConfirmationWebhook ?? false,
+      isInternational: Boolean(initialData.internationalCountryIso2),
+      internationalCountryIso2: initialData.internationalCountryIso2 ?? null,
     },
   });
+
+  const isInternational = customerForm.watch('isInternational');
 
   const prevStepRef = useRef<number | null>(null);
   useEffect(() => {
@@ -242,10 +285,12 @@ export function NewOrderStepForm({
           email: initialData.customer.email ?? '',
         },
         skipConfirmationWebhook: initialData.skipConfirmationWebhook ?? false,
+        isInternational: Boolean(initialData.internationalCountryIso2),
+        internationalCountryIso2: initialData.internationalCountryIso2 ?? null,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset al volver del paso 2
-  }, [currentStep, initialData.customer, initialData.skipConfirmationWebhook]);
+  }, [currentStep, initialData.customer, initialData.skipConfirmationWebhook, initialData.internationalCountryIso2]);
 
   // Observar cambios en teléfono o email para autocompletar datos del cliente
   const watchedPhone = customerForm.watch('customer.phoneE164');
@@ -342,11 +387,11 @@ export function NewOrderStepForm({
       },
       values: {
         totalValue: 0,
-        depositValue: 20000,
+        depositValue: paisInternacional ? 0 : 20000,
         ...initialData.values,
       },
       shipping: {
-        carrier: 'ANDREANI',
+        carrier: paisInternacional ? 'DHL' : 'ANDREANI',
         service: 'DOMICILIO',
         ...initialData.shipping,
       },
@@ -358,6 +403,23 @@ export function NewOrderStepForm({
       },
     },
   });
+
+  // Al entrar al paso 2 con pedido internacional, forzar DHL y seña 0 si aún están los defaults nacionales.
+  const intlDefaultsAppliedRef = useRef(false);
+  useEffect(() => {
+    if (currentStep !== 2 || !paisInternacional) return;
+    if (intlDefaultsAppliedRef.current) return;
+    intlDefaultsAppliedRef.current = true;
+    const carrier = orderForm.getValues('shipping.carrier');
+    const deposit = orderForm.getValues('values.depositValue');
+    if (carrier === 'ANDREANI') {
+      orderForm.setValue('shipping.carrier', 'DHL', { shouldDirty: true });
+      orderForm.setValue('shipping.service', 'DOMICILIO', { shouldDirty: true });
+    }
+    if (deposit === 20000) {
+      orderForm.setValue('values.depositValue', 0, { shouldDirty: true });
+    }
+  }, [currentStep, paisInternacional, orderForm]);
 
   const watchedValues = orderForm.watch(['values.totalValue', 'values.depositValue']);
   const selectedItemType = orderForm.watch('order.itemType');
@@ -425,23 +487,26 @@ export function NewOrderStepForm({
     const { anchoCm, altoCm } = mmPedidoAcm(w, h);
     const c = cotizarSelloRectangularCm(anchoCm, altoCm, preciosCotizacion);
     if (!c) return;
-    orderForm.setValue('values.totalValue', c.precioTransferencia, { shouldDirty: true, shouldValidate: true });
-  }, [preciosCotizacion, selectedItemType, currentStep, wMm, hMm, orderForm]);
+    orderForm.setValue('values.totalValue', arsAMonedaPedido(c.precioTransferencia), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [preciosCotizacion, selectedItemType, currentStep, wMm, hMm, orderForm, arsAMonedaPedido]);
 
   useEffect(() => {
     if (selectedItemType === 'SOLDADOR') {
-      orderForm.setValue('values.totalValue', 75000);
+      orderForm.setValue('values.totalValue', arsAMonedaPedido(75000));
     } else if (selectedItemType === 'MANGO_GOLPE') {
-      orderForm.setValue('values.totalValue', 25000);
+      orderForm.setValue('values.totalValue', arsAMonedaPedido(25000));
     } else if (selectedItemType === 'BASE_REMACHADORA') {
-      orderForm.setValue('values.totalValue', 40000);
+      orderForm.setValue('values.totalValue', arsAMonedaPedido(40000));
     }
     if (selectedItemType !== 'SELLO') {
       orderForm.setValue('order.requestedWidthMm', 1);
       orderForm.setValue('order.requestedHeightMm', 1);
       orderForm.setValue('order.stampType', 'CLASICO');
     }
-  }, [selectedItemType, orderForm]);
+  }, [selectedItemType, orderForm, arsAMonedaPedido]);
 
   const handleFileChange = (type: 'base' | 'vector' | 'photo', file: File | undefined) => {
     setFiles(prev => ({ ...prev, [type]: file }));
@@ -513,7 +578,13 @@ export function NewOrderStepForm({
   };
 
   const handleCustomerSubmit = (data: CustomerFormData) => {
-    onStepSubmit(data, 1);
+    onStepSubmit(
+      {
+        ...data,
+        internationalCountryIso2: data.isInternational ? data.internationalCountryIso2 ?? null : null,
+      },
+      1,
+    );
   };
 
   const handleOrderSubmit = (data: OrderFormData) => {
@@ -646,6 +717,59 @@ export function NewOrderStepForm({
               </Select>
             </div>
           </div>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-white/15 bg-white/[0.03] px-4 py-3">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="isInternational"
+              checked={!!isInternational}
+              onCheckedChange={(c) => {
+                const checked = c === true;
+                customerForm.setValue('isInternational', checked, { shouldDirty: true });
+                if (!checked) {
+                  customerForm.setValue('internationalCountryIso2', null, { shouldDirty: true, shouldValidate: true });
+                }
+              }}
+            />
+            <Label htmlFor="isInternational" className="cursor-pointer text-sm font-normal leading-snug">
+              Pedido internacional
+            </Label>
+          </div>
+          {isInternational && (
+            <div className="space-y-2 pl-7">
+              <Label htmlFor="internationalCountryIso2">País *</Label>
+              <Select
+                value={customerForm.watch('internationalCountryIso2') ?? undefined}
+                onValueChange={(value) =>
+                  customerForm.setValue(
+                    'internationalCountryIso2',
+                    value as PaisInternacional['iso2'],
+                    { shouldDirty: true, shouldValidate: true },
+                  )
+                }
+              >
+                <SelectTrigger
+                  id="internationalCountryIso2"
+                  className={customerForm.formState.errors.internationalCountryIso2 ? 'border-red-500' : ''}
+                >
+                  <SelectValue placeholder="Seleccionar país" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.values(PAISES_INTERNACIONALES).map((pais) => (
+                    <SelectItem key={pais.iso2} value={pais.iso2}>
+                      {pais.nombre} ({pais.moneda})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {customerForm.formState.errors.internationalCountryIso2 && (
+                <p className="text-xs text-red-500">
+                  {customerForm.formState.errors.internationalCountryIso2.message}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-start gap-3 rounded-lg border border-white/15 bg-white/[0.03] px-4 py-3">
@@ -803,13 +927,15 @@ export function NewOrderStepForm({
 
       {/* Valores */}
       <div className="space-y-4">
-        <h3 className="text-lg font-medium">Valores</h3>
+        <h3 className="text-lg font-medium">
+          Valores{paisInternacional ? ` (${paisInternacional.moneda})` : ''}
+        </h3>
         <div className="grid grid-cols-6 gap-4">
           <div className="col-span-2">
             <Input
               id="totalValue"
               type="number"
-              placeholder="Valor Total *"
+              placeholder={paisInternacional ? `Valor Total (${paisInternacional.moneda}) *` : 'Valor Total *'}
               {...orderForm.register('values.totalValue', { valueAsNumber: true })}
               className={orderForm.formState.errors.values?.totalValue ? 'border-red-500' : ''}
               disabled={selectedItemType === 'SOLDADOR' || selectedItemType === 'MANGO_GOLPE' || selectedItemType === 'BASE_REMACHADORA'}
@@ -822,7 +948,7 @@ export function NewOrderStepForm({
             <Input
               id="depositValue"
               type="number"
-              placeholder="Seña"
+              placeholder={paisInternacional ? `Seña (${paisInternacional.moneda})` : 'Seña'}
               {...orderForm.register('values.depositValue', { valueAsNumber: true })}
               className={orderForm.formState.errors.values?.depositValue ? 'border-red-500' : ''}
             />
@@ -832,7 +958,11 @@ export function NewOrderStepForm({
           </div>
           <div className="col-span-2">
             <Input
-              value={`$${restante.toLocaleString()}`}
+              value={
+                paisInternacional
+                  ? formatMontoInternacional(restante, paisInternacional)
+                  : `$${restante.toLocaleString()}`
+              }
               disabled
               className="bg-muted"
               placeholder="Restante"

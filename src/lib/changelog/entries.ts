@@ -436,6 +436,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 23,
+    date: '2026-09-29',
+    title: 'Novedades',
+    version: '1.41',
+    slides: [
+      {
+        heading: 'Alta manual internacional',
+        body: 'En Nuevo Pedido podés marcar el pedido como internacional y elegir el país. Los montos van en moneda local y el envío arranca en DHL.',
+        icon: Flag,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

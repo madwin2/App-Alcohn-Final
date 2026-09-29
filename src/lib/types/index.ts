@@ -371,6 +371,8 @@ export interface Program {
 export interface NewOrderFormData {
   /** Solo alta manual: si es true, no se invoca el webhook de confirmación al cliente. */
   skipConfirmationWebhook?: boolean;
+  /** País del pedido internacional (null/undefined = nacional). Montos en moneda local. */
+  internationalCountryIso2?: import('@/lib/internacional').PaisInternacional['iso2'] | null;
   customer: {
     firstName: string;
     lastName: string;
