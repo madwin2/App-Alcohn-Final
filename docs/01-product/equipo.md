@@ -4,10 +4,12 @@ Confirmado por el equipo el 2026-09-28 ([Q-USR-001](../14-open-questions/usuario
 
 | Persona | Rol | Qué hace en Alcohn AI | Fuera de Alcohn AI |
 |---|---|---|---|
-| **Julián Moreno** | Dueño / administración | Único usuario de Economía y Gastos; dueño del catálogo de Precios; administra el VPS (bot, workers), Supabase, Vercel y la app de Meta; aprueba usuarios en Supabase; actualiza `costos_de_envio`; a veces ayuda en ventas | Desarrollo de la app (con Cursor/Claude) |
+| **Julián Moreno** | Dueño / administración | Único usuario de Economía y Gastos; dueño del catálogo de Precios; administra el VPS (bot, workers), Supabase, Vercel y la app de Meta; aprueba usuarios en Supabase; actualiza `costos_de_envio`; a veces ayuda en ventas | Desarrollo de la app (con Cursor/Claude); contenido de redes (videos elaborados) |
 | **Lautaro "Cachi" Albornoz** | Ventas y **logística** | Ventas y cobros; carga datos de envío; descarga el PDF de MiCorreo y lo carga en "Cargar seguimientos"; envíos Andreani; genera links Andreani | Arma los sellos al despachar (varilla, tuerca, mango, prisionero); imprime etiquetas (Zebra ZD220); lleva los paquetes al correo |
-| **Julián "Juli B" Bobasso** | Ventas | Ventas y cobros; **sube las fotos** de los sellos terminados; genera links Andreani | Saca las fotos |
+| **Julián "Juli B" Bobasso** | Ventas | Ventas y cobros; **sube las fotos** de los sellos terminados; genera links Andreani | Saca las fotos; contenido de redes (historias y contenido rápido con el celular) |
 | **Federico "Fede" Minuto** | Producción (operario) | **Vectorización** (principal); arma los **programas**; corre el gadget de Aspire; marca Haciendo/Hecho; mantiene los `.crv3d` base | Prepara y opera las **dos CNC**; guarda trayectorias en pendrive; corta y prueba los sellos en cuero |
+
+Lugar y horario: oficina y taller en Mar del Plata (Alberti 1254). Horario flexible: cada uno cumple su jornada (en general 8 h) cuando quiera; hacia afuera se comunica de 9 a 16 h.
 
 Ayuda cruzada: en picos de vectorización puede ayudar otra persona; el túnel de Andreani lo abre quien lo necesite.
 

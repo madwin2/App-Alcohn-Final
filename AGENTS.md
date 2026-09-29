@@ -27,6 +27,8 @@ Distinguí siempre: ✅ lo que el código demuestra · 🔶 lo que se infiere ·
 
 ## 1. Antes de modificar una funcionalidad
 
+0. **Si la tarea es de negocio o de proceso** (mejorar un proceso, proponer una funcionalidad, escribir algo que lea el cliente), leer primero el contexto de la empresa: [`docs/00-overview/la-empresa.md`](docs/00-overview/la-empresa.md) (visión, clientes, pilares, tono, marca).
+   Para saber **cómo se usa hoy** una pantalla desde el punto de vista del equipo, está el [manual de uso](docs/manual/README.md).
 1. **Identificar el módulo afectado** (inventario: [`docs/02-modules/README.md`](docs/02-modules/README.md)).
 2. **Leer su documentación** usando el [índice de ruteo de contexto](docs/README.md#índice-para-agentes-context-routing): cargar solo lo que la tabla indica para esa área.
 3. **Leer los workflows relacionados** ([`docs/03-workflows/`](docs/03-workflows/README.md)): casi todo cambio en un módulo afecta a otro (p. ej. un estado de venta dispara WhatsApp y envíos).
@@ -61,6 +63,7 @@ Actualizar, en el mismo cambio:
 - **Integraciones/automatizaciones** (`docs/07-integrations/`, `docs/08-automations/`).
 - **Decisiones** (`docs/13-decisions/`) cuando se eligió entre alternativas.
 - **Preguntas abiertas** resueltas (`docs/14-open-questions/`: estado → documentada).
+- **Manual de uso** (`docs/manual/`): si el cambio es visible para usuarios, actualizar el capítulo de esa pantalla (nombres de botones, pasos, mensajes automáticos).
 - **Changelog para el equipo**: si el cambio es visible para usuarios, agregar entrada en `src/lib/changelog/entries.ts` (regla `.cursor/rules/changelog-novedades.mdc`).
 - Correr `npm run typecheck`, `npm run lint` y `npm test`.
 

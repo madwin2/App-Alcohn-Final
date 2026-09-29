@@ -13,7 +13,7 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 
 ## Estado general (2026-09-28)
 
-100 preguntas: **87 documentadas**, 2 parciales, **11 pendientes** (incluye 6 nuevas surgidas de las respuestas).
+110 preguntas: **97 documentadas**, 2 parciales, **11 pendientes**.
 
 ## Pendientes
 
@@ -35,4 +35,4 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 
 ## Archivos por área
 
-[general](general.md) · [usuarios-permisos](usuarios-permisos.md) · [pedidos](pedidos.md) · [ventas-cobros](ventas-cobros.md) · [produccion-fabricacion](produccion-fabricacion.md) · [programas](programas.md) · [vectorizacion](vectorizacion.md) · [envios](envios.md) · [stock](stock.md) · [comercial-web](comercial-web.md) · [whatsapp-bot](whatsapp-bot.md) · [economia](economia.md) · [arquitectura](arquitectura.md) · [datos](datos.md)
+[general](general.md) · [empresa](empresa.md) · [usuarios-permisos](usuarios-permisos.md) · [pedidos](pedidos.md) · [ventas-cobros](ventas-cobros.md) · [produccion-fabricacion](produccion-fabricacion.md) · [programas](programas.md) · [vectorizacion](vectorizacion.md) · [envios](envios.md) · [stock](stock.md) · [comercial-web](comercial-web.md) · [whatsapp-bot](whatsapp-bot.md) · [economia](economia.md) · [arquitectura](arquitectura.md) · [datos](datos.md)

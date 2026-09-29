@@ -8,7 +8,7 @@ Fuente de verdad sobre **cómo funciona realmente Alcohn AI** (la app interna de
 
 | # | Sección | Para qué |
 |---|---|---|
-| 00 | [Visión general](00-overview/README.md) · [Mapa del sistema](00-overview/mapa-del-sistema.md) · [Ciclo del pedido](00-overview/ciclo-de-vida-del-pedido.md) · [Qué controla/registra/automatiza](00-overview/control-registro-automatizacion.md) | Entender Alcohn AI en 15 minutos |
+| 00 | [**La empresa**](00-overview/la-empresa.md) · [Visión general](00-overview/README.md) · [Mapa del sistema](00-overview/mapa-del-sistema.md) · [Ciclo del pedido](00-overview/ciclo-de-vida-del-pedido.md) · [Qué controla/registra/automatiza](00-overview/control-registro-automatizacion.md) | Qué es Alcohn (visión, clientes, estrategia, marca) y Alcohn AI en 15 minutos |
 | 01 | [Producto](01-product/README.md) · [Equipo](01-product/equipo.md) | Actores, quién hace qué, productos, máquinas, planchuelas |
 | 02 | [Módulos](02-modules/README.md) | Inventario y documentación de cada módulo |
 | 03 | [Workflows](03-workflows/README.md) | Procesos de punta a punta (WF-01…WF-13) |
@@ -22,15 +22,16 @@ Fuente de verdad sobre **cómo funciona realmente Alcohn AI** (la app interna de
 | 11 | [Operación y SOPs](11-operations-sops/README.md) | Esqueletos de procedimientos + scripts + despliegue |
 | 12 | [Arquitectura](12-architecture/README.md) · [Base de datos](12-architecture/base-de-datos.md) | Stack, estructura, patrones, cómo verificar la DB |
 | 13 | [Decisiones](13-decisions/README.md) | ADR reconstruidos |
-| 14 | [Preguntas abiertas](14-open-questions/README.md) | 100 preguntas: 87 documentadas, 13 abiertas o parciales |
+| 14 | [Preguntas abiertas](14-open-questions/README.md) | 110 preguntas: 97 documentadas, 13 abiertas o parciales |
 | 15 | [Glosario](15-glossary/README.md) | Términos propios y ambigüedades |
 | 16 | [Backlog](16-backlog/README.md) | Mejoras y correcciones identificadas, priorizadas |
+| — | [**Manual de uso**](manual/README.md) | Manual para el equipo, pantalla por pantalla, en lenguaje de usuario |
 | — | [Auditorías](audits/README.md) | Inconsistencias, código muerto, comportamientos sorprendentes, arquitectura, seguridad |
 | — | [Mantenimiento de esta base](_meta/mantenimiento.md) | Cómo mantenerla viva |
 
 ## Índice para agentes (context routing)
 
-Cargar **solo** lo necesario según el área de la tarea. Siempre sumar: [convenciones](_meta/convenciones.md), [equipo](01-product/equipo.md) y [políticas confirmadas](04-business-rules/politicas-confirmadas.md), [glosario](15-glossary/README.md) (si hay términos dudosos) y [inconsistencias de nombres](05-data/inconsistencias-de-nombres.md) (si se tocan datos).
+Cargar **solo** lo necesario según el área de la tarea. Siempre sumar: [la empresa](00-overview/la-empresa.md) (si la tarea es de negocio, proceso o texto al cliente), [convenciones](_meta/convenciones.md), [equipo](01-product/equipo.md) y [políticas confirmadas](04-business-rules/politicas-confirmadas.md), [glosario](15-glossary/README.md) (si hay términos dudosos) y [inconsistencias de nombres](05-data/inconsistencias-de-nombres.md) (si se tocan datos).
 
 | Si la tarea toca… | Leer módulo | Workflows | Reglas | Datos / estados | Integraciones / otros |
 |---|---|---|---|---|---|

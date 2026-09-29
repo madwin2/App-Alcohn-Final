@@ -5,6 +5,7 @@
 ## 1. Nombre
 
 - La aplicación se llama **Alcohn AI** (`<title>` en `index.html`; paquete npm `pedidos-app`; repositorio "Alcohn Ai Nueva"). Confirmado por el equipo ([Q-GEN-001](../14-open-questions/general.md#q-gen-001)). "Icon" fue un error de transcripción: no es un nombre del sistema.
+- Contexto de negocio (visión, clientes, estrategia, marca, hoja de ruta): [la-empresa.md](la-empresa.md).
 - **Alcohn** (también "Alcohn CNC", dominio `alcohncnc.com` citado en el código) es la empresa. ✅ (confirmado) Alcohn fabrica **sellos personalizados de bronce mecanizados por CNC** (para marcar cuero, madera, alimentos, lacre), y vende además **accesorios**: abecedarios (juegos de letras), soldadores eléctricos adaptados (100 W / 200 W), mangos de golpe y bases para remachadora.
 
 ## 2. Para qué existe
