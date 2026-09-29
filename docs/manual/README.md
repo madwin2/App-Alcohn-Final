@@ -23,6 +23,7 @@ Manual para el equipo de Alcohn: qué hay en cada pantalla, para qué sirve cada
 | 13 | [Economía y Gastos](13-economia-y-gastos.md) | Números del negocio | Julián |
 | 14 | [Configuración y WhatsApp Bot](14-configuracion-y-whatsapp.md) | Quién recibe cada aviso; conexión con Meta | Julián |
 | 15 | [Problemas frecuentes](15-problemas-frecuentes.md) | Qué hacer cuando algo no sale | Todos |
+| 16 | [Centro Alcohn](16-centro-alcohn.md) | Manual, búsqueda y asistente dentro de la app | Todos |
 
 ## Lo básico que hay que entender
 

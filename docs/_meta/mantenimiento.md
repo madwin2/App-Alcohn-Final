@@ -11,8 +11,9 @@
 
 | Cambio | Documentos |
 |---|---|
-| Pantalla o acción nueva | módulo, workflow, changelog del producto (`src/lib/changelog/entries.ts`), **capítulo del [manual de uso](../manual/README.md)** |
-| Cambio visible en una pantalla (botón, texto, columna, mensaje) | capítulo del [manual de uso](../manual/README.md) y, si aplica, [problemas frecuentes](../manual/15-problemas-frecuentes.md) |
+| Pantalla o acción nueva | módulo, workflow, changelog del producto (`src/lib/changelog/entries.ts`), **capítulo del [manual de uso](../manual/README.md)**; si el texto entra al Centro Alcohn, actualizar `knowledge/catalog.json` y correr `npm run knowledge:build` |
+| Cambio visible en una pantalla (botón, texto, columna, mensaje) | capítulo del [manual de uso](../manual/README.md) y, si aplica, [problemas frecuentes](../manual/15-problemas-frecuentes.md); regenerar catálogo del Centro si el capítulo está publicado |
+| Cambio del contenido del Centro (manual publicado, curated, metadatos) | `knowledge/catalog.json`, `npm run knowledge:build`, pruebas `src/lib/centro`, [módulo centro](../02-modules/centro-informacion/README.md) |
 | Estado nuevo o transición nueva | `06-state-machines`, reglas, módulo, glosario |
 | Tabla/columna nueva | `05-data` (ficha + inconsistencias de nombres si aplica), `12-architecture/base-de-datos.md` si cambia la forma de verificar |
 | Trigger/cron/edge function | `08-automations`, reglas "DB", workflow afectado |

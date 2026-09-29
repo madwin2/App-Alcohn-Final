@@ -22,6 +22,7 @@ Módulos funcionales detectados en el código (no solo los del menú). Cada uno 
 | Innovación | `/innovacion` | Activo, poco uso (2 proyectos, 23 tareas) | [innovacion](innovacion/README.md) |
 | Configuración | `/configuracion` | Activo (solo áreas de notificación) | [configuracion-usuarios](configuracion-usuarios/README.md) |
 | WhatsApp Bot | `/whatsapp` | Parcial: conecta con Meta pero no persiste ni vincula al bot | [whatsapp-bot](whatsapp-bot/README.md) |
+| Centro Alcohn | `/centro`, `/centro/articulos/:slug` | En armado (2026-09-29): visible solo para el dueño (`julian.475@hotmail.com`), como Economía; manual, búsqueda y chat documental; actividades vacías | [centro-informacion](centro-informacion/README.md) |
 | Login / registro | `/login` | Activo | [configuracion-usuarios](configuracion-usuarios/README.md) |
 | Verificación | `/verificacion` (menú deshabilitado) | **No implementado** | [produccion](produccion/README.md#verificación) |
 

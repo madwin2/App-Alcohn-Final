@@ -19,6 +19,7 @@ import {
   Sparkles,
   TrendingUp,
   Settings,
+  BookOpen,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SidebarItem } from './SidebarItem';
@@ -157,6 +158,18 @@ function SidebarInner() {
         })}
         {isEconomiaUser && (
           <>
+            <div className="flex justify-start">
+              <SidebarItem
+                icon={BookOpen}
+                label="Centro Alcohn"
+                isActive={
+                  location.pathname === '/centro' || location.pathname.startsWith('/centro/')
+                }
+                isExpanded={isExpanded}
+                disabled={false}
+                onClick={() => navigate('/centro')}
+              />
+            </div>
             <div className="flex justify-start">
               <SidebarItem
                 icon={Calendar}

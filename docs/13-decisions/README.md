@@ -26,6 +26,7 @@ Decisiones de producto/arquitectura **reconstruidas** a partir de los planes en 
 | ADR-020 | Datos de envío **validados contra el padrón oficial** de MiCorreo (sin texto libre) para que la etiqueta no falle; la web usa el mismo criterio. | Implementada | `PROPUESTA_PAGINA_ENVIOS_CORREO.md`, `envios-ecommerce-web.md` |
 | ADR-021 | Máquina **Grande solo P12 y P38**; **XL solo P63**. | Implementada (2026-09-27) | changelog #19, `material.ts` |
 | ADR-022 | Envío **gratis desde 3 sellos** en el mensaje de cobro. 🔶 Motivación comercial no escrita. | Implementada (solo en el mensaje) | `webhook-bot` |
+| ADR-023 | **Centro Alcohn**: catálogo compartido (manual/búsqueda/chat), actividades diferidas, chat documental autenticado sin datos en vivo. | Implementada (2026-09-29) | `PLAN_CENTRO_INFORMACION_ALCOHN.md`, [ADR-023](ADR-023-centro-alcohn-catalogo-compartido.md) |
 
 ## Cómo registrar una nueva decisión
 

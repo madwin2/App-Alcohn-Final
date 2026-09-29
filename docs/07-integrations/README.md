@@ -9,7 +9,7 @@ Nunca se documentan valores de secretos: solo el **nombre** de la variable y dó
 | **Andreani Pymes** | Links de envío pagados por el cliente, etiquetas, tracking | Envíos | `/api/andreani-*` → `andreani-worker` (Playwright) | [andreani.md](andreani.md) |
 | **Vectric Aspire** | CAD/CAM de la CNC | Programas | Gadgets Lua ↔ edge `programa-sync`; archivos `.crv3d` | [aspire.md](aspire.md) |
 | **Vectorizer.AI** | Bitmap → SVG | Vectorización | `/api/vectorize`, `/api/vectorizer-account` | [vectorizer-ai.md](vectorizer-ai.md) |
-| **OpenAI** | Optimizar/simplificar logos, sugerir nombres, parsear datos de envío | Mockups, Envíos, (vector-worker) | `/api/optimize-logo`, `/api/simplify-logo`, `/api/suggest-mockup-name`, `/api/parse-shipping` | [openai.md](openai.md) |
+| **OpenAI** | Optimizar/simplificar logos, sugerir nombres, parsear datos de envío, asistente del Centro | Mockups, Envíos, Centro Alcohn, (vector-worker) | `/api/optimize-logo`, `/api/simplify-logo`, `/api/suggest-mockup-name`, `/api/parse-shipping`, `/api/knowledge` | [openai.md](openai.md) |
 | **Meta** | Conversions API (Purchase) y conexión WhatsApp Business | Pedidos/Web, WhatsApp | Edge `meta-conversion`; SDK FB en `/whatsapp` | [meta.md](meta.md) |
 | **Tienda web** (otro repo) | Venta online, generador de muestras, analítica | Comercial, Pedidos | Comparte la base Supabase | [tienda-web.md](tienda-web.md) |
 | **vector-worker** (propio) | Vectorización automática (apagada) | Pedidos | `/api/vectorize-enqueue` → worker Python; `vector_jobs` | [vector-worker.md](vector-worker.md) |

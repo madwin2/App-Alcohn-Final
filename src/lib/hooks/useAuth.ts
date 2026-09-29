@@ -72,6 +72,8 @@ export const useAuth = () => {
   };
 
   const signOut = async () => {
+    const { clearCentroSession } = await import('../centro/session-cache');
+    clearCentroSession();
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   };

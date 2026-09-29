@@ -24,6 +24,7 @@ import ProgramasCardSandboxPage from './app/dev/ProgramasCardSandboxPage'
 import ProgramasBoardSandboxPage from './app/dev/ProgramasBoardSandboxPage'
 import ProgramasTourSandboxPage from './app/dev/ProgramasTourSandboxPage'
 import StockPendienteSandboxPage from './app/stock-pendiente/index'
+import CentroPage from './app/centro/index'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { AppUpdatesHost } from './components/global/AppUpdatesHost'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -60,6 +61,8 @@ function App() {
             <Route path="/vectorizacion" element={<VectorizacionPage />} />
             <Route path="/configuracion" element={<ConfiguracionPage />} />
             <Route path="/whatsapp" element={<WhatsAppPage />} />
+            <Route path="/centro" element={<CentroPage />} />
+            <Route path="/centro/articulos/:slug" element={<CentroPage />} />
           </Route>
           <Route path="/admin/registros" element={<Navigate to="/pedidos" replace />} />
           {import.meta.env.DEV ? (
