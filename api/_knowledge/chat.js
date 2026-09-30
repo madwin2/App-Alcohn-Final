@@ -41,7 +41,9 @@ function buildSystemPrompt() {
     'Si falta un dato que cambia la respuesta (ej. empresa de envío), pedí aclaración.',
     'Al final de tu respuesta, en una línea aparte, escribí exactamente:',
     'FUENTES: id1, id2',
-    'donde los id son fragmentId de la lista (solo de los entregados). Si no hay evidencia suficiente: FUENTES: ninguna',
+    'donde los id son los fragmentId exactos de la lista (ej. pedidos#cargar-un-pedido-nuevo).',
+    'También podés citar por número de fragmento: FUENTES: 1, 3',
+    'Si no hay evidencia suficiente: FUENTES: ninguna',
   ].join('\n');
 }
 
@@ -386,26 +388,59 @@ export async function runKnowledgeChat(bundle, input, ctx) {
   const allowedIds = new Set(retrieved.map((f) => f.id));
   let answer = content;
   let citedIds = [];
+  let explicitNone = false;
 
-  const fuentesMatch = content.match(/\nFUENTES:\s*(.+)\s*$/i);
+  // Gemini a veces mete markdown o cita por número [1]; ser flexibles
+  const fuentesMatch = content.match(/(?:\r?\n|^)\s*\*{0,2}FUENTES:\*{0,2}\s*(.+?)\s*$/im);
   if (fuentesMatch) {
     answer = content.slice(0, fuentesMatch.index).trim();
-    const rawList = fuentesMatch[1].trim();
-    if (!/^ninguna$/i.test(rawList)) {
-      citedIds = rawList
-        .split(/[,;\s]+/)
+    const rawList = fuentesMatch[1].replace(/\*+/g, '').trim();
+    if (/^ninguna$/i.test(rawList)) {
+      explicitNone = true;
+    } else {
+      const tokens = rawList
+        .split(/[,;]+/)
         .map((s) => s.trim())
-        .filter((id) => allowedIds.has(id));
+        .filter(Boolean);
+      for (const token of tokens) {
+        const cleaned = token.replace(/^\[|\]$/g, '').trim();
+        if (!cleaned) continue;
+        if (allowedIds.has(cleaned)) {
+          citedIds.push(cleaned);
+          continue;
+        }
+        const asNum = Number(cleaned);
+        if (Number.isInteger(asNum) && asNum >= 1 && asNum <= retrieved.length) {
+          citedIds.push(retrieved[asNum - 1].id);
+          continue;
+        }
+        const byIdTail = retrieved.find(
+          (f) =>
+            f.id === cleaned ||
+            f.id.endsWith(`#${cleaned}`) ||
+            f.heading.toLowerCase() === cleaned.toLowerCase(),
+        );
+        if (byIdTail) citedIds.push(byIdTail.id);
+      }
+      citedIds = [...new Set(citedIds)];
     }
   }
 
-  if (citedIds.length === 0) {
-    const looksOperational = /(cómo|como|dónde|donde|qué significa|que significa|paso|botón|estado)/i.test(question);
-    if (looksOperational && !/no (encontr|hay|está publicada|tengo)/i.test(answer)) {
-      if (answer.length > 40 && !/no (encontr|publicado|documentad)/i.test(answer)) {
-        answer =
-          'No pude respaldar una respuesta operativa con las fuentes publicadas disponibles. Revisá el manual o reformulá la pregunta.';
-      }
+  // Si el modelo respondió con evidencia recuperada pero sin citas parseables,
+  // no pisamos la respuesta (eso era el bug del "No pude respaldar…").
+  if (citedIds.length === 0 && !explicitNone && retrieved.length > 0) {
+    citedIds = retrieved.slice(0, Math.min(3, retrieved.length)).map((f) => f.id);
+  }
+
+  if (citedIds.length === 0 && explicitNone) {
+    const looksOperational = /(cómo|como|dónde|donde|qué significa|que significa|paso|botón|estado)/i.test(
+      question,
+    );
+    if (looksOperational && answer.length > 40 && !/no (encontr|hay|está publicada|tengo|publicado|documentad)/i.test(answer)) {
+      // El modelo dijo "ninguna" pero igual inventó pasos: frenamos
+      answer =
+        'No encontré pasos documentados para eso en las fuentes publicadas. Revisá el manual o reformulá la pregunta.';
+      citedIds = [];
     }
   }
 

@@ -253,14 +253,19 @@ export default function CentroPage() {
         ) : null}
 
         {showChat ? (
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,380px)] lg:items-start">
-            <div className="min-w-0">
-              {slug && articleLoading ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Cargando…
-                </div>
-              ) : slug && article ? (
+          <div
+            className={cn(
+              'flex min-h-[calc(100vh-8rem)] flex-col',
+              slug && article ? 'gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)] lg:items-start lg:gap-10' : '',
+            )}
+          >
+            {slug && articleLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando…
+              </div>
+            ) : slug && article ? (
+              <div className="min-w-0">
                 <CentroArticleView
                   article={article}
                   related={related}
@@ -274,18 +279,14 @@ export default function CentroPage() {
                     setReportOpen(true);
                   }}
                 />
-              ) : (
-                <div className="rounded-2xl border border-dashed border-border/70 px-5 py-8">
-                  <h2 className="text-lg font-medium">Consultá lo que necesites</h2>
-                  <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-                    El asistente explica el manual y la info publicada. No ve pedidos en vivo ni
-                    hace cambios en la app.
-                  </p>
-                </div>
-              )}
-            </div>
+              </div>
+            ) : null}
             <CentroChatPanel
-              className="lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)]"
+              className={cn(
+                slug && article
+                  ? 'min-h-[32rem] lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)]'
+                  : 'mx-auto w-full max-w-3xl flex-1',
+              )}
               openArticleId={article?.id}
               initialQuestion={seedQ || undefined}
               onReportAnswer={(question) => {
