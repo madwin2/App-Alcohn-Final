@@ -21,7 +21,7 @@
 ## Consecuencias
 
 - Cambiar el manual exige regenerar el catálogo (`npm run knowledge:build`).
-- El chat depende de `OPENAI_API_KEY` (y opcionalmente `OPENAI_KNOWLEDGE_MODEL`); sin eso, manual/búsqueda siguen.
+- El chat depende de `GEMINI_API_KEY` (y opcionalmente `GEMINI_KNOWLEDGE_MODEL`); sin eso, manual/búsqueda siguen. No usa OpenAI.
 - Módulo documentado en [`docs/02-modules/centro-informacion/`](../02-modules/centro-informacion/README.md).
 
 ## Fuente

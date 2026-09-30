@@ -1,7 +1,7 @@
 /**
  * Chat documental del Asistente Alcohn.
  * Solo usa fragmentos del catálogo; valida citas contra lo recuperado.
- * Proveedor: Gemini (GEMINI_API_KEY), con fallback a OpenAI si no hay Gemini.
+ * Proveedor: solo Gemini (GEMINI_API_KEY). Sin OpenAI — no gasta créditos de pago.
  */
 
 import { searchKnowledge } from './search.js';
@@ -9,7 +9,7 @@ import { searchKnowledge } from './search.js';
 const MAX_QUESTION = 800;
 const MAX_HISTORY_TURNS = 8;
 const MAX_HISTORY_CHARS = 4000;
-const MAX_FRAGMENTS = 8;
+const MAX_FRAGMENTS = 6;
 const REQUEST_TIMEOUT_MS = 45000;
 
 /** Rate limit por instancia (no es global entre instancias de Vercel). */
@@ -51,11 +51,15 @@ function buildSystemPrompt() {
  * @param {{ model: string, system: string, history: { role: string, content: string }[], question: string }} params
  * @param {string} apiKey
  * @param {AbortSignal} signal
- * @param {{ thinkingBudgetZero?: boolean }} [opts]
+ * @param {{ thinkingBudgetZero?: boolean, embedSystemInUser?: boolean }} [opts]
  */
 async function callGemini(params, apiKey, signal, opts = {}) {
   const model = params.model;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const userQuestion = opts.embedSystemInUser
+    ? `${params.system}\n\n---\nPregunta del equipo:\n${params.question}`
+    : params.question;
 
   /** @type {{ role: string, parts: { text: string }[] }[]} */
   const contents = [];
@@ -70,31 +74,33 @@ async function callGemini(params, apiKey, signal, opts = {}) {
   }
   const last = contents[contents.length - 1];
   if (last && last.role === 'user') {
-    last.parts[0].text += `\n\n${params.question}`;
+    last.parts[0].text += `\n\n${userQuestion}`;
   } else {
-    contents.push({ role: 'user', parts: [{ text: params.question }] });
+    contents.push({ role: 'user', parts: [{ text: userQuestion }] });
   }
 
   /** @type {Record<string, unknown>} */
   const generationConfig = {
     temperature: 0.2,
-    maxOutputTokens: 4096,
+    maxOutputTokens: 2048,
   };
-  // Solo en 2.5 Flash (no lite): apagar thinking para no vaciar la respuesta
   if (opts.thinkingBudgetZero) {
     generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
+
+  /** @type {Record<string, unknown>} */
+  const body = { contents, generationConfig };
+  if (!opts.embedSystemInUser) {
+    body.systemInstruction = { parts: [{ text: params.system }] };
   }
 
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
     },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: params.system }] },
-      contents,
-      generationConfig,
-    }),
+    body: JSON.stringify(body),
     signal,
   });
 
@@ -174,7 +180,45 @@ function geminiUserError(status, providerMessage) {
   if (msg.includes('vacía') || msg.includes('max_tokens')) {
     return 'Gemini cortó la respuesta. Probá de nuevo en un momento.';
   }
-  return 'El asistente no pudo responder ahora. Podés seguir con el manual y el buscador.';
+  return 'Gemini no pudo responder ahora. Podés seguir con el manual y el buscador.';
+}
+
+/**
+ * Lista modelos generateContent disponibles para esta API key (sin gastar casi nada).
+ * @param {string} apiKey
+ * @param {AbortSignal} signal
+ */
+async function listGeminiFlashModels(apiKey, signal) {
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=80`;
+    const response = await fetch(url, {
+      headers: { 'x-goog-api-key': apiKey },
+      signal,
+    });
+    if (!response.ok) return [];
+    const json = await response.json();
+    const models = Array.isArray(json?.models) ? json.models : [];
+    const names = [];
+    for (const m of models) {
+      const name = String(m?.name || '').replace(/^models\//, '');
+      const methods = m?.supportedGenerationMethods || [];
+      if (!name || !methods.includes('generateContent')) continue;
+      if (!/flash/i.test(name)) continue;
+      if (/embed|image|tts|audio|robotics/i.test(name)) continue;
+      names.push(name);
+    }
+    const rank = (n) => {
+      if (/2\.5-flash-lite/i.test(n)) return 0;
+      if (/flash-lite/i.test(n)) return 1;
+      if (/2\.5-flash$/i.test(n)) return 2;
+      if (/flash-latest/i.test(n)) return 3;
+      return 10;
+    };
+    names.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    return names;
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -194,58 +238,20 @@ async function callGeminiWithConfig(model, params, apiKey, signal) {
   if (!attempt.ok && attempt.thinkingRejected) {
     attempt = await callGemini({ ...params, model }, apiKey, signal, { thinkingBudgetZero: false });
   }
+  // Algunos errores de systemInstruction → reintentar metiendo el system en el user turn
+  if (
+    !attempt.ok &&
+    attempt.status === 400 &&
+    /system.?instruction|invalid.?argument/i.test(String(attempt.providerMessage || ''))
+  ) {
+    attempt = await callGemini(
+      { ...params, model },
+      apiKey,
+      signal,
+      { thinkingBudgetZero: false, embedSystemInUser: true },
+    );
+  }
   return attempt;
-}
-
-/**
- * @param {{ model: string, system: string, history: { role: string, content: string }[], question: string }} params
- * @param {string} apiKey
- * @param {AbortSignal} signal
- */
-async function callOpenAI(params, apiKey, signal) {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: params.model,
-      temperature: 0.2,
-      max_tokens: 900,
-      messages: [
-        { role: 'system', content: params.system },
-        ...params.history.map((t) => ({ role: t.role, content: t.content })),
-        { role: 'user', content: params.question },
-      ],
-    }),
-    signal,
-  });
-
-  const raw = await response.text();
-  let json = null;
-  try {
-    json = raw ? JSON.parse(raw) : null;
-  } catch {
-    json = null;
-  }
-
-  if (!response.ok) {
-    const providerMessage =
-      json?.error?.message || json?.error?.code || raw?.slice(0, 200) || `HTTP ${response.status}`;
-    return {
-      ok: false,
-      provider: 'openai',
-      model: params.model,
-      status: response.status,
-      providerMessage: String(providerMessage).slice(0, 300),
-      json,
-      raw,
-    };
-  }
-
-  const text = String(json?.choices?.[0]?.message?.content || '').trim();
-  return { ok: true, provider: 'openai', model: params.model, text, json };
 }
 
 /**
@@ -255,14 +261,14 @@ async function callOpenAI(params, apiKey, signal) {
  */
 export async function runKnowledgeChat(bundle, input, ctx) {
   const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
-  const openaiKey = (process.env.OPENAI_API_KEY || '').trim();
 
-  if (!geminiKey && !openaiKey) {
+  if (!geminiKey) {
     return {
       ok: false,
       status: 503,
       code: 'not_configured',
-      error: 'El asistente no está disponible en este momento. Podés seguir usando el manual y el buscador.',
+      error:
+        'Falta GEMINI_API_KEY en Vercel (Production). El asistente solo usa Gemini gratuito; no usa OpenAI.',
     };
   }
 
@@ -338,7 +344,7 @@ export async function runKnowledgeChat(bundle, input, ctx) {
   const fragmentBlock = retrieved
     .map(
       (f, i) =>
-        `[${i + 1}] fragmentId=${f.id}\nArtículo: ${f.title}\nApartado: ${f.heading}\n---\n${f.markdown.slice(0, 1800)}`,
+        `[${i + 1}] fragmentId=${f.id}\nArtículo: ${f.title}\nApartado: ${f.heading}\n---\n${f.markdown.slice(0, 1400)}`,
     )
     .join('\n\n');
 
@@ -349,50 +355,32 @@ export async function runKnowledgeChat(bundle, input, ctx) {
 
   let llmResult;
   try {
-    if (geminiKey) {
-      // Pocos modelos: en Vercel hobby el timeout es corto; demasiados reintentos = 502.
-      const preferred = (process.env.GEMINI_KNOWLEDGE_MODEL || 'gemini-2.5-flash-lite').trim();
-      const models = [...new Set([preferred, 'gemini-2.5-flash-lite', 'gemini-2.5-flash'])].slice(0, 2);
-      const baseParams = { system, history: safeHistory, question };
-      llmResult = null;
-      for (const model of models) {
-        const attempt = await callGeminiWithConfig(model, baseParams, geminiKey, controller.signal);
-        if (attempt.ok) {
-          llmResult = attempt;
-          break;
-        }
+    const preferred = (process.env.GEMINI_KNOWLEDGE_MODEL || '').trim();
+    const discovered = await listGeminiFlashModels(geminiKey, controller.signal);
+    const models = [
+      ...new Set(
+        [preferred, ...discovered, 'gemini-2.5-flash-lite', 'gemini-2.5-flash'].filter(Boolean),
+      ),
+    ].slice(0, 3);
+
+    const baseParams = { system, history: safeHistory, question };
+    llmResult = null;
+    for (const model of models) {
+      const attempt = await callGeminiWithConfig(model, baseParams, geminiKey, controller.signal);
+      if (attempt.ok) {
         llmResult = attempt;
-        console.error('[knowledge-chat] gemini_attempt_failed', {
-          model,
-          status: attempt.status,
-          message: String(attempt.providerMessage || '').slice(0, 200),
-        });
-        if (attempt.status === 401 || attempt.status === 403 || attempt.status === 429) break;
-        if (attempt.status === 400 && !attempt.retryable) break;
-        if (attempt.retryable || attempt.status === 404) continue;
         break;
       }
-
-      // Si Gemini falló y hay OpenAI, usamos fallback
-      if ((!llmResult || !llmResult.ok) && openaiKey) {
-        const model = (process.env.OPENAI_KNOWLEDGE_MODEL || process.env.OPENAI_MOCKUP_NAME_MODEL || 'gpt-4o-mini').trim();
-        console.error('[knowledge-chat] falling_back_openai', {
-          geminiStatus: llmResult?.status,
-          geminiMessage: String(llmResult?.providerMessage || '').slice(0, 160),
-        });
-        llmResult = await callOpenAI(
-          { model, system, history: safeHistory, question },
-          openaiKey,
-          controller.signal,
-        );
-      }
-    } else {
-      const model = (process.env.OPENAI_KNOWLEDGE_MODEL || process.env.OPENAI_MOCKUP_NAME_MODEL || 'gpt-4o-mini').trim();
-      llmResult = await callOpenAI(
-        { model, system, history: safeHistory, question },
-        openaiKey,
-        controller.signal,
-      );
+      llmResult = attempt;
+      console.error('[knowledge-chat] gemini_attempt_failed', {
+        model,
+        status: attempt.status,
+        message: String(attempt.providerMessage || '').slice(0, 200),
+      });
+      if (attempt.status === 401 || attempt.status === 403 || attempt.status === 429) break;
+      if (attempt.status === 400 && !attempt.retryable) continue;
+      if (attempt.retryable || attempt.status === 404) continue;
+      continue;
     }
   } catch (error) {
     clearTimeout(timer);
@@ -403,32 +391,35 @@ export async function runKnowledgeChat(bundle, input, ctx) {
       code: aborted ? 'timeout' : 'network',
       error: aborted
         ? 'El asistente tardó demasiado. Conservamos tu pregunta: podés reintentar.'
-        : 'No se pudo contactar al asistente. Conservamos tu pregunta: podés reintentar.',
+        : 'No se pudo contactar a Gemini. Conservamos tu pregunta: podés reintentar.',
     };
   } finally {
     clearTimeout(timer);
   }
 
-  if (!llmResult.ok) {
-    const providerMessage = llmResult.providerMessage || '';
+  if (!llmResult || !llmResult.ok) {
+    const providerMessage = llmResult?.providerMessage || '';
+    const model = llmResult?.model || '';
+    const status = llmResult?.status;
     if (providerMessage) {
       console.error('[knowledge-chat] provider_error', {
-        provider: llmResult.provider,
-        model: llmResult.model,
-        status: llmResult.status,
+        provider: 'gemini',
+        model,
+        status,
         message: providerMessage.slice(0, 300),
       });
     }
+    const detailParts = [
+      model ? `modelo ${model}` : null,
+      status ? `HTTP ${status}` : null,
+      providerMessage || null,
+    ].filter(Boolean);
     return {
       ok: false,
       status: 502,
       code: 'provider_error',
-      error:
-        llmResult.provider === 'gemini'
-          ? geminiUserError(llmResult.status, providerMessage)
-          : 'El asistente no pudo responder ahora. Podés seguir con el manual y el buscador.',
-      // Detalle seguro (sin secretos) para diagnosticar en UI / Network
-      detail: providerMessage ? String(providerMessage).slice(0, 180) : undefined,
+      error: geminiUserError(status, providerMessage),
+      detail: detailParts.join(' · ').slice(0, 220) || undefined,
     };
   }
 
