@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUp, Loader2, RotateCcw, Sparkles, Flag, BookMarked } from 'lucide-react';
 import { chatCentro, CentroApiError } from '@/lib/centro/api';
+import { renderCentroChatMarkdown } from '@/lib/centro/markdown';
 import {
   getChatMessages,
   getChatNoticeShown,
@@ -27,6 +28,16 @@ interface CentroChatPanelProps {
 
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function AssistantMarkdown({ content }: { content: string }) {
+  const html = useMemo(() => renderCentroChatMarkdown(content), [content]);
+  return (
+    <div
+      className="centro-chat-md"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 export function CentroChatPanel({
@@ -126,20 +137,19 @@ export function CentroChatPanel({
 
   return (
     <div className={cn('relative flex h-full min-h-0 flex-col', className)}>
-      {/* Ambient */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 overflow-hidden"
-      >
-        <div className="absolute left-1/2 top-0 h-[28rem] w-[42rem] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.07),transparent_65%)] blur-2xl" />
-        <div className="absolute bottom-24 left-[15%] h-40 w-40 rounded-full bg-[radial-gradient(circle,hsl(210_40%_50%/0.08),transparent_70%)] blur-xl" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="centro-chat-ambient absolute left-1/2 top-[-4%] h-[30rem] w-[44rem] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,hsl(var(--foreground)/0.09),transparent_68%)] blur-2xl" />
+        <div className="centro-chat-orb absolute bottom-28 left-[12%] h-44 w-44 rounded-full bg-[radial-gradient(circle,hsl(210_55%_55%/0.12),transparent_70%)] blur-xl" />
+        <div
+          className="centro-chat-orb absolute right-[8%] top-32 h-36 w-36 rounded-full bg-[radial-gradient(circle,hsl(var(--foreground)/0.06),transparent_70%)] blur-xl"
+          style={{ animationDelay: '2.5s' }}
+        />
       </div>
 
-      {/* Top bar */}
       <header className="relative z-10 flex items-center justify-between gap-3 px-1 pb-3 pt-0.5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-border/50 bg-card/60 shadow-sm backdrop-blur">
-            <Sparkles className="h-3.5 w-3.5 text-foreground/80" aria-hidden />
+          <div className="centro-chat-glow flex h-8 w-8 items-center justify-center rounded-xl border border-border/50 bg-card/70 shadow-sm backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5 text-foreground/85" aria-hidden />
           </div>
           <div className="min-w-0">
             <h2 className="text-sm font-medium tracking-tight">Asistente Alcohn</h2>
@@ -153,7 +163,7 @@ export function CentroChatPanel({
             type="button"
             onClick={reset}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/50 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-border hover:bg-muted/40 hover:text-foreground disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/50 px-3 py-1.5 text-xs text-muted-foreground transition duration-200 hover:border-border hover:bg-muted/40 hover:text-foreground disabled:opacity-50"
           >
             <RotateCcw className="h-3 w-3" />
             Nueva charla
@@ -161,75 +171,79 @@ export function CentroChatPanel({
         ) : null}
       </header>
 
-      {/* Messages */}
-      <div
-        className="relative z-10 flex-1 overflow-y-auto px-1"
-        role="log"
-        aria-live="polite"
-      >
+      <div className="relative z-10 flex-1 overflow-y-auto px-1" role="log" aria-live="polite">
         {empty ? (
           <div className="flex h-full min-h-[22rem] flex-col items-center justify-center px-2 pb-8 pt-6 text-center">
-            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-border/40 bg-card/40 shadow-[0_0_40px_-12px_hsl(var(--foreground)/0.35)]">
-              <Sparkles className="h-5 w-5 text-foreground/75" aria-hidden />
+            <div
+              className="centro-chat-rise centro-chat-glow mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-border/40 bg-card/50 shadow-[0_0_48px_-10px_hsl(var(--foreground)/0.45)] backdrop-blur"
+            >
+              <Sparkles className="h-6 w-6 text-foreground/80" aria-hidden />
             </div>
-            <h3 className="max-w-md text-2xl font-semibold tracking-tight text-foreground sm:text-[1.65rem]">
+            <h3
+              className="centro-chat-rise max-w-md text-2xl font-semibold tracking-tight text-foreground sm:text-[1.75rem]"
+              style={{ animationDelay: '60ms' }}
+            >
               ¿En qué te ayudo?
             </h3>
-            <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+            <p
+              className="centro-chat-rise mt-2.5 max-w-sm text-sm leading-relaxed text-muted-foreground"
+              style={{ animationDelay: '120ms' }}
+            >
               Preguntá por pantallas, estados o flujos del manual. La charla se borra al recargar.
             </p>
-            <div className="mt-8 flex w-full max-w-xl flex-col gap-2 sm:grid sm:grid-cols-3">
-              {EXAMPLES.map((ex) => (
+            <div className="mt-9 flex w-full max-w-xl flex-col gap-2.5 sm:grid sm:grid-cols-3">
+              {EXAMPLES.map((ex, i) => (
                 <button
                   key={ex}
                   type="button"
                   onClick={() => void send(ex)}
-                  className="rounded-2xl border border-border/50 bg-card/40 px-3.5 py-3 text-left text-sm text-foreground/90 shadow-sm backdrop-blur transition hover:border-border hover:bg-card/70 hover:shadow-md"
+                  className="centro-chat-pop group rounded-2xl border border-border/50 bg-card/45 px-3.5 py-3.5 text-left text-sm text-foreground/90 shadow-sm backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-border hover:bg-card/80 hover:shadow-[0_12px_28px_-16px_hsl(var(--foreground)/0.5)]"
+                  style={{ animationDelay: `${180 + i * 70}ms` }}
                 >
-                  {ex}
+                  <span className="block transition duration-200 group-hover:text-foreground">
+                    {ex}
+                  </span>
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          <div className="mx-auto w-full max-w-2xl space-y-6 py-4 pb-8">
+          <div className="mx-auto w-full max-w-2xl space-y-7 py-4 pb-8">
             {messages.map((m) => (
               <div
                 key={m.id}
                 className={cn(
-                  'animate-in fade-in-0 slide-in-from-bottom-1 duration-300',
+                  'centro-chat-rise',
                   m.role === 'user' ? 'flex justify-end' : 'flex justify-start',
                 )}
               >
                 {m.role === 'user' ? (
-                  <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-foreground px-4 py-2.5 text-[15px] leading-relaxed text-background">
+                  <div className="max-w-[85%] rounded-3xl rounded-br-md bg-foreground px-4 py-2.5 text-[15px] leading-relaxed text-background shadow-[0_10px_30px_-18px_hsl(var(--foreground)/0.65)]">
                     <p className="whitespace-pre-wrap">{m.content}</p>
                   </div>
                 ) : (
-                  <div className="w-full max-w-[95%] space-y-3">
+                  <div className="w-full max-w-[95%]">
                     <div className="flex items-start gap-3">
                       <div
-                        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/40"
+                        className="centro-chat-glow mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-gradient-to-b from-muted/70 to-muted/30"
                         aria-hidden
                       >
-                        <Sparkles className="h-3.5 w-3.5 text-foreground/70" />
+                        <Sparkles className="h-3.5 w-3.5 text-foreground/75" />
                       </div>
-                      <div className="min-w-0 flex-1 space-y-3 pt-0.5">
-                        <p className="whitespace-pre-wrap text-[15px] leading-7 text-foreground/95">
-                          {m.content}
-                        </p>
+                      <div className="min-w-0 flex-1 space-y-3.5 pt-0.5">
+                        <AssistantMarkdown content={m.content} />
                         {m.sources && m.sources.length > 0 ? (
-                          <div className="rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5">
-                            <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          <div className="centro-chat-pop overflow-hidden rounded-xl border border-border/45 bg-muted/15 px-3.5 py-3 backdrop-blur-sm">
+                            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                               <BookMarked className="h-3 w-3" />
                               Fuentes
                             </p>
-                            <ul className="space-y-1">
+                            <ul className="space-y-1.5">
                               {m.sources.map((s) => (
                                 <li key={s.fragmentId}>
                                   <Link
                                     to={s.href}
-                                    className="text-sm text-foreground/80 underline decoration-border underline-offset-2 transition hover:text-foreground hover:decoration-foreground"
+                                    className="text-sm text-foreground/85 underline decoration-border/80 underline-offset-2 transition hover:text-foreground hover:decoration-foreground"
                                   >
                                     {s.title}
                                     {s.heading !== s.title ? ` — ${s.heading}` : ''}
@@ -242,7 +256,7 @@ export function CentroChatPanel({
                         {onReportAnswer ? (
                           <button
                             type="button"
-                            className="inline-flex items-center gap-1 text-xs text-muted-foreground/80 transition hover:text-foreground"
+                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/75 transition hover:text-foreground"
                             onClick={() => {
                               const prevUser = [...messages]
                                 .reverse()
@@ -262,14 +276,20 @@ export function CentroChatPanel({
             ))}
 
             {loading ? (
-              <div className="flex items-center gap-3" aria-busy="true">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-border/50 bg-muted/40">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-foreground/70" />
+              <div className="centro-chat-rise flex items-center gap-3" aria-busy="true">
+                <div className="centro-chat-glow flex h-8 w-8 items-center justify-center rounded-xl border border-border/50 bg-muted/40">
+                  <Sparkles className="h-3.5 w-3.5 text-foreground/70" />
                 </div>
-                <div className="flex items-center gap-1.5 pt-0.5">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-foreground/40" />
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-foreground/40 [animation-delay:150ms]" />
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-foreground/40 [animation-delay:300ms]" />
+                <div className="flex items-center gap-1.5 rounded-full border border-border/40 bg-muted/20 px-3 py-2">
+                  <span className="centro-chat-dot h-1.5 w-1.5 rounded-full bg-foreground/70" />
+                  <span
+                    className="centro-chat-dot h-1.5 w-1.5 rounded-full bg-foreground/70"
+                    style={{ animationDelay: '0.15s' }}
+                  />
+                  <span
+                    className="centro-chat-dot h-1.5 w-1.5 rounded-full bg-foreground/70"
+                    style={{ animationDelay: '0.3s' }}
+                  />
                   <span className="sr-only">Pensando…</span>
                 </div>
               </div>
@@ -279,12 +299,11 @@ export function CentroChatPanel({
         )}
       </div>
 
-      {/* Composer */}
       <div className="relative z-10 mx-auto w-full max-w-2xl px-1 pb-1 pt-2">
         {error ? (
           <div
             role="alert"
-            className="mb-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
+            className="centro-chat-pop mb-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
           >
             {error}{' '}
             <button
@@ -298,7 +317,7 @@ export function CentroChatPanel({
           </div>
         ) : null}
 
-        <div className="rounded-[1.35rem] border border-border/60 bg-card/70 p-2 shadow-[0_12px_40px_-18px_hsl(var(--foreground)/0.45)] backdrop-blur-md transition focus-within:border-border focus-within:shadow-[0_16px_48px_-16px_hsl(var(--foreground)/0.55)]">
+        <div className="rounded-[1.4rem] border border-border/55 bg-card/75 p-2 shadow-[0_14px_44px_-18px_hsl(var(--foreground)/0.5)] backdrop-blur-md transition duration-300 focus-within:border-foreground/25 focus-within:shadow-[0_18px_52px_-14px_hsl(var(--foreground)/0.6)]">
           <label htmlFor="centro-chat-input" className="sr-only">
             Pregunta al asistente
           </label>
@@ -328,9 +347,9 @@ export function CentroChatPanel({
               disabled={loading || !input.trim()}
               aria-label="Enviar pregunta"
               className={cn(
-                'inline-flex h-9 w-9 items-center justify-center rounded-full transition',
+                'inline-flex h-9 w-9 items-center justify-center rounded-full transition duration-200',
                 input.trim() && !loading
-                  ? 'bg-foreground text-background hover:opacity-90'
+                  ? 'bg-foreground text-background shadow-[0_8px_20px_-10px_hsl(var(--foreground)/0.8)] hover:scale-105 hover:opacity-95 active:scale-95'
                   : 'bg-muted text-muted-foreground',
               )}
             >

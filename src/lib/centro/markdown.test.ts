@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderCentroMarkdown } from './markdown';
+import { renderCentroChatMarkdown, renderCentroMarkdown } from './markdown';
 
 describe('renderCentroMarkdown', () => {
   it('envuelve tablas y deja celdas con bordes vía clase wrap', () => {
@@ -25,5 +25,14 @@ describe('renderCentroMarkdown', () => {
     const html = renderCentroMarkdown('[← Volver al índice](/centro/articulos/x)\n\nHola mundo.');
     expect(html).not.toContain('Volver al índice');
     expect(html).toContain('Hola mundo');
+  });
+});
+
+describe('renderCentroChatMarkdown', () => {
+  it('renderiza negrita y no deja asterisks crudos', () => {
+    const html = renderCentroChatMarkdown('Andá a **Pedidos** y tocá **Nuevo**.');
+    expect(html).toContain('<strong>Pedidos</strong>');
+    expect(html).toContain('<strong>Nuevo</strong>');
+    expect(html).not.toContain('**Pedidos**');
   });
 });

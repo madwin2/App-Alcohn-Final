@@ -86,6 +86,47 @@ export function renderCentroMarkdown(markdown: string): string {
   });
 }
 
+/**
+ * Markdown liviano para respuestas del asistente (negrita, listas, saltos de línea).
+ */
+export function renderCentroChatMarkdown(markdown: string): string {
+  const cleaned = String(markdown || '').trim();
+  if (!cleaned) return '';
+
+  const renderer = new marked.Renderer();
+  renderer.link = function link(token) {
+    const href = token.href || '';
+    const titleAttr = token.title ? ` title="${token.title}"` : '';
+    const text = token.text || '';
+    const extra = href.startsWith('http') ? ' target="_blank" rel="noopener noreferrer"' : '';
+    return `<a href="${href}"${titleAttr}${extra}>${text}</a>`;
+  };
+
+  const dirty = marked.parse(cleaned, {
+    async: false,
+    breaks: true,
+    gfm: true,
+    renderer,
+  }) as string;
+
+  return DOMPurify.sanitize(dirty, {
+    ALLOWED_TAGS: [
+      'a',
+      'p',
+      'br',
+      'strong',
+      'em',
+      'ul',
+      'ol',
+      'li',
+      'code',
+      'pre',
+    ],
+    ALLOWED_ATTR: ['href', 'title', 'target', 'rel'],
+    ALLOW_DATA_ATTR: false,
+  });
+}
+
 /** Ancla estable alineada con el build del catálogo. */
 export function slugifyHeading(text: string): string {
   return text
