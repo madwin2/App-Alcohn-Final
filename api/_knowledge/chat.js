@@ -51,10 +51,10 @@ function buildSystemPrompt() {
  * @param {{ model: string, system: string, history: { role: string, content: string }[], question: string }} params
  * @param {string} apiKey
  * @param {AbortSignal} signal
+ * @param {{ disableThinking?: boolean }} [opts]
  */
-async function callGemini(params, apiKey, signal) {
+async function callGemini(params, apiKey, signal, opts = {}) {
   const model = params.model;
-  // key en query es el formato documentado por AI Studio; header como refuerzo
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   /** @type {{ role: string, parts: { text: string }[] }[]} */
@@ -75,19 +75,25 @@ async function callGemini(params, apiKey, signal) {
     contents.push({ role: 'user', parts: [{ text: params.question }] });
   }
 
+  /** @type {Record<string, unknown>} */
+  const generationConfig = {
+    temperature: 0.2,
+    // 2.5 Flash gasta tokens en "thinking"; 1024 suele dejar la respuesta vacía (MAX_TOKENS)
+    maxOutputTokens: 8192,
+  };
+  if (opts.disableThinking !== false) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      // JSON protobuf de Gemini: camelCase (systemInstruction / generationConfig)
       systemInstruction: { parts: [{ text: params.system }] },
       contents,
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 1024,
-      },
+      generationConfig,
     }),
     signal,
   });
@@ -103,11 +109,21 @@ async function callGemini(params, apiKey, signal) {
   if (!response.ok) {
     const providerMessage =
       json?.error?.message || json?.error?.status || raw?.slice(0, 200) || `HTTP ${response.status}`;
+    const msg = String(providerMessage).toLowerCase();
+    const thinkingRejected =
+      msg.includes('thinking') || msg.includes('thinking_config') || msg.includes('thinkingbudget');
     return {
       ok: false,
       provider: 'gemini',
       status: response.status,
       providerMessage: String(providerMessage).slice(0, 300),
+      retryable:
+        response.status === 404 ||
+        thinkingRejected ||
+        msg.includes('not found') ||
+        msg.includes('no longer available') ||
+        msg.includes('not supported'),
+      thinkingRejected,
       json,
     };
   }
@@ -115,6 +131,8 @@ async function callGemini(params, apiKey, signal) {
   const parts = json?.candidates?.[0]?.content?.parts;
   const text = Array.isArray(parts)
     ? parts
+        // Gemini 2.5 puede devolver partes de pensamiento; no cuentan como respuesta
+        .filter((p) => p && p.thought !== true)
         .map((p) => (typeof p?.text === 'string' ? p.text : ''))
         .join('')
         .trim()
@@ -127,6 +145,7 @@ async function callGemini(params, apiKey, signal) {
       provider: 'gemini',
       status: 502,
       providerMessage: `Respuesta vacía (${finish})`,
+      retryable: true,
       json,
     };
   }
@@ -143,10 +162,13 @@ function geminiUserError(status, providerMessage) {
     return 'Gemini rechazó la clave o el acceso. Revisá GEMINI_API_KEY (y que esté en Production) y redeploy.';
   }
   if (status === 404 || msg.includes('not found') || msg.includes('is not found') || msg.includes('no longer available')) {
-    return 'Ningún modelo de Gemini respondió. Revisá GEMINI_KNOWLEDGE_MODEL (ej. gemini-2.5-flash) y redeploy.';
+    return 'Ningún modelo de Gemini respondió. Revisá GEMINI_KNOWLEDGE_MODEL (ej. gemini-2.5-flash-lite) y redeploy.';
   }
   if (status === 429) {
     return 'Se alcanzó el límite gratuito de Gemini. Probá de nuevo en unos minutos.';
+  }
+  if (msg.includes('vacía') || msg.includes('max_tokens')) {
+    return 'Gemini cortó la respuesta. Probá de nuevo en un momento.';
   }
   return 'El asistente no pudo responder ahora. Podés seguir con el manual y el buscador.';
 }
@@ -294,13 +316,13 @@ export async function runKnowledgeChat(bundle, input, ctx) {
   let llmResult;
   try {
     if (geminiKey) {
-      // gemini-2.0-flash / 1.5 ya están apagados; default actual + fallbacks
-      const preferred = (process.env.GEMINI_KNOWLEDGE_MODEL || 'gemini-2.5-flash').trim();
+      // Preferir flash-lite: sin thinking por defecto. 2.5-flash con 1024 tokens devolvía vacío.
+      const preferred = (process.env.GEMINI_KNOWLEDGE_MODEL || 'gemini-2.5-flash-lite').trim();
       const models = [
         ...new Set([
           preferred,
-          'gemini-2.5-flash',
           'gemini-2.5-flash-lite',
+          'gemini-2.5-flash',
           'gemini-3.5-flash',
           'gemini-3.8-flash',
           'gemini-flash-latest',
@@ -308,29 +330,30 @@ export async function runKnowledgeChat(bundle, input, ctx) {
       ];
       llmResult = null;
       for (const model of models) {
-        const attempt = await callGemini(
+        let attempt = await callGemini(
           { model, system, history: safeHistory, question },
           geminiKey,
           controller.signal,
+          { disableThinking: true },
         );
+        // Algunos modelos rechazan thinkingBudget=0 → reintentar sin ese campo
+        if (!attempt.ok && attempt.thinkingRejected) {
+          attempt = await callGemini(
+            { model, system, history: safeHistory, question },
+            geminiKey,
+            controller.signal,
+            { disableThinking: false },
+          );
+        }
         if (attempt.ok) {
           llmResult = attempt;
           break;
         }
         llmResult = attempt;
-        // Si la clave es inválida, no tiene sentido probar otros modelos
-        if (attempt.status === 400 || attempt.status === 401 || attempt.status === 403) {
-          const msg = String(attempt.providerMessage || '').toLowerCase();
-          const modelMissing =
-            msg.includes('not found') ||
-            msg.includes('is not found') ||
-            msg.includes('no longer available') ||
-            msg.includes('not supported');
-          if (!modelMissing) break;
-          continue;
-        }
-        // 404 = modelo no disponible → probar el siguiente
-        if (attempt.status !== 404) break;
+        if (attempt.status === 401 || attempt.status === 403) break;
+        if (attempt.status === 400 && !attempt.retryable) break;
+        if (attempt.retryable || attempt.status === 404) continue;
+        break;
       }
     } else {
       const model = (process.env.OPENAI_KNOWLEDGE_MODEL || process.env.OPENAI_MOCKUP_NAME_MODEL || 'gpt-4o-mini').trim();

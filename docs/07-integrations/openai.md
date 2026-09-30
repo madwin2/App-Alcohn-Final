@@ -6,7 +6,7 @@
 | `/api/simplify-logo` | "Simplificar con IA" el trazo del logo | ídem | ídem |
 | `/api/suggest-mockup-name` | Nombre sugerido del diseño | `gpt-4o-mini` | `OPENAI_MOCKUP_NAME_MODEL` |
 | `/api/parse-shipping` | Extraer datos de envío de texto libre (JSON) | `gpt-4o` | `OPENAI_MODEL` |
-| `/api/knowledge` (`op: 'chat'`) | Asistente del Centro Alcohn (solo fragmentos publicados) | Gemini `gemini-2.5-flash` (fallback OpenAI `gpt-4o-mini`) | `GEMINI_API_KEY`, `GEMINI_KNOWLEDGE_MODEL` (opcional); fallback `OPENAI_API_KEY`, `OPENAI_KNOWLEDGE_MODEL` |
+| `/api/knowledge` (`op: 'chat'`) | Asistente del Centro Alcohn (solo fragmentos publicados) | Gemini `gemini-2.5-flash-lite` (fallback OpenAI `gpt-4o-mini`) | `GEMINI_API_KEY`, `GEMINI_KNOWLEDGE_MODEL` (opcional); fallback `OPENAI_API_KEY`, `OPENAI_KNOWLEDGE_MODEL` |
 | `/api/debug-env` | Muestra qué variables de IA están configuradas (sin valores) | — | — |
 | vector-worker | Mejora de imagen previa a vectorizar (opcional) | `VECTOR_AI_ENHANCE_MODEL` | `VECTOR_AI_ENHANCE_ENABLED` |
 
