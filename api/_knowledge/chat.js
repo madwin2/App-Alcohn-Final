@@ -140,8 +140,8 @@ function geminiUserError(status, providerMessage) {
   if (status === 403 || status === 401) {
     return 'Gemini rechazó la clave o el acceso. Revisá GEMINI_API_KEY (y que esté en Production) y redeploy.';
   }
-  if (status === 404 || msg.includes('not found') || msg.includes('is not found')) {
-    return 'El modelo de Gemini no está disponible. Probá definir GEMINI_KNOWLEDGE_MODEL=gemini-1.5-flash.';
+  if (status === 404 || msg.includes('not found') || msg.includes('is not found') || msg.includes('no longer available')) {
+    return 'Ningún modelo de Gemini respondió. Revisá GEMINI_KNOWLEDGE_MODEL (ej. gemini-2.5-flash) y redeploy.';
   }
   if (status === 429) {
     return 'Se alcanzó el límite gratuito de Gemini. Probá de nuevo en unos minutos.';
@@ -292,8 +292,18 @@ export async function runKnowledgeChat(bundle, input, ctx) {
   let llmResult;
   try {
     if (geminiKey) {
-      const preferred = (process.env.GEMINI_KNOWLEDGE_MODEL || 'gemini-2.0-flash').trim();
-      const models = [...new Set([preferred, 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'])];
+      // gemini-2.0-flash / 1.5 ya están apagados; default actual + fallbacks
+      const preferred = (process.env.GEMINI_KNOWLEDGE_MODEL || 'gemini-2.5-flash').trim();
+      const models = [
+        ...new Set([
+          preferred,
+          'gemini-2.5-flash',
+          'gemini-2.5-flash-lite',
+          'gemini-3.5-flash',
+          'gemini-3.8-flash',
+          'gemini-flash-latest',
+        ]),
+      ];
       llmResult = null;
       for (const model of models) {
         const attempt = await callGemini(
@@ -307,7 +317,16 @@ export async function runKnowledgeChat(bundle, input, ctx) {
         }
         llmResult = attempt;
         // Si la clave es inválida, no tiene sentido probar otros modelos
-        if (attempt.status === 400 || attempt.status === 401 || attempt.status === 403) break;
+        if (attempt.status === 400 || attempt.status === 401 || attempt.status === 403) {
+          const msg = String(attempt.providerMessage || '').toLowerCase();
+          const modelMissing =
+            msg.includes('not found') ||
+            msg.includes('is not found') ||
+            msg.includes('no longer available') ||
+            msg.includes('not supported');
+          if (!modelMissing) break;
+          continue;
+        }
         // 404 = modelo no disponible → probar el siguiente
         if (attempt.status !== 404) break;
       }
