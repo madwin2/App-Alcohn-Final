@@ -231,7 +231,17 @@ async function callOpenAI(params, apiKey, signal) {
   }
 
   if (!response.ok) {
-    return { ok: false, provider: 'openai', status: response.status, json, raw };
+    const providerMessage =
+      json?.error?.message || json?.error?.code || raw?.slice(0, 200) || `HTTP ${response.status}`;
+    return {
+      ok: false,
+      provider: 'openai',
+      model: params.model,
+      status: response.status,
+      providerMessage: String(providerMessage).slice(0, 300),
+      json,
+      raw,
+    };
   }
 
   const text = String(json?.choices?.[0]?.message?.content || '').trim();
