@@ -12,7 +12,7 @@
 - **Pendiente de cobro** desglosado por estado de venta: Deudor, Foto enviada, Señado.
 - **Cajas** (saldo manual): efectivo, Mercado Pago, dos cuentas Santander (a nombre de dos personas), BBVA; cotización USD de referencia → `economia_settings` (RLS **por usuario**).
 - **Movimientos reales**: compra de USD (ahorro), inversión en la empresa, inversión "Cyprea" → `economia_movimientos_reales` (RLS por creador). Cyprea = marca paralela de Alcohn de sellos de lacre (Q-ECO-001). Las cajas se cargan a mano y hoy están desactualizadas (Q-ECO-002).
-- Pestañas: **Ventas mensuales**, **Desglose productos** (clasificación por grupo de sello/accesorio; unidades, ventas o margen), **Mensual** (registro por mes: gasto operativo según fuente del mes), **Mix de ítems**, **Tendencias** (ticket promedio, unidades por pedido, pedidos, venta bruta, rentabilidad USD).
+- Pestañas: **Volumen**, **Por producto**, **P&L mensual** (gasto operativo según fuente del mes), **Mix**, **Tendencias**.
 - Costos y márgenes por ítem vienen de los triggers `calc_sello_fabrication_cost` / `refresh_orden_fabrication_totals`.
 
 ### Fuente del mes en Gastos (`MonthCostsBundle`)
@@ -21,6 +21,7 @@
 
 - `fuente?: 'detalle' | 'resumen'`
 - `gastos_reales?: number` (gasto operativo real del mes; **incluye publicidad**)
+- `ventas_resumen?` / `unidades_resumen?` (facturación y cantidad del cierre Excel; si están, Mensual las usa en meses resumen — p. ej. 2024 sin pedidos en el catálogo)
 
 Si `fuente === 'resumen'` y hay `gastos_reales` > 0, la pestaña **Mensual** de Economía usa ese total como gasto operativo y **no** vuelve a restar fabricación de pedidos ni fijos/extras. Publicidad, compra de dólares e inversiones empresa siguen en `extras` como desglose / columna Ganancias.
 

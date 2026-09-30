@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase/client';
 import {
   clearLegacyMonthlyLocalStorage,
   hydrateMonthlyCostsRuntime,
+  mergeGastosMonthsForPersist,
   normalizeMonthsFromUnknown,
   tryReadLegacyMonthlyFromLocalStorage,
   type MonthCostsBundle,
@@ -12,6 +13,8 @@ export type GastosMensualesRow = {
   legacyFixedScalar: number;
   updatedAt: string | null;
 };
+
+export { mergeGastosMonthsForPersist };
 
 async function fetchGastosMensualesRow(userId: string): Promise<GastosMensualesRow | null> {
   const { data, error } = await supabase
@@ -43,6 +46,18 @@ export async function upsertGastosMensuales(
     { onConflict: 'user_id' },
   );
   if (error) throw error;
+}
+
+/** Lee remoto, fusiona con lo local y persiste (evita pisar resúmenes / meses que solo están en DB). */
+export async function upsertGastosMensualesMerged(
+  userId: string,
+  localMonths: Record<string, MonthCostsBundle>,
+  legacyFixedScalar: number,
+): Promise<Record<string, MonthCostsBundle>> {
+  const remote = await fetchGastosMensualesRow(userId);
+  const merged = mergeGastosMonthsForPersist(remote?.months ?? {}, localMonths);
+  await upsertGastosMensuales(userId, merged, legacyFixedScalar);
+  return merged;
 }
 
 /**

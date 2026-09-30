@@ -53,6 +53,10 @@ export type MonthCostsBundle = {
   fuente?: MonthCostsFuente;
   /** Gasto operativo real del mes (incluye publicidad). Solo aplica si `fuente === 'resumen'`. */
   gastos_reales?: number;
+  /** Facturación del cierre (Excel). Si está, Mensual la usa cuando el mes es resumen. */
+  ventas_resumen?: number;
+  /** Cantidad de ventas/unidades del cierre (Excel). */
+  unidades_resumen?: number;
 };
 
 export function newSalaryEntry(): SalaryEntry {
@@ -218,6 +222,38 @@ export function monthHasDetailedFixedCosts(bundle: MonthCostsBundle | undefined)
     (Number(f.agua) || 0) > 0 ||
     (Number(f.internet) || 0) > 0
   );
+}
+
+/**
+ * Fusiona local sobre remoto sin borrar meses solo-remotos ni pisar un `resumen`
+ * histórico con un mes local vacío (p. ej. pestaña Gastos abierta con estado viejo).
+ */
+export function mergeGastosMonthsForPersist(
+  remote: Record<string, MonthCostsBundle>,
+  local: Record<string, MonthCostsBundle>,
+): Record<string, MonthCostsBundle> {
+  const out: Record<string, MonthCostsBundle> = { ...remote };
+  for (const [key, loc] of Object.entries(local)) {
+    const rem = remote[key];
+    if (
+      rem &&
+      isResumenMensual(rem) &&
+      !isResumenMensual(loc) &&
+      !monthHasDetailedFixedCosts(loc)
+    ) {
+      const extras = loc.extras;
+      const localHasExtras =
+        (Number(extras?.publicidad) || 0) > 0 ||
+        (Number(extras?.compra_dolares) || 0) > 0 ||
+        (Number(extras?.inversiones_empresa) || 0) > 0 ||
+        (Number(extras?.gastos_varios) || 0) > 0;
+      if (!localHasExtras) {
+        continue;
+      }
+    }
+    out[key] = loc;
+  }
+  return out;
 }
 
 let remoteMonths: Record<string, MonthCostsBundle> = {};
@@ -425,21 +461,36 @@ function normalizeFuente(raw: unknown): MonthCostsFuente | undefined {
   return undefined;
 }
 
+function normalizePositiveNumber(raw: unknown): number | undefined {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
 function normalizeBundle(raw: unknown): MonthCostsBundle {
   if (!raw || typeof raw !== 'object') return emptyBundle();
   const o = raw as Record<string, unknown>;
-  if ('fixed' in o || 'extras' in o || 'realFixed' in o || 'fuente' in o || 'gastos_reales' in o) {
+  if (
+    'fixed' in o ||
+    'extras' in o ||
+    'realFixed' in o ||
+    'fuente' in o ||
+    'gastos_reales' in o ||
+    'ventas_resumen' in o ||
+    'unidades_resumen' in o
+  ) {
     const pagos = normalizePagos(o.pagos);
     const fuente = normalizeFuente(o.fuente);
-    const gastosRealesRaw = Number(o.gastos_reales);
-    const gastos_reales =
-      Number.isFinite(gastosRealesRaw) && gastosRealesRaw > 0 ? gastosRealesRaw : undefined;
+    const gastos_reales = normalizePositiveNumber(o.gastos_reales);
+    const ventas_resumen = normalizePositiveNumber(o.ventas_resumen);
+    const unidades_resumen = normalizePositiveNumber(o.unidades_resumen);
     return {
       fixed: normalizeFixed(o.fixed),
       extras: normalizeExtras(o.extras),
       ...(pagos ? { pagos } : {}),
       ...(fuente ? { fuente } : {}),
       ...(gastos_reales != null ? { gastos_reales } : {}),
+      ...(ventas_resumen != null ? { ventas_resumen } : {}),
+      ...(unidades_resumen != null ? { unidades_resumen } : {}),
     };
   }
   return emptyBundle();
@@ -506,5 +557,54 @@ export function getBundleForMonth(
     ...(b.gastos_reales != null && Number(b.gastos_reales) > 0
       ? { gastos_reales: Number(b.gastos_reales) }
       : {}),
+    ...(b.ventas_resumen != null && Number(b.ventas_resumen) > 0
+      ? { ventas_resumen: Number(b.ventas_resumen) }
+      : {}),
+    ...(b.unidades_resumen != null && Number(b.unidades_resumen) > 0
+      ? { unidades_resumen: Number(b.unidades_resumen) }
+      : {}),
   };
+}
+
+/**
+ * Si el mes es resumen y trae facturación/unidades del Excel, las aplica al row
+ * (cierre contable; sirve cuando no hay pedidos en el catálogo o el detalle está incompleto).
+ */
+export function applyResumenVentasOverride(
+  row: {
+    ventasBrutas: number;
+    transferido: number;
+    pendiente: number;
+    sellos: number;
+    pedidos: number;
+    unidades: number;
+    costosVentas: number;
+    rentabilidadPesos: number;
+    rentabilidadUsd: number;
+    transferidoMenosGastos: number;
+  },
+  bundle: MonthCostsBundle | undefined,
+  usdRate: number,
+  legacyFixedFallback = 0,
+): void {
+  if (!isResumenMensual(bundle) || !bundle) return;
+  const ventas = Number(bundle.ventas_resumen) || 0;
+  const unidades = Number(bundle.unidades_resumen) || 0;
+  if (ventas <= 0 && unidades <= 0) return;
+
+  if (ventas > 0) {
+    row.ventasBrutas = ventas;
+    row.transferido = ventas;
+    row.pendiente = 0;
+  }
+  if (unidades > 0) {
+    row.sellos = unidades;
+    row.pedidos = unidades;
+    row.unidades = unidades;
+  }
+  row.costosVentas = 0;
+  const gastosOp = gastosOperativosParaEconomia(bundle, 0, legacyFixedFallback);
+  row.rentabilidadPesos = row.ventasBrutas - gastosOp;
+  row.rentabilidadUsd = usdRate > 0 ? row.rentabilidadPesos / usdRate : 0;
+  row.transferidoMenosGastos = row.transferido - gastosOp;
 }

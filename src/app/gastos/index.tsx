@@ -44,7 +44,7 @@ import {
   fetchLatestFabricacionParams,
   insertFabricacionParamsVersion,
 } from '@/lib/supabase/services/fabricacionParametros.service';
-import { loadGastosMensualesIntoCache, upsertGastosMensuales } from '@/lib/supabase/services/gastosMensuales.service';
+import { loadGastosMensualesIntoCache, upsertGastosMensualesMerged } from '@/lib/supabase/services/gastosMensuales.service';
 
 export type { VariableCostsState };
 
@@ -233,6 +233,7 @@ export default function GastosPage() {
   const [proyeccionOpen, setProyeccionOpen] = useState(false);
   const latestMonthlyRef = useRef<Record<string, MonthCostsBundle>>({});
   const latestLegacyRef = useRef(0);
+  const skipNextPersistRef = useRef(false);
 
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
 
@@ -325,11 +326,22 @@ export default function GastosPage() {
 
   const persistMonthlyNow = useCallback(async () => {
     if (!monthlyFromDbReady || !isAllowed || !user?.id) return;
-    await upsertGastosMensuales(user.id, latestMonthlyRef.current, latestLegacyRef.current);
+    const local = latestMonthlyRef.current;
+    const merged = await upsertGastosMensualesMerged(user.id, local, latestLegacyRef.current);
+    latestMonthlyRef.current = merged;
+    hydrateMonthlyCostsRuntime(merged, latestLegacyRef.current);
+    if (JSON.stringify(local) !== JSON.stringify(merged)) {
+      skipNextPersistRef.current = true;
+      setMonthlyByMonth(merged);
+    }
   }, [monthlyFromDbReady, isAllowed, user?.id]);
 
   useEffect(() => {
     if (!monthlyFromDbReady || !isAllowed || !user?.id) return;
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
     const t = window.setTimeout(() => {
       void persistMonthlyNow().catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);

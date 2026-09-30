@@ -74,9 +74,13 @@ describe('resumen mensual (Excel histórico)', () => {
         extras: emptyExtras(),
         fuente: 'resumen',
         gastos_reales: 7_500_000,
+        ventas_resumen: 12_827_500,
+        unidades_resumen: 207,
       },
     });
     expect(months['2025-01'].fuente).toBe('resumen');
     expect(months['2025-01'].gastos_reales).toBe(7_500_000);
+    expect(months['2025-01'].ventas_resumen).toBe(12_827_500);
+    expect(months['2025-01'].unidades_resumen).toBe(207);
   });
 });

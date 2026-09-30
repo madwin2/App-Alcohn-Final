@@ -38,10 +38,10 @@ Aparecen en **Movimientos cargados**; **Quitar** para borrar uno.
 
 | Pestaña | Qué muestra |
 |---|---|
-| **Ventas mensuales** | **Sellos vendidos por mes**, **Ventas brutas por mes** y el **Detalle mes a mes** (sellos, pedidos, unidades, ventas, ticket promedio, rentabilidad y comparación con el mes anterior) |
-| **Desglose productos** | Ventas por producto: sellos chicos, medianos, grandes y XL (misma clasificación que Precios), 3 mm, lacre, alimento, abecedarios, soldadores y accesorios. Tabla **mes × producto** |
-| **Mensual** | **Registro por mes**: ventas, gastos del mes (detalle o resumen) y transferido menos gastos |
-| **Mix de ítems** | Qué proporción de cada tipo de ítem se vende |
+| **Volumen** | **Sellos vendidos por mes**, **Ventas brutas por mes** y el **Detalle mes a mes** (sellos, pedidos, unidades, ventas, ticket promedio, rentabilidad y comparación con el mes anterior) |
+| **Por producto** | Ventas por producto: sellos chicos, medianos, grandes y XL (misma clasificación que Precios), 3 mm, lacre, alimento, abecedarios, soldadores y accesorios. Tabla **mes × producto** |
+| **P&L mensual** | **Registro por mes**: ventas, gastos del mes (detalle o resumen) y transferido menos gastos. Botones para desglosar gastos o ganancias |
+| **Mix** | Qué proporción de cada tipo de ítem se vende |
 | **Tendencias** | Ticket promedio, unidades por pedido, pedidos, venta bruta y rentabilidad en USD a lo largo del tiempo |
 
 ## Gastos

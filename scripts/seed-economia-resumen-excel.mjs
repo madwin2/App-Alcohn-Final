@@ -48,21 +48,26 @@ loadEnvFile(path.join(root, 'services', 'andreani-worker', '.env'));
 
 /** Filas del Excel de cierre (Gastos R ya incluye publicidad). */
 const EXCEL_ROWS = [
-  { month: '2024-07', gastosR: 1_800_000, publicidad: 96_000, dolaresArs: 980_000, inversion: 315_000, totalUsd: null },
-  { month: '2024-08', gastosR: 4_500_000, publicidad: 126_000, dolaresArs: 700_000, inversion: 163_000, totalUsd: null },
-  { month: '2024-09', gastosR: 4_800_000, publicidad: 220_000, dolaresArs: 255_000, inversion: 294_000, totalUsd: null },
-  { month: '2024-10', gastosR: 5_530_000, publicidad: 275_000, dolaresArs: 427_000, inversion: 550_000, totalUsd: 800 },
-  { month: '2024-11', gastosR: 6_888_000, publicidad: 470_000, dolaresArs: 1_465_000, inversion: 339_000, totalUsd: 600 },
-  { month: '2024-12', gastosR: 8_000_000, publicidad: 800_000, dolaresArs: 2_176_500, inversion: 90_000, totalUsd: 200 },
-  { month: '2025-01', gastosR: 7_500_000, publicidad: 1_050_000, dolaresArs: 1_419_000, inversion: 163_000, totalUsd: 300 },
-  { month: '2025-02', gastosR: 8_000_000, publicidad: 1_200_000, dolaresArs: 2_410_000, inversion: 90_000, totalUsd: 1100 },
-  { month: '2025-03', gastosR: 9_000_000, publicidad: 2_000_000, dolaresArs: 3_470_000, inversion: 90_000, totalUsd: 1960 },
-  { month: '2025-04', gastosR: 9_000_000, publicidad: 2_000_000, dolaresArs: 1_965_000, inversion: 90_000, totalUsd: 1390 },
-  { month: '2025-05', gastosR: 10_200_000, publicidad: 2_000_000, dolaresArs: 3_800_000, inversion: 90_000, totalUsd: 2000 },
-  { month: '2025-06', gastosR: 10_800_000, publicidad: 1_650_000, dolaresArs: 2_380_000, inversion: 90_000, totalUsd: 2800 },
-  { month: '2025-07', gastosR: 10_300_000, publicidad: 2_085_000, dolaresArs: 1_950_000, inversion: 3_290_000, totalUsd: 1500 },
-  { month: '2025-08', gastosR: 10_400_000, publicidad: 2_130_000, dolaresArs: 4_000_000, inversion: 2_860_000, totalUsd: 3000 },
+  // Jul-24…Ene-25: cierre completo (facturación + unidades) porque el catálogo de pedidos está incompleto/vacío.
+  { month: '2024-07', facturacion: 5_791_000, unidades: 147, gastosR: 1_800_000, publicidad: 96_000, dolaresArs: 980_000, inversion: 315_000, totalUsd: null, withVentas: true },
+  { month: '2024-08', facturacion: 5_996_300, unidades: 148, gastosR: 4_500_000, publicidad: 126_000, dolaresArs: 700_000, inversion: 163_000, totalUsd: null, withVentas: true },
+  { month: '2024-09', facturacion: 7_393_000, unidades: 177, gastosR: 4_800_000, publicidad: 220_000, dolaresArs: 255_000, inversion: 294_000, totalUsd: null, withVentas: true },
+  { month: '2024-10', facturacion: 8_771_000, unidades: 154, gastosR: 5_530_000, publicidad: 275_000, dolaresArs: 427_000, inversion: 550_000, totalUsd: 800, withVentas: true },
+  { month: '2024-11', facturacion: 8_198_500, unidades: 148, gastosR: 6_888_000, publicidad: 470_000, dolaresArs: 1_465_000, inversion: 339_000, totalUsd: 600, withVentas: true },
+  { month: '2024-12', facturacion: 11_256_200, unidades: 178, gastosR: 8_000_000, publicidad: 800_000, dolaresArs: 2_176_500, inversion: 90_000, totalUsd: 200, withVentas: true },
+  { month: '2025-01', facturacion: 12_827_500, unidades: 207, gastosR: 7_500_000, publicidad: 1_050_000, dolaresArs: 1_419_000, inversion: 163_000, totalUsd: 300, withVentas: true },
+  // Feb-25…Ago-25: solo gastos/ganancias; las ventas siguen saliendo de pedidos (ya cuadra).
+  { month: '2025-02', facturacion: null, unidades: null, gastosR: 8_000_000, publicidad: 1_200_000, dolaresArs: 2_410_000, inversion: 90_000, totalUsd: 1100, withVentas: false },
+  { month: '2025-03', facturacion: null, unidades: null, gastosR: 9_000_000, publicidad: 2_000_000, dolaresArs: 3_470_000, inversion: 90_000, totalUsd: 1960, withVentas: false },
+  { month: '2025-04', facturacion: null, unidades: null, gastosR: 9_000_000, publicidad: 2_000_000, dolaresArs: 1_965_000, inversion: 90_000, totalUsd: 1390, withVentas: false },
+  { month: '2025-05', facturacion: null, unidades: null, gastosR: 10_200_000, publicidad: 2_000_000, dolaresArs: 3_800_000, inversion: 90_000, totalUsd: 2000, withVentas: false },
+  { month: '2025-06', facturacion: null, unidades: null, gastosR: 10_800_000, publicidad: 1_650_000, dolaresArs: 2_380_000, inversion: 90_000, totalUsd: 2800, withVentas: false },
+  { month: '2025-07', facturacion: null, unidades: null, gastosR: 10_300_000, publicidad: 2_085_000, dolaresArs: 1_950_000, inversion: 3_290_000, totalUsd: 1500, withVentas: false },
+  { month: '2025-08', facturacion: null, unidades: null, gastosR: 10_400_000, publicidad: 2_130_000, dolaresArs: 4_000_000, inversion: 2_860_000, totalUsd: 3000, withVentas: false },
 ];
+
+/** Meses que forzamos a resumen aunque tengan sueldos/detalle (cierre Excel manda). */
+const FORCE_RESUMEN_MONTHS = new Set(['2025-01']);
 
 const DEFAULT_OWNER_EMAIL = 'julian.475@hotmail.com';
 
@@ -128,13 +133,22 @@ function buildResumenBundle(row, existing) {
   extras.publicidad = row.publicidad;
   extras.compra_dolares = row.dolaresArs;
   extras.inversiones_empresa = row.inversion;
-  return {
-    fixed: existing?.fixed && typeof existing.fixed === 'object' ? existing.fixed : emptyFixed(),
+  const out = {
+    // Para resumen forzado no conservamos sueldos viejos (evitar mezclar con legado).
+    fixed: FORCE_RESUMEN_MONTHS.has(row.month) ? emptyFixed() : existing?.fixed && typeof existing.fixed === 'object' ? existing.fixed : emptyFixed(),
     extras,
-    ...(existing?.pagos ? { pagos: existing.pagos } : {}),
+    ...(existing?.pagos && !FORCE_RESUMEN_MONTHS.has(row.month) ? { pagos: existing.pagos } : {}),
     fuente: 'resumen',
     gastos_reales: row.gastosR,
   };
+  if (row.withVentas && row.facturacion != null) out.ventas_resumen = row.facturacion;
+  if (row.withVentas && row.unidades != null) out.unidades_resumen = row.unidades;
+  // Si el mes no lleva ventas del Excel, limpia overrides viejos.
+  if (!row.withVentas) {
+    delete out.ventas_resumen;
+    delete out.unidades_resumen;
+  }
+  return out;
 }
 
 function midMonthIso(monthKey) {
@@ -198,18 +212,21 @@ async function main() {
 
   for (const row of EXCEL_ROWS) {
     const cur = months[row.month];
-    if (monthHasDetailedFixedCosts(cur)) {
+    const force = FORCE_RESUMEN_MONTHS.has(row.month);
+    if (!force && monthHasDetailedFixedCosts(cur)) {
       skipped.push({ month: row.month, reason: 'tiene detalle de fijos / fuente=detalle' });
       continue;
     }
     const next = buildResumenBundle(row, cur);
-    toApply.push({ month: row.month, next, row });
+    toApply.push({ month: row.month, next, row, force });
   }
 
   console.log(`\nMeses a cargar: ${toApply.length}`);
-  for (const { month, row } of toApply) {
+  for (const { month, row, force } of toApply) {
     console.log(
-      `  ${month}  gastos_reales=${row.gastosR}  pub=${row.publicidad}  usd_ars=${row.dolaresArs}  inv=${row.inversion}` +
+      `  ${month}${force ? ' [FORCE]' : ''}  gastos_reales=${row.gastosR}` +
+        (row.withVentas ? `  fact=${row.facturacion}  u=${row.unidades}` : '') +
+        `  pub=${row.publicidad}  usd_ars=${row.dolaresArs}  inv=${row.inversion}` +
         (row.totalUsd != null ? `  total_usd=${row.totalUsd}` : ''),
     );
   }
