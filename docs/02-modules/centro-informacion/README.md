@@ -56,7 +56,7 @@ Auth: verifica JWT en Supabase Auth, exige `solicitudes_registro.estado = APROBA
 | `SUPABASE_URL` o `VITE_SUPABASE_URL` | Verificar sesión |
 | `SUPABASE_ANON_KEY` o `VITE_SUPABASE_ANON_KEY` | Cliente auth/REST con el JWT del usuario |
 | `GEMINI_API_KEY` | Chat del asistente (preferido) |
-| `GEMINI_KNOWLEDGE_MODEL` | Modelo Gemini (default `gemini-2.0-flash`) |
+| `GEMINI_KNOWLEDGE_MODEL` | Modelo Gemini (default `gemini-2.5-flash`) |
 | `OPENAI_API_KEY` | Fallback del chat si no hay Gemini |
 | `OPENAI_KNOWLEDGE_MODEL` | Modelo OpenAI de fallback (default `gpt-4o-mini`) |
 
