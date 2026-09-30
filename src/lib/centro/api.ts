@@ -9,11 +9,13 @@ import type {
 export class CentroApiError extends Error {
   status: number;
   code?: string;
+  detail?: string;
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, detail?: string) {
     super(message);
     this.status = status;
     this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -70,6 +72,7 @@ async function knowledgeRequest<T>(body: Record<string, unknown>): Promise<T> {
       String(json.error || 'No se pudo completar la solicitud'),
       response.status,
       typeof json.code === 'string' ? json.code : undefined,
+      typeof json.detail === 'string' ? json.detail : undefined,
     );
   }
 

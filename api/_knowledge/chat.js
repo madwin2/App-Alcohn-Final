@@ -51,7 +51,7 @@ function buildSystemPrompt() {
  * @param {{ model: string, system: string, history: { role: string, content: string }[], question: string }} params
  * @param {string} apiKey
  * @param {AbortSignal} signal
- * @param {{ disableThinking?: boolean }} [opts]
+ * @param {{ thinkingBudgetZero?: boolean }} [opts]
  */
 async function callGemini(params, apiKey, signal, opts = {}) {
   const model = params.model;
@@ -78,10 +78,10 @@ async function callGemini(params, apiKey, signal, opts = {}) {
   /** @type {Record<string, unknown>} */
   const generationConfig = {
     temperature: 0.2,
-    // 2.5 Flash gasta tokens en "thinking"; 1024 suele dejar la respuesta vacía (MAX_TOKENS)
-    maxOutputTokens: 8192,
+    maxOutputTokens: 4096,
   };
-  if (opts.disableThinking !== false) {
+  // Solo en 2.5 Flash (no lite): apagar thinking para no vaciar la respuesta
+  if (opts.thinkingBudgetZero) {
     generationConfig.thinkingConfig = { thinkingBudget: 0 };
   }
 
@@ -115,14 +115,18 @@ async function callGemini(params, apiKey, signal, opts = {}) {
     return {
       ok: false,
       provider: 'gemini',
+      model,
       status: response.status,
       providerMessage: String(providerMessage).slice(0, 300),
       retryable:
         response.status === 404 ||
+        response.status === 500 ||
+        response.status === 503 ||
         thinkingRejected ||
         msg.includes('not found') ||
         msg.includes('no longer available') ||
-        msg.includes('not supported'),
+        msg.includes('not supported') ||
+        msg.includes('overloaded'),
       thinkingRejected,
       json,
     };
@@ -131,7 +135,6 @@ async function callGemini(params, apiKey, signal, opts = {}) {
   const parts = json?.candidates?.[0]?.content?.parts;
   const text = Array.isArray(parts)
     ? parts
-        // Gemini 2.5 puede devolver partes de pensamiento; no cuentan como respuesta
         .filter((p) => p && p.thought !== true)
         .map((p) => (typeof p?.text === 'string' ? p.text : ''))
         .join('')
@@ -143,6 +146,7 @@ async function callGemini(params, apiKey, signal, opts = {}) {
     return {
       ok: false,
       provider: 'gemini',
+      model,
       status: 502,
       providerMessage: `Respuesta vacía (${finish})`,
       retryable: true,
@@ -155,22 +159,42 @@ async function callGemini(params, apiKey, signal, opts = {}) {
 
 function geminiUserError(status, providerMessage) {
   const msg = String(providerMessage || '').toLowerCase();
-  if (status === 400 && msg.includes('api key')) {
+  if (status === 400 && (msg.includes('api key') || msg.includes('api_key'))) {
     return 'La clave de Gemini no es válida. Revisá GEMINI_API_KEY en Vercel y volvé a desplegar.';
   }
   if (status === 403 || status === 401) {
     return 'Gemini rechazó la clave o el acceso. Revisá GEMINI_API_KEY (y que esté en Production) y redeploy.';
   }
   if (status === 404 || msg.includes('not found') || msg.includes('is not found') || msg.includes('no longer available')) {
-    return 'Ningún modelo de Gemini respondió. Revisá GEMINI_KNOWLEDGE_MODEL (ej. gemini-2.5-flash-lite) y redeploy.';
+    return 'Ningún modelo de Gemini respondió. Revisá GEMINI_KNOWLEDGE_MODEL y redeploy.';
   }
-  if (status === 429) {
+  if (status === 429 || msg.includes('quota') || msg.includes('rate')) {
     return 'Se alcanzó el límite gratuito de Gemini. Probá de nuevo en unos minutos.';
   }
   if (msg.includes('vacía') || msg.includes('max_tokens')) {
     return 'Gemini cortó la respuesta. Probá de nuevo en un momento.';
   }
   return 'El asistente no pudo responder ahora. Podés seguir con el manual y el buscador.';
+}
+
+/**
+ * @param {string} model
+ * @param {{ model: string, system: string, history: { role: string, content: string }[], question: string }} params
+ * @param {string} apiKey
+ * @param {AbortSignal} signal
+ */
+async function callGeminiWithConfig(model, params, apiKey, signal) {
+  const needsThinkingOff = /^gemini-2\.5-flash$/i.test(model) || /^gemini-2\.5-flash-\d/i.test(model);
+  let attempt = await callGemini(
+    { ...params, model },
+    apiKey,
+    signal,
+    { thinkingBudgetZero: needsThinkingOff },
+  );
+  if (!attempt.ok && attempt.thinkingRejected) {
+    attempt = await callGemini({ ...params, model }, apiKey, signal, { thinkingBudgetZero: false });
+  }
+  return attempt;
 }
 
 /**
@@ -316,44 +340,41 @@ export async function runKnowledgeChat(bundle, input, ctx) {
   let llmResult;
   try {
     if (geminiKey) {
-      // Preferir flash-lite: sin thinking por defecto. 2.5-flash con 1024 tokens devolvía vacío.
+      // Pocos modelos: en Vercel hobby el timeout es corto; demasiados reintentos = 502.
       const preferred = (process.env.GEMINI_KNOWLEDGE_MODEL || 'gemini-2.5-flash-lite').trim();
-      const models = [
-        ...new Set([
-          preferred,
-          'gemini-2.5-flash-lite',
-          'gemini-2.5-flash',
-          'gemini-3.5-flash',
-          'gemini-3.8-flash',
-          'gemini-flash-latest',
-        ]),
-      ];
+      const models = [...new Set([preferred, 'gemini-2.5-flash-lite', 'gemini-2.5-flash'])].slice(0, 2);
+      const baseParams = { system, history: safeHistory, question };
       llmResult = null;
       for (const model of models) {
-        let attempt = await callGemini(
-          { model, system, history: safeHistory, question },
-          geminiKey,
-          controller.signal,
-          { disableThinking: true },
-        );
-        // Algunos modelos rechazan thinkingBudget=0 → reintentar sin ese campo
-        if (!attempt.ok && attempt.thinkingRejected) {
-          attempt = await callGemini(
-            { model, system, history: safeHistory, question },
-            geminiKey,
-            controller.signal,
-            { disableThinking: false },
-          );
-        }
+        const attempt = await callGeminiWithConfig(model, baseParams, geminiKey, controller.signal);
         if (attempt.ok) {
           llmResult = attempt;
           break;
         }
         llmResult = attempt;
-        if (attempt.status === 401 || attempt.status === 403) break;
+        console.error('[knowledge-chat] gemini_attempt_failed', {
+          model,
+          status: attempt.status,
+          message: String(attempt.providerMessage || '').slice(0, 200),
+        });
+        if (attempt.status === 401 || attempt.status === 403 || attempt.status === 429) break;
         if (attempt.status === 400 && !attempt.retryable) break;
         if (attempt.retryable || attempt.status === 404) continue;
         break;
+      }
+
+      // Si Gemini falló y hay OpenAI, usamos fallback
+      if ((!llmResult || !llmResult.ok) && openaiKey) {
+        const model = (process.env.OPENAI_KNOWLEDGE_MODEL || process.env.OPENAI_MOCKUP_NAME_MODEL || 'gpt-4o-mini').trim();
+        console.error('[knowledge-chat] falling_back_openai', {
+          geminiStatus: llmResult?.status,
+          geminiMessage: String(llmResult?.providerMessage || '').slice(0, 160),
+        });
+        llmResult = await callOpenAI(
+          { model, system, history: safeHistory, question },
+          openaiKey,
+          controller.signal,
+        );
       }
     } else {
       const model = (process.env.OPENAI_KNOWLEDGE_MODEL || process.env.OPENAI_MOCKUP_NAME_MODEL || 'gpt-4o-mini').trim();
@@ -383,6 +404,7 @@ export async function runKnowledgeChat(bundle, input, ctx) {
     if (providerMessage) {
       console.error('[knowledge-chat] provider_error', {
         provider: llmResult.provider,
+        model: llmResult.model,
         status: llmResult.status,
         message: providerMessage.slice(0, 300),
       });
@@ -395,6 +417,8 @@ export async function runKnowledgeChat(bundle, input, ctx) {
         llmResult.provider === 'gemini'
           ? geminiUserError(llmResult.status, providerMessage)
           : 'El asistente no pudo responder ahora. Podés seguir con el manual y el buscador.',
+      // Detalle seguro (sin secretos) para diagnosticar en UI / Network
+      detail: providerMessage ? String(providerMessage).slice(0, 180) : undefined,
     };
   }
 

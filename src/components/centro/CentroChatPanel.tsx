@@ -50,6 +50,7 @@ export function CentroChatPanel({
   const [input, setInput] = useState(initialQuestion || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const seeded = useRef(false);
@@ -85,6 +86,7 @@ export function CentroChatPanel({
     if (!question || loading) return;
 
     setError(null);
+    setErrorDetail(null);
     const userMsg: CentroChatMessage = { id: newId(), role: 'user', content: question };
     const next = [...messages, userMsg];
     setMessages(next);
@@ -119,6 +121,7 @@ export function CentroChatPanel({
           ? err.message
           : 'No se pudo completar la consulta. Conservamos tu pregunta.';
       setError(message);
+      setErrorDetail(err instanceof CentroApiError ? err.detail || null : null);
       setInput(question);
       setMessages((prev) => prev.slice(0, -1));
     } finally {
@@ -129,6 +132,7 @@ export function CentroChatPanel({
   const reset = () => {
     setMessages([]);
     setError(null);
+    setErrorDetail(null);
     setInput('');
     textareaRef.current?.focus();
   };
@@ -305,15 +309,20 @@ export function CentroChatPanel({
             role="alert"
             className="centro-chat-pop mb-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
           >
-            {error}{' '}
-            <button
-              type="button"
-              className="font-medium underline underline-offset-2"
-              onClick={() => void send()}
-              disabled={loading || !input.trim()}
-            >
-              Reintentar
-            </button>
+            <p>
+              {error}{' '}
+              <button
+                type="button"
+                className="font-medium underline underline-offset-2"
+                onClick={() => void send()}
+                disabled={loading || !input.trim()}
+              >
+                Reintentar
+              </button>
+            </p>
+            {errorDetail ? (
+              <p className="mt-1.5 text-[11px] leading-relaxed text-destructive/80">{errorDetail}</p>
+            ) : null}
           </div>
         ) : null}
 

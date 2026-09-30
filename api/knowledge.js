@@ -14,6 +14,10 @@ import { requireApprovedUser } from './_knowledge/auth.js';
 import { searchKnowledge } from './_knowledge/search.js';
 import { runKnowledgeChat } from './_knowledge/chat.js';
 
+export const config = {
+  maxDuration: 60,
+};
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function loadBundle() {
