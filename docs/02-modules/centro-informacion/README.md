@@ -70,7 +70,7 @@ No actualizar “respuestas aprendidas” del chat por separado: la fuente es el
 ## Límites reales (chat)
 
 - Pregunta ≤ 800 caracteres; hasta 8 turnos de historial (~4000 chars).
-- Hasta 8 fragmentos recuperados; timeout 45 s.
+- Hasta 6 fragmentos recuperados; timeout 45 s.
 - Rate limit en memoria: 20 req/min **por instancia** (no es global entre instancias de Vercel).
 - Citas: solo `fragmentId` recuperados en esa consulta; el servidor arma títulos/URLs.
 
