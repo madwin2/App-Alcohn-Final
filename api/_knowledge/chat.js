@@ -52,7 +52,8 @@ function buildSystemPrompt() {
  */
 async function callGemini(params, apiKey, signal) {
   const model = params.model;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  // key en query es el formato documentado por AI Studio; header como refuerzo
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   /** @type {{ role: string, parts: { text: string }[] }[]} */
   const contents = [];
@@ -76,14 +77,14 @@ async function callGemini(params, apiKey, signal) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-goog-api-key': apiKey,
     },
     body: JSON.stringify({
+      // JSON protobuf de Gemini: camelCase (systemInstruction / generationConfig)
       systemInstruction: { parts: [{ text: params.system }] },
       contents,
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 900,
+        maxOutputTokens: 1024,
       },
     }),
     signal,
@@ -98,7 +99,15 @@ async function callGemini(params, apiKey, signal) {
   }
 
   if (!response.ok) {
-    return { ok: false, provider: 'gemini', status: response.status, json, raw };
+    const providerMessage =
+      json?.error?.message || json?.error?.status || raw?.slice(0, 200) || `HTTP ${response.status}`;
+    return {
+      ok: false,
+      provider: 'gemini',
+      status: response.status,
+      providerMessage: String(providerMessage).slice(0, 300),
+      json,
+    };
   }
 
   const parts = json?.candidates?.[0]?.content?.parts;
@@ -109,7 +118,35 @@ async function callGemini(params, apiKey, signal) {
         .trim()
     : '';
 
+  if (!text) {
+    const finish = json?.candidates?.[0]?.finishReason || json?.promptFeedback?.blockReason || 'empty';
+    return {
+      ok: false,
+      provider: 'gemini',
+      status: 502,
+      providerMessage: `Respuesta vacía (${finish})`,
+      json,
+    };
+  }
+
   return { ok: true, provider: 'gemini', model, text, json };
+}
+
+function geminiUserError(status, providerMessage) {
+  const msg = String(providerMessage || '').toLowerCase();
+  if (status === 400 && msg.includes('api key')) {
+    return 'La clave de Gemini no es válida. Revisá GEMINI_API_KEY en Vercel y volvé a desplegar.';
+  }
+  if (status === 403 || status === 401) {
+    return 'Gemini rechazó la clave o el acceso. Revisá GEMINI_API_KEY (y que esté en Production) y redeploy.';
+  }
+  if (status === 404 || msg.includes('not found') || msg.includes('is not found')) {
+    return 'El modelo de Gemini no está disponible. Probá definir GEMINI_KNOWLEDGE_MODEL=gemini-1.5-flash.';
+  }
+  if (status === 429) {
+    return 'Se alcanzó el límite gratuito de Gemini. Probá de nuevo en unos minutos.';
+  }
+  return 'El asistente no pudo responder ahora. Podés seguir con el manual y el buscador.';
 }
 
 /**
@@ -255,12 +292,25 @@ export async function runKnowledgeChat(bundle, input, ctx) {
   let llmResult;
   try {
     if (geminiKey) {
-      const model = (process.env.GEMINI_KNOWLEDGE_MODEL || 'gemini-2.0-flash').trim();
-      llmResult = await callGemini(
-        { model, system, history: safeHistory, question },
-        geminiKey,
-        controller.signal,
-      );
+      const preferred = (process.env.GEMINI_KNOWLEDGE_MODEL || 'gemini-2.0-flash').trim();
+      const models = [...new Set([preferred, 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest'])];
+      llmResult = null;
+      for (const model of models) {
+        const attempt = await callGemini(
+          { model, system, history: safeHistory, question },
+          geminiKey,
+          controller.signal,
+        );
+        if (attempt.ok) {
+          llmResult = attempt;
+          break;
+        }
+        llmResult = attempt;
+        // Si la clave es inválida, no tiene sentido probar otros modelos
+        if (attempt.status === 400 || attempt.status === 401 || attempt.status === 403) break;
+        // 404 = modelo no disponible → probar el siguiente
+        if (attempt.status !== 404) break;
+      }
     } else {
       const model = (process.env.OPENAI_KNOWLEDGE_MODEL || process.env.OPENAI_MOCKUP_NAME_MODEL || 'gpt-4o-mini').trim();
       llmResult = await callOpenAI(
@@ -285,11 +335,22 @@ export async function runKnowledgeChat(bundle, input, ctx) {
   }
 
   if (!llmResult.ok) {
+    const providerMessage = llmResult.providerMessage || '';
+    if (providerMessage) {
+      console.error('[knowledge-chat] provider_error', {
+        provider: llmResult.provider,
+        status: llmResult.status,
+        message: providerMessage.slice(0, 300),
+      });
+    }
     return {
       ok: false,
       status: 502,
       code: 'provider_error',
-      error: 'El asistente no pudo responder ahora. Podés seguir con el manual y el buscador.',
+      error:
+        llmResult.provider === 'gemini'
+          ? geminiUserError(llmResult.status, providerMessage)
+          : 'El asistente no pudo responder ahora. Podés seguir con el manual y el buscador.',
     };
   }
 
