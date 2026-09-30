@@ -5,6 +5,7 @@ import {
   emptyFixed,
   gastosOperativosParaEconomia,
   isResumenMensual,
+  mergeGastosMonthsForPersist,
   monthHasDetailedFixedCosts,
   normalizeMonthsFromUnknown,
 } from '@/lib/gastos/monthlyEconomiaCosts';
@@ -82,5 +83,32 @@ describe('resumen mensual (Excel histórico)', () => {
     expect(months['2025-01'].gastos_reales).toBe(7_500_000);
     expect(months['2025-01'].ventas_resumen).toBe(12_827_500);
     expect(months['2025-01'].unidades_resumen).toBe(207);
+  });
+});
+
+describe('mergeGastosMonthsForPersist', () => {
+  it('no pisa resumen ni detalle remoto con un mes local vacío', () => {
+    const remote = {
+      '2025-01': {
+        ...emptyBundle(),
+        fuente: 'resumen' as const,
+        gastos_reales: 7_500_000,
+        extras: { ...emptyExtras(), publicidad: 100 },
+      },
+      '2026-03': {
+        ...emptyBundle(),
+        fixed: { ...emptyFixed(), sueldos: [{ id: '1', nombre: 'A', monto: 6_000_000 }] },
+        extras: { ...emptyExtras(), publicidad: 2_000_000 },
+      },
+    };
+    const local = {
+      '2025-01': emptyBundle(),
+      '2026-03': emptyBundle(),
+      '2026-09': emptyBundle(),
+    };
+    const merged = mergeGastosMonthsForPersist(remote, local);
+    expect(merged['2025-01'].gastos_reales).toBe(7_500_000);
+    expect(merged['2026-03'].fixed.sueldos[0]?.monto).toBe(6_000_000);
+    expect(merged['2026-09']).toEqual(emptyBundle());
   });
 });

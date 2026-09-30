@@ -66,7 +66,7 @@ import {
   inversionesExtrasArs,
   isResumenMensual,
   loadAllMonthlyCosts,
-  monthHasDetailedFixedCosts,
+  monthHasEconomiaSignal,
   readLegacyFixedScalar,
 } from '@/lib/gastos/monthlyEconomiaCosts';
 import { Banknote, ChevronDown, CircleDollarSign, HelpCircle, Wallet } from 'lucide-react';
@@ -133,8 +133,38 @@ function totalGananciasGrupoArs(r: Pick<MonthlyRow, 'inversionEmpresaArs' | 'inv
   return r.inversionEmpresaArs + r.inversionCypreaArs + r.compraDolaresArs;
 }
 
+type YearlyRow = {
+  year: string;
+  ventasBrutas: number;
+  gastosOperativos: number;
+  /** Rentabilidad operativa (teórica): ventas − gastos. */
+  rentabilidadPesos: number;
+  compraDolaresArs: number;
+  inversionEmpresaArs: number;
+  inversionCypreaArs: number;
+  /**
+   * Ganancia real del año: plata pasada a dólares / inversiones
+   * (compra USD + inv. empresa + Cyprea). No se resta de la teórica.
+   */
+  gananciaRealArs: number;
+  transferido: number;
+  pendiente: number;
+  sellos: number;
+  pedidos: number;
+  unidades: number;
+  meses: number;
+};
+
 const formatArs = (value: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(value);
+
+const formatCompactArs = (n: number) =>
+  new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(n);
 
 const formatUsd = (value: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
@@ -160,6 +190,55 @@ function MomChip({ value, label }: { value: number | null; label?: string }) {
       {label ? <span className="font-normal opacity-80">{label}</span> : null}
       {formatPct(value)}
     </span>
+  );
+}
+
+/** Fila de tabla: hover claro + zebra suave; mes actual resaltado. */
+function economiaTableRowClass(isCurrent = false) {
+  return cn(
+    'group border-b border-border/60 last:border-0 transition-colors',
+    isCurrent ? 'bg-primary/5' : 'odd:bg-muted/15',
+    'hover:bg-muted/45',
+  );
+}
+
+/** Celda sticky (Mes): hereda el fondo/hover de la fila. */
+function economiaStickyCellClass() {
+  return 'sticky left-0 z-10 bg-inherit py-2 pl-4 pr-3';
+}
+
+/** Encabezado clickeable para expandir/contraer columnas en P&L. */
+function PlToggleTh({
+  expanded,
+  onToggle,
+  collapsedLabel,
+  expandedHint,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  collapsedLabel: string;
+  expandedHint: string;
+}) {
+  return (
+    <th className="py-2 pr-3 text-right">
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors',
+          'hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          expanded ? 'text-primary' : 'text-foreground',
+        )}
+        title={expanded ? `Clic para ocultar ${expandedHint}` : `Clic para ver ${expandedHint}`}
+        aria-expanded={expanded}
+      >
+        {expanded ? expandedHint : collapsedLabel}
+        <ChevronDown
+          className={cn('size-3.5 opacity-70 transition-transform', expanded && 'rotate-180')}
+          aria-hidden
+        />
+      </button>
+    </th>
   );
 }
 
@@ -253,7 +332,10 @@ function TinyLineChart({ values, labels }: { values: number[]; labels?: string[]
   );
 }
 
-/** Barras mensuales con etiquetas (sellos / ventas). */
+/** Ancho mínimo por barra para que el eje X no se amontone (scroll horizontal si hace falta). */
+const MONTHLY_BAR_MIN_PX = 36;
+
+/** Barras mensuales con altura real (el % se mide contra un contenedor fijo). */
 function MonthlyBarChart({
   rows,
   valueKey,
@@ -265,28 +347,56 @@ function MonthlyBarChart({
   highlightKey?: string;
   formatValue?: (n: number) => string;
 }) {
-  if (rows.length === 0) return <div className="h-40 text-sm text-muted-foreground">Sin datos</div>;
+  if (rows.length === 0) return <div className="h-32 text-sm text-muted-foreground">Sin datos</div>;
   const max = Math.max(...rows.map((r) => r.value), 1);
   const fmt = formatValue ?? ((n: number) => String(Math.round(n)));
+  const showValueLabels = rows.length <= 14;
+  const labelEvery = rows.length > 18 ? 3 : rows.length > 12 ? 2 : 1;
+
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex h-44 items-end gap-1.5 sm:gap-2">
-        {rows.map((r) => {
-          const h = Math.max((r.value / max) * 100, r.value > 0 ? 4 : 0);
+    <div className="-mx-1 overflow-x-auto px-1">
+      <div
+        className="flex h-36 items-stretch gap-1"
+        style={{ minWidth: Math.max(rows.length * MONTHLY_BAR_MIN_PX, 280) }}
+      >
+        {rows.map((r, i) => {
+          const h = Math.max((r.value / max) * 100, r.value > 0 ? 3 : 0);
           const isHighlight = highlightKey === r.key;
+          const showLabel = isHighlight || i % labelEvery === 0 || i === rows.length - 1;
           return (
-            <div key={r.key} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-              <span className="text-[10px] font-medium text-muted-foreground tabular-nums">{fmt(r.value)}</span>
-              <div
-                className={`w-full max-w-10 rounded-t transition-colors ${
-                  isHighlight ? 'bg-primary' : 'bg-primary/45'
-                }`}
-                style={{ height: `${h}%` }}
-                title={`${r.label}: ${fmt(r.value)}${valueKey ? ` ${valueKey}` : ''}`}
-              />
-              <span className={`truncate text-[10px] ${isHighlight ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
-                {r.label}
-              </span>
+            <div
+              key={r.key}
+              className="flex min-w-0 flex-1 flex-col items-center"
+              title={`${r.label}: ${fmt(r.value)}${valueKey ? ` ${valueKey}` : ''}`}
+            >
+              <div className="flex h-4 w-full shrink-0 items-end justify-center">
+                {showValueLabels || isHighlight ? (
+                  <span className="truncate text-[9px] font-medium tabular-nums text-muted-foreground">
+                    {fmt(r.value)}
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex w-full flex-1 items-end justify-center px-0.5">
+                <div
+                  className={`w-full max-w-9 rounded-t transition-colors ${
+                    isHighlight ? 'bg-primary' : 'bg-primary/50 hover:bg-primary/70'
+                  }`}
+                  style={{ height: `${h}%` }}
+                />
+              </div>
+              <div className="mt-1 flex h-7 w-full shrink-0 items-start justify-center">
+                {showLabel ? (
+                  <span
+                    className={`max-w-full truncate text-center text-[9px] leading-tight ${
+                      isHighlight ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {r.label}
+                  </span>
+                ) : (
+                  <span className="text-[9px] text-muted-foreground/40">·</span>
+                )}
+              </div>
             </div>
           );
         })}
@@ -310,52 +420,76 @@ function StackedMonthlyBars({
   formatValue: (n: number) => string;
 }) {
   if (rows.length === 0 || keys.length === 0) {
-    return <div className="h-48 text-sm text-muted-foreground">Sin datos</div>;
+    return <div className="h-40 text-sm text-muted-foreground">Sin datos</div>;
   }
   const totals = rows.map((r) => keys.reduce((s, k) => s + (r.values[k.key] || 0), 0));
   const max = Math.max(...totals, 1);
+  const showValueLabels = rows.length <= 14;
+  const labelEvery = rows.length > 18 ? 3 : rows.length > 12 ? 2 : 1;
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex h-52 items-end gap-1.5 sm:gap-2">
-        {rows.map((r, idx) => {
-          const total = totals[idx];
-          const h = Math.max((total / max) * 100, total > 0 ? 6 : 0);
-          const isHighlight = highlightKey === r.key;
-          return (
-            <div key={r.key} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-              <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
-                {formatValue(total)}
-              </span>
+      <div className="-mx-1 overflow-x-auto px-1">
+        <div
+          className="flex h-40 items-stretch gap-1"
+          style={{ minWidth: Math.max(rows.length * MONTHLY_BAR_MIN_PX, 280) }}
+        >
+          {rows.map((r, idx) => {
+            const total = totals[idx];
+            const h = Math.max((total / max) * 100, total > 0 ? 4 : 0);
+            const isHighlight = highlightKey === r.key;
+            const showLabel = isHighlight || idx % labelEvery === 0 || idx === rows.length - 1;
+            return (
               <div
-                className={`flex w-full max-w-12 flex-col-reverse overflow-hidden rounded-t ${
-                  isHighlight ? 'ring-2 ring-primary/60' : ''
-                }`}
-                style={{ height: `${h}%` }}
+                key={r.key}
+                className="flex min-w-0 flex-1 flex-col items-center"
                 title={`${r.label}: ${formatValue(total)} (${mode})`}
               >
-                {keys.map((k) => {
-                  const v = r.values[k.key] || 0;
-                  if (v <= 0 || total <= 0) return null;
-                  const pct = (v / total) * 100;
-                  return (
-                    <div
-                      key={k.key}
-                      style={{ height: `${pct}%`, backgroundColor: k.color }}
-                      title={`${k.label}: ${formatValue(v)}`}
-                    />
-                  );
-                })}
+                <div className="flex h-4 w-full shrink-0 items-end justify-center">
+                  {showValueLabels || isHighlight ? (
+                    <span className="truncate text-[9px] font-medium tabular-nums text-muted-foreground">
+                      {formatValue(total)}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex w-full flex-1 items-end justify-center px-0.5">
+                  <div
+                    className={`flex w-full max-w-10 flex-col-reverse overflow-hidden rounded-t ${
+                      isHighlight ? 'ring-2 ring-primary/60' : ''
+                    }`}
+                    style={{ height: `${h}%` }}
+                  >
+                    {keys.map((k) => {
+                      const v = r.values[k.key] || 0;
+                      if (v <= 0 || total <= 0) return null;
+                      const pct = (v / total) * 100;
+                      return (
+                        <div
+                          key={k.key}
+                          style={{ height: `${pct}%`, backgroundColor: k.color }}
+                          title={`${k.label}: ${formatValue(v)}`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="mt-1 flex h-7 w-full shrink-0 items-start justify-center">
+                  {showLabel ? (
+                    <span
+                      className={`max-w-full truncate text-center text-[9px] leading-tight ${
+                        isHighlight ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                      }`}
+                    >
+                      {r.label}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-muted-foreground/40">·</span>
+                  )}
+                </div>
               </div>
-              <span
-                className={`truncate text-[10px] ${
-                  isHighlight ? 'font-semibold text-foreground' : 'text-muted-foreground'
-                }`}
-              >
-                {r.label}
-              </span>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         {keys.map((k) => (
@@ -438,7 +572,15 @@ function PendingPieChart({
 
 export default function EconomiaPage() {
   const { user, loading: authLoading } = useAuth();
-  const { orders: ordersRaw, loading, loadingFullCatalog, fullCatalogLoaded, ensureFullCatalog } = useOrders({
+  const {
+    orders: ordersRaw,
+    loading,
+    loadingFullCatalog,
+    fullCatalogLoaded,
+    ensureFullCatalog,
+    reloadFullCatalog,
+    error: ordersError,
+  } = useOrders({
     useFullCatalog: true,
   });
   const orders = useMemo(() => ordersRaw.map(pedidoEnPesos), [ordersRaw]);
@@ -453,6 +595,8 @@ export default function EconomiaPage() {
 
   const [usdRate, setUsdRate] = useState(1200);
   const [gastosStorageTick, setGastosStorageTick] = useState(0);
+  const [gastosMensualesReady, setGastosMensualesReady] = useState(false);
+  const [gastosMensualesError, setGastosMensualesError] = useState<string | null>(null);
   const [realMovements, setRealMovements] = useState<RealMovement[]>([]);
   const [movementsLoading, setMovementsLoading] = useState(false);
 
@@ -542,13 +686,31 @@ export default function EconomiaPage() {
 
   useEffect(() => {
     if (authLoading || !isAllowed || !user?.id) return;
-    void loadGastosMensualesIntoCache(user.id).catch((e) => {
-      toast({
-        title: 'No se pudieron cargar los gastos mensuales',
-        description: e instanceof Error ? e.message : String(e),
-        variant: 'destructive',
+    let cancelled = false;
+    setGastosMensualesReady(false);
+    setGastosMensualesError(null);
+    void loadGastosMensualesIntoCache(user.id)
+      .then(() => {
+        if (!cancelled) {
+          setGastosStorageTick((t) => t + 1);
+          setGastosMensualesReady(true);
+          setGastosMensualesError(null);
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setGastosMensualesReady(false);
+          setGastosMensualesError(e instanceof Error ? e.message : String(e));
+          toast({
+            title: 'No se pudieron cargar los gastos mensuales',
+            description: e instanceof Error ? e.message : String(e),
+            variant: 'destructive',
+          });
+        }
       });
-    });
+    return () => {
+      cancelled = true;
+    };
   }, [authLoading, isAllowed, user?.id, toast]);
 
   useEffect(() => {
@@ -704,14 +866,7 @@ export default function EconomiaPage() {
       if (byMonth.has(key)) continue;
       const bundle = getBundleForMonth(gastosPorMes, key);
       const resumen = isResumenMensual(bundle);
-      const hasSignal =
-        resumen ||
-        monthHasDetailedFixedCosts(bundle) ||
-        gananciaInversionesExtrasArs(bundle.extras) > 0 ||
-        (Number(bundle.extras.publicidad) || 0) > 0 ||
-        gastosExtrasSinEnvioParaEconomia(bundle.extras) > 0 ||
-        gastosExtrasEnviosManual(bundle.extras) > 0;
-      if (!hasSignal) continue;
+      if (!monthHasEconomiaSignal(bundle)) continue;
 
       const gastosRealesMes = resumen ? Number(bundle.gastos_reales) || 0 : 0;
       const costosFijosMes = resumen ? 0 : getFixedTotalForMonth(bundle, legacyFixed);
@@ -803,6 +958,54 @@ export default function EconomiaPage() {
       },
     );
   }, [monthly]);
+
+  const yearly = useMemo<YearlyRow[]>(() => {
+    const byYear = new Map<string, YearlyRow>();
+    for (const r of monthly) {
+      const year = r.key.slice(0, 4);
+      const row =
+        byYear.get(year) ||
+        ({
+          year,
+          ventasBrutas: 0,
+          gastosOperativos: 0,
+          rentabilidadPesos: 0,
+          compraDolaresArs: 0,
+          inversionEmpresaArs: 0,
+          inversionCypreaArs: 0,
+          gananciaRealArs: 0,
+          transferido: 0,
+          pendiente: 0,
+          sellos: 0,
+          pedidos: 0,
+          unidades: 0,
+          meses: 0,
+        } satisfies YearlyRow);
+      row.ventasBrutas += r.ventasBrutas;
+      row.gastosOperativos += totalGastosOperativos(r);
+      row.rentabilidadPesos += r.rentabilidadPesos;
+      row.compraDolaresArs += r.compraDolaresArs;
+      row.inversionEmpresaArs += r.inversionEmpresaArs;
+      row.inversionCypreaArs += r.inversionCypreaArs;
+      row.transferido += r.transferido;
+      row.pendiente += r.pendiente;
+      row.sellos += r.sellos;
+      row.pedidos += r.pedidos;
+      row.unidades += r.unidades;
+      row.meses += 1;
+      byYear.set(year, row);
+    }
+
+    return Array.from(byYear.values())
+      .map((row) => ({
+        ...row,
+        gananciaRealArs:
+          row.compraDolaresArs + row.inversionEmpresaArs + row.inversionCypreaArs,
+      }))
+      .sort((a, b) => a.year.localeCompare(b.year));
+  }, [monthly]);
+
+  const currentYearKey = currentArgentinaMonthKey().slice(0, 4);
 
   const currentMonthKey = currentArgentinaMonthKey();
   const currentMonth = useMemo(
@@ -966,12 +1169,62 @@ export default function EconomiaPage() {
     [pendingBreakdown],
   );
 
-  if (authLoading || ((loading || loadingFullCatalog) && !fullCatalogLoaded)) {
+  if (authLoading || (!gastosMensualesReady && !gastosMensualesError) || ((loading || loadingFullCatalog) && !fullCatalogLoaded)) {
     return <div className="min-h-screen flex items-center justify-center">Cargando...</div>;
   }
 
   if (!isAllowed) {
     return <Navigate to="/pedidos" replace />;
+  }
+
+  if (gastosMensualesError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          No se pudieron cargar los gastos mensuales: {gastosMensualesError}
+        </p>
+        <button
+          type="button"
+          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+          onClick={() => {
+            if (!user?.id) return;
+            setGastosMensualesError(null);
+            setGastosMensualesReady(false);
+            void loadGastosMensualesIntoCache(user.id)
+              .then(() => {
+                setGastosStorageTick((t) => t + 1);
+                setGastosMensualesReady(true);
+              })
+              .catch((e) => {
+                setGastosMensualesError(e instanceof Error ? e.message : String(e));
+              });
+          }}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
+  // Sin catálogo full, useOrders cae a los últimos 6 meses y el P&L queda truncado.
+  if (!fullCatalogLoaded) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          No se pudo cargar el historial completo de pedidos
+          {ordersError?.message ? `: ${ordersError.message}` : '.'}
+        </p>
+        <button
+          type="button"
+          className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+          onClick={() => {
+            void reloadFullCatalog();
+          }}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
   }
 
   const usdPurchaseArs = usdAmount * usdBuyRate;
@@ -1393,53 +1646,126 @@ export default function EconomiaPage() {
                 <TabsTrigger value="desglose">Por producto</TabsTrigger>
                 <TabsTrigger value="mensual">P&amp;L mensual</TabsTrigger>
                 <TabsTrigger value="mix">Mix</TabsTrigger>
-                <TabsTrigger value="tendencias">Tendencias</TabsTrigger>
+                <TabsTrigger value="tendencias">Por año</TabsTrigger>
               </TabsList>
             </div>
 
             <TabsContent value="ventas">
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="flex flex-col gap-3">
+                {yearly.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {yearly.map((y, i) => {
+                      const prev = i > 0 ? yearly[i - 1] : null;
+                      const deltaReal =
+                        prev && prev.gananciaRealArs !== 0
+                          ? ((y.gananciaRealArs - prev.gananciaRealArs) / Math.abs(prev.gananciaRealArs)) * 100
+                          : null;
+                      const inversionesArs = y.inversionEmpresaArs + y.inversionCypreaArs;
+                      const isCurrent = y.year === currentYearKey;
+                      return (
+                        <div
+                          key={y.year}
+                          className={`rounded-lg border px-4 py-3 ${
+                            isCurrent ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-card'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold">{y.year}</p>
+                            <div className="flex items-center gap-2">
+                              <MomChip value={deltaReal} />
+                              <span className="text-[11px] text-muted-foreground">{y.meses} meses</span>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[11px] text-muted-foreground">Teórica</p>
+                              <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight">
+                                {formatArs(y.rentabilidadPesos)}
+                              </p>
+                              <p className="mt-0.5 text-[10px] text-muted-foreground">ventas − gastos</p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] text-muted-foreground">Ganancia real</p>
+                              <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight">
+                                {formatArs(y.gananciaRealArs)}
+                              </p>
+                              <div className="mt-1.5 space-y-0.5 text-[11px] tabular-nums">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="text-muted-foreground">Dólares</span>
+                                  <span className="font-medium text-foreground">
+                                    {formatCompactArs(y.compraDolaresArs)}
+                                  </span>
+                                </div>
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span className="text-muted-foreground">Inversiones</span>
+                                  <span className="font-medium text-foreground">
+                                    {formatCompactArs(inversionesArs)}
+                                  </span>
+                                </div>
+                                {(y.inversionEmpresaArs > 0 || y.inversionCypreaArs > 0) && (
+                                  <p className="pt-0.5 text-[10px] leading-snug text-muted-foreground">
+                                    {[
+                                      y.inversionEmpresaArs > 0
+                                        ? `Empresa ${formatCompactArs(y.inversionEmpresaArs)}`
+                                        : null,
+                                      y.inversionCypreaArs > 0
+                                        ? `Cyprea ${formatCompactArs(y.inversionCypreaArs)}`
+                                        : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="border-b border-border/50 bg-muted/15 px-4 py-3">
+                      <CardTitle className="text-base">Sellos por mes</CardTitle>
+                      <CardDescription className="text-xs">
+                        Pasá el mouse sobre una barra para el detalle. Si hay muchos meses, scrolleá de lado.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-3">
+                      <MonthlyBarChart
+                        rows={monthly.map((m) => ({ key: m.key, label: m.label, value: m.sellos }))}
+                        valueKey="sellos"
+                        highlightKey={currentMonthKey}
+                      />
+                    </CardContent>
+                  </Card>
+                  <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="border-b border-border/50 bg-muted/15 px-4 py-3">
+                      <CardTitle className="text-base">Ventas brutas por mes</CardTitle>
+                      <CardDescription className="text-xs">
+                        Pedido + envío imputado cuando corresponde.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-3">
+                      <MonthlyBarChart
+                        rows={monthly.map((m) => ({ key: m.key, label: m.label, value: m.ventasBrutas }))}
+                        highlightKey={currentMonthKey}
+                        formatValue={formatCompactArs}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+
                 <Card className="border-border/70 shadow-sm">
                   <CardHeader className="border-b border-border/50 bg-muted/15 px-4 py-3">
-                    <CardTitle className="text-lg">Sellos vendidos por mes</CardTitle>
+                    <CardTitle className="text-base">Detalle mes a mes</CardTitle>
                     <CardDescription className="text-xs">
-                      Cantidad de sellos por mes de venta. Mes actual resaltado.
+                      Volumen, pedidos, ticket y rentabilidad. Acá está el número exacto de cada mes.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <MonthlyBarChart
-                      rows={monthly.map((m) => ({ key: m.key, label: m.label, value: m.sellos }))}
-                      valueKey="sellos"
-                      highlightKey={currentMonthKey}
-                    />
-                  </CardContent>
-                </Card>
-                <Card className="border-border/70 shadow-sm">
-                  <CardHeader className="border-b border-border/50 bg-muted/15 px-4 py-3">
-                    <CardTitle className="text-lg">Ventas brutas por mes</CardTitle>
-                    <CardDescription className="text-xs">Total facturado (pedido + envío imputado cuando corresponde).</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <MonthlyBarChart
-                      rows={monthly.map((m) => ({ key: m.key, label: m.label, value: m.ventasBrutas }))}
-                      highlightKey={currentMonthKey}
-                      formatValue={(n) =>
-                        new Intl.NumberFormat('es-AR', {
-                          notation: 'compact',
-                          maximumFractionDigits: 1,
-                        }).format(n)
-                      }
-                    />
-                  </CardContent>
-                </Card>
-                <Card className="border-border/70 shadow-sm lg:col-span-2">
-                  <CardHeader className="border-b border-border/50 bg-muted/15 px-4 py-3">
-                    <CardTitle className="text-lg">Detalle mes a mes</CardTitle>
-                    <CardDescription className="text-xs">
-                      Volumen, pedidos, ticket y rentabilidad de cada mes.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="overflow-auto p-0">
+                  <CardContent className="max-h-[min(28rem,55vh)] overflow-auto p-0">
                     <table className="w-full min-w-[720px] text-sm">
                       <thead className="sticky top-0 z-10 bg-card">
                         <tr className="border-b text-left text-muted-foreground">
@@ -1463,11 +1789,8 @@ export default function EconomiaPage() {
                           const ticket = r.pedidos > 0 ? r.ventasBrutas / r.pedidos : 0;
                           const isCurrent = r.key === currentMonthKey;
                           return (
-                            <tr
-                              key={r.key}
-                              className={`border-b last:border-0 ${isCurrent ? 'bg-primary/5' : ''}`}
-                            >
-                              <td className="py-2.5 pl-4 pr-3">
+                            <tr key={r.key} className={economiaTableRowClass(isCurrent)}>
+                              <td className={economiaStickyCellClass()}>
                                 <div className="flex items-center gap-2">
                                   <Badge variant={isCurrent ? 'default' : 'outline'}>{r.label}</Badge>
                                   {isCurrent ? (
@@ -1475,14 +1798,18 @@ export default function EconomiaPage() {
                                   ) : null}
                                 </div>
                               </td>
-                              <td className="py-2.5 pr-3 text-right font-semibold tabular-nums">{r.sellos}</td>
-                              <td className="py-2.5 pr-3 text-right tabular-nums">{r.pedidos}</td>
-                              <td className="py-2.5 pr-3 text-right tabular-nums">{r.unidades}</td>
-                              <td className="py-2.5 pr-3 text-right font-medium tabular-nums">{formatArs(r.ventasBrutas)}</td>
-                              <td className="py-2.5 pr-3 text-right tabular-nums">{formatArs(ticket)}</td>
-                              <td className="py-2.5 pr-3 text-right font-medium tabular-nums">{formatArs(r.rentabilidadPesos)}</td>
+                              <td className="py-2 pr-3 text-right font-semibold tabular-nums">{r.sellos}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">{r.pedidos}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">{r.unidades}</td>
+                              <td className="py-2 pr-3 text-right font-medium tabular-nums">
+                                {formatArs(r.ventasBrutas)}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">{formatArs(ticket)}</td>
+                              <td className="py-2 pr-3 text-right font-medium tabular-nums">
+                                {formatArs(r.rentabilidadPesos)}
+                              </td>
                               <td
-                                className={`py-2.5 pr-4 text-right tabular-nums ${
+                                className={`py-2 pr-4 text-right tabular-nums ${
                                   delta == null
                                     ? 'text-muted-foreground'
                                     : delta >= 0
@@ -1497,8 +1824,8 @@ export default function EconomiaPage() {
                         })}
                       </tbody>
                       <tfoot>
-                        <tr className="border-t-2 border-border bg-muted/40 font-semibold">
-                          <td className="py-2 pr-3">Total</td>
+                        <tr className="sticky bottom-0 border-t-2 border-border bg-muted/90 font-semibold backdrop-blur-sm">
+                          <td className="py-2 pl-4 pr-3">Total</td>
                           <td className="py-2 pr-3 text-right tabular-nums">{totals.sellos}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">{totals.pedidos}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">{totals.unidades}</td>
@@ -1507,7 +1834,7 @@ export default function EconomiaPage() {
                             {formatArs(totals.pedidos > 0 ? totals.ventasBrutas / totals.pedidos : 0)}
                           </td>
                           <td className="py-2 pr-3 text-right">{formatArs(totals.rentabilidadPesos)}</td>
-                          <td className="py-2 pr-3 text-right text-muted-foreground">—</td>
+                          <td className="py-2 pr-4 text-right text-muted-foreground">—</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -1694,11 +2021,8 @@ export default function EconomiaPage() {
                                 ? r.totalVentas
                                 : r.totalMargen;
                           return (
-                            <tr
-                              key={r.key}
-                              className={`border-b last:border-0 ${isCurrent ? 'bg-primary/5' : ''}`}
-                            >
-                              <td className="sticky left-0 z-10 bg-background py-2 pr-3">
+                            <tr key={r.key} className={economiaTableRowClass(isCurrent)}>
+                              <td className={economiaStickyCellClass()}>
                                 <Badge variant={isCurrent ? 'default' : 'outline'}>{r.label}</Badge>
                               </td>
                               {productKeysActive.map((key) => {
@@ -1751,96 +2075,106 @@ export default function EconomiaPage() {
 
             <TabsContent value="mensual">
               <Card className="border-border/70 shadow-sm">
-                <CardHeader className="space-y-3 border-b border-border/50 bg-muted/15 px-4 py-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <CardTitle className="text-lg">P&amp;L por mes</CardTitle>
-                      <CardDescription className="text-xs leading-snug">
-                        Ventas, gastos del mes (detalle o resumen) y transferido. Expandí gastos o ganancias para ver el
-                        desglose.
-                      </CardDescription>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={mensualDetalleGastos ? 'default' : 'outline'}
-                        className="h-8 text-xs"
-                        onClick={() => setMensualDetalleGastos((v) => !v)}
-                      >
-                        {mensualDetalleGastos ? 'Ocultar gastos' : 'Desglose gastos'}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={mensualDetalleGanancias ? 'default' : 'outline'}
-                        className="h-8 text-xs"
-                        onClick={() => setMensualDetalleGanancias((v) => !v)}
-                      >
-                        {mensualDetalleGanancias ? 'Ocultar ganancias' : 'Desglose ganancias'}
-                      </Button>
-                    </div>
+                <CardHeader className="space-y-2 border-b border-border/50 bg-muted/15 px-4 py-3">
+                  <div>
+                    <CardTitle className="text-base">P&amp;L por mes</CardTitle>
+                    <CardDescription className="text-xs leading-snug">
+                      Ventas, gastos del mes y transferido. Tocá <span className="font-medium text-foreground">Gastos</span>{' '}
+                      o <span className="font-medium text-foreground">Ganancias</span> en el encabezado para ver el
+                      desglose.
+                    </CardDescription>
                   </div>
                 </CardHeader>
-                <CardContent className="overflow-auto p-0">
-                  <table
-                    className={`w-full text-sm ${mensualDetalleGastos || mensualDetalleGanancias ? 'min-w-[1400px]' : 'min-w-[1000px]'}`}
-                  >
-                    <thead className="sticky top-0 z-20 bg-card">
+                <CardContent className="max-h-[min(32rem,60vh)] overflow-auto p-0">
+                  <table className={`w-full text-sm ${mensualDetalleGastos || mensualDetalleGanancias ? 'min-w-[1400px]' : 'min-w-[960px]'}`}>
+                    <thead className="sticky top-0 z-20 bg-card/95 backdrop-blur-sm">
                       <tr className="border-b text-left text-muted-foreground">
-                        <th className="sticky left-0 z-30 bg-card py-2.5 pl-4 pr-3">Mes</th>
-                        <th className="py-2.5 pr-3 text-right">Sellos</th>
-                        <th className="py-2.5 pr-3 text-right">Pedidos</th>
-                        <th className="py-2.5 pr-3 text-right">Ventas brutas</th>
+                        <th className="sticky left-0 z-30 bg-card/95 py-2 pl-4 pr-3 backdrop-blur-sm">Mes</th>
+                        <th className="py-2 pr-3 text-right">Sellos</th>
+                        <th className="py-2 pr-3 text-right">Pedidos</th>
+                        <th className="py-2 pr-3 text-right">Ventas brutas</th>
                         {mensualDetalleGastos ? (
                           <>
-                            <th className="py-2.5 pr-2 text-right text-xs font-normal">Costos fijos</th>
-                            <th className="py-2.5 pr-2 text-right text-xs font-normal">Costos ventas</th>
-                            <th className="py-2.5 pr-2 text-right text-xs font-normal">Gastos extras</th>
-                            <th className="py-2.5 pr-2 text-right text-xs font-normal">Publicidad</th>
-                            <th className="py-2.5 pr-2 text-right text-xs font-normal">Envíos</th>
+                            <th className="py-2 pr-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setMensualDetalleGastos(false)}
+                                className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-medium text-primary hover:bg-muted"
+                                title="Clic para ocultar desglose de gastos"
+                                aria-expanded
+                              >
+                                Gastos
+                                <ChevronDown className="size-3.5 rotate-180 opacity-70" aria-hidden />
+                              </button>
+                              <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">Costos fijos</span>
+                            </th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal">Costos ventas</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal">Gastos extras</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal">Publicidad</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal">Envíos</th>
                           </>
                         ) : (
-                          <th className="py-2.5 pr-3 text-right font-medium text-foreground">Gastos</th>
+                          <PlToggleTh
+                            expanded={false}
+                            onToggle={() => setMensualDetalleGastos(true)}
+                            collapsedLabel="Gastos"
+                            expandedHint="desglose de gastos"
+                          />
                         )}
-                        <th className="py-2.5 pr-3 text-right">Rentabilidad</th>
-                        <th className="py-2.5 pr-3 text-right">Transferido</th>
+                        <th className="py-2 pr-3 text-right">Rentabilidad</th>
+                        <th className="py-2 pr-3 text-right">Transferido</th>
                         <th
-                          className="py-2.5 pr-3 text-right"
+                          className="py-2 pr-3 text-right"
                           title="Transferido − gasto operativo del mes"
                         >
                           Transf. − gastos
                         </th>
-                        <th className="py-2.5 pr-3 text-right">Pendiente</th>
+                        <th className="py-2 pr-3 text-right">Pendiente</th>
                         {mensualDetalleGanancias ? (
                           <>
-                            <th className="py-2.5 pr-2 text-right text-xs font-normal">Inv. Cyprea</th>
-                            <th className="py-2.5 pr-2 text-right text-xs font-normal">Inv. empresa</th>
-                            <th className="py-2.5 pr-2 text-right text-xs font-normal">Compra USD</th>
-                            <th className="py-2.5 pr-4 text-right text-xs font-normal">Ganancia USD</th>
+                            <th className="py-2 pr-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setMensualDetalleGanancias(false)}
+                                className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-medium text-primary hover:bg-muted"
+                                title="Clic para ocultar desglose de ganancias"
+                                aria-expanded
+                              >
+                                Ganancias
+                                <ChevronDown className="size-3.5 rotate-180 opacity-70" aria-hidden />
+                              </button>
+                              <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">Inv. Cyprea</span>
+                            </th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal">Inv. empresa</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal">Compra USD</th>
+                            <th className="py-2 pr-4 text-right text-xs font-normal">Ganancia USD</th>
                           </>
                         ) : (
-                          <th className="py-2.5 pr-4 text-right font-medium text-foreground">Ganancias</th>
+                          <PlToggleTh
+                            expanded={false}
+                            onToggle={() => setMensualDetalleGanancias(true)}
+                            collapsedLabel="Ganancias"
+                            expandedHint="desglose de ganancias"
+                          />
                         )}
                       </tr>
                     </thead>
                     <tbody>
                       {monthly.map((r) => {
                         const isCurrent = r.key === currentMonthKey;
-                        const rowBg = isCurrent ? 'bg-primary/5' : 'bg-card';
                         return (
-                        <tr key={r.key} className={`border-b last:border-0 ${isCurrent ? 'bg-primary/5' : ''}`}>
-                          <td className={cn('sticky left-0 z-10 py-2.5 pl-4 pr-3', rowBg)}>
+                        <tr key={r.key} className={economiaTableRowClass(isCurrent)}>
+                          <td className={economiaStickyCellClass()}>
                             <Badge variant={isCurrent ? 'default' : 'outline'}>{r.label}</Badge>
                           </td>
-                          <td className="py-2.5 pr-3 text-right font-medium tabular-nums">{r.sellos}</td>
-                          <td className="py-2.5 pr-3 text-right tabular-nums">{r.pedidos}</td>
-                          <td className="py-2.5 pr-3 text-right font-medium tabular-nums">{formatArs(r.ventasBrutas)}</td>
+                          <td className="py-2 pr-3 text-right font-medium tabular-nums">{r.sellos}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{r.pedidos}</td>
+                          <td className="py-2 pr-3 text-right font-medium tabular-nums">{formatArs(r.ventasBrutas)}</td>
                           {mensualDetalleGastos ? (
                             <>
                               {r.fuenteResumen ? (
                                 <td
-                                  className="py-2.5 pr-2 text-right text-muted-foreground"
+                                  className="py-2 pr-2 text-right text-muted-foreground"
                                   colSpan={5}
                                   title="Mes con cierre resumen: un solo gasto real (incluye publicidad)"
                                 >
@@ -1851,16 +2185,16 @@ export default function EconomiaPage() {
                                 </td>
                               ) : (
                                 <>
-                                  <td className="py-2.5 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.costosFijos)}</td>
-                                  <td className="py-2.5 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.costosVentas)}</td>
-                                  <td className="py-2.5 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.gastosExtras)}</td>
-                                  <td className="py-2.5 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.publicidad)}</td>
-                                  <td className="py-2.5 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.enviosManual)}</td>
+                                  <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.costosFijos)}</td>
+                                  <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.costosVentas)}</td>
+                                  <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.gastosExtras)}</td>
+                                  <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.publicidad)}</td>
+                                  <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.enviosManual)}</td>
                                 </>
                               )}
                             </>
                           ) : (
-                            <td className="py-2.5 pr-3 text-right font-medium tabular-nums">
+                            <td className="py-2 pr-3 text-right font-medium tabular-nums">
                               <div className="flex flex-col items-end gap-0.5 leading-tight">
                                 <span>{formatArs(totalGastosOperativos(r))}</span>
                                 {r.fuenteResumen ? (
@@ -1869,19 +2203,19 @@ export default function EconomiaPage() {
                               </div>
                             </td>
                           )}
-                          <td className="py-2.5 pr-3 text-right font-semibold tabular-nums">{formatArs(r.rentabilidadPesos)}</td>
-                          <td className="py-2.5 pr-3 text-right tabular-nums">{formatArs(r.transferido)}</td>
-                          <td className="py-2.5 pr-3 text-right tabular-nums">{formatArs(r.transferidoMenosGastos)}</td>
-                          <td className="py-2.5 pr-3 text-right tabular-nums">{formatArs(r.pendiente)}</td>
+                          <td className="py-2 pr-3 text-right font-semibold tabular-nums">{formatArs(r.rentabilidadPesos)}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{formatArs(r.transferido)}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{formatArs(r.transferidoMenosGastos)}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{formatArs(r.pendiente)}</td>
                           {mensualDetalleGanancias ? (
                             <>
-                              <td className="py-2.5 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.inversionCypreaArs)}</td>
-                              <td className="py-2.5 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.inversionEmpresaArs)}</td>
-                              <td className="py-2.5 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.compraDolaresArs)}</td>
-                              <td className="py-2.5 pr-4 text-right tabular-nums text-muted-foreground">{formatUsd(r.gananciaInversionesUsd)}</td>
+                              <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.inversionCypreaArs)}</td>
+                              <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.inversionEmpresaArs)}</td>
+                              <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.compraDolaresArs)}</td>
+                              <td className="py-2 pr-4 text-right tabular-nums text-muted-foreground">{formatUsd(r.gananciaInversionesUsd)}</td>
                             </>
                           ) : (
-                            <td className="py-2.5 pr-4 text-right">
+                            <td className="py-2 pr-4 text-right">
                               <div className="flex flex-col items-end gap-0.5 leading-tight">
                                 <span className="font-medium tabular-nums">{formatArs(totalGananciasGrupoArs(r))}</span>
                                 <span className="text-[11px] text-muted-foreground">{formatUsd(r.gananciaInversionesUsd)}</span>
@@ -2017,45 +2351,300 @@ export default function EconomiaPage() {
             </TabsContent>
 
             <TabsContent value="tendencias">
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Venta bruta</CardTitle>
-                    <CardDescription>{formatArs(totals.ventasBrutas)} acumulado</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <TinyLineChart
-                      values={monthly.map((m) => m.ventasBrutas)}
-                      labels={monthly.map((m) => m.label)}
-                    />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Rentabilidad USD</CardTitle>
-                    <CardDescription>
-                      {formatUsd(usdRate > 0 ? totals.rentabilidadPesos / usdRate : 0)} referencia acumulada
+              <div className="flex flex-col gap-3">
+                <Card className="border-border/70 shadow-sm">
+                  <CardHeader className="border-b border-border/50 bg-muted/15 px-4 py-3">
+                    <CardTitle className="text-base">Ganancia por año</CardTitle>
+                    <CardDescription className="text-xs">
+                      <strong className="font-medium text-foreground">Teórica</strong> = ventas − gastos.{' '}
+                      <strong className="font-medium text-foreground">Ganancia real</strong> = dólares + inversiones.
+                      Margen, ticket y ritmo mensual dan contexto al total.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <TinyLineChart
-                      values={monthly.map((m) => m.rentabilidadUsd)}
-                      labels={monthly.map((m) => m.label)}
-                    />
+                  <CardContent className="overflow-auto p-0">
+                    <table className="w-full min-w-[1180px] text-sm">
+                      <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
+                        <tr className="border-b text-left text-muted-foreground">
+                          <th className="py-2 pl-4 pr-3">Año</th>
+                          <th className="py-2 pr-3 text-right">Sellos</th>
+                          <th className="py-2 pr-3 text-right">Ticket</th>
+                          <th className="py-2 pr-3 text-right">Ventas</th>
+                          <th
+                            className="py-2 pr-3 text-right"
+                            title="Teórica ÷ ventas"
+                          >
+                            Margen
+                          </th>
+                          <th className="py-2 pr-3 text-right">Teórica</th>
+                          <th className="py-2 pr-2 text-right text-xs font-normal">Compra USD</th>
+                          <th className="py-2 pr-2 text-right text-xs font-normal">Inversiones</th>
+                          <th className="py-2 pr-3 text-right font-medium text-foreground">Ganancia real</th>
+                          <th
+                            className="py-2 pr-3 text-right"
+                            title="Ganancia real ÷ meses del año"
+                          >
+                            Real / mes
+                          </th>
+                          <th
+                            className="py-2 pr-3 text-right"
+                            title="Ganancia real ÷ ventas"
+                          >
+                            Real / ventas
+                          </th>
+                          <th className="py-2 pr-4 text-right">vs año ant.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {yearly.map((y, i) => {
+                          const prev = i > 0 ? yearly[i - 1] : null;
+                          const deltaReal =
+                            prev && prev.gananciaRealArs !== 0
+                              ? ((y.gananciaRealArs - prev.gananciaRealArs) / Math.abs(prev.gananciaRealArs)) * 100
+                              : null;
+                          const deltaVentas =
+                            prev && prev.ventasBrutas > 0
+                              ? ((y.ventasBrutas - prev.ventasBrutas) / prev.ventasBrutas) * 100
+                              : null;
+                          const ticket = y.pedidos > 0 ? y.ventasBrutas / y.pedidos : 0;
+                          const margen =
+                            y.ventasBrutas > 0 ? (y.rentabilidadPesos / y.ventasBrutas) * 100 : null;
+                          const realSobreVentas =
+                            y.ventasBrutas > 0 ? (y.gananciaRealArs / y.ventasBrutas) * 100 : null;
+                          const realPorMes = y.meses > 0 ? y.gananciaRealArs / y.meses : 0;
+                          const inversiones = y.inversionEmpresaArs + y.inversionCypreaArs;
+                          const isCurrent = y.year === currentYearKey;
+                          return (
+                            <tr key={y.year} className={economiaTableRowClass(isCurrent)}>
+                              <td className={economiaStickyCellClass()}>
+                                <div className="flex flex-col gap-0.5">
+                                  <Badge variant={isCurrent ? 'default' : 'outline'} className="w-fit">
+                                    {y.year}
+                                  </Badge>
+                                  <span className="text-[10px] text-muted-foreground">{y.meses} meses</span>
+                                </div>
+                              </td>
+                              <td className="py-2 pr-3 text-right font-medium tabular-nums">{y.sellos}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">
+                                {ticket > 0 ? formatArs(ticket) : '—'}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                <div className="flex flex-col items-end gap-0.5 leading-tight">
+                                  <span className="font-medium">{formatArs(y.ventasBrutas)}</span>
+                                  {deltaVentas != null ? (
+                                    <span
+                                      className={`text-[10px] ${
+                                        deltaVentas >= 0 ? 'text-emerald-600' : 'text-red-600'
+                                      }`}
+                                    >
+                                      {formatPct(deltaVentas)} vs ant.
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">
+                                {margen == null ? '—' : `${margen.toFixed(0)}%`}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums">{formatArs(y.rentabilidadPesos)}</td>
+                              <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">
+                                {y.compraDolaresArs > 0 ? formatArs(y.compraDolaresArs) : '—'}
+                              </td>
+                              <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">
+                                {inversiones > 0 ? (
+                                  <div className="flex flex-col items-end gap-0.5 leading-tight">
+                                    <span>{formatArs(inversiones)}</span>
+                                    <span className="text-[10px] font-normal">
+                                      {[
+                                        y.inversionEmpresaArs > 0
+                                          ? `Emp. ${formatCompactArs(y.inversionEmpresaArs)}`
+                                          : null,
+                                        y.inversionCypreaArs > 0
+                                          ? `Cyp. ${formatCompactArs(y.inversionCypreaArs)}`
+                                          : null,
+                                      ]
+                                        .filter(Boolean)
+                                        .join(' · ')}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
+                              <td className="py-2 pr-3 text-right font-semibold tabular-nums">
+                                {formatArs(y.gananciaRealArs)}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">
+                                {formatArs(realPorMes)}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular-nums text-muted-foreground">
+                                {realSobreVentas == null ? '—' : `${realSobreVentas.toFixed(0)}%`}
+                              </td>
+                              <td
+                                className={`py-2 pr-4 text-right tabular-nums ${
+                                  deltaReal == null
+                                    ? 'text-muted-foreground'
+                                    : deltaReal >= 0
+                                      ? 'text-emerald-600'
+                                      : 'text-red-600'
+                                }`}
+                              >
+                                {formatPct(deltaReal)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        {(() => {
+                          const invTotal = totals.inversionEmpresaArs + totals.inversionCypreaArs;
+                          const realTotal =
+                            totals.compraDolaresArs + totals.inversionEmpresaArs + totals.inversionCypreaArs;
+                          const margenTotal =
+                            totals.ventasBrutas > 0
+                              ? (totals.rentabilidadPesos / totals.ventasBrutas) * 100
+                              : null;
+                          const realPct =
+                            totals.ventasBrutas > 0 ? (realTotal / totals.ventasBrutas) * 100 : null;
+                          return (
+                            <tr className="border-t-2 border-border bg-muted/40 font-semibold">
+                              <td className="py-2 pl-4 pr-3">Total</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">{totals.sellos}</td>
+                              <td className="py-2 pr-3 text-right">
+                                {formatArs(totals.pedidos > 0 ? totals.ventasBrutas / totals.pedidos : 0)}
+                              </td>
+                              <td className="py-2 pr-3 text-right">{formatArs(totals.ventasBrutas)}</td>
+                              <td className="py-2 pr-3 text-right text-muted-foreground">
+                                {margenTotal == null ? '—' : `${margenTotal.toFixed(0)}%`}
+                              </td>
+                              <td className="py-2 pr-3 text-right">{formatArs(totals.rentabilidadPesos)}</td>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">
+                                {formatArs(totals.compraDolaresArs)}
+                              </td>
+                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(invTotal)}</td>
+                              <td className="py-2 pr-3 text-right">{formatArs(realTotal)}</td>
+                              <td className="py-2 pr-3 text-right text-muted-foreground">—</td>
+                              <td className="py-2 pr-3 text-right text-muted-foreground">
+                                {realPct == null ? '—' : `${realPct.toFixed(0)}%`}
+                              </td>
+                              <td className="py-2 pr-4 text-right text-muted-foreground">—</td>
+                            </tr>
+                          );
+                        })()}
+                      </tfoot>
+                    </table>
                   </CardContent>
+                  <p className="border-t border-border/50 px-4 py-2 text-[11px] text-muted-foreground">
+                    Real / mes = ganancia real ÷ meses con datos (útil si el año está incompleto). Real / ventas = qué
+                    % de la facturación se pasó a dólares o inversiones.
+                  </p>
                 </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Sellos vendidos</CardTitle>
-                    <CardDescription>{totals.sellos} sellos · {totals.unidades} unidades</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <TinyLineChart
-                      values={monthly.map((m) => m.sellos)}
-                      labels={monthly.map((m) => m.label)}
-                    />
-                  </CardContent>
-                </Card>
+
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                  {yearly.map((y) => {
+                    const inversiones = y.inversionEmpresaArs + y.inversionCypreaArs;
+                    const usdShare =
+                      y.gananciaRealArs > 0 ? (y.compraDolaresArs / y.gananciaRealArs) * 100 : 0;
+                    const invShare = y.gananciaRealArs > 0 ? (inversiones / y.gananciaRealArs) * 100 : 0;
+                    const realVsTeorica =
+                      y.rentabilidadPesos !== 0
+                        ? (y.gananciaRealArs / Math.abs(y.rentabilidadPesos)) * 100
+                        : null;
+                    const isCurrent = y.year === currentYearKey;
+                    return (
+                      <div
+                        key={`mix-${y.year}`}
+                        className={`rounded-lg border px-4 py-3 ${
+                          isCurrent ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-card'
+                        }`}
+                      >
+                        <p className="text-sm font-semibold">{y.year} · mix de la real</p>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                          <div className="flex h-full w-full">
+                            <div
+                              className="h-full bg-sky-500/80"
+                              style={{ width: `${usdShare}%` }}
+                              title={`Dólares ${usdShare.toFixed(0)}%`}
+                            />
+                            <div
+                              className="h-full bg-amber-500/80"
+                              style={{ width: `${invShare}%` }}
+                              title={`Inversiones ${invShare.toFixed(0)}%`}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground">
+                          <span>
+                            <span className="mr-1 inline-block size-1.5 rounded-full bg-sky-500/80" />
+                            Dólares {usdShare.toFixed(0)}%
+                          </span>
+                          <span>
+                            <span className="mr-1 inline-block size-1.5 rounded-full bg-amber-500/80" />
+                            Inversiones {invShare.toFixed(0)}%
+                          </span>
+                        </div>
+                        <p className="mt-2 text-[11px] text-muted-foreground">
+                          Real vs teórica:{' '}
+                          <span className="font-medium tabular-nums text-foreground">
+                            {realVsTeorica == null ? '—' : `${realVsTeorica.toFixed(0)}%`}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {' '}
+                            (cuánto de la teórica se materializó en USD/inversiones)
+                          </span>
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                  <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="px-4 py-3">
+                      <CardTitle className="text-sm">Tendencia · ventas</CardTitle>
+                      <CardDescription className="text-xs">{formatArs(totals.ventasBrutas)} acumulado</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <TinyLineChart
+                        values={monthly.map((m) => m.ventasBrutas)}
+                        labels={monthly.map((m) => m.label)}
+                      />
+                    </CardContent>
+                  </Card>
+                  <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="px-4 py-3">
+                      <CardTitle className="text-sm">Tendencia · teórica</CardTitle>
+                      <CardDescription className="text-xs">
+                        {formatArs(totals.rentabilidadPesos)} acumulado
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <TinyLineChart
+                        values={monthly.map((m) => m.rentabilidadPesos)}
+                        labels={monthly.map((m) => m.label)}
+                      />
+                    </CardContent>
+                  </Card>
+                  <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="px-4 py-3">
+                      <CardTitle className="text-sm">Tendencia · ganancia real</CardTitle>
+                      <CardDescription className="text-xs">
+                        {formatArs(
+                          totals.compraDolaresArs +
+                            totals.inversionEmpresaArs +
+                            totals.inversionCypreaArs,
+                        )}{' '}
+                        acumulado
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <TinyLineChart
+                        values={monthly.map(
+                          (m) => m.compraDolaresArs + m.inversionEmpresaArs + m.inversionCypreaArs,
+                        )}
+                        labels={monthly.map((m) => m.label)}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
             </TabsContent>
           </Tabs>

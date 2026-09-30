@@ -449,6 +449,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 24,
+    date: '2026-09-30',
+    title: 'Novedades',
+    version: '1.42',
+    slides: [
+      {
+        heading: 'Ganancia por año en Economía',
+        body: 'En Volumen y Por año ves la teórica (ventas − gastos) y la ganancia real (dólares + inversiones), lado a lado por año, sin restarlas.',
+        icon: WalletCards,
+      },
+      {
+        heading: 'P&L más fácil de leer',
+        body: 'Las filas se resaltan al pasar el cursor. El desglose de gastos o ganancias se abre tocando esas columnas en el encabezado.',
+        icon: Layers,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

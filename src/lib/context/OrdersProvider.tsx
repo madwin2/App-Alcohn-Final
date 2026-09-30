@@ -118,6 +118,8 @@ interface OrdersActionsContextValue {
     includeOlderOpen?: boolean;
   }) => Promise<void>;
   ensureFullCatalog: () => Promise<void>;
+  /** Invalida cache y vuelve a pedir el catálogo completo (Economía). */
+  reloadFullCatalog: () => Promise<void>;
   createOrder: (formData: NewOrderFormData) => Promise<Order>;
   updateOrder: (orderId: string, updates: Partial<Order>) => Promise<Order>;
   deleteOrder: (orderId: string) => Promise<void>;
@@ -144,7 +146,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
 
   const fullCatalogLoadedRef = useRef(false);
-  const fetchGenerationRef = useRef(0);
+  /** Generaciones separadas: un refresh operativo no debe descartar el catálogo full (Economía). */
+  const operationalFetchGenRef = useRef(0);
+  const fullFetchGenRef = useRef(0);
   const ensureFullInFlightRef = useRef<Promise<void> | null>(null);
   const operationalOrdersRef = useRef<Order[]>([]);
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,25 +200,26 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }) => {
       const silent = options?.silent ?? false;
       const scope = options?.scope ?? 'operational';
-      const gen = ++fetchGenerationRef.current;
+      const genRef = scope === 'full' ? fullFetchGenRef : operationalFetchGenRef;
+      const gen = ++genRef.current;
 
       try {
         if (!silent && scope === 'operational') setLoading(true);
         if (!silent && scope === 'full') setLoadingFullCatalog(true);
-        setError(null);
+        if (scope === 'full') setError(null);
 
         const data = await ordersService.getOrders({
           scope,
           recentOnly: scope === 'operational' && !options?.includeOlderOpen,
         });
-        if (gen !== fetchGenerationRef.current) return;
+        if (gen !== genRef.current) return;
         applyOrdersState(scope, data);
       } catch (err) {
-        if (gen !== fetchGenerationRef.current) return;
+        if (gen !== genRef.current) return;
         setError(err instanceof Error ? err : new Error('Error al cargar órdenes'));
         console.error('Error fetching orders:', err);
       } finally {
-        if (gen === fetchGenerationRef.current) {
+        if (gen === genRef.current) {
           if (!silent && scope === 'operational') setLoading(false);
           if (!silent && scope === 'full') setLoadingFullCatalog(false);
         }
@@ -290,6 +295,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
     const run = async () => {
       const cached = readEconomiaOrdersCache();
+      // Preview desde sessionStorage; el refetch de red siempre corre (generación full
+      // ya no la pisan los refresh operativos).
       if (cached?.length) {
         startTransition(() => {
           setFullOrders(cached);
@@ -304,6 +311,15 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       ensureFullInFlightRef.current = null;
     });
     return ensureFullInFlightRef.current;
+  }, [fetchOrders]);
+
+  const reloadFullCatalog = useCallback(async () => {
+    clearEconomiaOrdersCache();
+    fullCatalogLoadedRef.current = false;
+    ensureFullInFlightRef.current = null;
+    setFullOrders(null);
+    setFullCatalogLoaded(false);
+    await fetchOrders({ scope: 'full', silent: false });
   }, [fetchOrders]);
 
   useEffect(() => {
@@ -474,6 +490,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     (): OrdersActionsContextValue => ({
       fetchOrders,
       ensureFullCatalog,
+      reloadFullCatalog,
       createOrder,
       updateOrder,
       deleteOrder,
@@ -483,6 +500,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     [
       fetchOrders,
       ensureFullCatalog,
+      reloadFullCatalog,
       createOrder,
       updateOrder,
       deleteOrder,

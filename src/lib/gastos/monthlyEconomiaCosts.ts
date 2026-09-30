@@ -224,9 +224,23 @@ export function monthHasDetailedFixedCosts(bundle: MonthCostsBundle | undefined)
   );
 }
 
+/** Señal económica suficiente para mostrar el mes en P&L / protegerlo en merge. */
+export function monthHasEconomiaSignal(bundle: MonthCostsBundle | undefined): boolean {
+  if (!bundle) return false;
+  if (isResumenMensual(bundle)) return true;
+  if (monthHasDetailedFixedCosts(bundle)) return true;
+  if (gananciaInversionesExtrasArs(bundle.extras) > 0) return true;
+  if ((Number(bundle.extras.publicidad) || 0) > 0) return true;
+  if (gastosExtrasSinEnvioParaEconomia(bundle.extras) > 0) return true;
+  if (gastosExtrasEnviosManual(bundle.extras) > 0) return true;
+  if ((Number(bundle.extras.inversion_cyprea) || 0) > 0) return true;
+  return false;
+}
+
 /**
  * Fusiona local sobre remoto sin borrar meses solo-remotos ni pisar un `resumen`
- * histórico con un mes local vacío (p. ej. pestaña Gastos abierta con estado viejo).
+ * histórico / mes con carga fina con un mes local vacío (p. ej. pestaña Gastos
+ * abierta con estado viejo o race de autosave).
  */
 export function mergeGastosMonthsForPersist(
   remote: Record<string, MonthCostsBundle>,
@@ -235,6 +249,9 @@ export function mergeGastosMonthsForPersist(
   const out: Record<string, MonthCostsBundle> = { ...remote };
   for (const [key, loc] of Object.entries(local)) {
     const rem = remote[key];
+    if (rem && monthHasEconomiaSignal(rem) && !monthHasEconomiaSignal(loc)) {
+      continue;
+    }
     if (
       rem &&
       isResumenMensual(rem) &&
@@ -568,7 +585,8 @@ export function getBundleForMonth(
 
 /**
  * Si el mes es resumen y trae facturación/unidades del Excel, las aplica al row
- * (cierre contable; sirve cuando no hay pedidos en el catálogo o el detalle está incompleto).
+ * (cierre contable; sirve cuando el catálogo de pedidos está incompleto).
+ * `ventas_resumen` reemplaza ventas/transferido; las unidades del Excel solo si vienen cargadas.
  */
 export function applyResumenVentasOverride(
   row: {
@@ -593,6 +611,7 @@ export function applyResumenVentasOverride(
   if (ventas <= 0 && unidades <= 0) return;
 
   if (ventas > 0) {
+    // Cierre Excel manda sobre la suma de pedidos (puede faltar carga en el catálogo).
     row.ventasBrutas = ventas;
     row.transferido = ventas;
     row.pendiente = 0;

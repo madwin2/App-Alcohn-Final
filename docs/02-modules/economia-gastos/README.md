@@ -12,7 +12,7 @@
 - **Pendiente de cobro** desglosado por estado de venta: Deudor, Foto enviada, Señado.
 - **Cajas** (saldo manual): efectivo, Mercado Pago, dos cuentas Santander (a nombre de dos personas), BBVA; cotización USD de referencia → `economia_settings` (RLS **por usuario**).
 - **Movimientos reales**: compra de USD (ahorro), inversión en la empresa, inversión "Cyprea" → `economia_movimientos_reales` (RLS por creador). Cyprea = marca paralela de Alcohn de sellos de lacre (Q-ECO-001). Las cajas se cargan a mano y hoy están desactualizadas (Q-ECO-002).
-- Pestañas: **Volumen**, **Por producto**, **P&L mensual** (gasto operativo según fuente del mes), **Mix**, **Tendencias**.
+- Pestañas: **Volumen** (resumen anual + barras + tabla), **Por producto**, **P&L mensual** (gasto operativo según fuente del mes), **Mix**, **Por año** (ganancia / rentabilidad anual + tendencias).
 - Costos y márgenes por ítem vienen de los triggers `calc_sello_fabrication_cost` / `refresh_orden_fabrication_totals`.
 
 ### Fuente del mes en Gastos (`MonthCostsBundle`)

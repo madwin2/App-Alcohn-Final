@@ -56,14 +56,15 @@ const EXCEL_ROWS = [
   { month: '2024-11', facturacion: 8_198_500, unidades: 148, gastosR: 6_888_000, publicidad: 470_000, dolaresArs: 1_465_000, inversion: 339_000, totalUsd: 600, withVentas: true },
   { month: '2024-12', facturacion: 11_256_200, unidades: 178, gastosR: 8_000_000, publicidad: 800_000, dolaresArs: 2_176_500, inversion: 90_000, totalUsd: 200, withVentas: true },
   { month: '2025-01', facturacion: 12_827_500, unidades: 207, gastosR: 7_500_000, publicidad: 1_050_000, dolaresArs: 1_419_000, inversion: 163_000, totalUsd: 300, withVentas: true },
-  // Feb-25…Ago-25: solo gastos/ganancias; las ventas siguen saliendo de pedidos (ya cuadra).
+  // Feb-25…Jul-25: solo gastos/ganancias; las ventas salen de pedidos.
   { month: '2025-02', facturacion: null, unidades: null, gastosR: 8_000_000, publicidad: 1_200_000, dolaresArs: 2_410_000, inversion: 90_000, totalUsd: 1100, withVentas: false },
   { month: '2025-03', facturacion: null, unidades: null, gastosR: 9_000_000, publicidad: 2_000_000, dolaresArs: 3_470_000, inversion: 90_000, totalUsd: 1960, withVentas: false },
   { month: '2025-04', facturacion: null, unidades: null, gastosR: 9_000_000, publicidad: 2_000_000, dolaresArs: 1_965_000, inversion: 90_000, totalUsd: 1390, withVentas: false },
   { month: '2025-05', facturacion: null, unidades: null, gastosR: 10_200_000, publicidad: 2_000_000, dolaresArs: 3_800_000, inversion: 90_000, totalUsd: 2000, withVentas: false },
   { month: '2025-06', facturacion: null, unidades: null, gastosR: 10_800_000, publicidad: 1_650_000, dolaresArs: 2_380_000, inversion: 90_000, totalUsd: 2800, withVentas: false },
   { month: '2025-07', facturacion: null, unidades: null, gastosR: 10_300_000, publicidad: 2_085_000, dolaresArs: 1_950_000, inversion: 3_290_000, totalUsd: 1500, withVentas: false },
-  { month: '2025-08', facturacion: null, unidades: null, gastosR: 10_400_000, publicidad: 2_130_000, dolaresArs: 4_000_000, inversion: 2_860_000, totalUsd: 3000, withVentas: false },
+  // Ago-25: pedidos incompletos en catálogo → forzar facturación del Excel.
+  { month: '2025-08', facturacion: 15_800_000, unidades: null, gastosR: 10_400_000, publicidad: 2_130_000, dolaresArs: 4_000_000, inversion: 2_860_000, totalUsd: 3000, withVentas: true },
 ];
 
 /** Meses que forzamos a resumen aunque tengan sueldos/detalle (cierre Excel manda). */

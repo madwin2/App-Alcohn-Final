@@ -248,14 +248,13 @@ export default function GastosPage() {
       try {
         const data = await loadGastosMensualesIntoCache(user.id);
         if (cancelled) return;
+        skipNextPersistRef.current = true;
         setMonthlyByMonth(data.months);
         setLegacyFixedScalar(data.legacyFixedScalar);
       } catch (e: unknown) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
-        hydrateMonthlyCostsRuntime({}, 0);
-        setMonthlyByMonth({});
-        setLegacyFixedScalar(0);
+        // No vaciar la caché en memoria: Economía puede estar usándola.
         toast({
           title: 'No se pudieron cargar los gastos mensuales',
           description: msg,

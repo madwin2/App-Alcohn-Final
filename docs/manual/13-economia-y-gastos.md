@@ -38,11 +38,11 @@ Aparecen en **Movimientos cargados**; **Quitar** para borrar uno.
 
 | Pestaña | Qué muestra |
 |---|---|
-| **Volumen** | **Sellos vendidos por mes**, **Ventas brutas por mes** y el **Detalle mes a mes** (sellos, pedidos, unidades, ventas, ticket promedio, rentabilidad y comparación con el mes anterior) |
+| **Volumen** | Cards con **teórica** y **ganancia real** por año (desglose USD / inversiones), gráficos y tabla mes a mes |
 | **Por producto** | Ventas por producto: sellos chicos, medianos, grandes y XL (misma clasificación que Precios), 3 mm, lacre, alimento, abecedarios, soldadores y accesorios. Tabla **mes × producto** |
-| **P&L mensual** | **Registro por mes**: ventas, gastos del mes (detalle o resumen) y transferido menos gastos. Botones para desglosar gastos o ganancias |
+| **P&L mensual** | **Registro por mes**: ventas, gastos y transferido. Tocá **Gastos** o **Ganancias** en el encabezado de la tabla para ver el desglose (y otra vez para contraer) |
 | **Mix** | Qué proporción de cada tipo de ítem se vende |
-| **Tendencias** | Ticket promedio, unidades por pedido, pedidos, venta bruta y rentabilidad en USD a lo largo del tiempo |
+| **Por año** | Análisis anual: sellos, ticket, margen, teórica, dólares/inversiones, ganancia real, ritmo mensual, % sobre ventas, mix dólares vs inversiones y tendencias |
 
 ## Gastos
 
