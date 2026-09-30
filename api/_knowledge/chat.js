@@ -1,11 +1,11 @@
 /**
  * Chat documental del Asistente Alcohn.
  * Solo usa fragmentos del catálogo; valida citas contra lo recuperado.
+ * Proveedor: Gemini (GEMINI_API_KEY), con fallback a OpenAI si no hay Gemini.
  */
 
 import { searchKnowledge } from './search.js';
 
-const CHAT_URL = 'https://api.openai.com/v1/chat/completions';
 const MAX_QUESTION = 800;
 const MAX_HISTORY_TURNS = 8;
 const MAX_HISTORY_CHARS = 4000;
@@ -46,13 +46,123 @@ function buildSystemPrompt() {
 }
 
 /**
+ * @param {{ model: string, system: string, history: { role: string, content: string }[], question: string }} params
+ * @param {string} apiKey
+ * @param {AbortSignal} signal
+ */
+async function callGemini(params, apiKey, signal) {
+  const model = params.model;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+
+  /** @type {{ role: string, parts: { text: string }[] }[]} */
+  const contents = [];
+  for (const turn of params.history) {
+    const role = turn.role === 'assistant' ? 'model' : 'user';
+    const last = contents[contents.length - 1];
+    if (last && last.role === role) {
+      last.parts[0].text += `\n\n${turn.content}`;
+    } else {
+      contents.push({ role, parts: [{ text: turn.content }] });
+    }
+  }
+  const last = contents[contents.length - 1];
+  if (last && last.role === 'user') {
+    last.parts[0].text += `\n\n${params.question}`;
+  } else {
+    contents.push({ role: 'user', parts: [{ text: params.question }] });
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: params.system }] },
+      contents,
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 900,
+      },
+    }),
+    signal,
+  });
+
+  const raw = await response.text();
+  let json = null;
+  try {
+    json = raw ? JSON.parse(raw) : null;
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    return { ok: false, provider: 'gemini', status: response.status, json, raw };
+  }
+
+  const parts = json?.candidates?.[0]?.content?.parts;
+  const text = Array.isArray(parts)
+    ? parts
+        .map((p) => (typeof p?.text === 'string' ? p.text : ''))
+        .join('')
+        .trim()
+    : '';
+
+  return { ok: true, provider: 'gemini', model, text, json };
+}
+
+/**
+ * @param {{ model: string, system: string, history: { role: string, content: string }[], question: string }} params
+ * @param {string} apiKey
+ * @param {AbortSignal} signal
+ */
+async function callOpenAI(params, apiKey, signal) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: params.model,
+      temperature: 0.2,
+      max_tokens: 900,
+      messages: [
+        { role: 'system', content: params.system },
+        ...params.history.map((t) => ({ role: t.role, content: t.content })),
+        { role: 'user', content: params.question },
+      ],
+    }),
+    signal,
+  });
+
+  const raw = await response.text();
+  let json = null;
+  try {
+    json = raw ? JSON.parse(raw) : null;
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    return { ok: false, provider: 'openai', status: response.status, json, raw };
+  }
+
+  const text = String(json?.choices?.[0]?.message?.content || '').trim();
+  return { ok: true, provider: 'openai', model: params.model, text, json };
+}
+
+/**
  * @param {object} bundle
  * @param {{ question: string, history?: { role: string, content: string }[], openArticleId?: string | null }} input
  * @param {{ userId: string }} ctx
  */
 export async function runKnowledgeChat(bundle, input, ctx) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
+  const openaiKey = (process.env.OPENAI_API_KEY || '').trim();
+
+  if (!geminiKey && !openaiKey) {
     return {
       ok: false,
       status: 503,
@@ -137,37 +247,28 @@ export async function runKnowledgeChat(bundle, input, ctx) {
     )
     .join('\n\n');
 
-  const model = (process.env.OPENAI_KNOWLEDGE_MODEL || process.env.OPENAI_MOCKUP_NAME_MODEL || 'gpt-4o-mini').trim();
-
-  const messages = [
-    { role: 'system', content: buildSystemPrompt() },
-    {
-      role: 'system',
-      content: `FRAGMENTOS AUTORIZADOS (versión ${bundle.version}):\n\n${fragmentBlock}`,
-    },
-    ...safeHistory,
-    { role: 'user', content: question },
-  ];
+  const system = `${buildSystemPrompt()}\n\nFRAGMENTOS AUTORIZADOS (versión ${bundle.version}):\n\n${fragmentBlock}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  let response;
+  let llmResult;
   try {
-    response = await fetch(CHAT_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        max_tokens: 900,
-        messages,
-      }),
-      signal: controller.signal,
-    });
+    if (geminiKey) {
+      const model = (process.env.GEMINI_KNOWLEDGE_MODEL || 'gemini-2.0-flash').trim();
+      llmResult = await callGemini(
+        { model, system, history: safeHistory, question },
+        geminiKey,
+        controller.signal,
+      );
+    } else {
+      const model = (process.env.OPENAI_KNOWLEDGE_MODEL || process.env.OPENAI_MOCKUP_NAME_MODEL || 'gpt-4o-mini').trim();
+      llmResult = await callOpenAI(
+        { model, system, history: safeHistory, question },
+        openaiKey,
+        controller.signal,
+      );
+    }
   } catch (error) {
     clearTimeout(timer);
     const aborted = error?.name === 'AbortError';
@@ -183,15 +284,7 @@ export async function runKnowledgeChat(bundle, input, ctx) {
     clearTimeout(timer);
   }
 
-  const raw = await response.text();
-  let json = null;
-  try {
-    json = raw ? JSON.parse(raw) : null;
-  } catch {
-    json = null;
-  }
-
-  if (!response.ok) {
+  if (!llmResult.ok) {
     return {
       ok: false,
       status: 502,
@@ -200,7 +293,7 @@ export async function runKnowledgeChat(bundle, input, ctx) {
     };
   }
 
-  const content = String(json?.choices?.[0]?.message?.content || '').trim();
+  const content = llmResult.text;
   if (!content) {
     return {
       ok: false,
@@ -226,11 +319,9 @@ export async function runKnowledgeChat(bundle, input, ctx) {
     }
   }
 
-  // Si el modelo afirmó algo operativo sin citas válidas y la pregunta parece operativa, degradar
   if (citedIds.length === 0) {
     const looksOperational = /(cómo|como|dónde|donde|qué significa|que significa|paso|botón|estado)/i.test(question);
     if (looksOperational && !/no (encontr|hay|está publicada|tengo)/i.test(answer)) {
-      // Permitir respuesta de "no hay info" sin fuentes; si parece instructiva sin fuentes, acotar
       if (answer.length > 40 && !/no (encontr|publicado|documentad)/i.test(answer)) {
         answer =
           'No pude respaldar una respuesta operativa con las fuentes publicadas disponibles. Revisá el manual o reformulá la pregunta.';
@@ -257,6 +348,7 @@ export async function runKnowledgeChat(bundle, input, ctx) {
     sources,
     contentVersion: bundle.version,
     contentHash: bundle.contentHash,
-    model,
+    model: llmResult.model,
+    provider: llmResult.provider,
   };
 }

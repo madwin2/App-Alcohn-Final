@@ -45,7 +45,7 @@ Inventario explícito en [`knowledge/catalog.json`](../../../knowledge/catalog.j
 | `catalog` | Metadatos de artículos |
 | `article` | Markdown + relacionados |
 | `search` | Búsqueda textual (sin IA) |
-| `chat` | Asistente (requiere `OPENAI_API_KEY`) |
+| `chat` | Asistente (requiere `GEMINI_API_KEY` o, en fallback, `OPENAI_API_KEY`) |
 
 Auth: verifica JWT en Supabase Auth, exige `solicitudes_registro.estado = APROBADO`, rechaza `fbtest@alcohn.app`.
 
@@ -55,10 +55,12 @@ Auth: verifica JWT en Supabase Auth, exige `solicitudes_registro.estado = APROBA
 |---|---|
 | `SUPABASE_URL` o `VITE_SUPABASE_URL` | Verificar sesión |
 | `SUPABASE_ANON_KEY` o `VITE_SUPABASE_ANON_KEY` | Cliente auth/REST con el JWT del usuario |
-| `OPENAI_API_KEY` | Solo chat |
-| `OPENAI_KNOWLEDGE_MODEL` | Modelo del chat (default `gpt-4o-mini` / `OPENAI_MOCKUP_NAME_MODEL`) |
+| `GEMINI_API_KEY` | Chat del asistente (preferido) |
+| `GEMINI_KNOWLEDGE_MODEL` | Modelo Gemini (default `gemini-2.0-flash`) |
+| `OPENAI_API_KEY` | Fallback del chat si no hay Gemini |
+| `OPENAI_KNOWLEDGE_MODEL` | Modelo OpenAI de fallback (default `gpt-4o-mini`) |
 
-Sin `OPENAI_API_KEY`, manual y búsqueda siguen; el chat muestra indisponibilidad.
+Sin `GEMINI_API_KEY` ni `OPENAI_API_KEY`, manual y búsqueda siguen; el chat muestra indisponibilidad.
 
 ## Mantenimiento del contenido
 
