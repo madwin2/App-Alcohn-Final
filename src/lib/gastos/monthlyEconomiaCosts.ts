@@ -42,10 +42,17 @@ export type GastosPagosTracking = {
   extras?: Partial<Record<keyof ExtrasMonth, boolean>>;
 };
 
+/** `detalle` = carga fina en /gastos; `resumen` = cierre mensual (p. ej. Excel histórico). */
+export type MonthCostsFuente = 'detalle' | 'resumen';
+
 export type MonthCostsBundle = {
   fixed: FixedCostsMonth;
   extras: ExtrasMonth;
   pagos?: GastosPagosTracking;
+  /** Origen del mes. Si es `resumen`, Economía usa `gastos_reales` como gasto total. */
+  fuente?: MonthCostsFuente;
+  /** Gasto operativo real del mes (incluye publicidad). Solo aplica si `fuente === 'resumen'`. */
+  gastos_reales?: number;
 };
 
 export function newSalaryEntry(): SalaryEntry {
@@ -187,6 +194,30 @@ export function gananciaInversionesExtrasArs(e: ExtrasMonth): number {
 /** Inversiones explícitas en extras (empresa + Cyprea); columna «Inversiones» en Economía mensual. */
 export function inversionesExtrasArs(e: ExtrasMonth): number {
   return (Number(e.inversiones_empresa) || 0) + (Number(e.inversion_cyprea) || 0);
+}
+
+export function isResumenMensual(bundle: MonthCostsBundle | undefined): boolean {
+  if (!bundle) return false;
+  return bundle.fuente === 'resumen' && Number(bundle.gastos_reales) > 0;
+}
+
+/** True si el mes ya tiene carga fina de fijos (no pisar con import de resumen). */
+export function monthHasDetailedFixedCosts(bundle: MonthCostsBundle | undefined): boolean {
+  if (!bundle) return false;
+  if (bundle.fuente === 'detalle') return true;
+  if (bundle.fuente === 'resumen') return false;
+  if (bundle.fixed.sueldos.some((s) => (Number(s.monto) || 0) > 0)) return true;
+  const f = bundle.fixed;
+  return (
+    (Number(f.monotributos) || 0) > 0 ||
+    (Number(f.contador) || 0) > 0 ||
+    (Number(f.alquiler) || 0) > 0 ||
+    (Number(f.seguro) || 0) > 0 ||
+    (Number(f.credito) || 0) > 0 ||
+    (Number(f.electricidad) || 0) > 0 ||
+    (Number(f.agua) || 0) > 0 ||
+    (Number(f.internet) || 0) > 0
+  );
 }
 
 let remoteMonths: Record<string, MonthCostsBundle> = {};
@@ -389,15 +420,26 @@ function normalizePagos(raw: unknown): GastosPagosTracking | undefined {
   return { ...(fixed ? { fixed } : {}), ...(sueldos ? { sueldos } : {}), ...(extras ? { extras } : {}) };
 }
 
+function normalizeFuente(raw: unknown): MonthCostsFuente | undefined {
+  if (raw === 'resumen' || raw === 'detalle') return raw;
+  return undefined;
+}
+
 function normalizeBundle(raw: unknown): MonthCostsBundle {
   if (!raw || typeof raw !== 'object') return emptyBundle();
   const o = raw as Record<string, unknown>;
-  if ('fixed' in o || 'extras' in o || 'realFixed' in o) {
+  if ('fixed' in o || 'extras' in o || 'realFixed' in o || 'fuente' in o || 'gastos_reales' in o) {
     const pagos = normalizePagos(o.pagos);
+    const fuente = normalizeFuente(o.fuente);
+    const gastosRealesRaw = Number(o.gastos_reales);
+    const gastos_reales =
+      Number.isFinite(gastosRealesRaw) && gastosRealesRaw > 0 ? gastosRealesRaw : undefined;
     return {
       fixed: normalizeFixed(o.fixed),
       extras: normalizeExtras(o.extras),
       ...(pagos ? { pagos } : {}),
+      ...(fuente ? { fuente } : {}),
+      ...(gastos_reales != null ? { gastos_reales } : {}),
     };
   }
   return emptyBundle();
@@ -426,6 +468,30 @@ export function getFixedTotalForMonth(bundle: MonthCostsBundle | undefined, lega
   return t;
 }
 
+/**
+ * Gasto operativo que usa Economía Mensual.
+ * En resumen: solo `gastos_reales` (no suma fabricación de pedidos ni fijos/extras otra vez).
+ * En detalle: fijos + costosVentas + extras sin envío + publicidad + envíos manual.
+ */
+export function gastosOperativosParaEconomia(
+  bundle: MonthCostsBundle | undefined,
+  costosVentas: number,
+  legacyFixedFallback = 0,
+): number {
+  if (isResumenMensual(bundle) && bundle) {
+    return Number(bundle.gastos_reales) || 0;
+  }
+  const costosFijos = getFixedTotalForMonth(bundle, legacyFixedFallback);
+  const extras = bundle?.extras ?? emptyExtras();
+  return (
+    costosFijos +
+    (Number(costosVentas) || 0) +
+    gastosExtrasSinEnvioParaEconomia(extras) +
+    (Number(extras.publicidad) || 0) +
+    gastosExtrasEnviosManual(extras)
+  );
+}
+
 export function getBundleForMonth(
   byMonth: Record<string, MonthCostsBundle>,
   monthKey: string,
@@ -436,5 +502,9 @@ export function getBundleForMonth(
     fixed: b.fixed,
     extras: b.extras,
     ...(b.pagos ? { pagos: b.pagos } : {}),
+    ...(b.fuente ? { fuente: b.fuente } : {}),
+    ...(b.gastos_reales != null && Number(b.gastos_reales) > 0
+      ? { gastos_reales: Number(b.gastos_reales) }
+      : {}),
   };
 }

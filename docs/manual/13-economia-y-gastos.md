@@ -21,8 +21,9 @@ Son las pantallas de números del negocio. En el menú **solo le aparecen a Juli
 
 - **Ventas brutas**: total del pedido; el envío se suma solo cuando el pedido ya está **Despachado** o **Seguimiento enviado**.
 - **Transferido**: lo cobrado por ítem en estado Transferido, más ese envío.
-- **Costos ventas**: el costo de fabricación de cada ítem (bronce, piezas, amortización), que la app calcula sola con los parámetros de Gastos.
-- **Rentabilidad** = ventas − fijos − costos ventas − gastos extras − publicidad − envíos (el monto manual de Gastos).
+- **Costos ventas**: el costo de fabricación de cada ítem (bronce, piezas, amortización), que la app calcula sola con los parámetros de Gastos. Solo entra en el total de gastos si el mes está cargado en **detalle**.
+- **Rentabilidad** (mes en detalle) = ventas − fijos − costos ventas − gastos extras − publicidad − envíos.
+- **Rentabilidad** (mes en **resumen histórico**, p. ej. cierre Excel): ventas − **gastos reales** del mes (ese total ya incluye publicidad; no se resta otra vez la fabricación).
 
 ### Movimientos reales
 
@@ -39,7 +40,7 @@ Aparecen en **Movimientos cargados**; **Quitar** para borrar uno.
 |---|---|
 | **Ventas mensuales** | **Sellos vendidos por mes**, **Ventas brutas por mes** y el **Detalle mes a mes** (sellos, pedidos, unidades, ventas, ticket promedio, rentabilidad y comparación con el mes anterior) |
 | **Desglose productos** | Ventas por producto: sellos chicos, medianos, grandes y XL (misma clasificación que Precios), 3 mm, lacre, alimento, abecedarios, soldadores y accesorios. Tabla **mes × producto** |
-| **Mensual** | **Registro por mes**: Transferido menos los gastos del mes |
+| **Mensual** | **Registro por mes**: ventas, gastos del mes (detalle o resumen) y transferido menos gastos |
 | **Mix de ítems** | Qué proporción de cada tipo de ítem se vende |
 | **Tendencias** | Ticket promedio, unidades por pedido, pedidos, venta bruta y rentabilidad en USD a lo largo del tiempo |
 
@@ -49,7 +50,11 @@ Carga mensual de los costos, que después usa Economía.
 
 ### Elegir el mes
 
-Arriba: **Mes a editar** (**Calendario**, **Mes actual**). En un mes nuevo, **Inicializar vacío**. La tarjeta **Gasto proyectado** muestra fijos + extras del mes (clic para el desglose).
+Arriba: **Mes a editar** (**Calendario**, **Mes actual**). En un mes nuevo, **Inicializar vacío**. La tarjeta **Gasto proyectado** muestra fijos + extras del mes (o el **gasto real** si el mes es un resumen histórico); clic para el desglose.
+
+### Meses con resumen histórico
+
+Algunos meses viejos (antes de la carga fina) tienen un **gasto real** único tomado del cierre en Excel, más publicidad / dólares / inversión como desglose. En esos meses Economía no suma otra vez la fabricación de los pedidos. Si abrís uno, vas a ver un aviso y el campo **Gastos reales**.
 
 ### Costos fijos
 

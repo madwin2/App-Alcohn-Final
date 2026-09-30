@@ -28,6 +28,7 @@ import {
   gastosExtrasSinEnvioParaEconomia,
   getBundleForMonth,
   hydrateMonthlyCostsRuntime,
+  isResumenMensual,
   newSalaryEntry,
   sueldosListsEqual,
   sumSueldos,
@@ -452,7 +453,10 @@ export default function GastosPage() {
   const sueldosSum = sumSueldos(bundle.fixed.sueldos);
   const extrasSinEnvio = gastosExtrasSinEnvioParaEconomia(bundle.extras);
   const totalExtrasAll = EXTRA_FIELDS.reduce((s, f) => s + (bundle.extras[f.key] || 0), 0);
-  const totalProyectadoMes = totalFijos + totalExtrasAll;
+  const esResumen = isResumenMensual(bundle);
+  const totalProyectadoMes = esResumen
+    ? Number(bundle.gastos_reales) || 0
+    : totalFijos + totalExtrasAll;
 
   const pagosResumen = useMemo(() => {
     const pg = bundle.pagos;
@@ -665,7 +669,9 @@ export default function GastosPage() {
                 </div>
                 <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-foreground sm:text-3xl">{formatArs(totalProyectadoMes)}</p>
                 <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-                  Fijos + extras del mes · Click para desglose (fabricación no entra).
+                  {esResumen
+                    ? 'Resumen histórico (gastos reales del mes). Fabricación no se suma otra vez en Economía.'
+                    : 'Fijos + extras del mes · Click para desglose (fabricación no entra).'}
                 </p>
               </button>
 
@@ -713,6 +719,31 @@ export default function GastosPage() {
               </Card>
             </div>
           </div>
+
+          {esResumen ? (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+              <p className="font-medium text-foreground">Mes con resumen histórico</p>
+              <p className="mt-1 text-muted-foreground">
+                Economía usa el gasto real del mes ({formatArs(Number(bundle.gastos_reales) || 0)}) y no suma otra vez
+                la fabricación de pedidos. La publicidad, dólares e inversiones abajo son desglose / ganancias; no
+                inventes sueldos en este mes si solo querés el cierre.
+              </p>
+              <div className="mt-3 max-w-xs">
+                <NumberField
+                  label="Gastos reales (ARS)"
+                  value={Number(bundle.gastos_reales) || 0}
+                  onChange={(n) =>
+                    setBundleForMonth((prev) => ({
+                      ...prev,
+                      fuente: 'resumen',
+                      gastos_reales: Math.max(0, n),
+                    }))
+                  }
+                  hint="Total operativo del mes (incluye publicidad)"
+                />
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid gap-6 lg:grid-cols-2 lg:items-start 2xl:gap-8">
             <Card className="min-w-0 border-border/70 shadow-sm">

@@ -20,7 +20,9 @@
     "import:clientes-viejos:dry": "node scripts/import-clientes-viejos-csv.mjs --dry-run",
     "import:clientes-viejos:insecure-win": "set IMPORT_SUPABASE_INSECURE_TLS=1&& node scripts/import-clientes-viejos-csv.mjs",
     "update:clientes-contacto": "node scripts/update-clientes-contacto-csv.mjs",
-    "update:clientes-contacto:dry": "node scripts/update-clientes-contacto-csv.mjs --dry-run"
+    "update:clientes-contacto:dry": "node scripts/update-clientes-contacto-csv.mjs --dry-run",
+    "seed:economia-resumen": "node scripts/seed-economia-resumen-excel.mjs",
+    "seed:economia-resumen:write": "node scripts/seed-economia-resumen-excel.mjs --write"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

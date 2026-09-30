@@ -17,6 +17,9 @@ build/
 
 .import-clientes-viejos.lock
 
+# Backups locales de scripts one-shot
+scripts/_backups/
+
 # IDE files
 .vscode/
 .idea/

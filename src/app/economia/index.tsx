@@ -58,9 +58,11 @@ import {
   gananciaInversionesExtrasArs,
   gastosExtrasEnviosManual,
   gastosExtrasSinEnvioParaEconomia,
+  gastosOperativosParaEconomia,
   getBundleForMonth,
   getFixedTotalForMonth,
   inversionesExtrasArs,
+  isResumenMensual,
   loadAllMonthlyCosts,
   readLegacyFixedScalar,
 } from '@/lib/gastos/monthlyEconomiaCosts';
@@ -93,13 +95,16 @@ type MonthlyRow = {
   gastosExtras: number;
   publicidad: number;
   enviosManual: number;
+  /** Mes con cierre tipo Excel: el gasto operativo es `gastosReales`. */
+  fuenteResumen: boolean;
+  gastosReales: number;
   rentabilidadPesos: number;
   rentabilidadUsd: number;
   gananciaInversionesArs: number;
   gananciaInversionesUsd: number;
   /** Suma ítems en TRANSFERIDO + mismo envío imputado que en ventas (por orden, si ya despachado). */
   transferido: number;
-  /** Transferido − (costos fijos + costos ventas + gastos extras + publicidad + envíos manual). */
+  /** Transferido − gastos operativos del mes. */
   transferidoMenosGastos: number;
   /** Inversiones empresa + Cyprea (extras Gastos). */
   inversionesArs: number;
@@ -115,7 +120,8 @@ type MonthlyRow = {
   pedidos: number;
 };
 
-function totalGastosOperativos(r: Pick<MonthlyRow, 'costosFijos' | 'costosVentas' | 'gastosExtras' | 'publicidad' | 'enviosManual'>): number {
+function totalGastosOperativos(r: MonthlyRow): number {
+  if (r.fuenteResumen && r.gastosReales > 0) return r.gastosReales;
   return r.costosFijos + r.costosVentas + r.gastosExtras + r.publicidad + r.enviosManual;
 }
 
@@ -544,10 +550,12 @@ export default function EconomiaPage() {
     for (const order of orders) {
       const key = orderBusinessMonthKey(order);
       const bundle = getBundleForMonth(gastosPorMes, key);
-      const costosFijosMes = getFixedTotalForMonth(bundle, legacyFixed);
-      const gastosExtrasSinEnvioMes = gastosExtrasSinEnvioParaEconomia(bundle.extras);
+      const resumen = isResumenMensual(bundle);
+      const gastosRealesMes = resumen ? Number(bundle.gastos_reales) || 0 : 0;
+      const costosFijosMes = resumen ? 0 : getFixedTotalForMonth(bundle, legacyFixed);
+      const gastosExtrasSinEnvioMes = resumen ? 0 : gastosExtrasSinEnvioParaEconomia(bundle.extras);
       const publicidadMes = Number(bundle.extras.publicidad) || 0;
-      const enviosManualMes = gastosExtrasEnviosManual(bundle.extras);
+      const enviosManualMes = resumen ? 0 : gastosExtrasEnviosManual(bundle.extras);
       const gananciaInvArs = gananciaInversionesExtrasArs(bundle.extras);
       const inversionesMes = inversionesExtrasArs(bundle.extras);
       const invEmpresaMes = Number(bundle.extras.inversiones_empresa) || 0;
@@ -565,6 +573,8 @@ export default function EconomiaPage() {
           gastosExtras: gastosExtrasSinEnvioMes,
           publicidad: publicidadMes,
           enviosManual: enviosManualMes,
+          fuenteResumen: resumen,
+          gastosReales: gastosRealesMes,
           rentabilidadPesos: 0,
           rentabilidadUsd: 0,
           gananciaInversionesArs: gananciaInvArs,
@@ -591,11 +601,13 @@ export default function EconomiaPage() {
             : ECONOMIA_ENVIO_SIN_TIPO_ARS
         : 0;
       row.ventasBrutas += Number(order.totalValue || 0) + envioImputadoVentas;
-      row.costosVentas += fab;
+      if (!resumen) row.costosVentas += fab;
       row.costosFijos = costosFijosMes;
       row.gastosExtras = gastosExtrasSinEnvioMes;
       row.publicidad = publicidadMes;
       row.enviosManual = enviosManualMes;
+      row.fuenteResumen = resumen;
+      row.gastosReales = gastosRealesMes;
       row.gananciaInversionesArs = gananciaInvArs;
       row.gananciaInversionesUsd = usdRate > 0 ? gananciaInvArs / usdRate : 0;
       row.inversionesArs = inversionesMes;
@@ -615,21 +627,10 @@ export default function EconomiaPage() {
       row.transferido += envioImputadoVentas;
 
       row.pendiente = row.ventasBrutas - row.transferido;
-      row.rentabilidadPesos =
-        row.ventasBrutas -
-        row.costosFijos -
-        row.costosVentas -
-        row.gastosExtras -
-        row.publicidad -
-        row.enviosManual;
+      const gastosOp = gastosOperativosParaEconomia(bundle, row.costosVentas, legacyFixed);
+      row.rentabilidadPesos = row.ventasBrutas - gastosOp;
       row.rentabilidadUsd = usdRate > 0 ? row.rentabilidadPesos / usdRate : 0;
-      const gastosDesdeTransferido =
-        row.costosFijos +
-        row.costosVentas +
-        row.gastosExtras +
-        row.publicidad +
-        row.enviosManual;
-      row.transferidoMenosGastos = row.transferido - gastosDesdeTransferido;
+      row.transferidoMenosGastos = row.transferido - gastosOp;
 
       byMonth.set(key, row);
     }
@@ -646,6 +647,7 @@ export default function EconomiaPage() {
         acc.gastosExtras += r.gastosExtras;
         acc.publicidad += r.publicidad;
         acc.enviosManual += r.enviosManual;
+        acc.gastosOperativos += totalGastosOperativos(r);
         acc.rentabilidadPesos += r.rentabilidadPesos;
         acc.gananciaInversionesArs += r.gananciaInversionesArs;
         acc.gananciaInversionesUsd += r.gananciaInversionesUsd;
@@ -668,6 +670,7 @@ export default function EconomiaPage() {
         gastosExtras: 0,
         publicidad: 0,
         enviosManual: 0,
+        gastosOperativos: 0,
         rentabilidadPesos: 0,
         gananciaInversionesArs: 0,
         gananciaInversionesUsd: 0,
@@ -1606,15 +1609,14 @@ export default function EconomiaPage() {
                     <strong>Ventas brutas</strong>: total pedido + envío imputado solo con todos los ítems en Despachado o
                     Seguimiento enviado (tabla{' '}
                     <code className="text-xs bg-muted px-1 rounded">costos_de_envio</code> o{' '}
-                    {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método). <strong>Costos ventas</strong>: solo
-                    fabricación. <strong>Envíos</strong>: solo lo cargado a mano en Gastos. <strong>Transf. − gastos</strong>{' '}
-                    = transferido cobrado − (fijos + ventas + extras + publicidad + envíos). <strong>Transferido</strong>{' '}
-                    incluye el mismo envío imputado que ventas (una vez por pedido despachado: tabla o{' '}
-                    {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay empresa/servicio). <strong>Inversiones</strong> =
-                    inversión empresa + inversión Cyprea (Gastos, mismo mes). <strong>Rentabilidad</strong> = ventas −
-                    costos listados. <strong>Ganancia</strong> = inversiones empresa + compra dólares (Gastos, mismo mes).
-                    Podés expandir <strong>Gastos</strong> y <strong>Ganancias</strong> tocando el encabezado de la columna;
-                    el desglose se muestra en gris. Al final hay una fila <strong>Total</strong>.
+                    {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método). En meses con <strong>detalle</strong> de
+                    Gastos: <strong>Costos ventas</strong> = fabricación; <strong>Envíos</strong> = lo cargado a mano;
+                    <strong> Rentabilidad</strong> = ventas − (fijos + ventas + extras + publicidad + envíos). En meses con{' '}
+                    <strong>resumen histórico</strong> (cierre Excel): el gasto operativo es el total real del mes (incluye
+                    publicidad) y no se vuelve a restar la fabricación. <strong>Transf. − gastos</strong> = transferido −
+                    ese gasto operativo. <strong>Ganancia</strong> = inversiones empresa + compra dólares (Gastos, mismo
+                    mes). Podés expandir <strong>Gastos</strong> y <strong>Ganancias</strong> tocando el encabezado; el
+                    desglose se muestra en gris. Al final hay una fila <strong>Total</strong>.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="overflow-auto">
@@ -1719,14 +1721,38 @@ export default function EconomiaPage() {
                           <td className="py-2 pr-3 text-right">{formatArs(r.ventasBrutas)}</td>
                           {mensualDetalleGastos ? (
                             <>
-                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.costosFijos)}</td>
-                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.costosVentas)}</td>
-                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.gastosExtras)}</td>
-                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.publicidad)}</td>
-                              <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.enviosManual)}</td>
+                              {r.fuenteResumen ? (
+                                <>
+                                  <td
+                                    className="py-2 pr-2 text-right text-muted-foreground"
+                                    colSpan={5}
+                                    title="Mes con cierre resumen: un solo gasto real (incluye publicidad)"
+                                  >
+                                    Resumen {formatArs(r.gastosReales)}
+                                    {r.publicidad > 0 ? (
+                                      <span className="ml-1 text-[10px]">(pub. {formatArs(r.publicidad)})</span>
+                                    ) : null}
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.costosFijos)}</td>
+                                  <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.costosVentas)}</td>
+                                  <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.gastosExtras)}</td>
+                                  <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.publicidad)}</td>
+                                  <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(r.enviosManual)}</td>
+                                </>
+                              )}
                             </>
                           ) : (
-                            <td className="py-2 pr-3 text-right font-medium">{formatArs(totalGastosOperativos(r))}</td>
+                            <td className="py-2 pr-3 text-right font-medium">
+                              <div className="flex flex-col items-end gap-0.5 leading-tight">
+                                <span>{formatArs(totalGastosOperativos(r))}</span>
+                                {r.fuenteResumen ? (
+                                  <span className="text-[10px] font-normal text-muted-foreground">resumen</span>
+                                ) : null}
+                              </div>
+                            </td>
                           )}
                           <td className="py-2 pr-3 text-right font-medium">{formatArs(r.rentabilidadPesos)}</td>
                           <td className="py-2 pr-3 text-right">{formatArs(r.transferido)}</td>
@@ -1768,13 +1794,7 @@ export default function EconomiaPage() {
                           </>
                         ) : (
                           <td className="py-2 pr-3 text-right">
-                            {formatArs(
-                              totals.costosFijos +
-                                totals.costosVentas +
-                                totals.gastosExtras +
-                                totals.publicidad +
-                                totals.enviosManual,
-                            )}
+                            {formatArs(totals.gastosOperativos)}
                           </td>
                         )}
                         <td className="py-2 pr-3 text-right">{formatArs(totals.rentabilidadPesos)}</td>
