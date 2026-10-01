@@ -1,9 +1,9 @@
 import type { Locator, Page } from 'playwright';
 import type { WorkerConfig } from '../config.js';
-import { clickFirstMatch, saveArtifacts } from '../browser-helpers.js';
+import { clickFirstMatch, isAndreaniAppHost, saveArtifacts } from '../browser-helpers.js';
 
-const LINK_RE = /https:\/\/pymes\.andreani\.com\/completa-tu-envio\/[A-Za-z0-9._\-]+/i;
-const PYMES_HOST_RE = /pymes\.andreani\.com/i;
+const LINK_RE =
+  /https:\/\/(?:www\.)?(?:pymes\.)?andreani\.com\/(?:cuenta\/)?completa-tu-envio\/[A-Za-z0-9._\-+=]+/i;
 
 /** Evita el link del footer (`andreanionline.com` → corporativo). El CTA real es un button. */
 async function clickHacerUnEnvio(page: Page, timeoutMs: number): Promise<void> {
@@ -34,9 +34,9 @@ async function clickHacerUnEnvio(page: Page, timeoutMs: number): Promise<void> {
 
 async function assertStillOnPymes(page: Page): Promise<void> {
   const url = page.url();
-  if (!PYMES_HOST_RE.test(url)) {
+  if (!isAndreaniAppHost(url) || /andreanionline\.com/i.test(url)) {
     throw new Error(
-      `Se salió de pymes.andreani.com (ahora: ${url}). No usar links del footer (andreanionline/corporativo).`,
+      `Se salió del portal Andreani PyME (ahora: ${url}). No usar links del footer (andreanionline/corporativo).`,
     );
   }
 }

@@ -4,16 +4,31 @@ import { isLoginPage, looksLoggedIn, saveArtifacts } from '../browser-helpers.js
 
 const LOGIN_MAX_ATTEMPTS = 3;
 
+function emailField(page: Page) {
+  // B2C actual: input#signInName type=text name=Email (NO type=email)
+  return page
+    .locator('#signInName')
+    .or(page.getByLabel(/^email$/i))
+    .or(page.locator('input[name="Email"]'))
+    .or(page.locator('input[type="email"]'))
+    .first();
+}
+
+function passwordField(page: Page) {
+  return page
+    .locator('#password')
+    .or(page.getByLabel(/^contrase[nñ]a$/i))
+    .or(page.locator('input[type="password"]'))
+    .first();
+}
+
 async function waitForLoginForm(page: Page, timeoutMs: number): Promise<void> {
-  const email = page.getByLabel(/^email$/i).or(page.locator('input[type="email"]')).first();
-  await email.waitFor({ state: 'visible', timeout: timeoutMs });
+  await emailField(page).waitFor({ state: 'visible', timeout: timeoutMs });
 }
 
 async function enterLoginFromHome(page: Page, timeoutMs: number): Promise<void> {
   if (isLoginPage(page.url())) return;
-  if (await page.locator('input[type="email"], input[type="password"]').first().isVisible().catch(() => false)) {
-    return;
-  }
+  if (await emailField(page).isVisible().catch(() => false)) return;
 
   const ingresar = page
     .getByRole('button', { name: /^ingresar$/i })
@@ -33,15 +48,16 @@ async function enterLoginFromHome(page: Page, timeoutMs: number): Promise<void> 
   }
 
   await Promise.race([
-    page.waitForURL(/b2clogin\.com|oauth2|login/i, { timeout: timeoutMs }),
+    page.waitForURL(/b2clogin\.com|transaccional-router-login|oauth2/i, { timeout: timeoutMs }),
     waitForLoginForm(page, timeoutMs),
   ]).catch(() => undefined);
+
+  await waitForLoginForm(page, timeoutMs).catch(() => undefined);
 }
 
 async function attemptLoginOnce(page: Page, config: WorkerConfig): Promise<boolean> {
   const { user, password, loginUrl, timeoutMs, homeUrl } = config.andreani;
 
-  // Cookies viejas dejan la home en skeleton eterno → limpiar y entrar de cero
   await page.context().clearCookies();
   await page.goto(loginUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
   await page.waitForLoadState('networkidle', { timeout: timeoutMs }).catch(() => undefined);
@@ -49,14 +65,11 @@ async function attemptLoginOnce(page: Page, config: WorkerConfig): Promise<boole
 
   if (await looksLoggedIn(page)) return true;
 
-  // A veces el home redirige solo a B2C; si no, click Ingresar
   if (!isLoginPage(page.url())) {
     await enterLoginFromHome(page, timeoutMs);
   }
 
-  // Si seguimos en skeleton sin form, forzar reload limpio
-  const emailProbe = page.getByLabel(/^email$/i).or(page.locator('input[type="email"]')).first();
-  if (!(await emailProbe.isVisible({ timeout: 5000 }).catch(() => false))) {
+  if (!(await emailField(page).isVisible({ timeout: 8000 }).catch(() => false))) {
     await page.context().clearCookies();
     await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
     await page.waitForTimeout(3000);
@@ -67,18 +80,18 @@ async function attemptLoginOnce(page: Page, config: WorkerConfig): Promise<boole
 
   if (await looksLoggedIn(page)) return true;
 
-  const email = page.getByLabel(/^email$/i).or(page.locator('input[type="email"]')).first();
-  const pass = page.getByLabel(/^contrase[nñ]a$/i).or(page.locator('input[type="password"]')).first();
+  const email = emailField(page);
+  const pass = passwordField(page);
 
   await email.waitFor({ state: 'visible', timeout: timeoutMs });
   await email.click();
   await email.fill('');
-  await email.fill(user);
+  await email.pressSequentially(user, { delay: 20 });
 
   await pass.waitFor({ state: 'visible', timeout: timeoutMs });
   await pass.click();
   await pass.fill('');
-  await pass.fill(password);
+  await pass.pressSequentially(password, { delay: 20 });
 
   const submit = page
     .locator('button')
@@ -87,8 +100,8 @@ async function attemptLoginOnce(page: Page, config: WorkerConfig): Promise<boole
   await submit.click();
 
   await Promise.race([
-    page.waitForURL(/pymes\.andreani\.com\/?(\?|$)/i, { timeout: timeoutMs }),
     page.getByText(/todo listo para empezar/i).waitFor({ state: 'visible', timeout: timeoutMs }),
+    page.waitForURL(/andreani\.com\/cuenta|pymes\.andreani\.com/i, { timeout: timeoutMs }),
   ]).catch(() => undefined);
   await page.waitForLoadState('networkidle', { timeout: timeoutMs }).catch(() => undefined);
   await page.waitForTimeout(2500);
@@ -100,7 +113,7 @@ async function attemptLoginOnce(page: Page, config: WorkerConfig): Promise<boole
   await page
     .getByText(/todo listo para empezar/i)
     .first()
-    .waitFor({ state: 'visible', timeout: Math.min(timeoutMs, 30000) })
+    .waitFor({ state: 'visible', timeout: Math.min(timeoutMs, 45000) })
     .catch(() => undefined);
   await page.waitForTimeout(1500);
 
@@ -108,7 +121,7 @@ async function attemptLoginOnce(page: Page, config: WorkerConfig): Promise<boole
 }
 
 /**
- * Login Azure B2C Andreani. Reintenta hasta 3 veces si falla.
+ * Login Azure B2C Andreani con ANDREANI_USER / ANDREANI_PASS.
  */
 export async function ensureLoggedIn(page: Page, config: WorkerConfig): Promise<void> {
   let lastError: unknown;

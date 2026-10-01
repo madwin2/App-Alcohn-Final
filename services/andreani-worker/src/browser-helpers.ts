@@ -81,13 +81,24 @@ export async function fillFirstMatch(
 }
 
 export function isLoginPage(url: string): boolean {
-  return /b2clogin\.com|login|signin|oauth/i.test(url);
+  // No usar /login/ suelto: matchea de más. El portal autenticado vive en andreani.com/cuenta.
+  return (
+    /b2clogin\.com/i.test(url) ||
+    /transaccional-router-login\.andreani\.com/i.test(url) ||
+    /\/oauth2\//i.test(url) ||
+    /\/signin/i.test(url)
+  );
+}
+
+/** Home autenticado del portal PyME (hoy puede ser pymes.* o andreani.com/cuenta). */
+export function isAndreaniAppHost(url: string): boolean {
+  return /pymes\.andreani\.com/i.test(url) || /(?:^https?:\/\/)?(?:www\.)?andreani\.com\//i.test(url);
 }
 
 export async function looksLoggedIn(page: Page): Promise<boolean> {
   const url = page.url();
   if (isLoginPage(url)) return false;
-  if (!/pymes\.andreani\.com/i.test(url)) return false;
+  if (!isAndreaniAppHost(url)) return false;
 
   const ingresar = page.getByRole('button', { name: /^ingresar$/i }).or(
     page.getByRole('link', { name: /^ingresar$/i }),
@@ -97,6 +108,6 @@ export async function looksLoggedIn(page: Page): Promise<boolean> {
   }
 
   const body = await page.locator('body').innerText().catch(() => '');
-  // No usar "Hacer un envío": también está en el footer público
-  return /todo listo para empezar|historial de env[ií]os/i.test(body);
+  // Señal fuerte del home autenticado (no usar solo "Hacer un envío": está en el footer público)
+  return /todo listo para empezar/i.test(body);
 }
