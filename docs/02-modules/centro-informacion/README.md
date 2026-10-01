@@ -26,13 +26,15 @@ Leer el Centro o consultar al chat **no cambia pedidos**, no dispara WhatsApp ni
 | `/centro?seccion=actividades` | Estado vacío de actividades |
 | `/centro?seccion=manual` | Índice del manual |
 
-Menú: **Centro Alcohn** (ícono libro). Hoy solo lo ve el dueño (`julian.475@hotmail.com`), igual que Economía/Gastos, mientras se termina de armar. Fuera de `OrdersScopeLayout`. FBTEST no tiene acceso.
+Menú: **Centro Alcohn** (ícono libro). Visible para todo el equipo autenticado (excepto FBTEST). Fuera de `OrdersScopeLayout`. Economía/Gastos siguen solo para el dueño.
 
 ## Fuentes publicadas
 
 Inventario explícito en [`knowledge/catalog.json`](../../../knowledge/catalog.json). El artefacto generado es `api/_knowledge/bundle.json` (también en `knowledge/server/`).
 
-**Publicados (revisión 2026-09-29):** capítulos del manual 01–12 y 14–15, conceptos básicos (extracto del README del manual), Sobre Alcohn y Estoy empezando (curados en `knowledge/curated/`).
+**Publicados (revisión 2026-09-29):** capítulos del manual 01–12 y 14–15, conceptos básicos (extracto del README del manual) y Estoy empezando (curados en `knowledge/curated/`).
+
+**En armado (oculto en la portada):** Sobre Alcohn — la tarjeta figura como “Próximamente”; la ruta del artículo redirige al Centro.
 
 **Excluidos:** `docs/manual/13-economia-y-gastos.md`, `docs/11-operations-sops/`, auditorías, arquitectura, preguntas abiertas, ADR, planes `PLAN_*`, `AGENTS.md`.
 

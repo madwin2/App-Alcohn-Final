@@ -2,7 +2,7 @@
 
 [← Volver al índice](README.md)
 
-El **Centro Alcohn** es la guía dentro de la app: manual por pantallas, problemas frecuentes, una intro de la empresa, un recorrido si estás empezando, y un asistente que responde con fuentes.
+El **Centro Alcohn** es la guía dentro de la app: manual por pantallas, problemas frecuentes, un recorrido si estás empezando, y un asistente que responde con fuentes. Más adelante se suma Sobre Alcohn y las actividades del taller.
 
 Entrá desde el menú lateral (**Centro Alcohn**) o andá a `/centro`.
 
@@ -10,7 +10,7 @@ Entrá desde el menú lateral (**Centro Alcohn**) o andá a `/centro`.
 
 1. **Buscador** — “Buscá una pantalla, una tarea o una duda”. No necesita el asistente.
 2. **Consultar al asistente** — abre el chat.
-3. Tarjetas: Manual de la app, Actividades, Problemas frecuentes, Estoy empezando, Sobre Alcohn.
+3. Tarjetas: Manual de la app, Estoy empezando, Problemas frecuentes, **Sobre Alcohn** (próximamente) y Actividades (próximamente).
 4. Filtros **Todos / Ventas / Producción / Logística** (sirven para encontrar contenido; no cambian tus permisos).
 
 ## Leer un capítulo
@@ -20,6 +20,10 @@ Abrí un artículo desde el manual o un resultado de búsqueda. Vas a ver el ín
 **Consultar al asistente** desde un artículo le da ese texto como pista, sin limitar todas las respuestas a ese capítulo.
 
 **Informar un problema** prepara un texto para copiar y compartir. No se envía solo ni queda guardado en la app.
+
+## Sobre Alcohn
+
+La tarjeta existe en la portada pero **todavía no está habilitada**. Cuando esté lista va a contar qué fabricamos, cómo trabajamos y quién hace qué.
 
 ## Actividades
 

@@ -18,6 +18,7 @@ import {
   Truck,
   Unlock,
   Upload,
+  BookOpen,
   WalletCards,
   type LucideIcon,
 } from 'lucide-react';
@@ -518,6 +519,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Podés corregir el tipo en Errores',
         body: 'Si el motivo quedó mal o es uno viejo, abrís el caso en Errores y lo cambiás al tipo correcto.',
         icon: AlertTriangle,
+      },
+    ],
+  },
+  {
+    id: 28,
+    date: '2026-10-01',
+    title: 'Novedades',
+    version: '1.46',
+    slides: [
+      {
+        heading: 'Centro Alcohn para todo el equipo',
+        body: 'En el menú ya está Centro Alcohn: manual, búsqueda y asistente. Sobre Alcohn sigue en preparación.',
+        icon: BookOpen,
       },
     ],
   },

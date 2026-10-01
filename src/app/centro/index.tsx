@@ -19,15 +19,15 @@ import { CentroChatPanel } from '@/components/centro/CentroChatPanel';
 import { CentroReportDialog } from '@/components/centro/CentroReportDialog';
 import { cn } from '@/lib/utils/cn';
 
-/** Mientras se arma el Centro, solo visible para el dueño (mismo criterio que Economía). */
-const ALLOWED_EMAIL = 'julian.475@hotmail.com';
+/** Artículo de empresa todavía en armado: no se abre desde la UI. */
+const SOBRE_ALCOHN_SLUG = 'sobre-alcohn';
 
 export default function CentroPage() {
   const { slug } = useParams<{ slug?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
+  const isAllowed = Boolean(user);
 
   const seccion = searchParams.get('seccion') || 'home';
   const area = searchParams.get('area') || 'todos';
@@ -192,6 +192,10 @@ export default function CentroPage() {
 
   if (!authLoading && !isAllowed) {
     return <Navigate to="/pedidos" replace />;
+  }
+
+  if (!authLoading && isAllowed && slug === SOBRE_ALCOHN_SLUG) {
+    return <Navigate to="/centro" replace />;
   }
 
   if (authLoading || loading) {

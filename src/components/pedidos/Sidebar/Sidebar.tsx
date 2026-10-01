@@ -158,20 +158,22 @@ function SidebarInner() {
           </div>
           );
         })}
+        {!isRestrictedUser && (
+          <div className="flex justify-start">
+            <SidebarItem
+              icon={BookOpen}
+              label="Centro Alcohn"
+              isActive={
+                location.pathname === '/centro' || location.pathname.startsWith('/centro/')
+              }
+              isExpanded={isExpanded}
+              disabled={false}
+              onClick={() => navigate('/centro')}
+            />
+          </div>
+        )}
         {isEconomiaUser && (
           <>
-            <div className="flex justify-start">
-              <SidebarItem
-                icon={BookOpen}
-                label="Centro Alcohn"
-                isActive={
-                  location.pathname === '/centro' || location.pathname.startsWith('/centro/')
-                }
-                isExpanded={isExpanded}
-                disabled={false}
-                onClick={() => navigate('/centro')}
-              />
-            </div>
             <div className="flex justify-start">
               <SidebarItem
                 icon={Calendar}

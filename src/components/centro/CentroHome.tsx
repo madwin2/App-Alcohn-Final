@@ -42,9 +42,16 @@ export function CentroHome({
   ).length;
   const faq = articles.find((a) => a.id === 'problemas-frecuentes');
   const starting = articles.find((a) => a.id === 'estoy-empezando');
-  const company = articles.find((a) => a.id === 'sobre-alcohn');
 
-  const cards = [
+  const cards: Array<{
+    title: string;
+    body: string;
+    meta?: string;
+    to?: string;
+    icon: typeof BookOpen;
+    muted?: boolean;
+    disabled?: boolean;
+  }> = [
     {
       title: 'Manual de la app',
       body: 'Cómo usar cada pantalla, con los nombres de botones y estados tal cual aparecen.',
@@ -67,8 +74,10 @@ export function CentroHome({
     {
       title: 'Sobre Alcohn',
       body: 'Qué fabricamos, cómo trabajamos y quién hace qué.',
-      to: company ? `/centro/articulos/${company.slug}` : '/centro?seccion=empresa',
+      meta: 'Próximamente',
       icon: Building2,
+      muted: true,
+      disabled: true,
     },
     {
       title: 'Actividades',
@@ -209,16 +218,14 @@ export function CentroHome({
         <section aria-label="Secciones" className="grid gap-3 sm:grid-cols-2">
           {cards.map((card) => {
             const Icon = card.icon;
-            return (
-              <Link
-                key={card.title}
-                to={card.to}
-                className={cn(
-                  'group flex gap-4 rounded-xl border border-border/70 bg-card/50 p-4 transition',
-                  'hover:border-border hover:bg-card',
-                  card.muted && 'opacity-80',
-                )}
-              >
+            const className = cn(
+              'group flex gap-4 rounded-xl border border-border/70 bg-card/50 p-4 transition',
+              !card.disabled && 'hover:border-border hover:bg-card',
+              card.muted && 'opacity-80',
+              card.disabled && 'cursor-default',
+            );
+            const content = (
+              <>
                 <div
                   className={cn(
                     'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
@@ -229,7 +236,12 @@ export function CentroHome({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="font-medium text-foreground group-hover:underline group-hover:underline-offset-4">
+                    <h2
+                      className={cn(
+                        'font-medium text-foreground',
+                        !card.disabled && 'group-hover:underline group-hover:underline-offset-4',
+                      )}
+                    >
                       {card.title}
                     </h2>
                     {card.meta ? (
@@ -240,6 +252,20 @@ export function CentroHome({
                   </div>
                   <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{card.body}</p>
                 </div>
+              </>
+            );
+
+            if (card.disabled || !card.to) {
+              return (
+                <div key={card.title} className={className} aria-disabled="true">
+                  {content}
+                </div>
+              );
+            }
+
+            return (
+              <Link key={card.title} to={card.to} className={className}>
+                {content}
               </Link>
             );
           })}
