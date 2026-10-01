@@ -533,7 +533,12 @@ export function AndreaniLabelsPanel({
     } catch (error) {
       toast({
         title: 'No se pudo unir los PDFs',
-        description: error instanceof Error ? error.message : 'Error al generar el archivo',
+        description:
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : 'Error al generar el archivo',
         variant: 'destructive',
       });
     } finally {

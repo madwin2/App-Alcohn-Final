@@ -253,9 +253,18 @@ export const downloadAndreaniEtiquetaPdf = async (
   const bytes = await fetchAndreaniEtiquetaPdfBytes(pdfPath);
   let out: Uint8Array = bytes;
   if (options?.tracking && options.order) {
-    const map = new Map<string, Order>([[options.tracking, options.order]]);
-    const copy = new Uint8Array(bytes);
-    out = await enrichAndreaniLabelsPdf(copy.buffer, map);
+    try {
+      const map = new Map<string, Order>([[options.tracking, options.order]]);
+      const copy = new Uint8Array(bytes);
+      out = await enrichAndreaniLabelsPdf(copy.buffer, map);
+    } catch (error) {
+      console.warn(
+        '[andreani] enrich al descargar falló, uso PDF guardado:',
+        options.tracking,
+        error instanceof Error ? error.message : error,
+      );
+      out = bytes;
+    }
   }
   const blob = new Blob([out as BlobPart], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
@@ -281,14 +290,25 @@ export const downloadMergedAndreaniEtiquetasPdfs = async (
   }
 
   const outDoc = await PDFDocument.create();
+  const enrichFailures: string[] = [];
 
   for (const item of normalized) {
     const raw = await fetchAndreaniEtiquetaPdfBytes(item.pdfPath);
     let bytes: Uint8Array = raw;
     if (item.tracking && item.order) {
-      const map = new Map<string, Order>([[item.tracking, item.order]]);
-      const copy = new Uint8Array(raw);
-      bytes = await enrichAndreaniLabelsPdf(copy.buffer, map);
+      try {
+        const map = new Map<string, Order>([[item.tracking, item.order]]);
+        const copy = new Uint8Array(raw);
+        bytes = await enrichAndreaniLabelsPdf(copy.buffer, map);
+      } catch (error) {
+        enrichFailures.push(item.tracking);
+        console.warn(
+          '[andreani] enrich al descargar falló, uso PDF guardado:',
+          item.tracking,
+          error instanceof Error ? error.message : error,
+        );
+        bytes = raw;
+      }
     }
     const src = await PDFDocument.load(bytes);
     const indices = src.getPageIndices();
@@ -310,6 +330,10 @@ export const downloadMergedAndreaniEtiquetasPdfs = async (
   const stamp = new Date().toISOString().slice(0, 10);
   triggerBrowserDownload(url, `etiquetas-andreani-${stamp}.pdf`);
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+
+  if (enrichFailures.length) {
+    console.warn('[andreani] etiquetas sin re-enrich en merge:', enrichFailures);
+  }
 };
 
 export const andreaniAssignCandidatesFromOrders = (orders: Order[]): Array<{ id: string; label: string }> =>

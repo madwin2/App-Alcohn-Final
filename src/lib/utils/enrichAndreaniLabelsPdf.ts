@@ -15,6 +15,8 @@ import { getDocument } from 'pdfjs-dist';
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
 import type { Order, OrderItem } from '@/lib/types';
 import { listAndreaniTrackingNumbersByPage } from '@/lib/utils/andreaniTrackingPdfParser';
+import { resolveStorageRefFromUrl } from '@/lib/utils/storageUrlUtils';
+import { supabase } from '@/lib/supabase/client';
 
 /**
  * Etiqueta Andreani → **siempre 100×152 mm** con logos + info del pedido en el pie.
@@ -179,17 +181,50 @@ const renderAndreaniPagePng = async (page: PDFPageProxy): Promise<Uint8Array | n
   return new Uint8Array(await pngBlob.arrayBuffer());
 };
 
+/** Re-firma buckets privados si la URL guardada ya venció; omite SVG. */
+const resolveFetchableImageUrl = async (url: string): Promise<string | null> => {
+  const trimmed = url.trim();
+  if (!trimmed || !/^https?:\/\//i.test(trimmed)) return null;
+  if (/\.svg(?:\?|#|$)/i.test(trimmed)) return null;
+
+  const ref = resolveStorageRefFromUrl(trimmed);
+  if (!ref) return trimmed;
+
+  // Públicos: URL estable sin token (evita firmar de más).
+  if (ref.bucket === 'vector' || ref.bucket === 'base' || ref.bucket === 'foto') {
+    // vector casi siempre es SVG → no embebible
+    if (ref.bucket === 'vector') return null;
+    return supabase.storage.from(ref.bucket).getPublicUrl(ref.path).data.publicUrl || trimmed;
+  }
+
+  const { data, error } = await supabase.storage.from(ref.bucket).createSignedUrl(ref.path, 3600);
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
+};
+
 const embedPreviewImage = async (
   doc: PDFDocument,
   url: string,
 ): Promise<PDFImage | null> => {
   try {
-    const res = await fetch(url);
+    const fetchUrl = await resolveFetchableImageUrl(url);
+    if (!fetchUrl) return null;
+    const res = await fetch(fetchUrl);
     if (!res.ok) return null;
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    if (contentType.includes('svg')) return null;
     const bytes = await res.arrayBuffer();
     const u8 = new Uint8Array(bytes);
-    if (u8[0] === 0xff && u8[1] === 0xd8) return doc.embedJpg(bytes);
-    return doc.embedPng(bytes);
+    // SVG/XML sin content-type confiable
+    if (u8[0] === 0x3c /* < */) return null;
+    if (u8.length >= 2 && u8[0] === 0xff && u8[1] === 0xd8) {
+      return await doc.embedJpg(bytes);
+    }
+    // PNG magic: 89 50 4E 47
+    if (u8.length >= 8 && u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4e && u8[3] === 0x47) {
+      return await doc.embedPng(bytes);
+    }
+    return null;
   } catch {
     return null;
   }
