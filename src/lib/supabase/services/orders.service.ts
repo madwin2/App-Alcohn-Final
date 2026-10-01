@@ -45,6 +45,16 @@ import {
 import { fetchReworkChargesForOrders } from './rehacer.service';
 import { invokeBotWebhook } from './botWebhook.service';
 import { formatDimensions } from '@/lib/utils/format';
+import {
+  CLIENTE_PRUEBAS_APELLIDO,
+  CLIENTE_PRUEBAS_NOMBRE,
+  esPruebaCerrada,
+  type OrderType,
+} from '@/lib/pedidos/tipoPedido';
+
+/** Flag temporal: plantillas Meta de regalo aún no listas. Apagado = no envía regalo_*. */
+const REGALO_WHATSAPP_HABILITADO =
+  import.meta.env?.VITE_REGALO_WHATSAPP_HABILITADO === 'true';
 
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
 type OrdenRow = Database['public']['Tables']['ordenes']['Row'];
@@ -116,10 +126,16 @@ const orderWebhookNombre = (order: Order): string =>
 const orderWebhookItems = (order: Order): Record<string, unknown>[] =>
   order.items.map((item) => {
     const itemType = item.itemType || 'SELLO';
+    const isGift = item.isGift === true;
     const entry: Record<string, unknown> = {
       item_type: itemType,
-      valor_item: Number(item.itemValue ?? 0),
+      valor_item: isGift ? 0 : Number(item.itemValue ?? 0),
+      saldo_item: isGift ? 0 : Number(item.balanceItemCached ?? 0),
+      es_regalo: isGift,
     };
+    if (isGift) {
+      entry.etiqueta = 'Regalo – sin cargo';
+    }
     if (itemType === 'SELLO' || itemType === 'ABECEDARIO') {
       entry.diseno = item.designName || '';
       const w = Number(item.requestedWidthMm || 0);
@@ -134,6 +150,7 @@ const orderWebhookItems = (order: Order): Record<string, unknown>[] =>
 const orderWebhookDatos = (order: Order): Record<string, unknown> => {
   const datos: Record<string, unknown> = {
     numero_pedido: order.id,
+    tipo_pedido: order.orderType === 'PRUEBA' ? 'Prueba' : order.orderType === 'REGALO' ? 'Regalo' : 'Venta',
     senia_total: Number(order.depositValueOrder ?? 0),
     items: orderWebhookItems(order),
   };
@@ -146,9 +163,18 @@ const orderWebhookDatos = (order: Order): Record<string, unknown> => {
 
 export const notifyOrderRegistered = async (order: Order): Promise<void> => {
   try {
+    if (order.orderType === 'PRUEBA' || order.customer.isInternal) return;
+    if (!order.customer.phoneE164?.trim()) return;
+
+    const isRegalo = order.orderType === 'REGALO';
+    if (isRegalo && !REGALO_WHATSAPP_HABILITADO) {
+      console.info('Regalo registrado: WhatsApp omitido (REGALO_WHATSAPP_HABILITADO=false)');
+      return;
+    }
+
     await invokeBotWebhook({
       numeroTelefono: order.customer.phoneE164,
-      tipo: 'pedido_registrado',
+      tipo: isRegalo ? 'regalo_registrado' : 'pedido_registrado',
       nombre: orderWebhookNombre(order),
       datos: orderWebhookDatos(order),
     });
@@ -160,6 +186,9 @@ export const notifyOrderRegistered = async (order: Order): Promise<void> => {
 
 export const notifyOrderUpdated = async (order: Order): Promise<void> => {
   try {
+    if (order.orderType === 'PRUEBA' || order.customer.isInternal) return;
+    if (!order.customer.phoneE164?.trim()) return;
+
     await invokeBotWebhook({
       numeroTelefono: order.customer.phoneE164,
       tipo: 'pedido_actualizado',
@@ -412,7 +441,9 @@ export const getOrdersOlderOpenOperational = async (recentOrders: Order[]): Prom
   if (import.meta.env.DEV) {
     console.info(`[getOrders:operational:older-open] +${olderRows.length} órdenes.`);
   }
-  return buildOrdersFromOrdenes(olderRows);
+  const built = await buildOrdersFromOrdenes(olderRows);
+  // Pruebas cerradas nunca se envían: no cargarlas como "envío abierto" eterno.
+  return built.filter((o) => !esPruebaCerrada(o));
 };
 
 const mergeOrdersById = (base: Order[], extra: Order[]): Order[] => {
@@ -626,65 +657,151 @@ export const createCustomer = async (customer: Customer): Promise<Customer> => {
   }
 };
 
+/** Cliente interno fijo para pruebas (sin teléfono / WhatsApp). */
+export const getOrCreateInternalTestCustomer = async (): Promise<Customer> => {
+  const { data: existing, error } = await supabase
+    .from('clientes')
+    .select('*')
+    .eq('es_interno', true)
+    .eq('nombre', CLIENTE_PRUEBAS_NOMBRE)
+    .eq('apellido', CLIENTE_PRUEBAS_APELLIDO)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (existing) return mapClienteToCustomer(existing);
+
+  const { data: created, error: insertError } = await supabase
+    .from('clientes')
+    .insert({
+      nombre: CLIENTE_PRUEBAS_NOMBRE,
+      apellido: CLIENTE_PRUEBAS_APELLIDO,
+      telefono: '',
+      medio_contacto: null,
+      es_interno: true,
+    })
+    .select()
+    .single();
+
+  if (insertError) throw insertError;
+  return mapClienteToCustomer(created);
+};
+
 // Crear orden completa (cliente, orden, sellos)
 export const createOrder = async (formData: NewOrderFormData): Promise<Order> => {
   try {
-    // 1. Buscar o crear cliente (reutiliza contacto web del generador de muestras)
-    let cliente: Customer;
-    const phoneNormalized = normalizePhoneDigitsCliente(formData.customer.phoneE164) || formData.customer.phoneE164;
-    const emailNormalized = normalizeEmailCliente(formData.customer.email) ?? undefined;
-    const existingCliente = await findCustomer(phoneNormalized, emailNormalized);
+    const orderType: OrderType = formData.orderType ?? 'VENTA';
+    const isGiftItem =
+      orderType === 'REGALO' || formData.order.isGift === true;
+    const forceZeroValues = orderType === 'PRUEBA' || orderType === 'REGALO' || isGiftItem;
+    const itemValue = forceZeroValues ? 0 : formData.values.totalValue;
+    const depositValue = forceZeroValues ? 0 : formData.values.depositValue;
+    const saleStateForItem =
+      orderType === 'REGALO' ? 'TRANSFERIDO' : formData.states.sale;
 
-    if (existingCliente) {
-      cliente = existingCliente;
-      const customerForMapping: Customer = {
-        id: cliente.id,
-        firstName: formData.customer.firstName,
-        lastName: formData.customer.lastName,
-        phoneE164: phoneNormalized,
-        email: emailNormalized ?? cliente.email,
-      };
-      const clienteData = mapCustomerToCliente(customerForMapping);
-      await supabase
-        .from('clientes')
-        .update(clienteData)
-        .eq('id', cliente.id);
+    // Regalo sumado a un pedido abierto existente
+    if (orderType === 'REGALO' && formData.attachGiftToOrderId) {
+      await addStampToOrder(
+        formData.attachGiftToOrderId,
+        {
+          designName: formData.order.designName,
+          requestedWidthMm: formData.order.requestedWidthMm,
+          requestedHeightMm: formData.order.requestedHeightMm,
+          itemType: formData.order.itemType || 'SELLO',
+          stampType: formData.order.stampType,
+          itemConfig: itemConfigFromForm(formData.order.itemType, formData.order),
+          notes: formData.order.notes,
+          isGift: true,
+          itemValue: 0,
+          fabricationState: formData.states.fabrication,
+          isPriority: formData.states.isPriority,
+          saleState: 'TRANSFERIDO',
+          shippingState: formData.states.shipping || 'SIN_ENVIO',
+          depositValueItem: 0,
+          restPaidAmountItem: 0,
+          paidAmountItemCached: 0,
+          balanceItemCached: 0,
+          files: {},
+          contact: {
+            channel: formData.customer.channel,
+            phoneE164: formData.customer.phoneE164,
+          },
+        },
+        formData.files,
+        { notifyCustomer: false },
+      );
+      const attached = await getOrderById(formData.attachGiftToOrderId);
+      if (!attached) throw new Error('No se pudo obtener el pedido al que se sumó el regalo');
+      return attached;
+    }
+
+    // 1. Cliente
+    let cliente: Customer;
+    if (orderType === 'PRUEBA') {
+      cliente = await getOrCreateInternalTestCustomer();
     } else {
-      cliente = await createCustomer({
-        id: '',
-        firstName: formData.customer.firstName,
-        lastName: formData.customer.lastName,
-        phoneE164: phoneNormalized,
-        email: emailNormalized,
-        dni: undefined,
-      });
+      const phoneNormalized =
+        normalizePhoneDigitsCliente(formData.customer.phoneE164) || formData.customer.phoneE164;
+      const emailNormalized = normalizeEmailCliente(formData.customer.email) ?? undefined;
+      const existingCliente = await findCustomer(phoneNormalized, emailNormalized);
+
+      if (existingCliente) {
+        cliente = existingCliente;
+        const customerForMapping: Customer = {
+          id: cliente.id,
+          firstName: formData.customer.firstName,
+          lastName: formData.customer.lastName,
+          phoneE164: phoneNormalized,
+          email: emailNormalized ?? cliente.email,
+        };
+        const clienteData = mapCustomerToCliente(customerForMapping);
+        await supabase.from('clientes').update(clienteData).eq('id', cliente.id);
+      } else {
+        cliente = await createCustomer({
+          id: '',
+          firstName: formData.customer.firstName,
+          lastName: formData.customer.lastName,
+          phoneE164: phoneNormalized,
+          email: emailNormalized,
+          dni: undefined,
+        });
+      }
     }
 
     // 2. Obtener usuario actual para taken_by
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     const takenByUserId = user?.id || null;
 
     // 3. Crear orden
     const shippingForOrden =
-      formData.internationalCountryIso2 && !formData.shipping?.carrier
-        ? { ...formData.shipping, carrier: 'DHL' as const, service: formData.shipping?.service ?? ('DOMICILIO' as const) }
-        : formData.shipping;
+      orderType === 'PRUEBA'
+        ? { carrier: null as any, service: null as any, origin: 'ENTREGA_EN_SUCURSAL' as const }
+        : formData.internationalCountryIso2 && !formData.shipping?.carrier
+          ? {
+              ...formData.shipping,
+              carrier: 'DHL' as const,
+              service: formData.shipping?.service ?? ('DOMICILIO' as const),
+            }
+          : formData.shipping;
 
     const ordenData = mapOrderToOrden(
       {
         shipping: shippingForOrden,
-        saleStateOrder: 'SEÑADO',
+        saleStateOrder: orderType === 'REGALO' ? 'TRANSFERIDO' : 'SEÑADO',
         orderDate: todayArgentinaDateKey(),
+        orderType,
+        testReason: orderType === 'PRUEBA' ? formData.testReason : undefined,
       },
-      cliente.id
+      cliente.id,
     );
 
-    // Agregar taken_by si existe usuario
     if (takenByUserId) {
       (ordenData as any).taken_by = takenByUserId;
     }
 
-    const iso = formData.internationalCountryIso2;
+    const iso = orderType === 'VENTA' ? formData.internationalCountryIso2 : null;
     if (iso && iso in PAISES_INTERNACIONALES) {
       (ordenData as { notas_web?: Record<string, unknown> }).notas_web = {
         international: {
@@ -716,26 +833,27 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
     const selloDataSinArchivos = {
       ...mapOrderItemToSello(
         {
-        id: '',
-        orderId: orden.id,
-        designName: formData.order.designName,
-        requestedWidthMm: formData.order.requestedWidthMm,
-        requestedHeightMm: formData.order.requestedHeightMm,
-        itemType: formData.order.itemType || 'SELLO',
-        stampType: formData.order.stampType,
-        itemConfig: itemConfigFromForm(formData.order.itemType, formData.order),
-        notes: formData.order.notes,
-        itemValue: formData.values.totalValue,
-        fabricationState: formData.states.fabrication,
-        isPriority: formData.states.isPriority,
-        saleState: formData.states.sale,
-        shippingState: formData.states.shipping,
-        depositValueItem: formData.values.depositValue,
-        restPaidAmountItem: formData.values.totalValue - formData.values.depositValue,
-        paidAmountItemCached: formData.values.depositValue,
-        balanceItemCached: formData.values.totalValue - formData.values.depositValue,
-        files: {}, // Sin archivos aún
-        contact: formData.customer,
+          id: '',
+          orderId: orden.id,
+          designName: formData.order.designName,
+          requestedWidthMm: formData.order.requestedWidthMm,
+          requestedHeightMm: formData.order.requestedHeightMm,
+          itemType: formData.order.itemType || 'SELLO',
+          stampType: formData.order.stampType,
+          itemConfig: itemConfigFromForm(formData.order.itemType, formData.order),
+          notes: formData.order.notes,
+          isGift: isGiftItem,
+          itemValue,
+          fabricationState: formData.states.fabrication,
+          isPriority: formData.states.isPriority,
+          saleState: saleStateForItem,
+          shippingState: formData.states.shipping,
+          depositValueItem: depositValue,
+          restPaidAmountItem: itemValue - depositValue,
+          paidAmountItemCached: depositValue,
+          balanceItemCached: itemValue - depositValue,
+          files: {}, // Sin archivos aún
+          contact: formData.customer,
         },
         orden.id,
         {
@@ -745,14 +863,21 @@ export const createOrder = async (formData: NewOrderFormData): Promise<Order> =>
           telefono: cliente.phoneE164,
           mail: cliente.email || null,
           dni: cliente.dni || null,
-          medio_contacto: formData.customer.channel === 'WHATSAPP' ? 'Whatsapp' : 
-                        formData.customer.channel === 'INSTAGRAM' ? 'Instagram' :
-                        formData.customer.channel === 'FACEBOOK' ? 'Facebook' :
-                        formData.customer.channel === 'MAIL' ? 'Mail' :
-                        formData.customer.channel === 'WEB' ? 'Web' : 'Whatsapp',
+          medio_contacto:
+            formData.customer.channel === 'WHATSAPP'
+              ? 'Whatsapp'
+              : formData.customer.channel === 'INSTAGRAM'
+                ? 'Instagram'
+                : formData.customer.channel === 'FACEBOOK'
+                  ? 'Facebook'
+                  : formData.customer.channel === 'MAIL'
+                    ? 'Mail'
+                    : formData.customer.channel === 'WEB'
+                      ? 'Web'
+                      : 'Whatsapp',
           created_at: null,
           updated_at: null,
-        }
+        },
       ),
       // Sobrescribir campos específicos al crear el sello
       ...{
@@ -1203,9 +1328,14 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
       
       // Actualizar estado general de la orden sin hacer getOrderById intermedio.
       // Reutilizamos sellos ya leídos y aplicamos los cambios del patch en memoria.
+      // Ítems regalo acompañan la venta de los cobrados; el sync de estado_orden
+      // se calcula solo sobre ítems no regalo (BR-PED-003 / plan §5.2).
       if (allSellos && allSellos.length > 0) {
         const saleStateBySello = new Map<string, string | null>(
           allSellos.map((s) => [s.id, s.estado_venta ?? null]),
+        );
+        const isGiftBySello = new Map<string, boolean>(
+          allSellos.map((s) => [s.id, (s as { es_regalo?: boolean | null }).es_regalo === true]),
         );
 
         for (const item of updates.items) {
@@ -1220,18 +1350,39 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
           }
         }
 
-        const allSaleStates = Array.from(saleStateBySello.values()).filter(Boolean);
-        const uniqueSaleStates = [...new Set(allSaleStates)];
-        if (uniqueSaleStates.length === 1 && uniqueSaleStates[0]) {
+        // Si se actualizó la venta de ítems cobrados, los regalos de la misma orden
+        // toman el mismo estado (salvo órdenes Regalo/Prueba que no usan este circuito).
+        const paidSaleStates = [...saleStateBySello.entries()]
+          .filter(([id]) => !isGiftBySello.get(id))
+          .map(([, st]) => st)
+          .filter(Boolean);
+        const uniquePaid = [...new Set(paidSaleStates)];
+        if (uniquePaid.length === 1 && uniquePaid[0]) {
+          for (const [id, isGift] of isGiftBySello) {
+            if (isGift) saleStateBySello.set(id, uniquePaid[0]);
+          }
+          // Persistir venta de regalos si cambió
+          const giftIdsToSync = [...isGiftBySello.entries()]
+            .filter(([id, isGift]) => isGift && saleStateBySello.get(id) !== allSellos.find((s) => s.id === id)?.estado_venta)
+            .map(([id]) => id);
+          if (giftIdsToSync.length) {
+            await supabase
+              .from('sellos')
+              .update({ estado_venta: uniquePaid[0] })
+              .in('id', giftIdsToSync);
+          }
+
           const { error: ordenUpdateError } = await supabase
             .from('ordenes')
-            .update({ estado_orden: uniqueSaleStates[0] })
+            .update({ estado_orden: uniquePaid[0] })
             .eq('id', orderId);
 
           if (ordenUpdateError) {
             console.error('Error updating order state:', ordenUpdateError);
             throw ordenUpdateError;
           }
+        } else if (paidSaleStates.length === 0) {
+          // Orden solo de regalos (o sin ítems cobrados): no forzar sync desde regalos
         }
       }
     }
@@ -1275,7 +1426,7 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
         selloId,
       });
     }
-    if (v3SelloIds.length) {
+    if (v3SelloIds.length && finalOrder.orderType !== 'PRUEBA') {
       notifySellosHechos({
         count: v3SelloIds.length,
         ordenId: orderId,
@@ -1320,26 +1471,45 @@ export const deleteOrder = async (orderId: string): Promise<void> => {
 };
 
 // Agregar sello a una orden existente
-export const addStampToOrder = async (orderId: string, item: Partial<OrderItem>, files?: { base?: File; vector?: File; photo?: File }): Promise<OrderItem> => {
+export const addStampToOrder = async (
+  orderId: string,
+  item: Partial<OrderItem>,
+  files?: { base?: File; vector?: File; photo?: File },
+  _options?: AddStampOptions,
+): Promise<OrderItem> => {
   try {
     const orden = await getOrderById(orderId);
     if (!orden) throw new Error('Order not found');
 
-    const selloData = mapOrderItemToSello(
-      item as OrderItem,
-      orderId,
-      {
-        id: orden.customer.id,
-        nombre: orden.customer.firstName,
-        apellido: orden.customer.lastName,
-        telefono: orden.customer.phoneE164,
-        mail: orden.customer.email || null,
-        dni: orden.customer.dni || null,
-        medio_contacto: null,
-        created_at: null,
-        updated_at: null,
-      }
-    );
+    const orderType = orden.orderType ?? 'VENTA';
+    const isGift =
+      orderType === 'REGALO' || item.isGift === true;
+    const forceZero = orderType === 'PRUEBA' || orderType === 'REGALO' || isGift;
+
+    const itemForMap: OrderItem = {
+      ...(item as OrderItem),
+      isGift,
+      itemValue: forceZero ? 0 : item.itemValue,
+      depositValueItem: forceZero ? 0 : item.depositValueItem,
+      saleState:
+        orderType === 'REGALO'
+          ? 'TRANSFERIDO'
+          : isGift && orden.saleStateOrder
+            ? orden.saleStateOrder
+            : item.saleState || 'SEÑADO',
+    };
+
+    const selloData = mapOrderItemToSello(itemForMap, orderId, {
+      id: orden.customer.id,
+      nombre: orden.customer.firstName,
+      apellido: orden.customer.lastName,
+      telefono: orden.customer.phoneE164,
+      mail: orden.customer.email || null,
+      dni: orden.customer.dni || null,
+      medio_contacto: null,
+      created_at: null,
+      updated_at: null,
+    });
 
     const { data: sello, error } = await supabase
       .from('sellos')
@@ -1440,7 +1610,8 @@ export const addStampToOrder = async (orderId: string, item: Partial<OrderItem>,
     const yaFoto =
       orden.saleStateOrder === 'FOTO_ENVIADA' ||
       orden.items.some((i) => i.saleState === 'FOTO_ENVIADA');
-    if (yaPagado || yaFoto) {
+    // Notificación v1: no emitir para Prueba
+    if ((yaPagado || yaFoto) && orderType !== 'PRUEBA') {
       notifyItemAgregadoPedidoPagado({
         ordenId: orderId,
         clienteNombre: `${orden.customer.firstName} ${orden.customer.lastName}`.trim(),

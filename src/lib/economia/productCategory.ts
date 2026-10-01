@@ -1,4 +1,5 @@
-import type { OrderItem } from '@/lib/types';
+import type { Order, OrderItem } from '@/lib/types';
+import { itemCuentaComoVenta } from '@/lib/pedidos/tipoPedido';
 import { clasificarGrupoSelloRectangularMm } from '@/lib/precios/cotizacionMedida';
 import type { SelloGrupoCodigo } from '@/lib/precios/resolverPrecioSello';
 
@@ -120,7 +121,7 @@ function emptyByProduct(): Record<EconomiaProductoKey, EconomiaProductoCell> {
 
 export function buildMonthlyProductBreakdown(
   months: Array<{ key: string; label: string }>,
-  itemsByMonth: Array<{ monthKey: string; item: OrderItem }>,
+  itemsByMonth: Array<{ monthKey: string; item: OrderItem; order: Pick<Order, 'orderType'> }>,
 ): EconomiaProductoMonthRow[] {
   const map = new Map<string, EconomiaProductoMonthRow>();
   for (const m of months) {
@@ -134,7 +135,9 @@ export function buildMonthlyProductBreakdown(
     });
   }
 
-  for (const { monthKey, item } of itemsByMonth) {
+  for (const { monthKey, item, order } of itemsByMonth) {
+    // Pruebas, regalos aparte e ítems regalo no cuentan como producto vendido.
+    if (!itemCuentaComoVenta(order, item)) continue;
     let row = map.get(monthKey);
     if (!row) {
       row = {

@@ -166,9 +166,13 @@ const resolveFotoSelloUrl = (fotoSello: unknown): string | null => {
 };
 
 const countSellosTipoSello = (
-  rows: Array<{ item_type?: unknown }>,
+  rows: Array<{ item_type?: unknown; es_regalo?: unknown }>,
 ): number => {
   return rows.filter((s) => {
+    // Ítems regalo no cuentan para la regla de envío gratis (≥3 sellos)
+    if (s?.es_regalo === true || s?.es_regalo === "true" || s?.es_regalo === 1) {
+      return false;
+    }
     const raw = s?.item_type;
     const t = raw === null || raw === undefined || raw === ""
       ? "SELLO"
@@ -269,6 +273,7 @@ Deno.serve(async (req: Request) => {
           cliente_id,
           tipo_envio,
           empresa_envio,
+          tipo_pedido,
           clientes (
             nombre,
             apellido,
@@ -287,7 +292,7 @@ Deno.serve(async (req: Request) => {
         const { data: sellos, error: sellosError } = await supabase
           .from("sellos")
           .select(
-            "id, diseno, tipo, item_type, item_config, valor, senia, ancho_real, largo_real, foto_sello",
+            "id, diseno, tipo, item_type, item_config, valor, senia, ancho_real, largo_real, foto_sello, es_regalo",
           )
           .eq("orden_id", numeroPedido);
 
@@ -328,8 +333,9 @@ Deno.serve(async (req: Request) => {
               ? Number(s.largo_real)
               : null;
 
-          const valorItem = toNumber(s.valor);
-          const seniaItem = toNumber(s.senia);
+          const esRegalo = s.es_regalo === true;
+          const valorItem = esRegalo ? 0 : toNumber(s.valor);
+          const seniaItem = esRegalo ? 0 : toNumber(s.senia);
           const nombreItem = resolveItemDisplayName(s.diseno, s.item_type);
 
           return {
@@ -343,8 +349,14 @@ Deno.serve(async (req: Request) => {
             valor_item: valorItem,
             senia_item: seniaItem,
             saldo_item: Math.max(0, valorItem - seniaItem),
+            es_regalo: esRegalo,
+            ...(esRegalo ? { etiqueta: "Regalo – sin cargo" } : {}),
           };
         });
+
+        // Propagar tipo_pedido al payload del bot
+        body.datos = body.datos || {};
+        body.datos.tipo_pedido = (orden as any).tipo_pedido || "Venta";
 
         const valorTotalOrden = toNumber((orden as any).valor_total);
         const seniaTotalOrden = toNumber((orden as any).senia_total);

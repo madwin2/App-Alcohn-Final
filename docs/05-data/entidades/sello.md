@@ -9,7 +9,7 @@
 | Identidad | `id`, `orden_id`, `fecha`, `created_at` | `fecha` = fecha del pedido |
 | Producto | `item_type` (`SELLO`, `ABECEDARIO`, `SOLDADOR`, `MANGO_GOLPE`, `BASE_REMACHADORA`), `tipo` (`Clasico`, `3mm`, `Lacre`, `Alimento`, `ABC`), `diseno` (nombre), `item_config` (JSON: potencia, datos de abecedario; en web: origen, slug, colección, variante), `nota` | |
 | Medidas | `ancho_real`, `largo_real` (**cm**, pedida; ancho = mayor), `ancho_fabricacion_mm`, `largo_fabricacion_mm` (**mm**, confirmada), `tipo_planchuela` (12/19/25/38/63, 100 legado) | Ver [medida](../../02-modules/vectorizacion/medida-de-fabricacion.md) |
-| Dinero | `valor`, `senia`, `restante` (trigger), `costo_fabricacion`, `margen_fabricacion` (trigger) | |
+| Dinero | `valor`, `senia`, `restante` (trigger), `costo_fabricacion`, `margen_fabricacion` (trigger), `es_regalo` (ítem sin cargo; fuerza valor/seña = 0) | Inmutable después del INSERT |
 | Estados | `estado_fabricacion`, `estado_fabricacion_previo`, `es_prioritario`, `estado_venta`, `estado_vectorizacion`, `estado_aspire` | Ver [06-state-machines](../../06-state-machines/README.md) |
 | Archivos | `archivo_base` (bucket `base` o URL de mockup), `archivo_base_mejorado(_at)`, `archivo_vector_preview` (URL del **vector** SVG/PDF/AI, o del **preview PNG** si es EPS), `foto_sello` (bucket `foto`) | `vectorUrlFromPreview` convierte `_preview.png` → `.eps` |
 | Programa | `programa_id`, `programa_nombre` (copia por trigger), `maquina`, `motivo_salida_programa`, `no_importado_motivo` | 1.535 ítems tienen `programa_nombre` sin `programa_id` (históricos) |

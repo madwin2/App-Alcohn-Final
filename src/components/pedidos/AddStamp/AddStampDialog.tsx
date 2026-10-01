@@ -21,6 +21,8 @@ import {
   writeAbecedarioFields,
   type AbecedarioFormFields,
 } from '@/lib/abecedario/abecedarioConfig';
+import { OrderTypeBadge } from '@/components/pedidos/OrderTypeBadge';
+import { esOrdenSinCargo } from '@/lib/pedidos/tipoPedido';
 import { NonSvgVectorConfirmDialog } from '@/components/shared/NonSvgVectorConfirmDialog';
 import { isSvgFileName } from '@/lib/utils/vectorFileFormat';
 
@@ -47,6 +49,8 @@ const addStampSchema = z.object({
   saleState: z.enum(['SEÑADO', 'FOTO_ENVIADA', 'TRANSFERIDO', 'DEUDOR']),
   shippingState: z.enum(['SIN_ENVIO', 'HACER_ETIQUETA', 'ERROR_ETIQUETA', 'ETIQUETA_LISTA', 'DESPACHADO', 'SEGUIMIENTO_ENVIADO']),
   isPriority: z.boolean(),
+  /** Casilla "Regalo (sin cargo)": solo aplica en órdenes Venta. */
+  isGift: z.boolean().optional(),
 }).superRefine((data, ctx) => {
   if (data.itemType === 'SELLO' && !data.designName?.trim()) {
     ctx.addIssue({
@@ -154,6 +158,19 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
 
   const watchedValues = watch(['itemValue', 'depositValueItem']);
   const selectedItemType = watch('itemType');
+
+  const orderType = order.orderType ?? 'VENTA';
+  const ordenSinCargo = esOrdenSinCargo(order);
+  /** Casilla "Regalo (sin cargo)" (solo en órdenes Venta). */
+  const itemIsGiftCheckbox = watch('isGift') === true && orderType === 'VENTA';
+  /** Valor y seña bloqueados en 0: orden Regalo/Prueba o ítem marcado como regalo. */
+  const valoresBloqueados = ordenSinCargo || itemIsGiftCheckbox;
+
+  useEffect(() => {
+    if (!valoresBloqueados) return;
+    setValue('itemValue', 0, { shouldDirty: true, shouldValidate: true });
+    setValue('depositValueItem', 0, { shouldDirty: true, shouldValidate: true });
+  }, [valoresBloqueados, setValue]);
   const abcFields: AbecedarioFormFields = {
     abecedarioTipografia: watch('abecedarioTipografia'),
     abecedarioAlturaMm: watch('abecedarioAlturaMm'),
@@ -179,6 +196,8 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
 
   useEffect(() => {
     if (selectedItemType !== 'SELLO') return;
+    // La cotización automática no aplica a regalos ni pruebas.
+    if (valoresBloqueados) return;
     if (!preciosCotizacion) return;
     const w = Number(wMmWatch) || 0;
     const h = Number(hMmWatch) || 0;
@@ -187,7 +206,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
     const { anchoCm, altoCm } = mmPedidoAcm(w, h);
     const c = cotizarSelloRectangularCm(anchoCm, altoCm, preciosCotizacion);
     if (c) setValue('itemValue', c.precioTransferencia, { shouldDirty: true, shouldValidate: true });
-  }, [preciosCotizacion, selectedItemType, wMmWatch, hMmWatch, setValue]);
+  }, [preciosCotizacion, selectedItemType, wMmWatch, hMmWatch, setValue, valoresBloqueados]);
 
   const aplicarMedidaDesdeTexto = useCallback(
     (value: string) => {
@@ -205,19 +224,29 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
   );
 
   useEffect(() => {
-    if (selectedItemType === 'SOLDADOR') {
-      setValue('itemValue', 75000);
-    } else if (selectedItemType === 'MANGO_GOLPE') {
-      setValue('itemValue', 25000);
-    } else if (selectedItemType === 'BASE_REMACHADORA') {
-      setValue('itemValue', 40000);
+    if (!valoresBloqueados) {
+      if (selectedItemType === 'SOLDADOR') {
+        setValue('itemValue', 75000);
+      } else if (selectedItemType === 'MANGO_GOLPE') {
+        setValue('itemValue', 25000);
+      } else if (selectedItemType === 'BASE_REMACHADORA') {
+        setValue('itemValue', 40000);
+      }
     }
     if (selectedItemType !== 'SELLO') {
       setValue('requestedWidthMm', 1);
       setValue('requestedHeightMm', 1);
       setValue('stampType', 'CLASICO');
     }
-  }, [selectedItemType, setValue]);
+  }, [selectedItemType, setValue, valoresBloqueados]);
+
+  const handleItemGiftToggle = (checked: boolean) => {
+    setValue('isGift', checked, { shouldDirty: true });
+    if (checked) {
+      setValue('itemValue', 0, { shouldDirty: true, shouldValidate: true });
+      setValue('depositValueItem', 0, { shouldDirty: true, shouldValidate: true });
+    }
+  };
 
   // Resetear el campo de medida cuando se abre el diálogo
   useEffect(() => {
@@ -263,11 +292,13 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
           stampType: data.stampType,
           itemConfig: itemConfigFromForm(data.itemType, data),
           notes: data.notes,
-          itemValue: data.itemValue,
-          depositValueItem: data.depositValueItem,
-          restPaidAmountItem: restante,
-          paidAmountItemCached: data.depositValueItem,
-          balanceItemCached: restante,
+          // Regalo: todo ítem nuevo es regalo. Prueba: valor 0. Venta: según la casilla.
+          isGift: orderType === 'REGALO' || (orderType === 'VENTA' && data.isGift === true),
+          itemValue: valoresBloqueados ? 0 : data.itemValue,
+          depositValueItem: valoresBloqueados ? 0 : data.depositValueItem,
+          restPaidAmountItem: valoresBloqueados ? 0 : restante,
+          paidAmountItemCached: valoresBloqueados ? 0 : data.depositValueItem,
+          balanceItemCached: valoresBloqueados ? 0 : restante,
           fabricationState: data.fabricationState,
           saleState: data.saleState,
           shippingState: data.shippingState,
@@ -329,8 +360,9 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
           <DialogTitle className="text-xl">
             Agregar Ítem al Pedido
           </DialogTitle>
-          <p className="text-sm text-muted-foreground mt-2">
+          <p className="text-sm text-muted-foreground mt-2 flex items-center gap-2">
             Cliente: {order.customer.firstName} {order.customer.lastName}
+            <OrderTypeBadge orderType={order.orderType} />
           </p>
         </DialogHeader>
         
@@ -452,6 +484,14 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
           {/* Valores */}
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Valores</h3>
+            {ordenSinCargo ? (
+              <p className="text-sm text-muted-foreground">
+                Sin cargo
+                {orderType === 'REGALO'
+                  ? ': todo ítem nuevo de un pedido de regalo es regalo.'
+                  : ': en una prueba interna el valor es 0.'}
+              </p>
+            ) : (
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="itemValue">Valor *</Label>
@@ -460,7 +500,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                   type="number"
                   {...register('itemValue', { valueAsNumber: true })}
                   className={errors.itemValue ? 'border-red-500' : ''}
-                  disabled={selectedItemType === 'SOLDADOR' || selectedItemType === 'MANGO_GOLPE' || selectedItemType === 'BASE_REMACHADORA'}
+                  disabled={itemIsGiftCheckbox || selectedItemType === 'SOLDADOR' || selectedItemType === 'MANGO_GOLPE' || selectedItemType === 'BASE_REMACHADORA'}
                 />
                 {errors.itemValue && (
                   <p className="text-xs text-red-500 mt-1">{errors.itemValue.message}</p>
@@ -473,6 +513,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                   type="number"
                   {...register('depositValueItem', { valueAsNumber: true })}
                   className={errors.depositValueItem ? 'border-red-500' : ''}
+                  disabled={itemIsGiftCheckbox}
                 />
                 {errors.depositValueItem && (
                   <p className="text-xs text-red-500 mt-1">{errors.depositValueItem.message}</p>
@@ -481,12 +522,26 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
               <div>
                 <Label>Restante</Label>
                 <Input
-                  value={`$${restante.toLocaleString()}`}
+                  value={itemIsGiftCheckbox ? 'Sin cargo' : `$${restante.toLocaleString()}`}
                   disabled
                   className="bg-muted"
                 />
               </div>
+              <div className="col-span-3 flex items-center space-x-2">
+                <Checkbox
+                  id="isGiftItem"
+                  checked={itemIsGiftCheckbox}
+                  onCheckedChange={(c) => handleItemGiftToggle(c === true)}
+                />
+                <Label htmlFor="isGiftItem" className="text-sm font-medium cursor-pointer">
+                  🎁 Regalo (sin cargo)
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    Viaja con el pedido pero no se cobra.
+                  </span>
+                </Label>
+              </div>
             </div>
+            )}
           </div>
 
           {/* Estados */}

@@ -1,5 +1,6 @@
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 import type { ItemType } from '@/lib/types/index';
+import { ORDER_TYPE_FROM_DB, ordenCuentaComoVenta, type OrderType } from '@/lib/pedidos/tipoPedido';
 import { supabase } from '../client';
 import type { Database } from '../types';
 import { isWebOrderHiddenFromInternalApp } from './orders.service';
@@ -29,10 +30,14 @@ export type ClienteProfileItem = {
   estadoFabricacion: string | null;
   estadoVenta: string | null;
   nota: string | null;
+  /** Ítem regalo (sin cargo). */
+  isGift: boolean;
 };
 
 export type ClienteProfileOrder = {
   id: string;
+  /** Tipo de pedido. Solo las ventas suman a los totales del cliente. */
+  orderType: OrderType;
   fecha: string | null;
   origen: string | null;
   valorTotal: number;
@@ -103,6 +108,7 @@ function mapItem(sello: SelloRow): ClienteProfileItem {
     estadoFabricacion: sello.estado_fabricacion,
     estadoVenta: sello.estado_venta,
     nota: sello.nota,
+    isGift: (sello as { es_regalo?: boolean | null }).es_regalo === true,
   };
 }
 
@@ -112,7 +118,7 @@ export async function fetchClienteProfile(clienteId: string): Promise<ClientePro
     supabase
       .from('ordenes')
       .select(
-        'id, fecha, origen, valor_total, senia_total, restante, empresa_envio, tipo_envio, estado_envio, seguimiento, direccion_id, estado_pago_web',
+        'id, fecha, origen, valor_total, senia_total, restante, empresa_envio, tipo_envio, estado_envio, seguimiento, direccion_id, estado_pago_web, tipo_pedido',
       )
       .eq('cliente_id', clienteId)
       .order('fecha', { ascending: false })
@@ -138,7 +144,7 @@ export async function fetchClienteProfile(clienteId: string): Promise<ClientePro
     const chunk = ordenIds.slice(i, i + SELLOS_IN_QUERY_CHUNK);
     const { data, error } = await supabase
       .from('sellos')
-      .select('id, orden_id, diseno, tipo, item_type, item_config, estado_fabricacion, estado_venta, nota')
+      .select('id, orden_id, diseno, tipo, item_type, item_config, estado_fabricacion, estado_venta, nota, es_regalo')
       .in('orden_id', chunk);
     if (error) throw new Error(error.message);
     if (data?.length) sellos.push(...(data as SelloRow[]));
@@ -162,6 +168,7 @@ export async function fetchClienteProfile(clienteId: string): Promise<ClientePro
 
   const orders: ClienteProfileOrder[] = ordenes.map((orden) => ({
     id: orden.id,
+    orderType: ORDER_TYPE_FROM_DB[(orden as { tipo_pedido?: string | null }).tipo_pedido ?? 'Venta'] ?? 'VENTA',
     fecha: orden.fecha,
     origen: orden.origen ?? null,
     valorTotal: toNumber(orden.valor_total),
@@ -175,8 +182,10 @@ export async function fetchClienteProfile(clienteId: string): Promise<ClientePro
     shipping: orden.direccion_id ? mapShipping(direccionesById.get(orden.direccion_id)) : null,
   }));
 
-  const totalFacturado = orders.reduce((sum, order) => sum + order.valorTotal, 0);
-  const saldoPendiente = orders.reduce((sum, order) => sum + order.restante, 0);
+  // Totales y recurrencia: solo ventas (los regalos y pruebas se listan pero no suman).
+  const ventas = orders.filter(ordenCuentaComoVenta);
+  const totalFacturado = ventas.reduce((sum, order) => sum + order.valorTotal, 0);
+  const saldoPendiente = ventas.reduce((sum, order) => sum + order.restante, 0);
 
   return {
     cliente: {
@@ -191,10 +200,10 @@ export async function fetchClienteProfile(clienteId: string): Promise<ClientePro
     },
     orders,
     stats: {
-      pedidosCount: orders.length,
+      pedidosCount: ventas.length,
       totalFacturado,
       saldoPendiente,
-      ultimoPedido: orders[0]?.fecha ?? null,
+      ultimoPedido: ventas[0]?.fecha ?? null,
     },
   };
 }

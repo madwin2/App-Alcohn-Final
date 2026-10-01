@@ -9,6 +9,7 @@
 | `mail` | **UNIQUE**. |
 | `dni` | **UNIQUE**; casi nunca se completa. |
 | `medio_contacto` | `Whatsapp`, `Instagram`, `Facebook`, `Mail`, `Web`. ⚠️ El alta manual siempre escribe `Whatsapp` si hay teléfono. |
+| `es_interno` | Cliente interno (p. ej. "Alcohn – Pruebas internas"). Excluido de Comercial/recompra. `telefono` puede ser `''` (NOT NULL en BD). |
 
 **Quién lo crea**: alta de pedido (Pedidos), tienda web, scripts de importación (`scripts/import-clientes-viejos-csv.mjs`, `import-ventas-csv.mjs`, `update-clientes-contacto-csv.mjs`).
 **Quién lo modifica**: alta de pedido (actualiza nombre/teléfono/email si ya existía), edición en Pedidos, Envíos (email detectado).

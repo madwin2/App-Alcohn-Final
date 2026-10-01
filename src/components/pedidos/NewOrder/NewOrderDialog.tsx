@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { NewOrderStepForm } from './NewOrderStepForm';
 import { NewOrderFormData, Order, OrderItem } from '@/lib/types/index';
+import type { OrderType } from '@/lib/pedidos/tipoPedido';
 import { useToast } from '@/components/ui/use-toast';
 import { useSound } from '@/lib/hooks/useSound';
 import { useOrders } from '@/lib/hooks/useOrders';
@@ -27,6 +28,8 @@ interface NewOrderDialogProps {
     options?: { notifyCustomer?: boolean },
   ) => Promise<any>;
   fetchOrders?: () => Promise<void>;
+  /** Pedidos cargados (para ofrecer sumar un regalo a un pedido abierto del cliente). Default: los del contexto. */
+  orders?: Order[];
 }
 
 export type SaveDesignOptions = {
@@ -37,12 +40,27 @@ export type SaveDesignOptions = {
   advanceToStep3?: boolean;
 };
 
+/** Regalo/Prueba: valor y seña en 0; Regalo marca el ítem como regalo; Prueba sin transportista. */
+function alignDesignToOrderType(design: SavedDesignData, type: OrderType): SavedDesignData {
+  if (type === 'VENTA') return design;
+  return {
+    ...design,
+    order: { ...design.order, isGift: type === 'REGALO' },
+    values: { totalValue: 0, depositValue: 0 },
+    shipping:
+      type === 'PRUEBA'
+        ? ({ ...design.shipping, carrier: undefined, service: undefined } as unknown as SavedDesignData['shipping'])
+        : design.shipping,
+  };
+}
+
 export function NewOrderDialog({
   open,
   onOpenChange,
   createOrder: createOrderProp,
   addStampToOrder: addStampToOrderProp,
   fetchOrders: fetchOrdersProp,
+  orders: ordersProp,
 }: NewOrderDialogProps) {
   const { toast } = useToast();
   const { playSound } = useSound();
@@ -50,9 +68,13 @@ export function NewOrderDialog({
   const createOrder = createOrderProp ?? ordersApi.createOrder;
   const addStampToOrder = addStampToOrderProp ?? ordersApi.addStampToOrder;
   const fetchOrders = fetchOrdersProp ?? ordersApi.fetchOrders;
+  const ordersForGift = ordersProp ?? ordersApi.orders;
   const [currentStep, setCurrentStep] = useState(1);
   const [customerData, setCustomerData] = useState<NewOrderFormData['customer'] | null>(null);
   const [skipConfirmationWebhook, setSkipConfirmationWebhook] = useState(false);
+  const [orderType, setOrderType] = useState<OrderType>('VENTA');
+  const [testReason, setTestReason] = useState('');
+  const [attachGiftToOrderId, setAttachGiftToOrderId] = useState<string | null>(null);
   const [internationalCountryIso2, setInternationalCountryIso2] = useState<PaisInternacional['iso2'] | null>(null);
   const [designs, setDesigns] = useState<SavedDesignData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,13 +97,25 @@ export function NewOrderDialog({
       customer?: NewOrderFormData['customer'];
       skipConfirmationWebhook?: boolean;
       internationalCountryIso2?: PaisInternacional['iso2'] | null;
+      orderType?: OrderType;
+      testReason?: string;
+      attachGiftToOrderId?: string | null;
     },
     step: number,
   ) => {
     if (step === 1) {
+      const nextType = stepData.orderType ?? 'VENTA';
       setCustomerData(stepData.customer!);
-      setSkipConfirmationWebhook(stepData.skipConfirmationWebhook === true);
-      setInternationalCountryIso2(stepData.internationalCountryIso2 ?? null);
+      setOrderType(nextType);
+      setTestReason(nextType === 'PRUEBA' ? stepData.testReason?.trim() ?? '' : '');
+      setAttachGiftToOrderId(nextType === 'REGALO' ? stepData.attachGiftToOrderId ?? null : null);
+      // Prueba nunca avisa al cliente (cliente interno sin teléfono).
+      setSkipConfirmationWebhook(nextType === 'PRUEBA' || stepData.skipConfirmationWebhook === true);
+      setInternationalCountryIso2(nextType === 'VENTA' ? stepData.internationalCountryIso2 ?? null : null);
+      if (nextType !== orderType) {
+        // Si cambió el tipo con diseños ya guardados, alinearlos (valores en 0, marca de regalo, sin envío en Prueba).
+        setDesigns((prev) => prev.map((d) => alignDesignToOrderType(d, nextType)));
+      }
       setCurrentStep(2);
     }
   };
@@ -149,6 +183,9 @@ export function NewOrderDialog({
       const orderData: NewOrderFormData = {
         customer: customerToUse,
         internationalCountryIso2,
+        orderType,
+        testReason: orderType === 'PRUEBA' ? testReason : undefined,
+        attachGiftToOrderId: orderType === 'REGALO' ? attachGiftToOrderId : null,
         order: {
           ...firstDesign.order,
           requestedHeightMm: firstDesign.order.requestedHeightMm || firstDesign.order.requestedWidthMm,
@@ -173,6 +210,7 @@ export function NewOrderDialog({
             stampType: design.order.stampType,
             itemConfig: itemConfigFromForm(design.order.itemType, design.order),
             notes: design.order.notes,
+            isGift: orderType === 'REGALO' || design.order.isGift === true,
             itemValue: design.values.totalValue,
             fabricationState: design.states.fabrication,
             isPriority: design.states.isPriority,
@@ -195,15 +233,24 @@ export function NewOrderDialog({
 
       await fetchOrders();
 
-      if (!skipConfirmationWebhook) {
+      // Prueba nunca notifica. Regalo sumado a un pedido abierto tampoco (el cliente ya fue avisado de ese pedido).
+      const shouldNotifyCustomer =
+        !skipConfirmationWebhook && orderType !== 'PRUEBA' && !(orderType === 'REGALO' && attachGiftToOrderId);
+      if (shouldNotifyCustomer) {
         await notifyOrderRegistered(createdOrder);
       }
 
       playSound('success');
 
       toast({
-        title: '¡Pedido creado!',
-        description: `Se ha creado el pedido con ${designsToUse.length} diseño(s) para ${customerToUse.firstName} ${customerToUse.lastName}`,
+        title:
+          orderType === 'PRUEBA' ? '¡Prueba creada!' : orderType === 'REGALO' ? '¡Regalo creado!' : '¡Pedido creado!',
+        description:
+          orderType === 'PRUEBA'
+            ? `Se ha creado la prueba interna con ${designsToUse.length} diseño(s)`
+            : orderType === 'REGALO' && attachGiftToOrderId
+              ? `Se sumó el regalo (${designsToUse.length} diseño(s)) al pedido abierto de ${customerToUse.firstName} ${customerToUse.lastName}`
+              : `Se ha creado el pedido${orderType === 'REGALO' ? ' de regalo' : ''} con ${designsToUse.length} diseño(s) para ${customerToUse.firstName} ${customerToUse.lastName}`,
       });
 
       if (createdOrder.shipping?.carrier === 'ANDREANI' && !createdOrder.andreaniLinkUrl) {
@@ -217,6 +264,9 @@ export function NewOrderDialog({
       setCurrentStep(1);
       setCustomerData(null);
       setSkipConfirmationWebhook(false);
+      setOrderType('VENTA');
+      setTestReason('');
+      setAttachGiftToOrderId(null);
       setInternationalCountryIso2(null);
       setDesigns([]);
       onOpenChange(false);
@@ -236,6 +286,9 @@ export function NewOrderDialog({
     setCurrentStep(1);
     setCustomerData(null);
     setSkipConfirmationWebhook(false);
+    setOrderType('VENTA');
+    setTestReason('');
+    setAttachGiftToOrderId(null);
     setInternationalCountryIso2(null);
     setDesigns([]);
     onOpenChange(false);
@@ -294,9 +347,13 @@ export function NewOrderDialog({
               ...(customerData ? { customer: customerData } : {}),
               skipConfirmationWebhook,
               internationalCountryIso2,
+              orderType,
+              testReason,
+              attachGiftToOrderId,
             }}
             savedDesigns={designs}
             isSubmitting={isSubmitting}
+            orders={ordersForGift}
           />
         </DialogContent>
       </Dialog>

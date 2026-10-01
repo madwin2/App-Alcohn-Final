@@ -1,7 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { Order, SaleState } from '@/lib/types/index';
-import { getSaleStateColor, getSaleChipVisual, getSaleLabel } from '@/lib/utils/format';
+import { getSaleChipVisual, getSaleLabel } from '@/lib/utils/format';
 import { useSound } from '@/lib/hooks/useSound';
 
 interface CellVentaProps {
@@ -23,7 +22,17 @@ export function CellVenta({ order, onVentaChange, isSubitem = false }: CellVenta
   
   if (!item) return null;
 
-  const saleState = item.saleState as SaleState;
+  // Prueba: no hay venta. Regalo aparte: sin cobro (nace "Transferido" pero no se muestra como venta).
+  if (order.orderType === 'PRUEBA' || order.orderType === 'REGALO') {
+    return (
+      <div className="flex items-center justify-center">
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs border border-white/10 text-muted-foreground cursor-default">
+          {order.orderType === 'PRUEBA' ? 'Prueba' : 'Sin cargo'}
+        </span>
+      </div>
+    );
+  }
+
   const isEnabled = item.fabricationState === 'HECHO';
   
   const handleValueChange = (value: string) => {
@@ -77,7 +86,7 @@ export function CellVenta({ order, onVentaChange, isSubitem = false }: CellVenta
       </SelectTrigger>
       {isEnabled && (
         <SelectContent>
-          {Object.entries(availableOptions).map(([value, label]) => (
+          {Object.entries(availableOptions).map(([value]) => (
             <SelectItem key={value} value={value} className="text-xs">
               {(() => {
                 const visual = getSaleChipVisual(value);

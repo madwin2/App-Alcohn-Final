@@ -70,6 +70,7 @@ import {
   readLegacyFixedScalar,
 } from '@/lib/gastos/monthlyEconomiaCosts';
 import { Banknote, ChevronDown, CircleDollarSign, HelpCircle, Wallet } from 'lucide-react';
+import { itemCuentaComoVenta, ordenCuentaComoVenta } from '@/lib/pedidos/tipoPedido';
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
 
@@ -117,16 +118,32 @@ type MonthlyRow = {
   inversionCypreaArs: number;
   compraDolaresArs: number;
   pendiente: number;
-  /** Todas las unidades (sellos + accesorios). */
+  /** Todas las unidades (sellos + accesorios) que cuentan como venta. */
   unidades: number;
-  /** Solo ítems tipo SELLO. */
+  /** Solo ítems tipo SELLO que cuentan como venta. */
   sellos: number;
   pedidos: number;
+  /** Regalos: costo de fabricación de ítems regalo + envío de pedidos Regalo (gasto, resta de la rentabilidad). */
+  costoRegalos: number;
+  /** Pruebas: costo de fabricación de pedidos de Prueba (gasto, resta de la rentabilidad). */
+  costoPruebas: number;
+  /** Cantidad de ítems regalo del mes (informativo). */
+  regalosCount: number;
+  /** Cantidad de ítems de pruebas del mes (informativo). */
+  pruebasCount: number;
 };
 
 function totalGastosOperativos(r: MonthlyRow): number {
   if (r.fuenteResumen && r.gastosReales > 0) return r.gastosReales;
-  return r.costosFijos + r.costosVentas + r.gastosExtras + r.publicidad + r.enviosManual;
+  return (
+    r.costosFijos +
+    r.costosVentas +
+    r.gastosExtras +
+    r.publicidad +
+    r.enviosManual +
+    r.costoRegalos +
+    r.costoPruebas
+  );
 }
 
 function totalGananciasGrupoArs(r: Pick<MonthlyRow, 'inversionEmpresaArs' | 'inversionCypreaArs' | 'compraDolaresArs'>): number {
@@ -814,9 +831,15 @@ export default function EconomiaPage() {
           unidades: 0,
           sellos: 0,
           pedidos: 0,
+          costoRegalos: 0,
+          costoPruebas: 0,
+          regalosCount: 0,
+          pruebasCount: 0,
         } satisfies MonthlyRow);
 
-      row.pedidos += 1;
+      const esVenta = ordenCuentaComoVenta(order);
+      // Pruebas y regalos aparte no suman a pedidos.
+      if (esVenta) row.pedidos += 1;
       const fab = Number(order.fabricationCostTotal || 0);
       const envioImputadoVentas = economiaPedidoListoParaImputarEnvio(order)
         ? order.international
@@ -825,8 +848,23 @@ export default function EconomiaPage() {
             ? (shippingCostByOrderId[order.id] ?? ECONOMIA_ENVIO_SIN_TIPO_ARS)
             : ECONOMIA_ENVIO_SIN_TIPO_ARS
         : 0;
-      row.ventasBrutas += Number(order.totalValue || 0) + envioImputadoVentas;
-      if (!resumen) row.costosVentas += fab;
+      // Ventas: solo pedidos Venta (el envío imputado y el valor del pedido no incluyen regalos/pruebas).
+      if (esVenta) row.ventasBrutas += Number(order.totalValue || 0) + envioImputadoVentas;
+      if (!resumen) {
+        // Costo de fabricación de ítems regalo: sale de costosVentas y va a la línea "Regalos".
+        const fabGiftItems = order.items
+          .filter((i) => i.isGift)
+          .reduce((s, i) => s + Number(i.fabricationCostItem || 0), 0);
+        if (order.orderType === 'PRUEBA') {
+          row.costoPruebas += fab;
+        } else if (order.orderType === 'REGALO') {
+          // Regalo aparte: fabricación + envío (lo paga Alcohn).
+          row.costoRegalos += fab + envioImputadoVentas;
+        } else {
+          row.costosVentas += Math.max(0, fab - fabGiftItems);
+          row.costoRegalos += fabGiftItems;
+        }
+      }
       row.costosFijos = costosFijosMes;
       row.gastosExtras = gastosExtrasSinEnvioMes;
       row.publicidad = publicidadMes;
@@ -841,6 +879,13 @@ export default function EconomiaPage() {
       row.compraDolaresArs = compraDolaresMes;
 
       for (const item of order.items) {
+        if (order.orderType === 'PRUEBA') {
+          row.pruebasCount += 1;
+        } else if (order.orderType === 'REGALO' || item.isGift) {
+          row.regalosCount += 1;
+        }
+        // Unidades, sellos y transferido: solo lo que cuenta como venta.
+        if (!itemCuentaComoVenta(order, item)) continue;
         row.unidades += 1;
         if (itemTypeOf(item) === 'SELLO') row.sellos += 1;
 
@@ -849,10 +894,14 @@ export default function EconomiaPage() {
           row.transferido += value;
         }
       }
-      row.transferido += envioImputadoVentas;
+      if (esVenta) row.transferido += envioImputadoVentas;
 
       row.pendiente = row.ventasBrutas - row.transferido;
-      const gastosOp = gastosOperativosParaEconomia(bundle, row.costosVentas, legacyFixed);
+      // Regalos y pruebas son gasto operativo que resta de la rentabilidad.
+      // En meses con cierre tipo Excel (`resumen`) los gastos reales ya los incluyen: no se vuelven a restar.
+      const gastosOp =
+        gastosOperativosParaEconomia(bundle, row.costosVentas, legacyFixed) +
+        (resumen ? 0 : row.costoRegalos + row.costoPruebas);
       row.rentabilidadPesos = row.ventasBrutas - gastosOp;
       row.rentabilidadUsd = usdRate > 0 ? row.rentabilidadPesos / usdRate : 0;
       row.transferidoMenosGastos = row.transferido - gastosOp;
@@ -901,6 +950,10 @@ export default function EconomiaPage() {
         unidades: 0,
         sellos: 0,
         pedidos: 0,
+        costoRegalos: 0,
+        costoPruebas: 0,
+        regalosCount: 0,
+        pruebasCount: 0,
       };
       applyResumenVentasOverride(row, bundle, usdRate, legacyFixed);
       byMonth.set(key, row);
@@ -932,9 +985,17 @@ export default function EconomiaPage() {
         acc.unidades += r.unidades;
         acc.sellos += r.sellos;
         acc.pedidos += r.pedidos;
+        acc.costoRegalos += r.costoRegalos;
+        acc.costoPruebas += r.costoPruebas;
+        acc.regalosCount += r.regalosCount;
+        acc.pruebasCount += r.pruebasCount;
         return acc;
       },
       {
+        costoRegalos: 0,
+        costoPruebas: 0,
+        regalosCount: 0,
+        pruebasCount: 0,
         ventasBrutas: 0,
         costosFijos: 0,
         costosVentas: 0,
@@ -1031,11 +1092,11 @@ export default function EconomiaPage() {
   }, [currentMonth, previousMonth]);
 
   const productBreakdown = useMemo(() => {
-    const itemsByMonth: Array<{ monthKey: string; item: OrderItem }> = [];
+    const itemsByMonth: Array<{ monthKey: string; item: OrderItem; order: Order }> = [];
     for (const order of orders) {
       const monthKey = orderBusinessMonthKey(order);
       for (const item of order.items) {
-        itemsByMonth.push({ monthKey, item });
+        itemsByMonth.push({ monthKey, item, order });
       }
     }
     const monthShell = monthly.map((m) => ({ key: m.key, label: m.label }));
@@ -1146,6 +1207,8 @@ export default function EconomiaPage() {
 
     for (const order of orders) {
       for (const item of order.items) {
+        // Pendiente de cobro: solo ventas (los regalos y pruebas no se cobran).
+        if (!itemCuentaComoVenta(order, item)) continue;
         if (item.saleState === 'TRANSFERIDO') continue;
         const key = item.saleState === 'DEUDOR' ? 'DEUDOR' : item.saleState === 'FOTO_ENVIADA' ? 'FOTO_ENVIADA' : 'SEÑADO';
         byState[key].amount += Number(item.itemValue || 0);
@@ -1314,7 +1377,10 @@ export default function EconomiaPage() {
                 <strong className="text-foreground">Ventas brutas</strong>: total del pedido + envío imputado solo cuando
                 todos los ítems están Despachado o Seguimiento enviado (tabla de costos o{' '}
                 {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método).{' '}
-                <strong className="text-foreground">Costos ventas</strong>: solo fabricación (meses en detalle).{' '}
+                <strong className="text-foreground">Costos ventas</strong>: solo fabricación de lo vendido (meses en detalle).{' '}
+                <strong className="text-foreground">Regalos</strong> (fabricación de ítems regalo + envío de pedidos de
+                regalo) y <strong className="text-foreground">Pruebas</strong> (fabricación de pruebas internas) no suman a
+                ventas, pedidos ni sellos: se restan como gasto en meses en detalle.{' '}
                 <strong className="text-foreground">Envíos</strong> en el P&amp;L: monto manual de Gastos.{' '}
                 <strong className="text-foreground">Transferido</strong>: cobrado en Transferido + mismo envío imputado.{' '}
                 <strong className="text-foreground">Rentabilidad (detalle)</strong> = ventas − fijos − costos ventas −
@@ -1338,6 +1404,13 @@ export default function EconomiaPage() {
                 <MomChip value={momSellosPct} label="sellos" />
                 <MomChip value={momVentasPct} label="ventas" />
               </div>
+              {(currentMonth?.regalosCount ?? 0) > 0 || (currentMonth?.pruebasCount ?? 0) > 0 ? (
+                <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+                  🎁 {currentMonth?.regalosCount ?? 0} regalo{(currentMonth?.regalosCount ?? 0) === 1 ? '' : 's'} (
+                  {formatArs(currentMonth?.costoRegalos ?? 0)}) · 🧪 {currentMonth?.pruebasCount ?? 0} prueba
+                  {(currentMonth?.pruebasCount ?? 0) === 1 ? '' : 's'} ({formatArs(currentMonth?.costoPruebas ?? 0)})
+                </p>
+              ) : null}
             </KpiShell>
 
             <KpiShell>
@@ -2109,6 +2182,8 @@ export default function EconomiaPage() {
                               <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">Costos fijos</span>
                             </th>
                             <th className="py-2 pr-2 text-right text-xs font-normal">Costos ventas</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal">Regalos</th>
+                            <th className="py-2 pr-2 text-right text-xs font-normal">Pruebas</th>
                             <th className="py-2 pr-2 text-right text-xs font-normal">Gastos extras</th>
                             <th className="py-2 pr-2 text-right text-xs font-normal">Publicidad</th>
                             <th className="py-2 pr-2 text-right text-xs font-normal">Envíos</th>
@@ -2175,7 +2250,7 @@ export default function EconomiaPage() {
                               {r.fuenteResumen ? (
                                 <td
                                   className="py-2 pr-2 text-right text-muted-foreground"
-                                  colSpan={5}
+                                  colSpan={7}
                                   title="Mes con cierre resumen: un solo gasto real (incluye publicidad)"
                                 >
                                   Resumen {formatArs(r.gastosReales)}
@@ -2187,6 +2262,18 @@ export default function EconomiaPage() {
                                 <>
                                   <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.costosFijos)}</td>
                                   <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.costosVentas)}</td>
+                                  <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">
+                                    {formatArs(r.costoRegalos)}
+                                    {r.regalosCount > 0 ? (
+                                      <span className="ml-1 text-[10px]">({r.regalosCount})</span>
+                                    ) : null}
+                                  </td>
+                                  <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">
+                                    {formatArs(r.costoPruebas)}
+                                    {r.pruebasCount > 0 ? (
+                                      <span className="ml-1 text-[10px]">({r.pruebasCount})</span>
+                                    ) : null}
+                                  </td>
                                   <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.gastosExtras)}</td>
                                   <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.publicidad)}</td>
                                   <td className="py-2 pr-2 text-right tabular-nums text-muted-foreground">{formatArs(r.enviosManual)}</td>
@@ -2238,6 +2325,18 @@ export default function EconomiaPage() {
                           <>
                             <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.costosFijos)}</td>
                             <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.costosVentas)}</td>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">
+                              {formatArs(totals.costoRegalos)}
+                              {totals.regalosCount > 0 ? (
+                                <span className="ml-1 text-[10px]">({totals.regalosCount})</span>
+                              ) : null}
+                            </td>
+                            <td className="py-2 pr-2 text-right text-muted-foreground">
+                              {formatArs(totals.costoPruebas)}
+                              {totals.pruebasCount > 0 ? (
+                                <span className="ml-1 text-[10px]">({totals.pruebasCount})</span>
+                              ) : null}
+                            </td>
                             <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.gastosExtras)}</td>
                             <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.publicidad)}</td>
                             <td className="py-2 pr-2 text-right text-muted-foreground">{formatArs(totals.enviosManual)}</td>

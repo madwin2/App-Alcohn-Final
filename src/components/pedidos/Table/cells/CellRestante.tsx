@@ -3,6 +3,7 @@ import { formatCurrency } from '@/lib/utils/format';
 import { formatMontoPedido } from '@/lib/internacional';
 import { Order } from '@/lib/types/index';
 import { getShippingCost } from '@/lib/supabase/services/orders.service';
+import { esOrdenSinCargo } from '@/lib/pedidos/tipoPedido';
 
 interface CellRestanteProps {
   order: Order;
@@ -47,6 +48,15 @@ export function CellRestante({ order }: CellRestanteProps) {
   const restanteFinal = envioYaIncluido 
     ? restanteFromDB 
     : baseRestante + shippingCost;
+
+  // Regalo/Prueba (o ítem regalo individual): restante $0, se muestra "Sin cargo".
+  if (esOrdenSinCargo(order) || (!hasMultipleItems && order.items[0]?.isGift)) {
+    return (
+      <div>
+        <span className="text-sm font-medium text-muted-foreground">Sin cargo</span>
+      </div>
+    );
+  }
   
   // Si es la fila resumen (múltiples items)
   if (hasMultipleItems) {

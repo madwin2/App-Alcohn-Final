@@ -5,6 +5,7 @@ import {
   FileText,
   Filter,
   Flag,
+  Gift,
   Layers,
   Link2,
   Lock,
@@ -588,6 +589,29 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       {
         heading: 'Stock que refleja la realidad',
         body: "Cada envío descuenta todos sus insumos aunque el stock esté en cero (queda en rojo). Para dejarlo al día, contá lo que hay y cargalo con 'Guardar conteo'.",
+        icon: Package,
+      },
+    ],
+  },
+  {
+    id: 33,
+    date: '2026-10-01',
+    title: 'Novedades',
+    version: '1.51',
+    slides: [
+      {
+        heading: 'Pedidos de prueba y de regalo',
+        body: 'En Nuevo pedido elegís Venta, Regalo o Prueba interna. Las pruebas van al cliente interno y no se envían; los regalos se fabrican y se envían sin cargo.',
+        icon: Gift,
+      },
+      {
+        heading: 'Regalo dentro de una venta',
+        body: 'En un pedido normal podés marcar un diseño como “Regalo (sin cargo)”. No suma a las ventas del mes ni al restante.',
+        icon: Gift,
+      },
+      {
+        heading: 'No cuentan como venta',
+        body: 'Pruebas y regalos no suman a la meta ni a Economía como ventas: aparecen como gasto (Pruebas / Regalos) y restan de la rentabilidad.',
         icon: Package,
       },
     ],

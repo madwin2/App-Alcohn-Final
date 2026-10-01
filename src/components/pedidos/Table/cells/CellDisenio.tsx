@@ -2,6 +2,7 @@ import { formatDimensions, truncateToWords } from '@/lib/utils/format';
 import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
 import { formatAbecedarioSummary } from '@/lib/abecedario/abecedarioConfig';
+import { OrderTypeBadge } from '@/components/pedidos/OrderTypeBadge';
 
 interface CellDisenioProps {
   order: Order;
@@ -90,11 +91,15 @@ export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, o
   return (
     <div className="min-w-0">
       <p 
-        className={`text-sm font-medium truncate ${hasMultipleItems ? 'cursor-pointer hover:text-blue-500 transition-colors underline' : ''}`}
+        className={`text-sm font-medium truncate flex items-center gap-1.5 ${hasMultipleItems ? 'cursor-pointer hover:text-blue-500 transition-colors underline' : ''}`}
         onClick={handleClick}
         title={hasMultipleItems ? 'Click para expandir' : undefined}
       >
-        {displayName}
+        <span className="truncate">{displayName}</span>
+        {/* Ítem regalo dentro de una venta (en Regalo/Prueba el badge va en la columna Cliente) */}
+        {!hasMultipleItems && (order.orderType ?? 'VENTA') === 'VENTA' && item.isGift ? (
+          <OrderTypeBadge orderType="VENTA" isGift />
+        ) : null}
       </p>
       {/* Solo mostrar medidas y notas si NO hay múltiples items */}
       {!hasMultipleItems && (

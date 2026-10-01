@@ -1,6 +1,7 @@
 import { formatMontoPedido } from '@/lib/internacional';
 import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
+import { esOrdenSinCargo } from '@/lib/pedidos/tipoPedido';
 
 interface CellSenaProps {
   order: Order;
@@ -12,6 +13,15 @@ export function CellSena({ order, editingRowId, onUpdate }: CellSenaProps) {
   const item = order.items[0];
   const isEditing = editingRowId === order.id;
   const hasMultipleItems = order.items.length > 1;
+
+  // Regalo/Prueba (o ítem regalo individual): sin cargo, no editable.
+  if (esOrdenSinCargo(order) || (!hasMultipleItems && item?.isGift)) {
+    return (
+      <div>
+        <span className="text-sm font-medium text-muted-foreground">Sin cargo</span>
+      </div>
+    );
+  }
   
   // Si es la fila resumen (múltiples items), usar el valor calculado por Supabase
   if (hasMultipleItems) {

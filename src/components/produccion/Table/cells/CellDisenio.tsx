@@ -1,5 +1,6 @@
 import { ProductionItem } from '@/lib/types/index';
 import { formatAbecedarioSummary } from '@/lib/abecedario/abecedarioConfig';
+import { OrderTypeBadge } from '@/components/pedidos/OrderTypeBadge';
 
 interface CellDisenioProps {
   item: ProductionItem;
@@ -37,7 +38,10 @@ export function CellDisenio({ item, onOpenOrderInfo }: CellDisenioProps) {
 
   const content = (
     <>
-      <p className="text-sm font-medium truncate">{displayName}</p>
+      <p className="text-sm font-medium truncate flex items-center gap-1.5">
+        <span className="truncate">{displayName}</span>
+        <OrderTypeBadge orderType={item.orderType} isGift={item.isGift} />
+      </p>
       {secondary && (
         <p className="text-xs text-muted-foreground truncate">{secondary}</p>
       )}

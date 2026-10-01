@@ -98,6 +98,15 @@ export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
     }
   };
 
+  // Prueba interna: nunca se envía => celda deshabilitada.
+  if (order.orderType === 'PRUEBA') {
+    return (
+      <div className="flex justify-center items-center w-full" title="Las pruebas internas no se envían">
+        <span className="text-xs text-muted-foreground cursor-default">—</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex justify-center items-center gap-1 w-full">
       <Select value={currentOption} onValueChange={handleValueChange}>

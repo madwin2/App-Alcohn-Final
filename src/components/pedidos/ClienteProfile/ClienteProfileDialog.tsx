@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { OrderTypeBadge } from '@/components/pedidos/OrderTypeBadge';
 import { whatsAppUrl } from '@/lib/comercial/utils';
 import {
   fetchClienteProfile,
@@ -68,7 +69,9 @@ function OrderCard({
   order: ClienteProfileOrder;
   onCopy: (value: string, label: string) => void;
 }) {
-  const designs = order.items.map((item) => item.name).filter(Boolean);
+  const designs = order.items
+    .map((item) => (item.isGift && order.orderType === 'VENTA' ? `${item.name} (regalo)` : item.name))
+    .filter(Boolean);
   const notes = order.items.map((item) => item.nota).filter(Boolean);
 
   return (
@@ -83,6 +86,7 @@ function OrderCard({
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-1">
+          <OrderTypeBadge orderType={order.orderType} className="text-xs px-2 py-0.5" />
           {order.origen ? <Badge variant="outline">{order.origen}</Badge> : null}
           {order.estadoEnvio ? <Badge variant="secondary">{order.estadoEnvio}</Badge> : null}
         </div>
@@ -90,8 +94,14 @@ function OrderCard({
 
       <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
         <p>
-          Total {formatCurrency(order.valorTotal)}
-          {order.restante > 0 ? ` · pendiente ${formatCurrency(order.restante)}` : ' · saldo 0'}
+          {order.orderType !== 'VENTA' ? (
+            'Sin cargo'
+          ) : (
+            <>
+              Total {formatCurrency(order.valorTotal)}
+              {order.restante > 0 ? ` · pendiente ${formatCurrency(order.restante)}` : ' · saldo 0'}
+            </>
+          )}
         </p>
         <p>
           {[order.empresaEnvio, order.tipoEnvio].filter(Boolean).join(' · ') || 'Sin empresa de envío'}
@@ -230,7 +240,7 @@ export function ClienteProfileDialog({
             </div>
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Stat label="Pedidos" value={String(profile.stats.pedidosCount)} />
+              <Stat label="Pedidos (ventas)" value={String(profile.stats.pedidosCount)} />
               <Stat label="Facturado" value={formatCurrency(profile.stats.totalFacturado)} />
               <Stat
                 label="Pendiente"

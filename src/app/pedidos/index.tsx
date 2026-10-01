@@ -139,6 +139,7 @@ export default function PedidosPage() {
           await addStampToOrder(orderId, item, files, options);
         }}
         fetchOrders={fetchOrders}
+        orders={orders}
       />
 
       <UploadPhotosDialog

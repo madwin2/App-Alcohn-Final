@@ -7,10 +7,11 @@ export interface Database {
           id: string;
           nombre: string;
           apellido: string;
-          medio_contacto: 'Whatsapp' | 'Facebook' | 'Instagram' | 'Mail' | 'Web' | null;
+          medio_contacto: 'Whatsapp' | 'Facebook' | 'Instagram' | 'Mail' | 'Web' | 'Otro' | null;
           telefono: string;
           dni: string | null;
           mail: string | null;
+          es_interno?: boolean | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -100,6 +101,9 @@ export interface Database {
           comprobante_validado_por?: string | null;
           notas_web?: Record<string, unknown> | null;
           carrito_json?: Record<string, unknown> | null;
+          /** Venta (default) | Prueba | Regalo. No cambiar después del INSERT. */
+          tipo_pedido?: 'Venta' | 'Prueba' | 'Regalo' | null;
+          motivo_prueba?: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -147,6 +151,8 @@ export interface Database {
           mockup_solicitud_id?: string | null;
           motivo_salida_programa?: string | null;
           no_importado_motivo?: string | null;
+          /** Ítem sin cargo (regalo). */
+          es_regalo?: boolean | null;
           created_at: string | null;
           updated_at: string | null;
         };

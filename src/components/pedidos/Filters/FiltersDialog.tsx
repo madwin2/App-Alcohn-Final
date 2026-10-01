@@ -12,7 +12,7 @@ export function FiltersDialog({ open, onOpenChange }: FiltersDialogProps) {
   const { filters, setFilters, clearFilters } = useOrdersStore();
 
   const handleSubmit = (data: Filters) => {
-    setFilters(data);
+    setFilters(data as Filters);
     onOpenChange(false);
   };
 
@@ -30,7 +30,7 @@ export function FiltersDialog({ open, onOpenChange }: FiltersDialogProps) {
           </p>
         </DialogHeader>
         <FiltersForm
-          onSubmit={handleSubmit}
+          onSubmit={(data) => handleSubmit(data as Filters)}
           onClear={handleClear}
           initialData={filters}
         />

@@ -77,6 +77,8 @@ export interface Customer {
   phoneE164: string;
   email?: string;
   dni?: string;
+  /** Cliente interno (p. ej. pruebas). Excluido de Comercial/WhatsApp. */
+  isInternal?: boolean;
 }
 
 export interface Task {
@@ -101,6 +103,8 @@ export interface ReworkCharge {
   createdAt: string;
 }
 
+export type OrderType = 'VENTA' | 'PRUEBA' | 'REGALO';
+
 export interface Order {
   id: string;
   customer: Customer;
@@ -108,6 +112,10 @@ export interface Order {
   createdAt?: string | null; // ISO, cuando se creó la orden en el sistema
   /** Fecha en que el pedido pasó a Seguimiento Enviado (`ordenes.seguimiento_enviado_at`). */
   seguimientoEnviadoAt?: string | null;
+  /** Tipo de pedido. Default VENTA. No se puede cambiar después de creado. */
+  orderType?: OrderType;
+  /** Motivo obligatorio cuando orderType = PRUEBA. */
+  testReason?: string | null;
   takenBy?: { id: string; name: string } | null;
   totalValue: number;
   fabricationCostTotal?: number | null;
@@ -174,6 +182,8 @@ export interface OrderItem {
   itemType?: ItemType;
   stampType: StampType;
   itemConfig?: ItemConfig;
+  /** Ítem sin cargo (regalo). En órdenes REGALO todos van true. */
+  isGift?: boolean;
   itemValue?: number | null;
   fabricationCostItem?: number | null;
   fabricationMarginItem?: number | null;
@@ -217,6 +227,8 @@ export interface Filters {
   types?: StampType[];
   channels?: ('WHATSAPP' | 'INSTAGRAM' | 'FACEBOOK' | 'MAIL' | 'WEB')[];
   uploaders?: string[];
+  /** Tipo de pedido. Vacío / ausente = todos. */
+  orderTypes?: OrderType[];
 }
 
 export interface SortCriteria {
@@ -279,6 +291,10 @@ export interface ProductionItem {
   deadline?: string | null; // Fecha límite del sello
   takenBy?: { id: string; name: string } | null; // Usuario que subió el pedido
   mockupSolicitudId?: string | null;
+  /** Tipo de la orden del sello (badge PRUEBA / REGALO en Producción). */
+  orderType?: OrderType;
+  /** Ítem regalo (sin cargo) dentro de una venta. */
+  isGift?: boolean;
   itemConfig?: ItemConfig;
   files?: {
     baseUrl?: string;
@@ -373,6 +389,15 @@ export interface NewOrderFormData {
   skipConfirmationWebhook?: boolean;
   /** País del pedido internacional (null/undefined = nacional). Montos en moneda local. */
   internationalCountryIso2?: import('@/lib/internacional').PaisInternacional['iso2'] | null;
+  /** Tipo de pedido al crear. Default VENTA. */
+  orderType?: OrderType;
+  /** Motivo obligatorio si orderType = PRUEBA. */
+  testReason?: string;
+  /**
+   * Si orderType = REGALO y el cliente tiene pedidos abiertos:
+   * sumar el ítem regalo a esa orden en vez de crear una orden Regalo aparte.
+   */
+  attachGiftToOrderId?: string | null;
   customer: {
     firstName: string;
     lastName: string;
@@ -397,6 +422,8 @@ export interface NewOrderFormData {
     abecedarioCase?: AbecedarioCase;
     abecedarioExtraLetters?: string;
     notes?: string;
+    /** Casilla "Regalo (sin cargo)" en diseños de una Venta. */
+    isGift?: boolean;
   };
   values: {
     totalValue: number;

@@ -1,6 +1,7 @@
 import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
 import { CountryFlag } from '@/components/shared/CountryFlag';
+import { OrderTypeBadge } from '@/components/pedidos/OrderTypeBadge';
 
 interface CellClienteProps {
   order: Order;
@@ -40,6 +41,7 @@ export function CellCliente({ order, editingRowId, onUpdate, onOpenProfile }: Ce
           />
         ) : null}
         {customer.firstName}
+        <OrderTypeBadge orderType={order.orderType} />
       </p>
       <p className="text-xs text-muted-foreground truncate">
         {customer.lastName}

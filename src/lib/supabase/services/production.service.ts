@@ -4,6 +4,7 @@ import { Database } from '../types';
 import { vectorUrlFromPreview } from '../../utils/vectorUrlFromPreview';
 import { baseFileUtil } from '@/lib/vectorizacion/baseFile';
 import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
+import { ORDER_TYPE_FROM_DB } from '../../pedidos/tipoPedido';
 import { selloEnCurso, valuesEqual } from '@/lib/notificaciones/format';
 import { notifyPrioridad, notifySelloModificado, notifySellosHechos } from '@/lib/notificaciones/events';
 
@@ -99,11 +100,13 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         no_importado_motivo,
         item_config,
         mockup_solicitud_id,
+        es_regalo,
         ordenes!inner (
           id,
           taken_by,
           origen,
           estado_pago_web,
+          tipo_pedido,
           clientes (*)
         )
       `)
@@ -267,6 +270,8 @@ export const getProductionItems = async (): Promise<ProductionItem[]> => {
         deadline: sello.fecha_limite ? `${sello.fecha_limite}T00:00:00Z` : null,
         takenBy,
         mockupSolicitudId: (sello as any).mockup_solicitud_id ?? null,
+        orderType: ORDER_TYPE_FROM_DB[(orden as { tipo_pedido?: string | null }).tipo_pedido ?? 'Venta'] ?? 'VENTA',
+        isGift: (sello as { es_regalo?: boolean | null }).es_regalo === true,
         files: {
           baseUrl:
             baseFileUtil({
@@ -426,6 +431,7 @@ export const updateProductionItem = async (
         ordenes!inner (
           id,
           taken_by,
+          tipo_pedido,
           clientes (*)
         )
       `)
@@ -562,6 +568,8 @@ export const updateProductionItem = async (
       notes: updatedSello.nota || undefined,
       deadline: updatedSello.fecha_limite ? `${updatedSello.fecha_limite}T00:00:00Z` : null,
       takenBy,
+      orderType: ORDER_TYPE_FROM_DB[(orden as { tipo_pedido?: string | null }).tipo_pedido ?? 'Venta'] ?? 'VENTA',
+      isGift: (updatedSello as { es_regalo?: boolean | null }).es_regalo === true,
       files: {
         baseUrl: updatedSello.archivo_base || undefined,
         vectorUrl: vectorUrlFromPreview((updatedSello as any).archivo_vector_preview),

@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils/cn';
 import type { Order, OrderItem } from '@/lib/types';
+import { itemCuentaComoVenta, ordenCuentaComoVenta } from '@/lib/pedidos/tipoPedido';
+import { OrderTypeBadge } from '@/components/pedidos/OrderTypeBadge';
 import { getApprovedUsers } from '@/lib/supabase/services/auth.service';
 import { supabase } from '@/lib/supabase/client';
 import {
@@ -417,29 +419,40 @@ export default function HomePage() {
         const orderIsToday = refDateStr === todayKey;
 
         for (const item of order.items) {
-          if (orderInCurrentMonth) monthly += 1;
-          if (orderIsToday) daily += 1;
+          // Objetivos: solo ventas reales (sin pruebas, regalos aparte ni ítems regalo).
+          if (itemCuentaComoVenta(order, item)) {
+            if (orderInCurrentMonth) monthly += 1;
+            if (orderIsToday) daily += 1;
+          }
           allStamps.push({ order, item });
         }
       }
 
+      // Enviar foto / Esperando pago / Deudores: solo pedidos Venta (Prueba y Regalo aparte quedan fuera).
+      // Los ítems regalo dentro de una venta siguen al pedido.
       const stampsEnviarFoto = allStamps.filter(
-        ({ item }) => item.fabricationState === 'HECHO' && item.saleState === 'SEÑADO',
+        ({ order, item }) =>
+          ordenCuentaComoVenta(order) && item.fabricationState === 'HECHO' && item.saleState === 'SEÑADO',
       );
       const stampsEsperandoPago = allStamps.filter(
-        ({ item }) => item.fabricationState === 'HECHO' && item.saleState === 'FOTO_ENVIADA',
+        ({ order, item }) =>
+          ordenCuentaComoVenta(order) && item.fabricationState === 'HECHO' && item.saleState === 'FOTO_ENVIADA',
       );
+      // Para enviar: Venta y Regalo aparte (nace Transferido). La Prueba nunca se envía.
       const stampsParaEnviar = allStamps.filter(
-        ({ item }) =>
+        ({ order, item }) =>
+          order.orderType !== 'PRUEBA' &&
           item.fabricationState === 'HECHO' &&
           item.saleState === 'TRANSFERIDO' &&
           item.shippingState === 'SIN_ENVIO',
       );
       const stampsDeudores = allStamps.filter(
-        ({ item }) => item.saleState === 'DEUDOR',
+        ({ order, item }) => ordenCuentaComoVenta(order) && item.saleState === 'DEUDOR',
       );
 
       const priorityStamps = allStamps.filter(({ order, item }) => {
+        // Una prueba ya hecha no se despacha nunca: no debe quedar eternamente como "pendiente".
+        if (order.orderType === 'PRUEBA' && item.fabricationState === 'HECHO') return false;
         const isPriority = item.isPriority;
         const hasDeadline = !!order.deadlineAt;
         const shipping = item.shippingState;
@@ -935,7 +948,10 @@ export default function HomePage() {
                             )}
                           </div>
                           <div className="min-w-0 px-0.5">
-                            <p className="font-medium truncate text-[11px]">{firstItem.designName}</p>
+                            <p className="font-medium truncate text-[11px] flex items-center gap-1">
+                              <span className="truncate">{firstItem.designName}</span>
+                              <OrderTypeBadge orderType={order.orderType} />
+                            </p>
                             {order.deadlineAt && (
                               <p className="text-[10px] text-muted-foreground">
                                 Límite:{' '}
@@ -1039,7 +1055,10 @@ function SellosColumn({ title, subtitle, orders, compact = false }: SellosColumn
                         })}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium truncate">{firstItem.designName}</p>
+                        <p className="font-medium truncate flex items-center gap-1.5">
+                          <span className="truncate">{firstItem.designName}</span>
+                          <OrderTypeBadge orderType={order.orderType} />
+                        </p>
                         <p className="text-[11px] text-muted-foreground truncate">
                           {order.customer.firstName} {order.customer.lastName}
                         </p>

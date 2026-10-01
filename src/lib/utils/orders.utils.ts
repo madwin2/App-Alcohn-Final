@@ -126,6 +126,10 @@ export const filterOrders = (
     );
   }
 
+  if (!fullDbSearchActive && filters.orderTypes && filters.orderTypes.length > 0) {
+    result = result.filter(order => filters.orderTypes!.includes(order.orderType ?? 'VENTA'));
+  }
+
   if (!fullDbSearchActive && filters.uploaders && filters.uploaders.length > 0) {
     result = result.filter(order => {
       const uploaderName = order.takenBy?.name;

@@ -8,7 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
-import { NewOrderFormData, FabricationState, ShippingCarrier, ShippingServiceDest, StampType, ItemType, SoldadorPower } from '@/lib/types/index';
+import { NewOrderFormData, FabricationState, ShippingCarrier, ShippingServiceDest, StampType, ItemType, SoldadorPower, Order } from '@/lib/types/index';
+import { OrderTypeBadge } from '@/components/pedidos/OrderTypeBadge';
+import {
+  CLIENTE_PRUEBAS_APELLIDO,
+  CLIENTE_PRUEBAS_NOMBRE,
+  type OrderType,
+} from '@/lib/pedidos/tipoPedido';
 import { AbecedarioFields } from '@/components/pedidos/abecedario/AbecedarioFields';
 import {
   writeAbecedarioFields,
@@ -35,10 +41,17 @@ const internationalCountryIso2Schema = z.enum(['MX', 'CO', 'PE', 'CL']);
 // Schema para el paso 1 (Información del cliente)
 const customerSchema = z
   .object({
+    /** Tipo de pedido (Venta | Regalo | Prueba interna). */
+    orderType: z.enum(['VENTA', 'REGALO', 'PRUEBA']),
+    /** Motivo de la prueba (obligatorio si orderType = PRUEBA). */
+    testReason: z.string().optional(),
+    /** Regalo: id del pedido abierto al que se suma (null = pedido de regalo aparte). */
+    attachGiftToOrderId: z.string().nullable().optional(),
     customer: z.object({
-      firstName: z.string().min(1, 'El nombre es requerido'),
-      lastName: z.string().min(1, 'El apellido es requerido'),
-      phoneE164: z.string().min(1, 'El teléfono es requerido'),
+      // En Prueba el cliente es el interno fijo: la obligatoriedad se valida en el superRefine.
+      firstName: z.string(),
+      lastName: z.string(),
+      phoneE164: z.string(),
       email: z.string().email('Email inválido').optional().or(z.literal('')),
       channel: z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'WEB', 'OTRO']),
     }),
@@ -48,6 +61,25 @@ const customerSchema = z
     internationalCountryIso2: internationalCountryIso2Schema.optional().nullable(),
   })
   .superRefine((data, ctx) => {
+    if (data.orderType === 'PRUEBA') {
+      if (!data.testReason?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'El motivo de la prueba es requerido',
+          path: ['testReason'],
+        });
+      }
+      return;
+    }
+    if (!data.customer.firstName.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'El nombre es requerido', path: ['customer', 'firstName'] });
+    }
+    if (!data.customer.lastName.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'El apellido es requerido', path: ['customer', 'lastName'] });
+    }
+    if (!data.customer.phoneE164.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'El teléfono es requerido', path: ['customer', 'phoneE164'] });
+    }
     if (data.isInternational && !data.internationalCountryIso2) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -76,6 +108,8 @@ const orderSchema = z.object({
     abecedarioCase: z.enum(['MAYUSCULA', 'MINUSCULA', 'AMBAS']).optional(),
     abecedarioExtraLetters: z.string().optional(),
     notes: z.string().optional(),
+    /** Casilla "Regalo (sin cargo)" por diseño (solo en pedidos de tipo Venta). */
+    isGift: z.boolean().optional(),
   }),
   values: z.object({
     totalValue: z.number().min(0, 'El valor total debe ser mayor o igual a 0'),
@@ -113,19 +147,40 @@ interface NewOrderStepFormProps {
   initialData: Partial<NewOrderFormData>;
   savedDesigns?: SavedDesignData[];
   isSubmitting?: boolean;
+  /**
+   * Pedidos cargados (store). Se usan para ofrecer "Sumar al pedido abierto" cuando
+   * el tipo es Regalo y el cliente tiene pedidos sin despachar.
+   */
+  orders?: Order[];
 }
 
-const buildEmptyDesignFormValues = (pais: PaisInternacional | null) => ({
+/** Pedido Venta del cliente que todavía no salió (algún ítem sin Despachado / Seguimiento Enviado). */
+const isOpenSaleOrder = (o: Order) =>
+  (o.orderType ?? 'VENTA') === 'VENTA' &&
+  o.items.length > 0 &&
+  o.items.some((i) => i.shippingState !== 'DESPACHADO' && i.shippingState !== 'SEGUIMIENTO_ENVIADO');
+
+const orderTypeOptions: { value: OrderType; label: string; hint: string }[] = [
+  { value: 'VENTA', label: 'Venta', hint: 'Pedido normal con cobro.' },
+  { value: 'REGALO', label: 'Regalo', hint: 'Sin cargo para el cliente; el envío lo paga Alcohn.' },
+  { value: 'PRUEBA', label: 'Prueba interna', hint: 'Se fabrica pero no es venta ni se envía.' },
+];
+
+const DEFAULT_DEPOSIT_ARS = 20000;
+
+const buildEmptyDesignFormValues = (pais: PaisInternacional | null, orderType: OrderType = 'VENTA') => ({
   order: {
     itemType: 'SELLO' as ItemType,
     stampType: 'CLASICO' as StampType,
     requestedWidthMm: 1,
     requestedHeightMm: 1,
   },
-  values: { totalValue: 0, depositValue: pais ? 0 : 20000 },
+  // Regalo/Prueba: sin cargo => valor y seña en 0.
+  values: { totalValue: 0, depositValue: pais || orderType !== 'VENTA' ? 0 : DEFAULT_DEPOSIT_ARS },
   shipping: {
-    carrier: (pais ? 'DHL' : 'ANDREANI') as ShippingCarrier,
-    service: 'DOMICILIO' as ShippingServiceDest,
+    // Prueba: nunca se envía => sin transportista.
+    carrier: (orderType === 'PRUEBA' ? undefined : pais ? 'DHL' : 'ANDREANI') as ShippingCarrier,
+    service: (orderType === 'PRUEBA' ? undefined : 'DOMICILIO') as ShippingServiceDest,
   },
   states: { fabrication: 'SIN_HACER' as FabricationState, isPriority: false, deadline: undefined },
 });
@@ -178,16 +233,6 @@ const carrierOptions: {
   { value: 'OTRO', label: 'Otro', carrier: 'OTRO' },
 ];
 
-const serviceOptions = [
-  { value: 'DOMICILIO', label: 'Domicilio' },
-  { value: 'SUCURSAL', label: 'Sucursal' },
-];
-
-const originOptions = [
-  { value: 'RETIRO_EN_ORIGEN', label: 'Retiro en origen' },
-  { value: 'ENTREGA_EN_SUCURSAL', label: 'Entrega en sucursal' },
-];
-
 const fabricationOptions = [
   { value: 'SIN_HACER', label: 'Sin Hacer' },
   { value: 'HACIENDO', label: 'Haciendo' },
@@ -196,22 +241,6 @@ const fabricationOptions = [
   { value: 'REHACER', label: 'Rehacer' },
   { value: 'RETOCAR', label: 'Retocar' },
   { value: 'PROGRAMADO', label: 'Programado' },
-];
-
-const saleOptions = [
-  { value: 'SEÑADO', label: 'Señado' },
-  { value: 'FOTO_ENVIADA', label: 'Foto Enviada' },
-  { value: 'TRANSFERIDO', label: 'Transferido' },
-  { value: 'DEUDOR', label: 'Deudor' },
-];
-
-const shippingOptions = [
-  { value: 'SIN_ENVIO', label: 'Sin Envío' },
-  { value: 'HACER_ETIQUETA', label: 'Hacer Etiqueta' },
-  { value: 'ERROR_ETIQUETA', label: 'Error de Etiqueta' },
-  { value: 'ETIQUETA_LISTA', label: 'Etiqueta Lista' },
-  { value: 'DESPACHADO', label: 'Despachado' },
-  { value: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado' },
 ];
 
 export function NewOrderStepForm({
@@ -224,6 +253,7 @@ export function NewOrderStepForm({
   initialData,
   savedDesigns = [],
   isSubmitting = false,
+  orders = [],
 }: NewOrderStepFormProps) {
   const [files, setFiles] = useState<{
     base?: File;
@@ -245,8 +275,8 @@ export function NewOrderStepForm({
   }, [initialData.internationalCountryIso2]);
 
   const emptyDesignFormValues = useMemo(
-    () => buildEmptyDesignFormValues(paisInternacional),
-    [paisInternacional],
+    () => buildEmptyDesignFormValues(paisInternacional, initialData.orderType ?? 'VENTA'),
+    [paisInternacional, initialData.orderType],
   );
 
   const arsAMonedaPedido = useCallback(
@@ -259,6 +289,9 @@ export function NewOrderStepForm({
   const customerForm = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
+      orderType: initialData.orderType ?? 'VENTA',
+      testReason: initialData.testReason ?? '',
+      attachGiftToOrderId: initialData.attachGiftToOrderId ?? null,
       customer: {
         channel: 'WHATSAPP',
         ...initialData.customer,
@@ -270,6 +303,42 @@ export function NewOrderStepForm({
   });
 
   const isInternational = customerForm.watch('isInternational');
+  const formOrderType = customerForm.watch('orderType') ?? 'VENTA';
+  const isPrueba = formOrderType === 'PRUEBA';
+  const isRegaloType = formOrderType === 'REGALO';
+  /** Tipo ya confirmado en el paso 1 (se usa en los pasos 2 y 3). */
+  const orderType: OrderType = initialData.orderType ?? 'VENTA';
+  const isPruebaOrder = orderType === 'PRUEBA';
+  const isRegaloOrder = orderType === 'REGALO';
+  const isSinCargoOrder = isPruebaOrder || isRegaloOrder;
+  const attachGiftToOrderId = initialData.attachGiftToOrderId ?? null;
+  const attachedOrder = useMemo(
+    () => (attachGiftToOrderId ? orders.find((o) => o.id === attachGiftToOrderId) ?? null : null),
+    [orders, attachGiftToOrderId],
+  );
+
+  const handleOrderTypeChange = (next: OrderType) => {
+    customerForm.setValue('orderType', next, { shouldDirty: true });
+    if (next !== 'PRUEBA') {
+      // Al salir de Prueba, no arrastrar los datos del cliente interno al formulario.
+      const { firstName, lastName } = customerForm.getValues('customer');
+      if (firstName === CLIENTE_PRUEBAS_NOMBRE && lastName === CLIENTE_PRUEBAS_APELLIDO) {
+        customerForm.setValue('customer.firstName', '');
+        customerForm.setValue('customer.lastName', '');
+        customerForm.setValue('customer.phoneE164', '');
+        customerForm.setValue('customer.email', '');
+      }
+    }
+    if (next !== 'REGALO') {
+      customerForm.setValue('attachGiftToOrderId', null, { shouldDirty: true });
+    }
+    if (next !== 'VENTA') {
+      // Internacional queda fuera de alcance para Regalo/Prueba.
+      customerForm.setValue('isInternational', false, { shouldDirty: true });
+      customerForm.setValue('internationalCountryIso2', null, { shouldDirty: true });
+    }
+    customerForm.clearErrors();
+  };
 
   const prevStepRef = useRef<number | null>(null);
   useEffect(() => {
@@ -277,6 +346,9 @@ export function NewOrderStepForm({
     prevStepRef.current = currentStep;
     if (prev === 2 && currentStep === 1 && initialData.customer) {
       customerForm.reset({
+        orderType: initialData.orderType ?? 'VENTA',
+        testReason: initialData.testReason ?? '',
+        attachGiftToOrderId: initialData.attachGiftToOrderId ?? null,
         customer: {
           channel: initialData.customer.channel ?? 'WHATSAPP',
           firstName: initialData.customer.firstName ?? '',
@@ -290,11 +362,34 @@ export function NewOrderStepForm({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset al volver del paso 2
-  }, [currentStep, initialData.customer, initialData.skipConfirmationWebhook, initialData.internationalCountryIso2]);
+  }, [
+    currentStep,
+    initialData.customer,
+    initialData.skipConfirmationWebhook,
+    initialData.internationalCountryIso2,
+    initialData.orderType,
+    initialData.testReason,
+    initialData.attachGiftToOrderId,
+  ]);
 
   // Observar cambios en teléfono o email para autocompletar datos del cliente
   const watchedPhone = customerForm.watch('customer.phoneE164');
   const watchedEmail = customerForm.watch('customer.email');
+  const watchedAttachId = customerForm.watch('attachGiftToOrderId');
+
+  /** Regalo: pedidos Venta abiertos (sin despachar) del cliente cargado en el formulario. */
+  const openOrdersForGift = useMemo(() => {
+    if (!isRegaloType) return [] as Order[];
+    const phone = normalizePhoneDigitsCliente(watchedPhone || '');
+    const email = (watchedEmail || '').trim().toLowerCase();
+    if (!phone && !email) return [] as Order[];
+    return orders.filter((o) => {
+      if (!isOpenSaleOrder(o)) return false;
+      const oPhone = normalizePhoneDigitsCliente(o.customer.phoneE164 || '');
+      const oEmail = (o.customer.email || '').trim().toLowerCase();
+      return (phone && oPhone && phone === oPhone) || (email && oEmail && email === oEmail);
+    });
+  }, [isRegaloType, orders, watchedPhone, watchedEmail]);
 
   const applyCustomerAutocomplete = useCallback(
     (customer: Awaited<ReturnType<typeof findCustomer>>) => {
@@ -332,6 +427,7 @@ export function NewOrderStepForm({
   useEffect(() => {
     if (phoneTimeoutRef.current) clearTimeout(phoneTimeoutRef.current);
 
+    if (isPrueba) return;
     if (!watchedPhone || watchedPhone.length < 8) return;
 
     phoneTimeoutRef.current = setTimeout(async () => {
@@ -349,11 +445,12 @@ export function NewOrderStepForm({
     return () => {
       if (phoneTimeoutRef.current) clearTimeout(phoneTimeoutRef.current);
     };
-  }, [watchedPhone, watchedEmail, applyCustomerAutocomplete]);
+  }, [watchedPhone, watchedEmail, applyCustomerAutocomplete, isPrueba]);
 
   useEffect(() => {
     if (emailTimeoutRef.current) clearTimeout(emailTimeoutRef.current);
 
+    if (isPrueba) return;
     const email = (watchedEmail || '').trim();
     if (!email || !email.includes('@')) return;
 
@@ -372,7 +469,7 @@ export function NewOrderStepForm({
     return () => {
       if (emailTimeoutRef.current) clearTimeout(emailTimeoutRef.current);
     };
-  }, [watchedEmail, watchedPhone, customerForm, applyCustomerAutocomplete]);
+  }, [watchedEmail, watchedPhone, customerForm, applyCustomerAutocomplete, isPrueba]);
 
   // Formulario para el paso 2 (Pedido)
   const orderForm = useForm<OrderFormData>({
@@ -416,13 +513,63 @@ export function NewOrderStepForm({
       orderForm.setValue('shipping.carrier', 'DHL', { shouldDirty: true });
       orderForm.setValue('shipping.service', 'DOMICILIO', { shouldDirty: true });
     }
-    if (deposit === 20000) {
+    if (deposit === DEFAULT_DEPOSIT_ARS) {
       orderForm.setValue('values.depositValue', 0, { shouldDirty: true });
     }
   }, [currentStep, paisInternacional, orderForm]);
 
   const watchedValues = orderForm.watch(['values.totalValue', 'values.depositValue']);
   const selectedItemType = orderForm.watch('order.itemType');
+  /** Casilla "Regalo (sin cargo)" del diseño (solo aplica en pedidos Venta). */
+  const designIsGift = orderForm.watch('order.isGift') === true && orderType === 'VENTA';
+  /** Valor y seña bloqueados en 0: pedido Regalo/Prueba o diseño marcado como regalo. */
+  const valoresBloqueados = isSinCargoOrder || designIsGift;
+
+  // Regalo/Prueba (o diseño regalo): forzar valor y seña en 0 y quitar el envío en Prueba.
+  useEffect(() => {
+    if (currentStep < 2) return;
+    if (valoresBloqueados) {
+      if (orderForm.getValues('values.totalValue') !== 0) {
+        orderForm.setValue('values.totalValue', 0, { shouldDirty: true, shouldValidate: true });
+      }
+      if (orderForm.getValues('values.depositValue') !== 0) {
+        orderForm.setValue('values.depositValue', 0, { shouldDirty: true, shouldValidate: true });
+      }
+    }
+    if (isPruebaOrder && orderForm.getValues('shipping.carrier')) {
+      orderForm.setValue('shipping.carrier', undefined, { shouldDirty: true });
+      orderForm.setValue('shipping.service', undefined, { shouldDirty: true });
+    }
+    if (isSinCargoOrder && orderForm.getValues('order.isGift')) {
+      orderForm.setValue('order.isGift', false, { shouldDirty: true });
+    }
+  }, [currentStep, valoresBloqueados, isPruebaOrder, isSinCargoOrder, orderForm]);
+
+  // Si el usuario vuelve al paso 1 y cambia el tipo, restaurar los defaults de valores/envío del formulario actual.
+  const prevOrderTypeRef = useRef<OrderType>(orderType);
+  useEffect(() => {
+    const prev = prevOrderTypeRef.current;
+    prevOrderTypeRef.current = orderType;
+    if (prev === orderType) return;
+    if (orderType === 'VENTA' && !paisInternacional && orderForm.getValues('values.depositValue') === 0) {
+      orderForm.setValue('values.depositValue', DEFAULT_DEPOSIT_ARS, { shouldDirty: true });
+    }
+    if (prev === 'PRUEBA' && orderType !== 'PRUEBA' && !orderForm.getValues('shipping.carrier')) {
+      orderForm.setValue('shipping.carrier', paisInternacional ? 'DHL' : 'ANDREANI', { shouldDirty: true });
+      orderForm.setValue('shipping.service', 'DOMICILIO', { shouldDirty: true });
+    }
+  }, [orderType, paisInternacional, orderForm]);
+
+  /** Al tildar/destildar "Regalo (sin cargo)" en una Venta: restaura la seña por defecto al destildar. */
+  const handleDesignGiftToggle = (checked: boolean) => {
+    orderForm.setValue('order.isGift', checked, { shouldDirty: true });
+    if (checked) {
+      orderForm.setValue('values.totalValue', 0, { shouldDirty: true, shouldValidate: true });
+      orderForm.setValue('values.depositValue', 0, { shouldDirty: true, shouldValidate: true });
+    } else if (!paisInternacional) {
+      orderForm.setValue('values.depositValue', DEFAULT_DEPOSIT_ARS, { shouldDirty: true, shouldValidate: true });
+    }
+  };
   const abcFields: AbecedarioFormFields = {
     abecedarioTipografia: orderForm.watch('order.abecedarioTipografia'),
     abecedarioAlturaMm: orderForm.watch('order.abecedarioAlturaMm'),
@@ -478,6 +625,8 @@ export function NewOrderStepForm({
   useEffect(() => {
     if (selectedItemType !== 'SELLO') return;
     if (currentStep !== 2 && currentStep !== 3) return;
+    // La cotización automática no aplica a regalos ni pruebas.
+    if (valoresBloqueados) return;
     if (!preciosCotizacion) return;
     const w = Number(wMm) || 0;
     const h = Number(hMm) || 0;
@@ -491,22 +640,24 @@ export function NewOrderStepForm({
       shouldDirty: true,
       shouldValidate: true,
     });
-  }, [preciosCotizacion, selectedItemType, currentStep, wMm, hMm, orderForm, arsAMonedaPedido]);
+  }, [preciosCotizacion, selectedItemType, currentStep, wMm, hMm, orderForm, arsAMonedaPedido, valoresBloqueados]);
 
   useEffect(() => {
-    if (selectedItemType === 'SOLDADOR') {
-      orderForm.setValue('values.totalValue', arsAMonedaPedido(75000));
-    } else if (selectedItemType === 'MANGO_GOLPE') {
-      orderForm.setValue('values.totalValue', arsAMonedaPedido(25000));
-    } else if (selectedItemType === 'BASE_REMACHADORA') {
-      orderForm.setValue('values.totalValue', arsAMonedaPedido(40000));
+    if (!valoresBloqueados) {
+      if (selectedItemType === 'SOLDADOR') {
+        orderForm.setValue('values.totalValue', arsAMonedaPedido(75000));
+      } else if (selectedItemType === 'MANGO_GOLPE') {
+        orderForm.setValue('values.totalValue', arsAMonedaPedido(25000));
+      } else if (selectedItemType === 'BASE_REMACHADORA') {
+        orderForm.setValue('values.totalValue', arsAMonedaPedido(40000));
+      }
     }
     if (selectedItemType !== 'SELLO') {
       orderForm.setValue('order.requestedWidthMm', 1);
       orderForm.setValue('order.requestedHeightMm', 1);
       orderForm.setValue('order.stampType', 'CLASICO');
     }
-  }, [selectedItemType, orderForm, arsAMonedaPedido]);
+  }, [selectedItemType, orderForm, arsAMonedaPedido, valoresBloqueados]);
 
   const handleFileChange = (type: 'base' | 'vector' | 'photo', file: File | undefined) => {
     setFiles(prev => ({ ...prev, [type]: file }));
@@ -517,7 +668,7 @@ export function NewOrderStepForm({
     setFiles({});
     setMeasureInput('');
     setActiveSlot('new');
-  }, [orderForm]);
+  }, [orderForm, emptyDesignFormValues]);
 
   const loadDesignIntoForm = useCallback(
     (design: SavedDesignData) => {
@@ -530,13 +681,36 @@ export function NewOrderStepForm({
       setFiles(design.files ?? {});
       setMeasureInput(measureInputFromDesign(design.order));
     },
-    [orderForm],
+    [orderForm, emptyDesignFormValues],
+  );
+
+  /** Regalo/Prueba: valores en 0, marca de regalo según el tipo y sin envío en Prueba. */
+  const applyOrderTypeToDesign = useCallback(
+    (design: SavedDesignData): SavedDesignData => {
+      if (orderType === 'VENTA') {
+        return {
+          ...design,
+          order: { ...design.order, isGift: design.order.isGift === true },
+          values: design.order.isGift === true ? { totalValue: 0, depositValue: 0 } : design.values,
+        };
+      }
+      return {
+        ...design,
+        order: { ...design.order, isGift: orderType === 'REGALO' },
+        values: { totalValue: 0, depositValue: 0 },
+        shipping:
+          orderType === 'PRUEBA'
+            ? ({ ...design.shipping, carrier: undefined, service: undefined } as unknown as SavedDesignData['shipping'])
+            : design.shipping,
+      };
+    },
+    [orderType],
   );
 
   const captureCurrentDesign = useCallback((): SavedDesignData => {
     const values = orderForm.getValues();
     const itemType = values.order.itemType;
-    return {
+    return applyOrderTypeToDesign({
       order: {
         ...values.order,
         designName: itemType === 'SELLO' ? (values.order.designName || '') : '',
@@ -545,17 +719,18 @@ export function NewOrderStepForm({
       shipping: values.shipping,
       states: values.states,
       files: { ...files },
-    };
-  }, [orderForm, files]);
+    } as SavedDesignData);
+  }, [orderForm, files, applyOrderTypeToDesign]);
 
-  const buildDesignPayload = (data: OrderFormData): SavedDesignData => ({
-    ...data,
-    order: {
-      ...data.order,
-      designName: selectedItemType === 'SELLO' ? (data.order.designName || '') : '',
-    },
-    files,
-  });
+  const buildDesignPayload = (data: OrderFormData): SavedDesignData =>
+    applyOrderTypeToDesign({
+      ...data,
+      order: {
+        ...data.order,
+        designName: selectedItemType === 'SELLO' ? (data.order.designName || '') : '',
+      },
+      files,
+    } as SavedDesignData);
 
   const persistActiveSlotDraft = useCallback(() => {
     if (activeSlot === 'new') return;
@@ -578,10 +753,34 @@ export function NewOrderStepForm({
   };
 
   const handleCustomerSubmit = (data: CustomerFormData) => {
+    if (data.orderType === 'PRUEBA') {
+      // Prueba interna: cliente interno fijo, sin teléfono ni WhatsApp, sin internacional.
+      onStepSubmit(
+        {
+          orderType: 'PRUEBA' as const,
+          testReason: data.testReason?.trim() ?? '',
+          attachGiftToOrderId: null,
+          customer: {
+            firstName: CLIENTE_PRUEBAS_NOMBRE,
+            lastName: CLIENTE_PRUEBAS_APELLIDO,
+            phoneE164: '',
+            email: '',
+            channel: 'OTRO' as const,
+          },
+          skipConfirmationWebhook: true,
+          internationalCountryIso2: null,
+        },
+        1,
+      );
+      return;
+    }
     onStepSubmit(
       {
         ...data,
-        internationalCountryIso2: data.isInternational ? data.internationalCountryIso2 ?? null : null,
+        testReason: undefined,
+        attachGiftToOrderId: data.orderType === 'REGALO' ? data.attachGiftToOrderId ?? null : null,
+        internationalCountryIso2:
+          data.orderType === 'VENTA' && data.isInternational ? data.internationalCountryIso2 ?? null : null,
       },
       1,
     );
@@ -628,6 +827,54 @@ export function NewOrderStepForm({
   if (currentStep === 1) {
     return (
       <form onSubmit={customerForm.handleSubmit(handleCustomerSubmit)} className="space-y-8">
+        {/* Tipo de pedido */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-medium">Tipo de pedido</h3>
+          <div className="grid grid-cols-3 gap-3" role="radiogroup" aria-label="Tipo de pedido">
+            {orderTypeOptions.map((opt) => {
+              const selected = formOrderType === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => handleOrderTypeChange(opt.value)}
+                  className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+                    selected
+                      ? 'border-primary bg-primary/10'
+                      : 'border-white/15 bg-white/[0.03] hover:border-white/25'
+                  }`}
+                >
+                  <p className="text-sm font-medium">{opt.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{opt.hint}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {isPrueba && (
+          <div className="space-y-2">
+            <Label htmlFor="testReason">Motivo de la prueba *</Label>
+            <Textarea
+              id="testReason"
+              rows={3}
+              placeholder="Ej: probar bronce nuevo, calibrar la máquina, test de diseño…"
+              {...customerForm.register('testReason')}
+              className={customerForm.formState.errors.testReason ? 'border-red-500' : ''}
+            />
+            {customerForm.formState.errors.testReason && (
+              <p className="text-xs text-red-500 mt-1">{customerForm.formState.errors.testReason.message}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Se carga al cliente interno “{CLIENTE_PRUEBAS_NOMBRE} – {CLIENTE_PRUEBAS_APELLIDO}”. No envía WhatsApp ni se despacha.
+            </p>
+          </div>
+        )}
+
+        {!isPrueba && (
+        <>
         <div className="space-y-6">
           <h3 className="text-lg font-medium">Información del contacto</h3>
           <div className="grid grid-cols-2 gap-6">
@@ -724,6 +971,7 @@ export function NewOrderStepForm({
             <Checkbox
               id="isInternational"
               checked={!!isInternational}
+              disabled={isRegaloType}
               onCheckedChange={(c) => {
                 const checked = c === true;
                 customerForm.setValue('isInternational', checked, { shouldDirty: true });
@@ -734,6 +982,9 @@ export function NewOrderStepForm({
             />
             <Label htmlFor="isInternational" className="cursor-pointer text-sm font-normal leading-snug">
               Pedido internacional
+              {isRegaloType && (
+                <span className="ml-2 text-xs text-muted-foreground">(no disponible para regalos)</span>
+              )}
             </Label>
           </div>
           {isInternational && (
@@ -772,6 +1023,40 @@ export function NewOrderStepForm({
           )}
         </div>
 
+        {isRegaloType && (
+          <div className="space-y-2 rounded-lg border border-pink-500/30 bg-pink-500/[0.05] px-4 py-3">
+            <Label htmlFor="attachGiftToOrderId">Destino del regalo</Label>
+            <Select
+              value={watchedAttachId ?? 'NEW'}
+              onValueChange={(value) =>
+                customerForm.setValue('attachGiftToOrderId', value === 'NEW' ? null : value, { shouldDirty: true })
+              }
+            >
+              <SelectTrigger id="attachGiftToOrderId">
+                <SelectValue placeholder="Pedido de regalo aparte" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NEW">Pedido de regalo aparte</SelectItem>
+                {openOrdersForGift.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    Sumar al pedido #{o.id.slice(0, 6)} (viaja junto) · {o.items.length} ítem
+                    {o.items.length > 1 ? 's' : ''}
+                    {o.items[0]?.designName ? ` · ${o.items[0].designName}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {openOrdersForGift.length > 0
+                ? 'El cliente tiene pedidos abiertos: podés sumar el regalo a uno (viaja junto) o cargarlo como pedido aparte.'
+                : 'Sin cargo para el cliente. El envío lo paga Alcohn. Si el cliente tiene un pedido abierto (cargá su teléfono o email), vas a poder sumarlo a ese pedido.'}
+            </p>
+          </div>
+        )}
+        </>
+        )}
+
+        {!isPrueba && (
         <div className="flex items-start gap-3 rounded-lg border border-white/15 bg-white/[0.03] px-4 py-3">
           <Checkbox
             id="skipConfirmationWebhook"
@@ -784,6 +1069,7 @@ export function NewOrderStepForm({
             No enviar aviso de confirmación al cliente (solo este pedido). Útil si cargás un alta manual tarde y no querés que se dispare el mensaje automático.
           </Label>
         </div>
+        )}
 
         <div className="flex justify-end gap-4 pt-6 border-t">
           <Button type="button" variant="outline" onClick={onCancel}>
@@ -800,6 +1086,27 @@ export function NewOrderStepForm({
   return (
     <form onSubmit={orderForm.handleSubmit(handleOrderSubmit)} className="space-y-8">
       {designTabs}
+      {/* Resumen del tipo de pedido */}
+      {orderType !== 'VENTA' && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/15 bg-white/[0.03] px-4 py-2.5 text-sm">
+          <OrderTypeBadge orderType={orderType} className="text-xs px-2 py-0.5" />
+          <span className="font-medium text-muted-foreground">Sin cargo</span>
+          {isPruebaOrder && initialData.testReason ? (
+            <span className="text-muted-foreground">· Motivo: {initialData.testReason}</span>
+          ) : null}
+          {isRegaloOrder && !attachedOrder && (
+            <span className="text-muted-foreground">
+              · {initialData.customer?.firstName} {initialData.customer?.lastName} · el envío lo paga Alcohn
+            </span>
+          )}
+          {isRegaloOrder && attachedOrder && (
+            <span className="text-muted-foreground">
+              · Se suma al pedido #{attachedOrder.id.slice(0, 6)} de {attachedOrder.customer.firstName}{' '}
+              {attachedOrder.customer.lastName} (viaja junto)
+            </span>
+          )}
+        </div>
+      )}
       {/* Diseño */}
       <div className="space-y-4">
         <h3 className="text-lg font-medium">Diseño</h3>
@@ -925,7 +1232,8 @@ export function NewOrderStepForm({
         </div>
       </div>
 
-      {/* Valores */}
+      {/* Valores (ocultos en Regalo/Prueba: valor y seña = 0) */}
+      {!isSinCargoOrder && (
       <div className="space-y-4">
         <h3 className="text-lg font-medium">
           Valores{paisInternacional ? ` (${paisInternacional.moneda})` : ''}
@@ -938,7 +1246,7 @@ export function NewOrderStepForm({
               placeholder={paisInternacional ? `Valor Total (${paisInternacional.moneda}) *` : 'Valor Total *'}
               {...orderForm.register('values.totalValue', { valueAsNumber: true })}
               className={orderForm.formState.errors.values?.totalValue ? 'border-red-500' : ''}
-              disabled={selectedItemType === 'SOLDADOR' || selectedItemType === 'MANGO_GOLPE' || selectedItemType === 'BASE_REMACHADORA'}
+              disabled={designIsGift || selectedItemType === 'SOLDADOR' || selectedItemType === 'MANGO_GOLPE' || selectedItemType === 'BASE_REMACHADORA'}
             />
             {orderForm.formState.errors.values?.totalValue && (
               <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.values.totalValue.message}</p>
@@ -951,6 +1259,7 @@ export function NewOrderStepForm({
               placeholder={paisInternacional ? `Seña (${paisInternacional.moneda})` : 'Seña'}
               {...orderForm.register('values.depositValue', { valueAsNumber: true })}
               className={orderForm.formState.errors.values?.depositValue ? 'border-red-500' : ''}
+              disabled={designIsGift}
             />
             {orderForm.formState.errors.values?.depositValue && (
               <p className="text-xs text-red-500 mt-1">{orderForm.formState.errors.values.depositValue.message}</p>
@@ -959,22 +1268,39 @@ export function NewOrderStepForm({
           <div className="col-span-2">
             <Input
               value={
-                paisInternacional
-                  ? formatMontoInternacional(restante, paisInternacional)
-                  : `$${restante.toLocaleString()}`
+                designIsGift
+                  ? 'Sin cargo'
+                  : paisInternacional
+                    ? formatMontoInternacional(restante, paisInternacional)
+                    : `$${restante.toLocaleString()}`
               }
               disabled
               className="bg-muted"
               placeholder="Restante"
             />
           </div>
+          <div className="col-span-6 flex items-center space-x-2">
+            <Checkbox
+              id="designIsGift"
+              checked={designIsGift}
+              onCheckedChange={(c) => handleDesignGiftToggle(c === true)}
+            />
+            <Label htmlFor="designIsGift" className="text-sm font-medium cursor-pointer">
+              🎁 Regalo (sin cargo)
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                Este diseño viaja con el pedido pero no se cobra.
+              </span>
+            </Label>
+          </div>
         </div>
       </div>
+      )}
 
       {/* Transportista y Estado de Fabricación */}
       <div className="space-y-4">
-        <h3 className="text-lg font-medium">Transportista y Estado</h3>
+        <h3 className="text-lg font-medium">{isPruebaOrder || attachedOrder ? 'Estado' : 'Transportista y Estado'}</h3>
         <div className="grid grid-cols-6 gap-4">
+          {!isPruebaOrder && !attachedOrder && (
           <div className="col-span-3">
             <Select onValueChange={(value) => {
               const option = carrierOptions.find((o) => o.value === value);
@@ -998,7 +1324,8 @@ export function NewOrderStepForm({
               </SelectContent>
             </Select>
           </div>
-          <div className="col-span-3">
+          )}
+          <div className={!isPruebaOrder && !attachedOrder ? 'col-span-3' : 'col-span-6'}>
             <Select 
               value={orderForm.watch('states.fabrication') || 'SIN_HACER'}
               onValueChange={(value) => orderForm.setValue('states.fabrication', value as FabricationState)}

@@ -7,7 +7,8 @@
 | Grupo | Campos | Notas |
 |---|---|---|
 | Identidad | `id`, `cliente_id`, `fecha` (fecha de negocio), `created_at`, `taken_by` (usuario que la cargó) | `fecha` default `CURRENT_DATE` (UTC); la app manda la fecha argentina |
-| Totales (trigger) | `cantidad_sellos`, `senia_total`, `valor_total`, `restante` (incluye costo de envío), `costo_fabricacion_total`, `margen_fabricacion_total` | No editar a mano: los recalculan triggers |
+| Tipo | `tipo_pedido` (`Venta` default, `Prueba`, `Regalo`), `motivo_prueba` | Inmutable después del INSERT. Prueba/Regalo no cuentan como venta. |
+| Totales (trigger) | `cantidad_sellos`, `senia_total`, `valor_total`, `restante` (incluye costo de envío **salvo** en `Regalo`, donde restante no suma envío), `costo_fabricacion_total`, `margen_fabricacion_total` | No editar a mano: los recalculan triggers |
 | Venta | `estado_orden` | Valores: `Señado`, `Foto`, `Transferido`, `Deudor` (+ legados `Hecho`, `Hacer Etiqueta`, `Etiqueta Lista`, `Despachado`, `Seguimiento Enviado`). ⚠️ 2.048 filas históricas tienen `Seguimiento Enviado` acá. |
 | Envío | `empresa_envio` (`Andreani`, `Correo Argentino`, `Via Cargo`, `Retiro`, `Retiro en Persona`), `tipo_envio` (`Domicilio`, `Sucursal`, `Retiro`), `direccion_id`, `seguimiento`, `estado_envio`, `seguimiento_enviado_at` | `estado_envio`: `Sin envio`, `Hacer Etiqueta`, `Error de Etiqueta`, `Etiqueta Lista`, `Despachado`, `Seguimiento Enviado` |
 | Auditoría de envío | `envio_datos_cargado_por`, `envio_datos_cargado_at`, `envio_datos_editado` | |

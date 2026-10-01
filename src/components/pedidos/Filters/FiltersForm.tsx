@@ -66,6 +66,7 @@ const filtersSchema = z.object({
     .array(z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'WEB'] as any))
     .optional(),
   uploaders: z.array(z.string()).optional(),
+  orderTypes: z.array(z.enum(['VENTA', 'REGALO', 'PRUEBA'])).optional(),
 });
 
 type FiltersFormData = z.infer<typeof filtersSchema>;
@@ -118,6 +119,12 @@ const channelOptions = [
   { value: 'WEB', label: 'Web' },
 ];
 
+const orderTypeFilterOptions: { value: 'VENTA' | 'REGALO' | 'PRUEBA'; label: string }[] = [
+  { value: 'VENTA', label: 'Venta' },
+  { value: 'REGALO', label: 'Regalo' },
+  { value: 'PRUEBA', label: 'Prueba' },
+];
+
 // uploaderOptions se obtendrá dinámicamente desde la BD
 
 function Chip({ selected, onToggle, children }: { selected: boolean; onToggle: () => void; children: React.ReactNode }) {
@@ -156,7 +163,7 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
     loadUsers();
   }, []);
 
-  const { register, handleSubmit, watch, setValue, reset } = useForm<FiltersFormData>({
+  const { handleSubmit, watch, setValue, reset } = useForm<FiltersFormData>({
     resolver: zodResolver(filtersSchema),
     defaultValues: initialData || {
       dateRange: undefined,
@@ -166,9 +173,11 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
       types: [],
       channels: [],
       uploaders: [],
+      orderTypes: [],
     },
   });
 
+  const watchedOrderTypes = watch('orderTypes') || [];
   const watchedFabrication = watch('fabrication') || [];
   const watchedSale = watch('sale') || [];
   const watchedShipping = watch('shipping') || [];
@@ -191,6 +200,7 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
       types: [],
       channels: [],
       uploaders: [],
+      orderTypes: [],
     });
     onClear();
   };
@@ -350,6 +360,20 @@ export function FiltersForm({ onSubmit, onClear, initialData }: FiltersFormProps
         <div className="flex flex-wrap gap-2">
           {shippingOptions.map((o) => (
             <Chip key={o.value} selected={watchedShipping.includes(o.value)} onToggle={() => toggleArrayValue('shipping', o.value)}>
+              {o.label}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t"></div>
+
+      {/* Tipo de pedido */}
+      <div className="space-y-3">
+        <Label className="text-base font-semibold">Tipo de pedido</Label>
+        <div className="flex flex-wrap gap-2">
+          {orderTypeFilterOptions.map((o) => (
+            <Chip key={o.value} selected={watchedOrderTypes.includes(o.value)} onToggle={() => toggleArrayValue('orderTypes', o.value)}>
               {o.label}
             </Chip>
           ))}

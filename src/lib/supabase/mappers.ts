@@ -206,6 +206,7 @@ export const mapClienteToCustomer = (cliente: ClienteRow): Customer => ({
   phoneE164: cliente.telefono,
   email: cliente.mail || undefined,
   dni: cliente.dni || undefined,
+  isInternal: (cliente as { es_interno?: boolean | null }).es_interno === true,
 });
 
 // Mapear Sello a OrderItem
@@ -231,6 +232,7 @@ export const mapSelloToOrderItem = (sello: SelloRow, cliente: ClienteRow): Order
     itemType: mapItemType((sello as any).item_type),
     stampType: mapStampType(sello.tipo),
     itemConfig: ((sello as any).item_config as Record<string, any> | null) || undefined,
+    isGift: (sello as { es_regalo?: boolean | null }).es_regalo === true,
     itemValue: sello.valor ? Number(sello.valor) : 0,
     fabricationCostItem: (sello as any).costo_fabricacion != null ? Number((sello as any).costo_fabricacion) : null,
     fabricationMarginItem: (sello as any).margen_fabricacion != null ? Number((sello as any).margen_fabricacion) : null,
@@ -343,6 +345,13 @@ export const mapOrdenToOrder = (
     orderDate: orden.fecha || todayArgentinaDateKey(),
     createdAt: orden.created_at || undefined,
     seguimientoEnviadoAt: (orden as { seguimiento_enviado_at?: string | null }).seguimiento_enviado_at ?? null,
+    orderType: (() => {
+      const raw = (orden as { tipo_pedido?: string | null }).tipo_pedido;
+      if (raw === 'Prueba') return 'PRUEBA' as const;
+      if (raw === 'Regalo') return 'REGALO' as const;
+      return 'VENTA' as const;
+    })(),
+    testReason: (orden as { motivo_prueba?: string | null }).motivo_prueba ?? null,
     takenBy: takenBy || null,
     totalValue: orden.valor_total ? Number(orden.valor_total) : 0,
     fabricationCostTotal: (orden as any).costo_fabricacion_total != null ? Number((orden as any).costo_fabricacion_total) : null,
@@ -400,8 +409,9 @@ export const mapOrderItemToSello = (
     tipo: mapStampTypeToDB(item.stampType || 'CLASICO') as 'Clasico' | '3mm' | 'Lacre' | 'Alimento' | 'ABC',
     diseno: item.designName,
     nota: item.notes || null,
-    valor: item.itemValue || 0,
-    senia: item.depositValueItem || 0,
+    valor: item.isGift ? 0 : (item.itemValue || 0),
+    senia: item.isGift ? 0 : (item.depositValueItem || 0),
+    es_regalo: item.isGift === true,
     estado_fabricacion: mapFabricationStateToDB(item.fabricationState) as 'Sin Hacer' | 'Haciendo' | 'Hecho' | 'Rehacer' | 'Retocar' | 'Prioridad' | 'Verificar',
     es_prioritario: item.isPriority === true,
     estado_venta: mapSaleStateToDB(item.saleState) as 'Señado' | 'Foto' | 'Transferido',
@@ -420,22 +430,30 @@ export const mapOrderToOrden = (
   order: Partial<Order>,
   clienteId: string,
   direccionId?: string | null
-) => ({
-  cliente_id: clienteId,
-  direccion_id: direccionId || null,
-  empresa_envio: order.shipping?.carrier ? mapShippingCarrierToDB(order.shipping.carrier) as 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' | 'Retiro en Persona' | 'DHL' : null,
-  tipo_envio: order.shipping?.service ? mapShippingServiceToDB(order.shipping.service) as 'Domicilio' | 'Sucursal' | 'Retiro' : null,
-  seguimiento: order.shipping?.trackingNumber || null,
-  estado_orden: order.saleStateOrder ? mapSaleStateToDB(order.saleStateOrder) as 'Señado' | 'Hecho' | 'Foto' | 'Transferido' | 'Hacer Etiqueta' | 'Etiqueta Lista' | 'Despachado' | 'Seguimiento Enviado' : null,
-  estado_envio: order.items?.[0]?.shippingState
-    ? (mapShippingStateToDB(order.items[0].shippingState) as
-        | 'Sin envio'
-        | 'Hacer Etiqueta'
-        | 'Etiqueta Lista'
-        | 'Error de Etiqueta'
-        | 'Despachado'
-        | 'Seguimiento Enviado')
-    : null,
-  fecha: order.orderDate ? order.orderDate.split('T')[0] : todayArgentinaDateKey(),
-});
+) => {
+  const orderType = order.orderType ?? 'VENTA';
+  const tipoPedidoDb =
+    orderType === 'PRUEBA' ? 'Prueba' : orderType === 'REGALO' ? 'Regalo' : 'Venta';
+
+  return {
+    cliente_id: clienteId,
+    direccion_id: direccionId || null,
+    empresa_envio: order.shipping?.carrier ? mapShippingCarrierToDB(order.shipping.carrier) as 'Andreani' | 'Correo Argentino' | 'Via Cargo' | 'Retiro' | 'Retiro en Persona' | 'DHL' : null,
+    tipo_envio: order.shipping?.service ? mapShippingServiceToDB(order.shipping.service) as 'Domicilio' | 'Sucursal' | 'Retiro' : null,
+    seguimiento: order.shipping?.trackingNumber || null,
+    estado_orden: order.saleStateOrder ? mapSaleStateToDB(order.saleStateOrder) as 'Señado' | 'Hecho' | 'Foto' | 'Transferido' | 'Hacer Etiqueta' | 'Etiqueta Lista' | 'Despachado' | 'Seguimiento Enviado' : null,
+    estado_envio: order.items?.[0]?.shippingState
+      ? (mapShippingStateToDB(order.items[0].shippingState) as
+          | 'Sin envio'
+          | 'Hacer Etiqueta'
+          | 'Etiqueta Lista'
+          | 'Error de Etiqueta'
+          | 'Despachado'
+          | 'Seguimiento Enviado')
+      : null,
+    fecha: order.orderDate ? order.orderDate.split('T')[0] : todayArgentinaDateKey(),
+    tipo_pedido: tipoPedidoDb as 'Venta' | 'Prueba' | 'Regalo',
+    motivo_prueba: orderType === 'PRUEBA' ? (order.testReason || null) : null,
+  };
+};
 
