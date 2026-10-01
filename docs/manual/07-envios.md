@@ -126,9 +126,9 @@ Cuando los clientes completan y pagan, sus etiquetas aparecen en el portal. En e
 
 | Botón | Qué hace |
 |---|---|
-| **Traer etiquetas** | Baja del portal las etiquetas nuevas (las pendientes de ingreso), lee el seguimiento y el destinatario, y las empareja con los pedidos por nombre |
+| **Traer etiquetas** | Baja del portal las etiquetas nuevas (las pendientes de ingreso), lee el seguimiento y el destinatario, y las empareja con los pedidos por nombre. Si alguna que ya tenías **ya no** está pendiente de ingreso (la llevaron a Andreani), la saca de la lista activa y el pedido pasa a **Despachado** (el cliente recibe el seguimiento) |
 | **Cargar PDF** | Subir etiquetas bajadas a mano del portal |
-| **Actualizar seguimientos** | Revisa en el portal si Andreani ya recibió los paquetes. Los que ya no están "Pendiente de ingreso" pasan a **Despachado** |
+| **Actualizar seguimientos** | Revisa en el portal si Andreani ya recibió los paquetes. Los que ya no están "Pendiente de ingreso" pasan a **Despachado**. Sirve si no corriste Traer etiquetas después del ingreso |
 | **Descargar todas (N)** | Une en un PDF (hojas 100 × 152 mm) todas las etiquetas listas para despachar |
 
 Las etiquetas se ven en tres grupos:
@@ -145,7 +145,7 @@ Acciones sobre una etiqueta (menú **Más acciones**): **Liberar a huérfano**, 
 
 Después: **Descargar todas**, imprimir, pegar y entregar a Andreani.
 
-🤖 Cuando **Actualizar seguimientos** detecta que Andreani recibió el paquete, el pedido pasa a **Despachado**, al cliente le llega el seguimiento y queda en **Seguimiento Enviado**.
+🤖 Cuando Andreani ya recibió el paquete (lo detecta **Traer etiquetas** o **Actualizar seguimientos**), el pedido pasa a **Despachado**, al cliente le llega el seguimiento y queda en **Seguimiento Enviado**.
 
 ## Vía Cargo y retiro en persona
 

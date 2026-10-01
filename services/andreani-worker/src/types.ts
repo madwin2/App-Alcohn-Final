@@ -37,6 +37,7 @@ export interface SyncLabelsResult {
     retriedMissingPdf?: number;
     portalTotal?: number;
     downloadFailedPages?: number;
+    dispatched?: number;
   };
 }
 

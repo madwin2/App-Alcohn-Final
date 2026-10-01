@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `POST /generate {count}` | "Generar más" (pool) | Login (Azure B2C) → "Hacer un envío" → "Andreani envíos" → origen (sucursal de despacho) → paquete estándar → valor declarado y código de descuento → "Finalizar" → copia el link | INSERT `envios_andreani_links` (`disponible`) |
 | `POST /refill {min}` | — (sugerido como cron cada 6–12 h, ❓ no está en el repo) | Genera la diferencia hasta `min` (15) | ídem |
-| `POST /sync-labels` | "Traer etiquetas" | Descarga etiquetas Zebra nuevas del portal, deduplica por tracking, empareja por nombre, enriquece el PDF | UPSERT `envios_andreani_etiquetas`, bucket `etiquetas-andreani`; si asigna → `ordenes.seguimiento`, `Etiqueta Lista` |
+| `POST /sync-labels` | "Traer etiquetas" | Descarga etiquetas Zebra nuevas del portal, deduplica por tracking, empareja por nombre, enriquece el PDF. También refresca `estado_portal` de las ya guardadas; si ya no están "Pendiente de ingreso" y la orden está `Etiqueta Lista` → `Despachado` (mismo criterio que sync-tracking). | UPSERT `envios_andreani_etiquetas`, bucket `etiquetas-andreani`; si asigna → `ordenes.seguimiento`, `Etiqueta Lista`; si aplica → `Despachado` (+ WhatsApp vía trigger) |
 | `POST /sync-tracking` | "Actualizar seguimientos" | Lee el estado de cada tracking en el portal | `estado_portal`; si ya no es "Pendiente de ingreso" y la orden está `Etiqueta Lista` → `Despachado` |
 | `GET /jobs` | estado de trabajos | Cola serial del worker | — |
 | `GET /health` | — | Estado y links disponibles | — |

@@ -47,6 +47,24 @@ export async function listKnownTrackings(): Promise<Set<string>> {
   return new Set((data ?? []).map((r) => r.tracking as string).filter(Boolean));
 }
 
+/** Tracking → orden_id de etiquetas asignadas (para marcar Despachado al sincronizar). */
+export async function listAssignedTrackingOrdenIds(): Promise<Map<string, string>> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('envios_andreani_etiquetas')
+    .select('tracking, orden_id')
+    .eq('estado', 'asignada')
+    .not('orden_id', 'is', null);
+  if (error) throw error;
+  const map = new Map<string, string>();
+  for (const row of data ?? []) {
+    const tracking = typeof row.tracking === 'string' ? row.tracking : '';
+    const ordenId = typeof row.orden_id === 'string' ? row.orden_id : '';
+    if (tracking && ordenId) map.set(tracking, ordenId);
+  }
+  return map;
+}
+
 /** Trackings en DB pero sin PDF guardado — hay que reintentar descarga. */
 export async function listTrackingsMissingPdf(): Promise<Set<string>> {
   const supabase = getSupabase();

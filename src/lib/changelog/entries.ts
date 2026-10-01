@@ -548,6 +548,32 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 30,
+    date: '2026-10-01',
+    title: 'Novedades',
+    version: '1.48',
+    slides: [
+      {
+        heading: 'Accesorio hecho = foto enviada',
+        body: 'Cuando marcás un soldador, mango o base como Hecho, además del WhatsApp con la foto, la venta pasa sola a Foto Enviada. Ya no queda en la cola de Enviar foto.',
+        icon: MessageCircle,
+      },
+    ],
+  },
+  {
+    id: 31,
+    date: '2026-10-01',
+    title: 'Novedades',
+    version: '1.49',
+    slides: [
+      {
+        heading: 'Traer etiquetas también avisa al cliente',
+        body: 'Si al traer etiquetas Andreani ya recibió paquetes que tenías en la lista, el pedido pasa a Despachado y el cliente recibe el seguimiento (antes solo se sacaban de la lista).',
+        icon: Truck,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

@@ -17,11 +17,11 @@ Alcohn usa **Andreani Pymes – "Andreani envíos"**: genera un **link de envío
    - El portal bloquea la IP del servidor: el worker sale a internet por un **túnel SOCKS desde la PC de la oficina** (`office-tunnel.bat`), que tiene que estar abierto → [FR-08](../10-operational-boundaries/README.md#fr-08).
 2. **Asignación**: al subir la **foto del último ítem** (WF-05), la edge `webhook-bot` toma el link disponible más antiguo (`asignar_link_andreani`) y lo incluye en el WhatsApp `pedido_listo`. (Los pedidos web lo reciben en el WhatsApp de confirmación.) Si el pool está vacío, el mensaje sale sin link.
 3. ❓ El cliente completa y paga el envío en Andreani.
-4. **Traer etiquetas**: botón en el panel → worker descarga las etiquetas Zebra nuevas del portal, lee tracking y destinatario, intenta emparejar por nombre, enriquece el PDF y lo guarda (`envios_andreani_etiquetas`: `asignada` o `huerfano`; bucket `etiquetas-andreani`).
+4. **Traer etiquetas**: botón en el panel → worker descarga las etiquetas Zebra nuevas del portal, lee tracking y destinatario, intenta emparejar por nombre, enriquece el PDF y lo guarda (`envios_andreani_etiquetas`: `asignada` o `huerfano`; bucket `etiquetas-andreani`). Si al refrescar el portal una etiqueta ya guardada **ya no** está "Pendiente de ingreso", la orden pasa a **`Despachado`** (igual que el paso 8) para que el cliente reciba el WhatsApp de seguimiento.
 5. **Asignar** huérfanas a mano (`asignar_etiqueta_andreani`, requiere que la orden tenga link asignado) → `seguimiento`, `Etiqueta Lista`. También se pueden cargar PDFs a mano. Liberar a huérfano, marcar **errónea**, restaurar, eliminar.
 6. **Venta**: la descarga del PDF solo se permite si la venta está **Transferido** (selector en el panel).
 7. **Descargar PDF unido** (100×152) → ❓ imprimir, pegar, entregar a Andreani.
-8. **Actualizar seguimientos**: worker lee el estado en el portal; si ya **no** dice "Pendiente de ingreso", la orden pasa a **`Despachado`** (solo si estaba en `Etiqueta Lista`).
+8. **Actualizar seguimientos**: worker lee el estado en el portal; si ya **no** dice "Pendiente de ingreso", la orden pasa a **`Despachado`** (solo si estaba en `Etiqueta Lista`). Útil si no corriste "Traer etiquetas" después del ingreso en sucursal.
 9. ✅ Igual que Correo: trigger → WhatsApp `pedido_enviado` (link de Andreani con el tracking) → `Seguimiento Enviado` → stock.
 
 ## Estados

@@ -17,15 +17,17 @@ import {
   pdfContainsTracking,
   splitPdfPages,
 } from './pdf/enrich-zebra.js';
-import { isPendienteIngreso } from './map-andreani-portal-estado.js';
+import { shouldMarkDespachado, isPendienteIngreso } from './map-andreani-portal-estado.js';
 import { matchDestinatario, type MatchCandidate } from './match-names.js';
 import {
   applyTrackingToOrder,
   insertEtiqueta,
   listAssignedLinkCandidates,
+  listAssignedTrackingOrdenIds,
   listKnownTrackings,
   listTrackingsMissingPdf,
   loadEnrichInputByTracking,
+  markOrderDespachado,
   trackingAlreadyStored,
   updateEtiquetaPdfPath,
   updateEtiquetaPortalStatus,
@@ -217,6 +219,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
   }
 
   const known = await listKnownTrackings();
+  const trackingToOrden = await listAssignedTrackingOrdenIds();
   const missingPdf = await listTrackingsMissingPdf();
   const candidates = await listAssignedLinkCandidates();
   const usedOrdenIds = new Set<string>();
@@ -230,6 +233,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
   let orphans = 0;
   let refreshed = 0;
   let downloadFailedPages = 0;
+  let dispatched = 0;
 
   try {
     setJobDetail('Abriendo historial Pagados…');
@@ -272,6 +276,21 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
             estadoPortal: row.estado,
             fechaPortal: row.fecha,
           });
+          // Misma regla que "Actualizar seguimientos": si ya no está pendiente de ingreso,
+          // pasar a Despachado (dispara WhatsApp de seguimiento). Si no, la UI saca la
+          // etiqueta de la lista activa y el cliente no recibe el aviso.
+          if (shouldMarkDespachado(row.estado)) {
+            const ordenId = trackingToOrden.get(row.tracking);
+            if (ordenId) {
+              const ok = await markOrderDespachado(ordenId);
+              if (ok) {
+                dispatched += 1;
+                console.log(
+                  `[andreani] sync-labels ${row.tracking}: portal="${row.estado}" → Despachado`,
+                );
+              }
+            }
+          }
         } catch {
           /* */
         }
@@ -373,7 +392,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
 
     return {
       status: downloadFailedPages > 0 && !(assigned + orphans + refreshed) ? 'system_error' : 'ok',
-      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Reintento sin PDF: ${retriedMissingPdf}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}. Páginas: ${pagesVisited}${portalTotal ? ` de ${Math.ceil(portalTotal / 10)} (${portalTotal} en portal)` : ''}.${failNote}`,
+      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Reintento sin PDF: ${retriedMissingPdf}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}${dispatched ? `. → Despachado: ${dispatched}` : ''}. Páginas: ${pagesVisited}${portalTotal ? ` de ${Math.ceil(portalTotal / 10)} (${portalTotal} en portal)` : ''}.${failNote}`,
       httpStatus: downloadFailedPages > 0 && !(assigned + orphans + refreshed) ? 503 : 200,
       skipped,
       downloaded,
@@ -386,6 +405,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
         retriedMissingPdf,
         portalTotal,
         downloadFailedPages,
+        dispatched,
       },
     };
   } catch (error) {
