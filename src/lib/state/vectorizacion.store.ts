@@ -9,6 +9,7 @@ import type {
 } from '@/lib/vectorizacion/types';
 import type { VectorizeMode } from '@/lib/vectorizacion/vectorizerPreset';
 import { saveReviewQueue } from '@/lib/vectorizacion/reviewQueuePersist';
+import { dedupeReviewItems, mergeReviewItems } from '@/lib/vectorizacion/reviewQueueDedupe';
 
 interface VectorizacionStore {
   tab: 'pedidos' | 'lote' | 'asignar' | 'revision';
@@ -68,13 +69,19 @@ function closeBitmap(source?: SourceImage) {
   }
 }
 
+const REVIEW_CHANNEL = 'alcohn-vectorizacion-review';
+const reviewChannel: BroadcastChannel | null =
+  typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(REVIEW_CHANNEL) : null;
+
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 function schedulePersistReviewQueue(getQueue: () => ReviewItem[]) {
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    void saveReviewQueue(getQueue());
+    const queue = getQueue();
+    void saveReviewQueue(queue);
+    reviewChannel?.postMessage({ type: 'queue', items: queue });
   }, 200);
 }
 
@@ -142,7 +149,11 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
   setProgress: (progress) => set({ progress }),
   setResults: (results) => set({ results }),
   pushReviews: (items) => {
-    set({ reviewQueue: [...get().reviewQueue, ...items] });
+    const { queue, replaced } = mergeReviewItems(get().reviewQueue, items);
+    if (replaced.length > 0) {
+      console.warn('[vectorizacion] Sello ya estaba en Revisión, se reemplazó:', replaced);
+    }
+    set({ reviewQueue: queue });
     schedulePersistReviewQueue(() => get().reviewQueue);
   },
   updateReviewSvg: (id, svg) => {
@@ -158,20 +169,28 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
   hydrateReviewQueue: (items) => {
     const current = get().reviewQueue;
     if (!current.length) {
-      set({ reviewQueue: items, reviewQueueHydrated: true });
+      const deduped = dedupeReviewItems(items);
+      set({ reviewQueue: deduped, reviewQueueHydrated: true });
+      if (deduped.length !== items.length) {
+        schedulePersistReviewQueue(() => get().reviewQueue);
+      }
       return;
     }
-    // Sesión en curso: no pisar ítems nuevos; completar con los recuperados.
-    const byId = new Map(items.map((item) => [item.id, item]));
-    for (const item of current) {
-      byId.set(item.id, item);
-    }
-    const merged = [...byId.values()];
-    set({ reviewQueue: merged, reviewQueueHydrated: true });
-    if (merged.length !== current.length) {
+    // Sesión en curso gana sobre IndexedDB.
+    const { queue } = mergeReviewItems(items, current);
+    set({ reviewQueue: queue, reviewQueueHydrated: true });
+    if (queue.length !== current.length) {
       schedulePersistReviewQueue(() => get().reviewQueue);
     }
   },
   setFabricationReviews: (fabricationReviews) => set({ fabricationReviews }),
   clearRun: () => set({ progress: [], results: [] }),
 }));
+
+reviewChannel?.addEventListener('message', (event: MessageEvent) => {
+  if (event.data?.type !== 'queue' || !Array.isArray(event.data.items)) return;
+  useVectorizacionStore.setState({
+    reviewQueue: dedupeReviewItems(event.data.items as ReviewItem[]),
+    reviewQueueHydrated: true,
+  });
+});

@@ -145,7 +145,7 @@ export function RevisionTab() {
       store.removeLocal(item.selloId);
       if (saved.needsReview) {
         store.setFabricationReviews([
-          ...store.fabricationReviews,
+          ...useVectorizacionStore.getState().fabricationReviews,
           {
             selloId: item.selloId,
             fileName: saved.fileName,
@@ -171,6 +171,7 @@ export function RevisionTab() {
   const confirmAll = async () => {
     for (const item of [...store.reviewQueue]) {
       if (item.mode !== 'production') continue;
+      if (!useVectorizacionStore.getState().reviewQueue.some((r) => r.id === item.id)) continue;
       await confirmOne(item);
     }
   };

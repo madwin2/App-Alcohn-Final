@@ -22,28 +22,26 @@ Cuando un pedido llega a **Seguimiento Enviado**, la app descuenta del stock:
 
 "Adaptar" un soldador es cortarle la punta y hacerle una rosca M6 para enroscar el sello.
 
-- El descuento se hace **una sola vez** por pedido. Si no alcanza, descuenta lo que hay (no quedan números negativos).
+- El descuento se hace **una sola vez** por pedido y **siempre completo**. Si no alcanza, el número queda **en rojo (negativo)**: significa que se usó más de lo cargado.
 - Si un pedido vuelve atrás (por ejemplo, por un Rehacer), el stock **no se repone**.
 
 ### Cuánto hace falta
 
-La columna **Necesario (pendientes)** suma lo que consumirían **todos los pedidos que todavía no llegaron a Seguimiento Enviado**.
-
-⚠️ Hoy este número **sale inflado**: incluye pedidos viejos que ya se entregaron pero nunca se marcaron como enviados. Tomalo como referencia, no como número exacto.
+La columna **Necesario (pendientes)** suma lo que consumirían los pedidos **no enviados de los últimos 60 días** (o deudores) que **todavía no se descontaron**.
 
 ## La tabla (Resumen rápido)
 
 | Columna | Qué es |
 |---|---|
-| **Ítem** | El insumo |
-| **Stock actual** | Cuántos hay. Se puede corregir a mano |
-| **Necesario (pendientes)** | Cuántos harían falta para los pedidos pendientes. **Bajo** si no alcanza |
+| **Ítem** | El insumo. Badge **Negativo** / **Bajo** si aplica |
+| **Stock actual** | Cuántos hay en el sistema (rojo si negativo) + casilla **Conteo físico** |
+| **Necesario (pendientes)** | Cuántos harían falta para los pedidos pendientes |
 | **Responsables por faltante** | Quién recibe la tarea de reposición cuando falta ese insumo (se puede elegir más de una persona) |
-| **Acciones** | **Guardar** los cambios |
+| **Acciones** | **Guardar conteo** |
 
-### Corregir una cantidad
+### Conteo físico
 
-Cambiá el número en **Stock actual** y tocá **Guardar**. Usalo para ajustar después de contar lo que hay o cuando entra mercadería y no pasaste por el Inicio.
+Escribí en **Conteo físico** cuántos hay realmente y tocá **Guardar conteo**. Eso deja el stock en ese número y registra el ajuste. Usalo después de contar lo que hay en el depósito (recomendado tras cualquier cambio grande del sistema).
 
 ### Elegir responsables
 

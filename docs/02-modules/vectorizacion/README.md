@@ -66,7 +66,8 @@ Tour en la primera visita (`VectorizarOnboardingHost`, `lib/vectorizacion/onboar
 ## Riesgos / observaciones
 
 - `/api/vectorize` no exige autenticación: cualquiera con la URL puede consumir créditos ([AUD-SEC-004](../../audits/seguridad.md#aud-sec-004)).
-- La cola de revisión persiste en IndexedDB del mismo navegador hasta confirmar/rechazar; no entre dispositivos.
+- La cola de revisión persiste en IndexedDB del mismo navegador hasta confirmar/rechazar; no entre dispositivos ([Q-VEC-006](../../14-open-questions/vectorizacion.md#q-vec-006)).
+- ✅ Dentro del mismo navegador: un ítem por sello (`dedupeReviewItems` / `mergeReviewItems`); sincronización entre pestañas vía `BroadcastChannel`; no se puede vectorizar de nuevo un sello ya en Revisión o ya `VECTORIZADO`.
 
 ## Implementación relacionada
 

@@ -8,8 +8,23 @@ import {
   applyAspectRatioLock,
   clampToTopePreservingAspect,
   fitAspectInBox,
+  scaleMinorSideToTope,
 } from '@/lib/programas/fabricationSize';
 import type { FabricationSizeResolution } from '@/lib/programas/fabricationSize';
+
+/** "36,5" o "36.5" → 36.5. Vacío / inválido / ≤0 → null. */
+function parseMm(raw: string): number | null {
+  const normalized = raw.trim().replace(',', '.');
+  if (normalized === '') return null;
+  const n = Number(normalized);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Muestra hasta 1 decimal sin ceros de más: 36.5 → "36.5", 40 → "40". */
+function formatMm(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return String(Math.round(n * 10) / 10);
+}
 
 interface VectorSizeConfirmDialogProps {
   open: boolean;
@@ -36,6 +51,8 @@ export function VectorSizeConfirmDialog({
 }: VectorSizeConfirmDialogProps) {
   const [widthMm, setWidthMm] = useState(resolution.widthMm);
   const [heightMm, setHeightMm] = useState(resolution.heightMm);
+  const [widthText, setWidthText] = useState(formatMm(resolution.widthMm));
+  const [heightText, setHeightText] = useState(formatMm(resolution.heightMm));
   const [locked, setLocked] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -47,40 +64,62 @@ export function VectorSizeConfirmDialog({
         ? resolution.widthMm / resolution.heightMm
         : 1;
 
+  const setBoth = (w: number, h: number) => {
+    setWidthMm(w);
+    setHeightMm(h);
+    setWidthText(formatMm(w));
+    setHeightText(formatMm(h));
+  };
+
   useEffect(() => {
     if (open) {
-      setWidthMm(resolution.widthMm);
-      setHeightMm(resolution.heightMm);
+      setBoth(resolution.widthMm, resolution.heightMm);
       setLocked(true);
     }
+    // setBoth is stable for this purpose; we intentionally sync from resolution on open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, resolution.widthMm, resolution.heightMm]);
 
-  const handleWidthChange = (value: number) => {
+  const onWidthText = (raw: string) => {
+    setWidthText(raw);
+    const n = parseMm(raw);
+    if (n == null) return;
     if (locked) {
-      const next = applyAspectRatioLock('width', value, lockRatio);
+      const next = applyAspectRatioLock('width', n, lockRatio);
       setWidthMm(next.widthMm);
       setHeightMm(next.heightMm);
+      setHeightText(formatMm(next.heightMm));
     } else {
-      setWidthMm(value);
+      setWidthMm(n);
     }
   };
 
-  const handleHeightChange = (value: number) => {
+  const onHeightText = (raw: string) => {
+    setHeightText(raw);
+    const n = parseMm(raw);
+    if (n == null) return;
     if (locked) {
-      const next = applyAspectRatioLock('height', value, lockRatio);
+      const next = applyAspectRatioLock('height', n, lockRatio);
       setWidthMm(next.widthMm);
       setHeightMm(next.heightMm);
+      setWidthText(formatMm(next.widthMm));
     } else {
-      setHeightMm(value);
+      setHeightMm(n);
     }
   };
 
   /** Encaja lo pedido en la proporción del SVG (no deforma). */
   const handleUseRequested = () => {
+    const max = resolution.maxUsableMm;
+    const reqMinor = Math.min(requestedWidthMm, requestedHeightMm);
+    if (max != null && reqMinor > max + 0.05) {
+      const s = scaleMinorSideToTope(lockRatio, 1, max);
+      setBoth(s.widthMm, s.heightMm);
+      return;
+    }
     const fitted = fitAspectInBox(lockRatio, requestedWidthMm, requestedHeightMm);
-    const clamped = clampToTopePreservingAspect(fitted.widthMm, fitted.heightMm, resolution.maxUsableMm);
-    setWidthMm(clamped.widthMm);
-    setHeightMm(clamped.heightMm);
+    const clamped = clampToTopePreservingAspect(fitted.widthMm, fitted.heightMm, max);
+    setBoth(clamped.widthMm, clamped.heightMm);
   };
 
   const handleUseMeasured = () => {
@@ -90,19 +129,45 @@ export function VectorSizeConfirmDialog({
       resolution.measuredHeightMm,
       resolution.maxUsableMm,
     );
-    setWidthMm(clamped.widthMm);
-    setHeightMm(clamped.heightMm);
+    setBoth(clamped.widthMm, clamped.heightMm);
   };
 
+  const measureValid =
+    parseMm(widthText) != null && parseMm(heightText) != null && widthMm > 0 && heightMm > 0;
+
   const handleConfirm = async () => {
+    if (!measureValid) return;
     setSaving(true);
     try {
-      await onConfirm({ widthMm, heightMm });
+      await onConfirm({
+        widthMm: Math.round(widthMm * 10) / 10,
+        heightMm: Math.round(heightMm * 10) / 10,
+      });
       onOpenChange(false);
     } finally {
       setSaving(false);
     }
   };
+
+  const reviewMessage =
+    resolution.reviewReason === 'large_diff' ? (
+      <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
+        El vector se desvía ≥6mm de la medida pedida. Se sugiere la medida del diseño
+        (misma proporción del SVG, sin deformar).
+      </div>
+    ) : resolution.reviewReason === 'tope_long_side_diff' ? (
+      <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
+        Lo pedido supera el tope de la planchuela {resolution.tipoPlanchuela}mm ({resolution.maxUsableMm}mm).
+        Se llevó el lado chico a {resolution.maxUsableMm}mm y el largo quedó en{' '}
+        {Math.max(resolution.widthMm, resolution.heightMm).toFixed(1)}mm, que se aleja 6mm o más de lo
+        pedido. Revisá la medida.
+      </div>
+    ) : (
+      <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
+        El vector supera el máximo de la planchuela {resolution.tipoPlanchuela}mm ({resolution.maxUsableMm}
+        mm). Se sugiere el diseño recortado al tope, sin deformar.
+      </div>
+    );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -134,17 +199,7 @@ export function VectorSizeConfirmDialog({
             )}
           </div>
 
-          {resolution.reviewReason === 'large_diff' ? (
-            <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
-              El vector se desvía ≥6mm de la medida pedida. Se sugiere la medida del diseño
-              (misma proporción del SVG, sin deformar).
-            </div>
-          ) : (
-            <div className="text-xs rounded bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-3 py-2">
-              El vector supera el máximo de la planchuela {resolution.tipoPlanchuela}mm
-              ({resolution.maxUsableMm}mm). Se sugiere el diseño recortado al tope, sin deformar.
-            </div>
-          )}
+          {reviewMessage}
 
           {svgAspectRatio == null && (
             <div className="text-xs rounded bg-muted px-3 py-2 text-muted-foreground">
@@ -157,11 +212,18 @@ export function VectorSizeConfirmDialog({
               <Label htmlFor="fab-width">Ancho (mm)</Label>
               <Input
                 id="fab-width"
-                type="number"
-                step="0.1"
-                min="0"
-                value={widthMm.toFixed(1)}
-                onChange={(e) => handleWidthChange(parseFloat(e.target.value) || 0)}
+                type="text"
+                inputMode="decimal"
+                value={widthText}
+                onChange={(e) => onWidthText(e.target.value)}
+                onBlur={() => setWidthText(formatMm(widthMm))}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && measureValid) {
+                    e.preventDefault();
+                    void handleConfirm();
+                  }
+                }}
               />
             </div>
             <Button
@@ -178,11 +240,18 @@ export function VectorSizeConfirmDialog({
               <Label htmlFor="fab-height">Alto (mm)</Label>
               <Input
                 id="fab-height"
-                type="number"
-                step="0.1"
-                min="0"
-                value={heightMm.toFixed(1)}
-                onChange={(e) => handleHeightChange(parseFloat(e.target.value) || 0)}
+                type="text"
+                inputMode="decimal"
+                value={heightText}
+                onChange={(e) => onHeightText(e.target.value)}
+                onBlur={() => setHeightText(formatMm(heightMm))}
+                onFocus={(e) => e.currentTarget.select()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && measureValid) {
+                    e.preventDefault();
+                    void handleConfirm();
+                  }
+                }}
               />
             </div>
           </div>
@@ -202,7 +271,7 @@ export function VectorSizeConfirmDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
                 Cancelar
               </Button>
-              <Button type="button" onClick={handleConfirm} disabled={saving}>
+              <Button type="button" onClick={handleConfirm} disabled={saving || !measureValid}>
                 {saving ? 'Guardando…' : 'Confirmar medida'}
               </Button>
             </div>

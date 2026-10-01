@@ -4,6 +4,7 @@ import {
   clampToTopePreservingAspect,
   fitAspectInBox,
   resolveFabricationSize,
+  scaleMinorSideToTope,
 } from './fabricationSize';
 
 describe('resolveFabricationSize', () => {
@@ -24,10 +25,10 @@ describe('resolveFabricationSize', () => {
     expect(result.widthMm / result.heightMm).toBeCloseTo(61.9 / 36.5, 5);
   });
 
-  it('40×40 medido 40×40 (tope 36.5) → sugiere 36.5×36.5 preservando proporción', () => {
+  it('40×40 medido 40×40 (tope 36.5) → 36.5×36.5 sin popup', () => {
     const result = resolveFabricationSize(40, 40, { widthMm: 40, heightMm: 40 });
-    expect(result.needsReview).toBe(true);
-    expect(result.reviewReason).toBe('exceeds_tope');
+    expect(result.needsReview).toBe(false);
+    expect(result.reviewReason).toBe(null);
     expect(result.widthMm).toBeCloseTo(36.5, 5);
     expect(result.heightMm).toBeCloseTo(36.5, 5);
   });
@@ -72,11 +73,53 @@ describe('resolveFabricationSize', () => {
     expect(result.heightMm).toBeCloseTo(18, 5);
   });
 
-  it('25×25 medido 25×25 → sugiere 24×24', () => {
+  it('25×25 medido 25×25 → 24×24 sin popup', () => {
     const result = resolveFabricationSize(25, 25, { widthMm: 25, heightMm: 25 });
-    expect(result.needsReview).toBe(true);
+    expect(result.needsReview).toBe(false);
     expect(result.widthMm).toBeCloseTo(24, 5);
     expect(result.heightMm).toBeCloseTo(24, 5);
+  });
+
+  it('40×40 pedido, vector 40×32 → lado chico a 36.5, largo 45.625, sin popup', () => {
+    const r = resolveFabricationSize(40, 40, { widthMm: 40, heightMm: 32 });
+    expect(r.tipoPlanchuela).toBe(38);
+    expect(r.needsReview).toBe(false);
+    expect(r.heightMm).toBeCloseTo(36.5, 5);
+    expect(r.widthMm).toBeCloseTo(36.5 * (40 / 32), 5);
+  });
+
+  it('40×40 pedido, vector 40×36.4 → 40.1×36.5 sin popup (agranda apenas)', () => {
+    const r = resolveFabricationSize(40, 40, { widthMm: 40, heightMm: 36.4 });
+    expect(r.needsReview).toBe(false);
+    expect(r.heightMm).toBeCloseTo(36.5, 5);
+    expect(r.widthMm).toBeCloseTo(36.5 * (40 / 36.4), 5);
+  });
+
+  it('40×40 pedido, vector 2:1 (40×20) → 73×36.5 con popup tope_long_side_diff', () => {
+    const r = resolveFabricationSize(40, 40, { widthMm: 40, heightMm: 20 });
+    expect(r.needsReview).toBe(true);
+    expect(r.reviewReason).toBe('tope_long_side_diff');
+    expect(r.heightMm).toBeCloseTo(36.5, 5);
+    expect(r.widthMm).toBeCloseTo(73, 5);
+  });
+
+  it('vector vertical (32×40) en pedido 40×40 → el lado chico (ancho) va a 36.5', () => {
+    const r = resolveFabricationSize(40, 40, { widthMm: 32, heightMm: 40 });
+    expect(r.widthMm).toBeCloseTo(36.5, 5);
+    expect(r.heightMm).toBeCloseTo(36.5 * (40 / 32), 5);
+  });
+
+  it('40×30 pedido (lado menor 30 < tope) → NO aplica la regla nueva', () => {
+    const r = resolveFabricationSize(40, 30, { widthMm: 40, heightMm: 30 });
+    expect(r.needsReview).toBe(false);
+    expect(r.widthMm).toBeCloseTo(40, 5);
+    expect(r.heightMm).toBeCloseTo(30, 5);
+  });
+
+  it('scaleMinorSideToTope agranda y achica', () => {
+    expect(scaleMinorSideToTope(40, 32, 36.5).heightMm).toBeCloseTo(36.5, 5);
+    expect(scaleMinorSideToTope(50, 40, 36.5).heightMm).toBeCloseTo(36.5, 5);
+    expect(scaleMinorSideToTope(10, 10, null)).toEqual({ widthMm: 10, heightMm: 10 });
   });
 });
 

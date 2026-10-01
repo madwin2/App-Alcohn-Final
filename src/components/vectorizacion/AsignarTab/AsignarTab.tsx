@@ -60,7 +60,6 @@ export function AsignarTab() {
   const { toast } = useToast();
   const includeRehacer = useVectorizacionStore((s) => s.includeRehacerPrioridad);
   const setFabricationReviews = useVectorizacionStore((s) => s.setFabricationReviews);
-  const fabricationReviews = useVectorizacionStore((s) => s.fabricationReviews);
   const [sellos, setSellos] = useState<PendingSello[]>([]);
   const [files, setFiles] = useState<LocalSvg[]>([]);
   const [assignment, setAssignment] = useState<Record<string, string | null>>({});
@@ -148,7 +147,12 @@ export function AsignarTab() {
           });
         }
       }
-      if (reviews.length) setFabricationReviews([...fabricationReviews, ...reviews]);
+      if (reviews.length) {
+        setFabricationReviews([
+          ...useVectorizacionStore.getState().fabricationReviews,
+          ...reviews,
+        ]);
+      }
       toast({ title: 'Asignaciones guardadas', description: `${assignedCount} SVG subidos.` });
       setFiles([]);
       setAssignment({});

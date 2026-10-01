@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { useVectorizacionStore } from '@/lib/state/vectorizacion.store';
-import { fetchPendientes } from '@/lib/vectorizacion/vectorizacion.service';
+import {
+  fetchPendientes,
+  filterAlreadyVectorizedSelloIds,
+} from '@/lib/vectorizacion/vectorizacion.service';
 import { sourceFromSello } from '@/lib/vectorizacion/imageSource';
 import { buildPrep } from '@/lib/vectorizacion/buildPrep';
 import { packPrepared, runVectorizacion } from '@/lib/vectorizacion/runVectorizacion';
@@ -11,6 +14,7 @@ import type { PendingSello, ReviewItem } from '@/lib/vectorizacion/types';
 export function usePendientesRun() {
   const { toast } = useToast();
   const store = useVectorizacionStore();
+  const reviewQueueHydrated = useVectorizacionStore((s) => s.reviewQueueHydrated);
   const [sellos, setSellos] = useState<PendingSello[]>([]);
   const [loading, setLoading] = useState(true);
   const [preparing, setPreparing] = useState<Record<string, boolean>>({});
@@ -113,11 +117,42 @@ export function usePendientesRun() {
   };
 
   const run = async () => {
+    const state = useVectorizacionStore.getState();
+    if (state.running) return;
+    if (!state.reviewQueueHydrated) {
+      toast({
+        title: 'Esperá un segundo',
+        description: 'Todavía se está cargando la cola de Revisión.',
+      });
+      return;
+    }
+    const inReview = new Set(state.reviewQueue.map((item) => item.selloId));
+    let candidatos = selectedSellos.filter((sello) => !inReview.has(sello.id));
+    try {
+      const yaVectorizados = await filterAlreadyVectorizedSelloIds(candidatos.map((s) => s.id));
+      candidatos = candidatos.filter((s) => !yaVectorizados.has(s.id));
+    } catch (error) {
+      console.warn('[vectorizacion] No se pudo verificar estado antes de vectorizar:', error);
+    }
+    const omitidos = selectedSellos.length - candidatos.length;
+    if (omitidos > 0) {
+      toast({
+        title: `${omitidos} sello(s) omitidos`,
+        description: 'Ya estaban en Revisión o ya vectorizados.',
+      });
+    }
+    const images = candidatos
+      .map((sello) => state.prepared[sello.id])
+      .filter((img): img is NonNullable<typeof img> => Boolean(img));
+    if (!images.length) {
+      store.setSelectedIds([]);
+      return;
+    }
     store.setRunning(true);
     store.clearRun();
     try {
       const outcome = await runVectorizacion({
-        images: selectedPrepared,
+        images,
         mode: store.mode,
         upscale: store.maximizeResolution,
         onProgress: store.setProgress,
@@ -127,7 +162,7 @@ export function usePendientesRun() {
       const reviews: ReviewItem[] = [];
       for (const result of outcome.results) {
         if (!result.svg || !result.selloId) continue;
-        const sello = selectedSellos.find((item) => item.id === result.selloId);
+        const sello = candidatos.find((item) => item.id === result.selloId);
         const prepared = store.prepared[result.id];
         if (!sello || !prepared) continue;
         reviews.push({
@@ -159,7 +194,8 @@ export function usePendientesRun() {
   };
 
   return {
-    loading,
+    loading: loading || !reviewQueueHydrated,
+    reviewQueueHydrated,
     preparing,
     visibles,
     selectedSellos,

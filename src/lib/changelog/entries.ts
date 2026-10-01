@@ -574,6 +574,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 32,
+    date: '2026-10-01',
+    title: 'Novedades',
+    version: '1.50',
+    slides: [
+      {
+        heading: 'Medida del sello: escribí el número directo',
+        body: 'En el aviso de medida ya podés tipear los milímetros en vez de ir de a 0.1. Y los sellos pedidos al máximo (como 40×40) ahora salen con el lado chico en 36.5, lo más cerca posible de lo pedido.',
+        icon: Ruler,
+      },
+      {
+        heading: 'Stock que refleja la realidad',
+        body: "Cada envío descuenta todos sus insumos aunque el stock esté en cero (queda en rojo). Para dejarlo al día, contá lo que hay y cargalo con 'Guardar conteo'.",
+        icon: Package,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

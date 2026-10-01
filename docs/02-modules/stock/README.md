@@ -1,7 +1,7 @@
 # Stock
 
 > Ruta: `/stock` · Página: `src/app/stock/index.tsx` · Servicio: `src/lib/supabase/services/stock.service.ts`, `bronceConsumo.service.ts` · En el Inicio: `src/components/home/StockReplenishSection.tsx`
-> Workflow: [WF-11](../../03-workflows/WF-11-stock-y-reposicion.md) · Plan original: `migration_add_stock_management.sql`, `migration_auto_consume_stock_on_seguimiento_enviado.sql`
+> Workflow: [WF-11](../../03-workflows/WF-11-stock-y-reposicion.md) · Migraciones: `migration_add_stock_management.sql`, `migration_auto_consume_stock_on_seguimiento_enviado.sql`, `migration_stock_consumo_completo.sql`
 
 ## Propósito
 
@@ -9,11 +9,11 @@
 
 ## Ítems de stock (✅ 15 claves en `stock_items`)
 
-`MANGO`, `TUERCA`, `PRISIONERO`, `VARILLA`, `TUBO_80MM`, `TUBO_125MM`, `SOLDADOR_100W`, `SOLDADOR_200W`, `SOLDADOR_ADAPTADO_100W`, `SOLDADOR_ADAPTADO_200W`, `MANGO_GOLPE`, `BASE_REMACHADORA`, `ALUMINIO_PARA_BASE`, `CAJA_ABECEDARIO`, `SOPORTE_ABECEDARIO`. Se crean solos si faltan (`ensureDefaultStockItems`). `min_quantity` existe pero está en 0 para todos.
+`MANGO`, `TUERCA`, `PRISIONERO`, `VARILLA`, `TUBO_80MM`, `TUBO_125MM`, `SOLDADOR_100W`, `SOLDADOR_200W`, `SOLDADOR_ADAPTADO_100W`, `SOLDADOR_ADAPTADO_200W`, `MANGO_GOLPE`, `BASE_REMACHADORA`, `ALUMINIO_PARA_BASE`, `CAJA_ABECEDARIO`, `SOPORTE_ABECEDARIO`. Se crean solos si faltan (`ensureDefaultStockItems`). `min_quantity` existe pero está en 0 para todos. Las cantidades **pueden ser negativas** (faltante a cargar/contar).
 
 ## Lista de materiales por ítem (BOM) — BR-STK-001
 
-✅ Idéntica en TS (`requirementsForOrderItem`) y SQL (`consume_stock_for_order`):
+✅ Única fuente en SQL (`stock_bom_for_item`), usada por consumo y demanda:
 
 | Ítem del pedido | Consume |
 |---|---|
@@ -28,25 +28,25 @@
 ## Descuento automático — BR-STK-002
 
 ✅ Cuando `ordenes.estado_envio` pasa a `'Seguimiento Enviado'`:
-- **Trigger** `trg_consume_stock_on_envio` → `consume_stock_for_order` (idempotente: si ya hay movimientos `OUT` de esa orden, no hace nada). Nunca deja cantidades negativas (descuenta lo disponible).
-- **Además**, desde Pedidos (`OrdersTable`) se llama a `consumeStockForOrderWhenTrackingSent` en TS cuando el usuario cambia el estado a mano. El trigger y la función TS comparten la guarda de idempotencia.
-- Si una orden vuelve atrás (p. ej. Rehacer), el stock **no** se repone.
+- **Trigger** `trg_consume_stock_on_envio` → `consume_stock_for_order` (idempotente: si ya hay movimientos `OUT` de esa orden, no hace nada). **Siempre descuenta la BOM completa**; el stock puede quedar negativo (decisión 2026-10-01).
+- Ya **no** hay llamada TS desde Pedidos: el descuento lo hace solo el trigger.
+- Si una orden vuelve atrás (p. ej. Rehacer), el stock **no** se repone (y esa orden deja de contar como demanda si ya tuvo `OUT`).
 
 ## Demanda y reposición — BR-STK-003
 
-✅ `getPendingShipmentStockDemand`: suma la BOM de **todos** los ítems de órdenes cuyo envío no es `Seguimiento Enviado` (incluye `NULL`, es decir órdenes históricas sin estado de envío). ⚠️ Esto incluye 108 órdenes con estado de envío nulo y órdenes todavía no fabricadas. El equipo confirma que es **incorrecto**: órdenes de más de dos meses ya fueron entregadas (salvo deudores) (Q-STK-003) → backlog.
-✅ `syncStockReplenishTasksForCurrentUser` (al abrir el Inicio): para cada ítem del que el usuario es **responsable** (`stock_alert_assignments`), si faltante = demanda − stock > 0, crea/actualiza **una** tarea `[STOCK_REPLENISH]` en `tareas_dashboard` y emite notificación **p6** (stock bajo); si se resolvió, borra la tarea y la alerta.
-✅ Desde la tarjeta del Inicio se registra el ingreso ("cargar lo que falta") → movimiento `IN` y cierre de la tarea (`applyStockInboundFromReplenishTask`).
+✅ RPC `get_pending_stock_demand` (vía `getPendingShipmentStockDemand`): BOM de ítems de órdenes no enviadas, creadas hace ≤60 días **o** con ítems `Deudor`, sin descuento `OUT` previo (Q-STK-003 implementada 2026-10-01).
+✅ `syncStockReplenishTasksForCurrentUser` (al abrir el Inicio): para cada ítem del que el usuario es **responsable** (`stock_alert_assignments`), si faltante = demanda − stock > 0 (stock negativo suma), crea/actualiza **una** tarea `[STOCK_REPLENISH]` en `tareas_dashboard` y emite notificación **p6** (stock bajo); si se resolvió, borra la tarea y la alerta.
+✅ Desde la tarjeta del Inicio se registra el ingreso → RPC `add_stock_inbound` (movimiento `IN`) y cierre de la tarea (`applyStockInboundFromReplenishTask`).
 
 ## Pantalla
 
-- Tabla de ítems con cantidad y mínimo editables (ajuste manual → `setStockQuantity`; 🔶 no registra movimiento `ADJUSTMENT`, [AUD-INC-015](../../audits/inconsistencias.md#aud-inc-015)).
+- Stock del sistema como texto (rojo + badge **Negativo** si < 0). Al lado, input **Conteo físico** + **Guardar conteo** → RPC `adjust_stock_count` (movimiento `ADJUSTMENT`, BR-STK-006).
 - Responsables por ítem (multi-usuario).
 - **Consumo de bronce** por mes y por planchuela (`bronce_consumo`: se registra al marcar un SELLO `Hecho`, con largo en cm y costo en pesos según `fabricacion_parametros`), navegación por mes.
 
 ## Tablas
 
-`stock_items`, `stock_movements` (4.927), `stock_alert_assignments`, `bronce_consumo` (737), `tareas_dashboard`.
+`stock_items`, `stock_movements`, `stock_alert_assignments`, `bronce_consumo`, `tareas_dashboard`.
 
 ## Fronteras
 

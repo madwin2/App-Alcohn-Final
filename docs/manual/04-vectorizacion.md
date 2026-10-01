@@ -77,10 +77,12 @@ Cada sello tiene dos medidas:
 Casi siempre son iguales. Cuando el logo tiene otra proporción, o no entra en la planchuela, aparece **Confirmar medida de fabricación**:
 
 - Muestra la medida sugerida, que **mantiene la proporción del diseño** (nunca lo deforma).
-- **Acercar a lo pedido**: ajusta lo más cerca posible de la medida pedida.
+- **Acercar a lo pedido**: ajusta lo más cerca posible de la medida pedida (si lo pedido ya supera el tope, lleva el lado chico al tope).
 - **Usar vector medido**: usa la medida real del vector.
-- También podés escribir **Ancho (mm)** y **Alto (mm)**. El candado bloquea o libera la proporción.
+- También podés **escribir Ancho (mm) y Alto (mm)** a mano (coma o punto decimal). Al hacer click se selecciona todo; Enter confirma. El candado bloquea o libera la proporción.
 - Tocá **Confirmar medida**.
+
+Si pediste el sello al máximo de la planchuela (ej. 40×40), el lado chico del vector se lleva solo al tope (36,5 mm) y el otro sale por proporción, sin aviso — salvo que el lado largo se aleje 6 mm o más.
 
 Tope de cada planchuela (el lado corto del sello no puede superarlo): 12 → 11,5 mm · 19 → 18 mm · 25 → 24 mm · 38 → 36,5 mm · 63 → sin tope.
 

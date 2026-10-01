@@ -31,3 +31,10 @@
 - **Evidencia**: PLAN F3 §1.4.
 - **Impacto**: medio.
 - Respuesta: No pasa nada, ya no se usan. Ya fabricados.
+
+### Q-VEC-006
+- **Módulo**: Vectorización · **Estado**: abierta
+- **Pregunta**: Dos PCs (o dos usuarios) pueden vectorizar el mismo sello si el primero todavía no confirmó, porque la cola de Revisión vive en el navegador. ¿Marcar el sello en la base al vectorizar (p. ej. `EN_PROCESO`) y ocultarlo de pendientes? ¿Cómo liberar sellos "colgados" si se borra el navegador?
+- **Evidencia**: cola IndexedDB + `pushReviews`; fix 2026-10-01 solo cubre misma PC / pestañas.
+- **Impacto**: medio (créditos duplicados entre dispositivos).
+

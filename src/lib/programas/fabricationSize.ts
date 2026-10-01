@@ -16,7 +16,7 @@ export const KNOWN_MAX_FABRICATION_MM: Partial<Record<PlanchuelaSize, number>> =
 /** Si el SVG se desvía ≥ este valor (mm) en cualquier eje respecto a lo pedido, hay que revisar. */
 export const LARGE_SIZE_DIFF_MM = 6;
 
-export type FabricationReviewReason = 'exceeds_tope' | 'large_diff';
+export type FabricationReviewReason = 'exceeds_tope' | 'large_diff' | 'tope_long_side_diff';
 
 export interface FabricationSizeResolution {
   widthMm: number;
@@ -51,6 +51,21 @@ export function clampToTopePreservingAspect(
   return { widthMm: w, heightMm: h };
 }
 
+/**
+ * Escala el rectángulo (sin deformar) para que su lado MENOR quede exactamente en el tope.
+ * Puede agrandar o achicar. Se usa cuando lo pedido ya supera el tope de la planchuela.
+ */
+export function scaleMinorSideToTope(
+  widthMm: number,
+  heightMm: number,
+  maxUsableMm: number | null,
+): { widthMm: number; heightMm: number } {
+  const minor = Math.min(widthMm, heightMm);
+  if (maxUsableMm == null || !(minor > 0)) return { widthMm, heightMm };
+  const k = maxUsableMm / minor;
+  return { widthMm: widthMm * k, heightMm: heightMm * k };
+}
+
 /** Encaja la proporción `aspect` (ancho/alto) dentro de una caja, sin deformar. */
 export function fitAspectInBox(
   aspectRatio: number,
@@ -71,6 +86,9 @@ export function fitAspectInBox(
 
 /**
  * Resuelve la medida de fabricación a partir de lo pedido y lo medido del SVG.
+ * - Pedido "al tope" (lado menor pedido > tope, ej. 40×40 → 36.5): el lado chico del vector
+ *   va al tope y el otro por proporción; se guarda sin popup salvo que el lado largo se
+ *   desvíe ≥6mm de lo pedido (decisión 2026-10-01).
  * - Si el SVG ya entra en el tope y no se desvía ≥6mm de lo pedido → guarda lo medido, sin popup.
  * - Si supera el tope o hay diferencia grande → popup; la sugerencia conserva la proporción del
  *   vector (lo medido, recortado al tope si hace falta). Nunca deforma al forzar lo pedido.
@@ -99,6 +117,27 @@ export function resolveFabricationSize(
       maxUsableMm,
       needsReview: false,
       reviewReason: null,
+      measuredWidthMm,
+      measuredHeightMm,
+    };
+  }
+
+  // Pedido "al tope" (ej. 40×40 en planchuela 38): el lado chico del vector va al tope y el
+  // otro sale por proporción. Solo se pide revisión si el lado largo se desvía ≥6mm de lo pedido.
+  const requestedMinor = Math.min(requestedWidthMm, requestedHeightMm);
+  const requestedExceedsTope = maxUsableMm != null && requestedMinor > maxUsableMm + 0.05;
+  if (requestedExceedsTope && measured != null) {
+    const target = scaleMinorSideToTope(naturalWidth, naturalHeight, maxUsableMm);
+    const requestedMajor = Math.max(requestedWidthMm, requestedHeightMm);
+    const targetMajor = Math.max(target.widthMm, target.heightMm);
+    const longSideOff = Math.abs(targetMajor - requestedMajor) >= LARGE_SIZE_DIFF_MM;
+    return {
+      widthMm: target.widthMm,
+      heightMm: target.heightMm,
+      tipoPlanchuela,
+      maxUsableMm,
+      needsReview: longSideOff,
+      reviewReason: longSideOff ? 'tope_long_side_diff' : null,
       measuredWidthMm,
       measuredHeightMm,
     };

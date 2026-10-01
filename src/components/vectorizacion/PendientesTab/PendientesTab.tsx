@@ -23,6 +23,7 @@ export function PendientesTab() {
     toggle,
     run,
     load,
+    reviewQueueHydrated,
   } = usePendientesRun();
   const [confirm, setConfirm] = useState(false);
   const [credits, setCredits] = useState<number | null>(null);
@@ -70,7 +71,7 @@ export function PendientesTab() {
       <PendientesFooterBar
         sellosCount={selectedSellos.length}
         hojasCount={sheets.length}
-        canRun={selectedPrepared.length > 0}
+        canRun={selectedPrepared.length > 0 && reviewQueueHydrated}
         onOpenConfirm={(nextCredits) => {
           setCredits(nextCredits);
           setConfirm(true);

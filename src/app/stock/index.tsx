@@ -15,11 +15,11 @@ import {
   type BronceConsumoResumen,
 } from '@/lib/supabase/services/bronceConsumo.service';
 import {
+  adjustStockCount,
   getPendingShipmentStockDemand,
   getStockAssignments,
   getStockItems,
   setAssignmentForItem,
-  setStockQuantity,
   StockItem,
   syncStockReplenishTasksForCurrentUser,
 } from '@/lib/supabase/services/stock.service';
@@ -46,6 +46,7 @@ export default function StockPage() {
 
   const shortageItems = useMemo(() => {
     return items.filter((item) => {
+      if (item.quantity < 0) return true;
       const needed = pendingDemandByKey[item.itemKey] ?? 0;
       if (needed <= 0) return false;
       return item.quantity < needed;
@@ -65,9 +66,7 @@ export default function StockPage() {
       setUsers(approvedUsers);
       setAssignments(assignmentMap);
       setPendingDemandByKey(demand);
-      setPendingQty(
-        Object.fromEntries(stockItems.map((item) => [item.id, String(item.quantity)])),
-      );
+      setPendingQty(Object.fromEntries(stockItems.map((item) => [item.id, ''])));
       await syncStockReplenishTasksForCurrentUser();
     } catch (error) {
       toast({
@@ -127,12 +126,14 @@ export default function StockPage() {
   );
 
   const handleSaveStock = async (item: StockItem) => {
+    const raw = pendingQty[item.id];
+    if (raw == null || String(raw).trim() === '') return;
     try {
-      await setStockQuantity(item.id, Number(pendingQty[item.id] ?? item.quantity));
+      const cantidad = await adjustStockCount(item.itemKey, Number(raw));
       await loadData();
       toast({
-        title: 'Stock actualizado',
-        description: `Se guardaron los cambios de ${item.itemName}.`,
+        title: 'Conteo guardado',
+        description: `${item.itemName}: ${cantidad}`,
       });
     } catch (error) {
       toast({
@@ -170,8 +171,9 @@ export default function StockPage() {
         <div className="border-b bg-background p-6">
           <h1 className="text-2xl font-semibold">Stock</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            El mínimo necesario se calcula solo: suma lo que hace falta para los pedidos cuyo envío todavía
-            no está en «Seguimiento enviado» (misma receta que al descontar al enviar).
+            El necesario suma insumos de pedidos no enviados de los últimos 60 días (o deudores) que
+            todavía no se descontaron. Cada envío descuenta completo (el stock puede quedar negativo).
+            Para alinear el sistema, contá lo físico y usá «Guardar conteo».
           </p>
         </div>
 
@@ -355,7 +357,12 @@ export default function StockPage() {
                   <tr className="text-left">
                     <th className="px-4 py-3">Ítem</th>
                     <th className="px-4 py-3">Stock actual</th>
-                    <th className="px-4 py-3">Necesario (pendientes)</th>
+                    <th
+                      className="px-4 py-3"
+                      title="Insumos de pedidos no enviados de los últimos 60 días (o deudores) que todavía no se descontaron"
+                    >
+                      Necesario (pendientes)
+                    </th>
                     <th className="px-4 py-3">Responsables por faltante</th>
                     <th className="px-4 py-3">Acciones</th>
                   </tr>
@@ -370,13 +377,24 @@ export default function StockPage() {
                   ) : (
                     items.map((item) => {
                       const needed = pendingDemandByKey[item.itemKey] ?? 0;
-                      const isShort = needed > 0 && item.quantity < needed;
+                      const isNegative = item.quantity < 0;
+                      const isShort = isNegative || (needed > 0 && item.quantity < needed);
                       const selectedUsers = assignments[item.itemKey] ?? [];
+                      const countRaw = pendingQty[item.id] ?? '';
+                      const canSaveCount = String(countRaw).trim() !== '';
                       return (
                         <tr key={item.id} className="border-b last:border-b-0">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span>{item.itemName}</span>
+                              {isNegative ? (
+                                <span
+                                  className="text-xs rounded-full border border-red-400/40 text-red-500 px-2 py-0.5"
+                                  title="Se envió más de lo cargado. Cargá el ingreso pendiente o hacé un conteo físico."
+                                >
+                                  Negativo
+                                </span>
+                              ) : null}
                               {isShort ? (
                                 <span className="text-xs rounded-full border border-red-400/40 text-red-500 px-2 py-0.5">
                                   Bajo
@@ -384,15 +402,34 @@ export default function StockPage() {
                               ) : null}
                             </div>
                           </td>
-                          <td className="px-4 py-3 w-44">
-                            <Input
-                              type="number"
-                              min={0}
-                              value={pendingQty[item.id] ?? ''}
-                              onChange={(event) =>
-                                setPendingQty((prev) => ({ ...prev, [item.id]: event.target.value }))
-                              }
-                            />
+                          <td className="px-4 py-3 w-56">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`tabular-nums font-medium ${isNegative ? 'text-red-600 dark:text-red-400' : ''}`}
+                                title={
+                                  isNegative
+                                    ? 'Se envió más de lo cargado. Cargá el ingreso pendiente o hacé un conteo físico.'
+                                    : undefined
+                                }
+                              >
+                                {item.quantity}
+                              </span>
+                              <Input
+                                type="number"
+                                min={0}
+                                inputMode="numeric"
+                                placeholder="Conteo físico"
+                                aria-label={`Conteo físico ${item.itemName}`}
+                                className="w-28"
+                                value={countRaw}
+                                onChange={(event) =>
+                                  setPendingQty((prev) => ({
+                                    ...prev,
+                                    [item.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
                           </td>
                           <td className="px-4 py-3 w-36 tabular-nums text-muted-foreground">
                             {needed}
@@ -421,8 +458,12 @@ export default function StockPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <Button size="sm" onClick={() => handleSaveStock(item)}>
-                              Guardar
+                            <Button
+                              size="sm"
+                              onClick={() => handleSaveStock(item)}
+                              disabled={!canSaveCount}
+                            >
+                              Guardar conteo
                             </Button>
                           </td>
                         </tr>

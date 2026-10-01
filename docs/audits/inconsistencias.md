@@ -81,11 +81,13 @@ Hallazgos detectados durante la documentación (2026-09-27). **No se corrigió n
 ### AUD-INC-014 · BOM de stock duplicada (TS y SQL)
 - **Evidencia**: `requirementsForOrderItem` y `consume_stock_for_order` (el propio SQL dice "mismo criterio que TS"). Descuento disparado por trigger y por TS.
 - **Impacto**: si cambia la BOM hay que tocar ambos.
+- **Estado**: resuelta (2026-10-01) — BOM única en SQL (`stock_bom_for_item`); se eliminó el consumo TS desde Pedidos.
 
 <a id="aud-inc-015"></a>
 
 ### AUD-INC-015 · Ajustes de stock sin movimiento
 - **Evidencia**: `setStockQuantity` actualiza la cantidad sin insertar `ADJUSTMENT`.
+- **Estado**: resuelta (2026-10-01) — reemplazado por RPC `adjust_stock_count` (conteo físico con movimiento `ADJUSTMENT`).
 
 <a id="aud-inc-016"></a>
 
