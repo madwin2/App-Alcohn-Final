@@ -203,12 +203,19 @@ function drawCroppedPage(
 
 async function embedPreview(doc: PDFDocument, url: string): Promise<PDFImage | null> {
   try {
+    if (/\.svg(?:\?|#|$)/i.test(url)) return null;
     const res = await fetch(url);
     if (!res.ok) return null;
     const bytes = await res.arrayBuffer();
     const u8 = new Uint8Array(bytes);
-    if (u8[0] === 0xff && u8[1] === 0xd8) return doc.embedJpg(bytes);
-    return doc.embedPng(bytes);
+    if (u8.length >= 2 && u8[0] === 0xff && u8[1] === 0xd8) {
+      return await doc.embedJpg(bytes);
+    }
+    // PNG magic: 89 50 4E 47
+    if (u8.length >= 8 && u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4e && u8[3] === 0x47) {
+      return await doc.embedPng(bytes);
+    }
+    return null;
   } catch {
     return null;
   }
@@ -218,8 +225,13 @@ async function embedLogo(doc: PDFDocument, logoPath: string | undefined): Promis
   if (!logoPath || !existsSync(logoPath)) return null;
   try {
     const bytes = await readFile(logoPath);
-    if (bytes[0] === 0xff && bytes[1] === 0xd8) return doc.embedJpg(bytes);
-    return doc.embedPng(bytes);
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+      return await doc.embedJpg(bytes);
+    }
+    if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+      return await doc.embedPng(bytes);
+    }
+    return null;
   } catch {
     return null;
   }

@@ -188,7 +188,10 @@ export async function listAssignedLinkCandidates(): Promise<LabelMatchCandidate[
     const imageUrls: string[][] = [];
     for (const s of sellos) {
       const urls = [s.archivo_base, s.archivo_vector_preview].filter(
-        (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
+        (u): u is string =>
+          typeof u === 'string' &&
+          /^https?:\/\//i.test(u) &&
+          !/\.svg(?:\?|#|$)/i.test(u),
       );
       if (urls.length) imageUrls.push(urls);
     }
@@ -252,7 +255,10 @@ export async function loadEnrichInputByTracking(tracking: string): Promise<Label
   const imageUrls: string[][] = [];
   for (const s of sellos) {
     const urls = [s.archivo_base, s.archivo_vector_preview].filter(
-      (u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u),
+      (u): u is string =>
+        typeof u === 'string' &&
+        /^https?:\/\//i.test(u) &&
+        !/\.svg(?:\?|#|$)/i.test(u),
     );
     if (urls.length) imageUrls.push(urls);
   }
@@ -276,6 +282,57 @@ export async function uploadEtiquetaPdf(tracking: string, bytes: Uint8Array): Pr
   });
   if (error) throw error;
   return pathName;
+}
+
+/** Extrae bucket + path de una URL de Storage (public/sign/authenticated). */
+export function parseSupabaseStorageRef(
+  url: string,
+): { bucket: string; path: string } | null {
+  const match = url.match(
+    /\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\/(.+?)(?:\?|#|$)/i,
+  );
+  if (!match?.[1] || !match[2]) return null;
+  return { bucket: match[1], path: decodeURIComponent(match[2]) };
+}
+
+function isSvgUrl(url: string): boolean {
+  return /\.svg(?:\?|#|$)/i.test(url);
+}
+
+/**
+ * URL usable para bajar una imagen al enriquecer la etiqueta.
+ * - Omite SVG (pdf-lib no lo embebe).
+ * - Re-firma buckets privados / links vencidos con service role.
+ * - Públicos: URL pública estable sin token.
+ */
+export async function resolveImageUrlForEnrich(url: string): Promise<string | null> {
+  const trimmed = url.trim();
+  if (!trimmed || !/^https?:\/\//i.test(trimmed)) return null;
+  if (isSvgUrl(trimmed)) return null;
+
+  const ref = parseSupabaseStorageRef(trimmed);
+  if (!ref) return trimmed;
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase.storage.from(ref.bucket).createSignedUrl(ref.path, 60 * 60);
+  if (error || !data?.signedUrl) {
+    console.warn(`[andreani] no se pudo re-firmar ${ref.bucket}/${ref.path}:`, error?.message ?? 'sin url');
+    return null;
+  }
+  return data.signedUrl;
+}
+
+export async function refreshEnrichImageUrls(groups: string[][]): Promise<string[][]> {
+  const out: string[][] = [];
+  for (const group of groups) {
+    const refreshed: string[] = [];
+    for (const url of group) {
+      const fresh = await resolveImageUrlForEnrich(url);
+      if (fresh) refreshed.push(fresh);
+    }
+    if (refreshed.length) out.push(refreshed);
+  }
+  return out;
 }
 
 export async function updateEtiquetaPdfPath(tracking: string, pdfPath: string): Promise<void> {

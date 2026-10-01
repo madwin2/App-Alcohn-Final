@@ -28,6 +28,7 @@ import {
   listTrackingsMissingPdf,
   loadEnrichInputByTracking,
   markOrderDespachado,
+  refreshEnrichImageUrls,
   trackingAlreadyStored,
   updateEtiquetaPdfPath,
   updateEtiquetaPortalStatus,
@@ -51,6 +52,30 @@ function toEnrichInput(order: LabelMatchCandidate) {
     caption: order.caption,
     imageUrls: order.imageUrls,
   };
+}
+
+/** Enrich con URLs re-firmadas; si falla el pie, igual devolvemos la hoja Zebra cruda. */
+async function enrichLabelOrRaw(
+  pageBytes: Uint8Array,
+  tracking: string,
+  enrichInput: ReturnType<typeof toEnrichInput> | undefined,
+  logoPath: string,
+): Promise<Uint8Array> {
+  try {
+    const order = enrichInput
+      ? {
+          ...enrichInput,
+          imageUrls: await refreshEnrichImageUrls(enrichInput.imageUrls),
+        }
+      : undefined;
+    return await enrichZebraLabelPdf(pageBytes, tracking, order, logoPath);
+  } catch (error) {
+    console.warn(
+      `[andreani] enrich falló ${tracking}, guardo PDF sin pie:`,
+      error instanceof Error ? error.message : error,
+    );
+    return pageBytes;
+  }
 }
 
 /** Hoja del PDF que contiene ese tracking (no usar índice i = envío i). */
@@ -132,7 +157,7 @@ async function persistPage(
         nota = 'ambiguous';
       }
 
-      const enrichedNew = await enrichZebraLabelPdf(resolvedPage, ship.tracking, enrichInput, logoPath);
+      const enrichedNew = await enrichLabelOrRaw(resolvedPage, ship.tracking, enrichInput, logoPath);
       let pdfPath: string | null = null;
       try {
         pdfPath = await uploadEtiquetaPdf(ship.tracking, enrichedNew);
@@ -164,7 +189,7 @@ async function persistPage(
       continue;
     }
 
-    const enriched = await enrichZebraLabelPdf(resolvedPage, ship.tracking, enrichInput, logoPath);
+    const enriched = await enrichLabelOrRaw(resolvedPage, ship.tracking, enrichInput, logoPath);
     try {
       const pdfPath = await uploadEtiquetaPdf(ship.tracking, enriched);
       await updateEtiquetaPdfPath(ship.tracking, pdfPath);
