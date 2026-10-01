@@ -2,7 +2,7 @@
 
 | Tabla | Qué registra | Escribe | Filas |
 |---|---|---|---|
-| `estado_historial` | Cada cambio de `estado_fabricacion`/`estado_venta` (ítem) y `estado_envio`/`estado_orden` (orden), con fecha. **No** guarda quién. | Triggers | 7.956 |
+| `estado_historial` | Cada cambio de `estado_fabricacion`/`estado_venta`/`estado_vectorizacion` (ítem) y `estado_envio`/`estado_orden` (orden), con fecha. **No** guarda quién. Sirve para medir ciclos BASE→VECTORIZADO. | Triggers | 7.956 |
 | `envio_eventos` | `csv_generado`, `etiqueta_descargada`, `etiqueta_reimpresa` con usuario y `meta` | Envíos | 107 |
 | `sello_rehacer_eventos` | Cada Rehacer: motivo, descripción, snapshot de estados previos, medidas, `programa_id`, cobro adicional, y URLs de **base/vector/base mejorada** congeladas (`archivo_*_snapshot`) | RPC `registrar_rehacer` + cliente (copia Storage) | — |
 | `webhook_logs` | Cada WhatsApp disparado desde la base (tipo, teléfono, datos, request `pg_net`, éxito, reintentos, respuesta) | `enviar_webhook_pedido`, cron | 94.943 |

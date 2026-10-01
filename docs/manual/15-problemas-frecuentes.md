@@ -54,7 +54,7 @@ Qué hacer cuando algo no sale como se espera. Si el problema no está acá, avi
 
 | Problema | Qué hacer |
 |---|---|
-| Se perdió la revisión de vectores | La revisión vive en la pestaña: si se cierra, se pierde. Hay que volver a vectorizar (cuesta créditos). Confirmá antes de cerrar |
+| Se perdió la revisión de vectores | En el mismo navegador debería recuperarse al volver a Vectorización. Si borraste datos del sitio o estás en otra PC, hay que volver a vectorizar (cuesta créditos) |
 | **Sin saldo** de créditos | Avisale a Julián |
 | **No entró: …** en la hoja del programa | El vector es EPS o no se pudo importar. Re-vectorizalo en SVG y corré el gadget en modo Actualizar |
 | **No entra en esta máquina** | La planchuela de ese sello no la acepta esa máquina. Probá en otra |

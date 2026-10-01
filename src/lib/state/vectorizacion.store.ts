@@ -8,6 +8,7 @@ import type {
   VectorResult,
 } from '@/lib/vectorizacion/types';
 import type { VectorizeMode } from '@/lib/vectorizacion/vectorizerPreset';
+import { saveReviewQueue } from '@/lib/vectorizacion/reviewQueuePersist';
 
 interface VectorizacionStore {
   tab: 'pedidos' | 'lote' | 'asignar' | 'revision';
@@ -24,6 +25,8 @@ interface VectorizacionStore {
   progress: SheetProgress[];
   results: VectorResult[];
   reviewQueue: ReviewItem[];
+  /** True después de intentar hidratar desde IndexedDB (éxito o vacío). */
+  reviewQueueHydrated: boolean;
   fabricationReviews: Array<{
     selloId: string;
     fileName: string;
@@ -51,6 +54,8 @@ interface VectorizacionStore {
   pushReviews: (items: ReviewItem[]) => void;
   updateReviewSvg: (id: string, svg: string) => void;
   removeReview: (id: string) => void;
+  /** Carga inicial desde IndexedDB; fusiona con la cola en memoria (la sesión gana en conflictos). */
+  hydrateReviewQueue: (items: ReviewItem[]) => void;
   setFabricationReviews: (items: VectorizacionStore['fabricationReviews']) => void;
   clearRun: () => void;
 }
@@ -61,6 +66,16 @@ function closeBitmap(source?: SourceImage) {
   } catch {
     // ImageBitmap ya cerrado
   }
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePersistReviewQueue(getQueue: () => ReviewItem[]) {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void saveReviewQueue(getQueue());
+  }, 200);
 }
 
 export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
@@ -78,6 +93,7 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
   progress: [],
   results: [],
   reviewQueue: [],
+  reviewQueueHydrated: false,
   fabricationReviews: [],
   setTab: (tab) => set({ tab }),
   setIncludeRehacerPrioridad: (includeRehacerPrioridad) => set({ includeRehacerPrioridad }),
@@ -125,13 +141,37 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
   setRunning: (running) => set({ running }),
   setProgress: (progress) => set({ progress }),
   setResults: (results) => set({ results }),
-  pushReviews: (items) => set({ reviewQueue: [...get().reviewQueue, ...items] }),
-  updateReviewSvg: (id, svg) =>
+  pushReviews: (items) => {
+    set({ reviewQueue: [...get().reviewQueue, ...items] });
+    schedulePersistReviewQueue(() => get().reviewQueue);
+  },
+  updateReviewSvg: (id, svg) => {
     set({
       reviewQueue: get().reviewQueue.map((item) => (item.id === id ? { ...item, svg } : item)),
-    }),
-  removeReview: (id) =>
-    set({ reviewQueue: get().reviewQueue.filter((item) => item.id !== id) }),
+    });
+    schedulePersistReviewQueue(() => get().reviewQueue);
+  },
+  removeReview: (id) => {
+    set({ reviewQueue: get().reviewQueue.filter((item) => item.id !== id) });
+    schedulePersistReviewQueue(() => get().reviewQueue);
+  },
+  hydrateReviewQueue: (items) => {
+    const current = get().reviewQueue;
+    if (!current.length) {
+      set({ reviewQueue: items, reviewQueueHydrated: true });
+      return;
+    }
+    // Sesión en curso: no pisar ítems nuevos; completar con los recuperados.
+    const byId = new Map(items.map((item) => [item.id, item]));
+    for (const item of current) {
+      byId.set(item.id, item);
+    }
+    const merged = [...byId.values()];
+    set({ reviewQueue: merged, reviewQueueHydrated: true });
+    if (merged.length !== current.length) {
+      schedulePersistReviewQueue(() => get().reviewQueue);
+    }
+  },
   setFabricationReviews: (fabricationReviews) => set({ fabricationReviews }),
   clearRun: () => set({ progress: [], results: [] }),
 }));

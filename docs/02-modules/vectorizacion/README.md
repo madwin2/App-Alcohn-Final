@@ -25,7 +25,7 @@
 - ✅ Subir SVGs ya hechos (por otra vía) y emparejarlos automáticamente con pendientes por **nombre de archivo** (`matchByName`: normaliza, ignora palabras como "logo", "vector", "final", puntúa por bigramas). Confirmar → guarda cada SVG en su ítem (mismo `saveSelloVector`).
 
 ### Revisión
-- ✅ Cola **en memoria del navegador** (se pierde si se cierra la pestaña: el toast lo advierte). Por cada resultado: antes/después, **Confirmar** (guarda), **Rechazar**, **Reemplazar con un SVG propio**, descargar todo.
+- ✅ Cola **persistida en este navegador** (IndexedDB): si cerrás o recargás la pestaña, los SVG de revisión se recuperan al volver a Vectorización. No se sincroniza entre PCs. Por cada resultado: antes/después, **Confirmar** (guarda), **Rechazar**, **Reemplazar con un SVG propio**, descargar todo.
 
 ## Pipeline (✅)
 
@@ -53,7 +53,7 @@ flowchart LR
 
 ## Estados que escribe
 
-`sellos.estado_vectorizacion`: `VECTORIZADO` al confirmar; `archivo_vector_preview` = URL del SVG; `error_vectorizacion_mensaje` limpio; `ancho_fabricacion_mm`/`largo_fabricacion_mm` si no hace falta revisión. `archivo_base_mejorado(_at)`. Ver [06-state-machines/vectorizacion.md](../../06-state-machines/vectorizacion.md).
+`sellos.estado_vectorizacion`: `VECTORIZADO` al confirmar; `archivo_vector_preview` = URL del SVG; `error_vectorizacion_mensaje` limpio; `ancho_fabricacion_mm`/`largo_fabricacion_mm` si no hace falta revisión. `archivo_base_mejorado(_at)`. Cada cambio de `estado_vectorizacion` queda en `estado_historial` (BR-FAB-006). Ver [06-state-machines/vectorizacion.md](../../06-state-machines/vectorizacion.md).
 
 ## Vectorización automática (desactivada)
 
@@ -66,7 +66,7 @@ Tour en la primera visita (`VectorizarOnboardingHost`, `lib/vectorizacion/onboar
 ## Riesgos / observaciones
 
 - `/api/vectorize` no exige autenticación: cualquiera con la URL puede consumir créditos ([AUD-SEC-004](../../audits/seguridad.md#aud-sec-004)).
-- La cola de revisión no persiste.
+- La cola de revisión persiste en IndexedDB del mismo navegador hasta confirmar/rechazar; no entre dispositivos.
 
 ## Implementación relacionada
 

@@ -23,3 +23,7 @@ stateDiagram-v2
 | `ERROR` | Falló la vectorización automática | `error_vectorizacion_mensaje` |
 
 Control: ninguno en la DB más allá del CHECK. ⚠️ "VECTORIZADO" no garantiza **SVG**: puede ser EPS/PDF/AI, que el gadget no importa.
+
+## Historial / tiempos
+
+✅ Cada cambio de `estado_vectorizacion` queda en `estado_historial` (`campo='estado_vectorizacion'`, `changed_at`) vía `trg_estado_historial_sellos` (BR-FAB-006). Ciclo medible por ítem: evento a `BASE` → evento a `VECTORIZADO`. Sin pantalla de métricas todavía; sin backfill de ítems anteriores a la migración.

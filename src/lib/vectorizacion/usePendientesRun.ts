@@ -148,7 +148,7 @@ export function usePendientesRun() {
         store.setTab('revision');
         toast({
           title: `${reviews.length} vectores esperando revisión`,
-          description: 'No cierres la pestaña hasta confirmarlos o descargarlos.',
+          description: 'Quedan guardados en este navegador hasta que los confirmes o rechaces.',
         });
       }
       store.setSelectedIds([]);

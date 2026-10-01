@@ -13,7 +13,7 @@
 2. ❓ Si la imagen es mala: copiarla, **retocarla en un editor externo**, y "reemplazar desde el portapapeles" → `archivo_base_mejorado` → [FR-02](../10-operational-boundaries/README.md#fr-02).
 3. Seleccionar ítems → se preparan (recorte, margen, limpieza).
 4. **Vectorizar** → confirmar costo en créditos (modo `production`).
-5. Sistema: arma hojas, llama a Vectorizer.AI vía `/api/vectorize`, separa un SVG por ítem → cola de **Revisión** (en memoria; no cerrar la pestaña).
+5. Sistema: arma hojas, llama a Vectorizer.AI vía `/api/vectorize`, separa un SVG por ítem → cola de **Revisión** (persistida en IndexedDB de este navegador hasta confirmar/rechazar).
 6. Revisión (decisión humana): **Confirmar** / Rechazar / Reemplazar con SVG propio.
 7. Confirmar → el SVG se escala al tamaño pedido, se sube al bucket `vector`, `VECTORIZADO`. Si la medida medida difiere (tope de planchuela o ≥6 mm) → popup de **medida de fabricación** (ver [medida](../02-modules/vectorizacion/medida-de-fabricacion.md)).
 

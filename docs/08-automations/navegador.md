@@ -5,7 +5,7 @@ Estas "automatizaciones" solo ocurren si un usuario está usando la app en ese m
 | Automatización | Disparador | Qué hace | Riesgo si se cierra la pestaña / nadie la usa |
 |---|---|---|---|
 | Cola de subida a MiCorreo | Guardar datos de envío | Sube de a una orden al worker, con pausa | Órdenes quedan en `Hacer Etiqueta` con `micorreo_subiendo_at` y `etiqueta_estado='generando'` |
-| Cola de revisión de vectores | Terminar una vectorización | Guarda resultados para revisar | Se pierden los SVG generados (y los créditos gastados) |
+| Cola de revisión de vectores | Terminar una vectorización | Guarda resultados para revisar (IndexedDB del navegador) | Se recuperan al volver a Vectorización en la misma PC; se pierden si se borran datos del sitio o se cambia de computadora |
 | Sincronización de tareas de reposición de stock | Abrir el Inicio | Crea/borra tareas `[STOCK_REPLENISH]` y notificaciones p6 | Si el responsable no abre el Inicio, no se entera |
 | Persistencia de estado derivado del programa | Cargar Programas | Escribe `EN_FABRICACION`/`FINALIZADO` | El estado guardado queda desactualizado hasta que alguien abra Programas |
 | Preview del `.crv3d` grande | Abrir la hoja del programa | Genera y sube el GIF | Sin preview hasta abrirla |

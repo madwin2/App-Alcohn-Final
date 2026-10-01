@@ -7,7 +7,7 @@
 | BR-FAB-003 | Rehacer resetea: Aspire, foto (si venta era Foto → Señado), envío de la orden a `Sin envio` sin seguimiento. | `registrar_rehacer` | DB (RPC) |
 | BR-FAB-004 | Si un ítem tiene `estado_aspire` y está en `Sin Hacer`/`Rehacer` (sin que se cambie explícitamente el estado), pasa a `Programado`. | trigger `detect_programado_state` | DB |
 | BR-FAB-005 | Cada vez que un ítem `SELLO` entra a `Hecho` (desde otro estado) se registra el consumo de bronce (lado mayor + pérdida de corte) y se fija `tipo_planchuela`. | trigger `registrar_bronce_consumo_sello` | DB |
-| BR-FAB-006 | Todo cambio de `estado_fabricacion`/`estado_venta` (ítem) y `estado_envio`/`estado_orden` (orden) queda en `estado_historial`. | triggers `trg_estado_historial_*` | DB |
+| BR-FAB-006 | Todo cambio de `estado_fabricacion`/`estado_venta`/`estado_vectorizacion` (ítem) y `estado_envio`/`estado_orden` (orden) queda en `estado_historial`. | triggers `trg_estado_historial_*` | DB |
 | BR-PROD-001 | Cambiar el estado de fabricación desde Producción limpia `estado_aspire`. | `updateProductionItem` | Servicio |
 | BR-PROD-002 | Elegir un estado Aspire desde Producción fuerza `Programado`; quitarlo vuelve a `Sin Hacer` si el ítem no está en un programa. | `updateProductionItem` | Servicio |
 | BR-PROD-003 | El programa de un ítem solo se asigna/quita desde Programas (en Producción es solo lectura). | `CellPrograma`, `production.service.ts` | UI/Servicio |

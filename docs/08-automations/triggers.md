@@ -18,8 +18,9 @@
 | `trigger_update_orden_totals` | AFTER INS/UPD/DEL | `update_orden_totals` | Recalcula cantidad, seña, valor, restante (+ envío) de la orden |
 | `trigger_refresh_orden_fabrication_totals` | AFTER INS/UPD/DEL | `trg_refresh_orden_fabrication_totals` | Costo y margen totales de la orden |
 | `trigger_update_programa_cantidad` | AFTER INS/UPD/DEL | `update_programa_cantidad` | `programa.cantidad_sellos` (⚠️ solo del programa nuevo al mover) |
-| `trigger_estado_historial_sellos` | AFTER INS/UPD | `trg_estado_historial_sellos` | Historial de fabricación y venta |
+| `trigger_estado_historial_sellos` | AFTER INS/UPD OF fabricación, venta, vectorización | `trg_estado_historial_sellos` | Historial de fabricación, venta y vectorización |
 | `trigger_foto_sello_subida` | AFTER UPD | `trigger_foto_sello_subida` | Foto nueva/cambiada → WhatsApp `pedido_listo` |
+| `trigger_accesorio_listo` | AFTER UPD OF `estado_fabricacion` | `trigger_accesorio_listo` | Accesorio → `Hecho` → WhatsApp `accesorio_listo` (una vez) |
 | `trigger_registrar_bronce_consumo` | AFTER INS/UPD | `registrar_bronce_consumo_sello` | Entrada a `Hecho` (SELLO, desde otro estado) → `bronce_consumo` + `tipo_planchuela` |
 | `trigger_confirm_web_order_on_sellos_insert` | AFTER INS | `trg_confirm_web_order_on_sellos_insert` | Orden web pagada → edge `confirm-web-order` |
 

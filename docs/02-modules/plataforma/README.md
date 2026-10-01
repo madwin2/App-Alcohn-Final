@@ -30,4 +30,4 @@
 
 ## Historial de estados
 
-✅ Triggers registran en `estado_historial` todo cambio de `estado_fabricacion`, `estado_venta` (por sello) y `estado_envio`, `estado_orden` (por orden), con fecha. Se usa para el cálculo de deudores (fecha en que pasó a `Foto`). No registra quién hizo el cambio.
+✅ Triggers registran en `estado_historial` todo cambio de `estado_fabricacion`, `estado_venta`, `estado_vectorizacion` (por sello) y `estado_envio`, `estado_orden` (por orden), con fecha. Se usa para el cálculo de deudores (fecha en que pasó a `Foto`) y para medir tiempos de vectorización (BASE→VECTORIZADO). No registra quién hizo el cambio.

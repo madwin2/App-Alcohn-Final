@@ -312,7 +312,7 @@ export interface Database {
           id: string;
           orden_id: string;
           sello_id: string | null;
-          campo: 'estado_fabricacion' | 'estado_venta' | 'estado_envio' | 'estado_orden';
+          campo: 'estado_fabricacion' | 'estado_venta' | 'estado_envio' | 'estado_orden' | 'estado_vectorizacion';
           estado_anterior: string | null;
           estado_nuevo: string | null;
           changed_at: string;
@@ -321,7 +321,7 @@ export interface Database {
           id?: string;
           orden_id: string;
           sello_id?: string | null;
-          campo: 'estado_fabricacion' | 'estado_venta' | 'estado_envio' | 'estado_orden';
+          campo: 'estado_fabricacion' | 'estado_venta' | 'estado_envio' | 'estado_orden' | 'estado_vectorizacion';
           estado_anterior?: string | null;
           estado_nuevo?: string | null;
           changed_at?: string;

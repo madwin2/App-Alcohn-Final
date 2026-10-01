@@ -22,4 +22,4 @@ Clasificación de cada tramo de la operación según el rol que cumple el softwa
 
 - **Casi nada está "controlado" por la base de datos.** Las reglas de transición viven en la UI (y a veces solo como "deshabilitado" visual). Cualquier cliente con sesión puede escribir cualquier estado. Ver [06-state-machines](../06-state-machines/README.md) y [audits/arquitectura.md](../audits/observaciones-de-arquitectura.md).
 - **Las automatizaciones críticas viven en Postgres** (triggers y pg_cron): avisos por WhatsApp, cambio a `Seguimiento Enviado`, deudores, stock, costos. Un cambio de estado hecho desde cualquier pantalla (o desde SQL) dispara los mismos efectos.
-- **Varias automatizaciones dependen de que una pestaña del navegador quede abierta**: la cola de subida a MiCorreo y la cola de revisión de vectores viven en memoria del navegador.
+- **Varias automatizaciones dependen del navegador**: la cola de subida a MiCorreo vive en memoria (hay que dejar la pestaña abierta). La cola de revisión de vectores se persiste en IndexedDB del mismo navegador hasta confirmar.

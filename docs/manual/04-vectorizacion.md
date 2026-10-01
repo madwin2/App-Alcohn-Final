@@ -37,7 +37,7 @@ Muestra los sellos que tienen archivo base pero **todavía no tienen vector**. L
 
 ## Pestaña Revisión: controlar antes de guardar
 
-⚠️ Nada se guarda en el pedido hasta que lo confirmás acá. **La revisión se pierde si cerrás o recargás la pestaña**: confirmá antes de irte.
+⚠️ Nada se guarda en el pedido hasta que lo confirmás acá. Si cerrás o recargás la pestaña, **la revisión se recupera** en este mismo navegador (no en otra PC).
 
 Por cada diseño se ve el antes y el después (**Damero** muestra el fondo a cuadros para ver qué es transparente). Criterio de revisión: fiel al diseño, líneas rectas bien hechas, sin deformaciones.
 

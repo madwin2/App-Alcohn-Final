@@ -51,11 +51,12 @@ Surgen de comparar la visión del dueño en Notion ("La Empresa", 2023–2026) c
 
 <a id="q-emp-006"></a>
 ### Q-EMP-006
-- **Módulo**: Producción / tiempos · **Estado**: documentada (2026-09-29)
+- **Módulo**: Producción / tiempos · **Estado**: documentada (2026-09-29; actualizada 2026-10-01)
 - **Pregunta**: La visión fija 48 h desde el sello confirmado hasta listo para enviar y despachos al menos 2 veces por semana. ¿Cuál es la meta real hoy? ¿Se quiere medir en la app? (Hoy no se guarda cuándo un sello entra a Haciendo o Hecho.)
-- **Evidencia**: `sellos` no tiene marcas de tiempo por estado; `ordenes.seguimiento_enviado_at` mezcla fabricación con espera de pago y datos.
+- **Evidencia**: `estado_historial` registra cambios de `estado_fabricacion`/`estado_venta`/`estado_envio`/`estado_orden`/`estado_vectorizacion` con `changed_at` (sin quién). No hay pantalla de métricas; `ordenes.seguimiento_enviado_at` mezcla fabricación con espera de pago y datos.
 - **Impacto**: medio.
 - Respuesta: No creo que estemos cumpliendo con lo de las 48hs pero tampoco lo trakeamos. Se hacen envios casi todos los dias.
+- Nota (2026-10-01): se empezó a registrar también `estado_vectorizacion` en `estado_historial` para poder medir BASE→VECTORIZADO; sigue sin UI de tiempos.
 
 <a id="q-emp-007"></a>
 ### Q-EMP-007

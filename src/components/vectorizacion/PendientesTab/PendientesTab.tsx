@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { useVectorizacionStore } from '@/lib/state/vectorizacion.store';
 import { usePendientesRun } from '@/lib/vectorizacion/usePendientesRun';
@@ -27,17 +27,6 @@ export function PendientesTab() {
   const [confirm, setConfirm] = useState(false);
   const [credits, setCredits] = useState<number | null>(null);
   const [cropId, setCropId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (store.reviewQueue.length > 0) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [store.reviewQueue.length]);
 
   const byId = new Map(selectedPrepared.map((img) => [img.id, img]));
 

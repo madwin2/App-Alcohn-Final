@@ -535,6 +535,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 29,
+    date: '2026-10-01',
+    title: 'Novedades',
+    version: '1.47',
+    slides: [
+      {
+        heading: 'La revisión de vectores ya no se pierde',
+        body: 'Si cerrás o recargás Vectorización, los SVG pendientes de confirmar vuelven solos en este navegador. Seguí confirmándolos cuando puedas.',
+        icon: Layers,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

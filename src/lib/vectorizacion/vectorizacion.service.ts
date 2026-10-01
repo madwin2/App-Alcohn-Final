@@ -57,6 +57,19 @@ export async function fetchPendientes(includeRehacerPrioridad: boolean): Promise
   });
 }
 
+/** Ids de sellos que ya están VECTORIZADO (para limpiar cola de revisión persistida). */
+export async function filterAlreadyVectorizedSelloIds(selloIds: string[]): Promise<Set<string>> {
+  const unique = [...new Set(selloIds.filter(Boolean))];
+  if (!unique.length) return new Set();
+  const { data, error } = await supabase
+    .from('sellos')
+    .select('id')
+    .in('id', unique)
+    .eq('estado_vectorizacion', 'VECTORIZADO');
+  if (error) throw error;
+  return new Set((data ?? []).map((row) => row.id as string));
+}
+
 export async function setSelloVectorState(
   selloId: string,
   estado: 'EN_PROCESO' | 'VECTORIZADO' | 'ERROR' | 'BASE',
