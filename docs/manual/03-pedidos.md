@@ -259,12 +259,14 @@ Al llegar a **Seguimiento Enviado** se descuentan del stock los insumos del env�
 
 ## Rehacer un sello
 
-Cuando un sello hay que fabricarlo de nuevo (salió mal en la máquina, error de medida o vector, reclamo del cliente, daño en el envío):
+Cuando un sello hay que fabricarlo de nuevo (salió mal en la máquina, error de medida/vector/Aspire, reclamo del cliente, daño en el envío):
 
 1. En **Fabricación**, elegí **Rehacer** (en la fila del pedido para todos los ítems, o en el renglón de uno).
 2. Se abre **Rehacer**. Elegí el **Motivo**:
    - Error detectado en máquina
-   - Error de medida o vector
+   - Error en la Medida
+   - Error en el Vector
+   - Error en Programación Aspire
    - Reclamo del cliente (antes de entregar)
    - Daño o error en el envío
    - Reclamo del cliente (después de entregar)

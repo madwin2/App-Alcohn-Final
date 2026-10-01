@@ -4,7 +4,7 @@
 |---|---|---|---|
 | `estado_historial` | Cada cambio de `estado_fabricacion`/`estado_venta` (ítem) y `estado_envio`/`estado_orden` (orden), con fecha. **No** guarda quién. | Triggers | 7.956 |
 | `envio_eventos` | `csv_generado`, `etiqueta_descargada`, `etiqueta_reimpresa` con usuario y `meta` | Envíos | 107 |
-| `sello_rehacer_eventos` | Cada Rehacer: motivo, descripción, snapshot de estados previos, cobro adicional y si se cobró | RPC `registrar_rehacer` | — |
+| `sello_rehacer_eventos` | Cada Rehacer: motivo, descripción, snapshot de estados previos, medidas, `programa_id`, cobro adicional, y URLs de **base/vector/base mejorada** congeladas (`archivo_*_snapshot`) | RPC `registrar_rehacer` + cliente (copia Storage) | — |
 | `webhook_logs` | Cada WhatsApp disparado desde la base (tipo, teléfono, datos, request `pg_net`, éxito, reintentos, respuesta) | `enviar_webhook_pedido`, cron | 94.943 |
 | `meta_conversion_log` | Evento Purchase enviado a Meta por orden (idempotencia) | edge `meta-conversion` | 636 |
 | `web_pedido_confirm_log` | Confirmación de pedido web procesada (sellos normalizados, WhatsApp enviado, error) | edge `confirm-web-order` | 64 |

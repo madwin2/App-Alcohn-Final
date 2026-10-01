@@ -13,6 +13,7 @@ Módulos funcionales detectados en el código (no solo los del menú). Cada uno 
 | Producción | `/produccion` | Activo | [produccion](produccion/README.md) |
 | Programas | `/programas` | Activo, **muy reciente** (4 programas en la base; desde 2026-09-05) | [programas](programas/README.md) |
 | Vectorización | `/vectorizacion` | Activo, reciente (2026-09-15) | [vectorizacion](vectorizacion/README.md) |
+| Errores (rehaceres) | `/errores` | Activo (2026-09-30): métricas + snapshots de base/vector | [errores](errores/README.md) |
 | Stock | `/stock` | Activo | [stock](stock/README.md) |
 | Generador de Mockups | `/mockups` | Activo | [mockups](mockups/README.md) |
 | Comercial Web | `/comercial` | Activo | [comercial](comercial/README.md) |
@@ -34,7 +35,7 @@ Módulos funcionales detectados en el código (no solo los del menú). Cada uno 
 | Tareas y post-its (dashboard, pedidos, producción) | `tareas`, `tareas_dashboard`, `tareas_pedidos_globales` | [plataforma](plataforma/README.md#tareas-y-post-its) |
 | Novedades y aviso de versión | `src/components/global`, `lib/changelog`, `public/version.json` | [plataforma](plataforma/README.md#novedades-y-aviso-de-versión) |
 | Vistas de tabla persistidas | `vistas_tabla`, `useTableViewPersistence` | [plataforma](plataforma/README.md#vistas-de-tabla) |
-| Rehacer | `RehacerDialog`, RPC `registrar_rehacer` | [pedidos/rehacer.md](pedidos/rehacer.md) |
+| Rehacer | `RehacerDialog`, RPC `registrar_rehacer` | [pedidos/rehacer.md](pedidos/rehacer.md) · [errores](errores/README.md) |
 | Medida de fabricación | `FabricationSizeDialogHost`, `lib/programas/fabricationSize.ts` | [vectorizacion/medida-de-fabricacion.md](vectorizacion/medida-de-fabricacion.md) |
 | Perfil de cliente | `ClienteProfileDialog`, `ClienteDetailDialog` | [pedidos](pedidos/README.md#perfil-de-cliente) |
 | Pedidos web (integración tienda) | edge `confirm-web-order`, `webOrderPayment.service` | [tienda-web](tienda-web/README.md) |

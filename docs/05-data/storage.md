@@ -2,8 +2,8 @@
 
 | Bucket | Público | Qué contiene | Escribe | Path típico |
 |---|---|---|---|---|
-| `base` | sí | Archivo base del cliente y base mejorada | Pedidos, Vectorización | `generateFilePath(orden, 'base', archivo, sello)` |
-| `vector` | sí | Vectores (SVG/EPS/PDF/AI) y previews PNG de EPS | Pedidos, Producción, Vectorización, vector-worker | ídem `'vector'` |
+| `base` | sí | Archivo base del cliente, base mejorada y **snapshots de rehacer** (`rehacer-snapshots/{evento_id}/…`) | Pedidos, Vectorización, Rehacer | `generateFilePath(orden, 'base', archivo, sello)` · snapshots: `rehacer-snapshots/{evento_id}/base*.{ext}` |
+| `vector` | sí | Vectores (SVG/EPS/PDF/AI), previews PNG de EPS y **snapshots de rehacer** | Pedidos, Producción, Vectorización, vector-worker, Rehacer | ídem `'vector'` · snapshots: `rehacer-snapshots/{evento_id}/vector.{ext}` |
 | `foto` | sí | Fotos de sellos terminados, fotos pendientes (`pendientes/`), originales/optimizados/mockups de la app | Pedidos, Mockups | ídem `'foto'` |
 | `programas-zip` | sí | Paquetes ZIP de programas | Programas | `<programa>/<slug>-<ts>.zip` |
 | `programas-aspire` | sí | `.crv3d` subidos (gadget o manual) | Programas, edge `programa-sync` | `<programa>/<ts>-<nombre>` |

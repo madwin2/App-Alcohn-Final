@@ -8,6 +8,13 @@ import {
 
 export type BucketType = 'base' | 'vector' | 'foto';
 
+/** Prefijo de copias inmutables al marcar Rehacer. No borrar desde la UI operativa. */
+export const REHACER_SNAPSHOT_PREFIX = 'rehacer-snapshots/';
+
+export function isRehacerSnapshotPath(path: string): boolean {
+  return path.startsWith(REHACER_SNAPSHOT_PREFIX);
+}
+
 /**
  * Sube un archivo a un bucket de Supabase Storage
  * @param bucket - Nombre del bucket ('base', 'vector', o 'foto')
@@ -101,6 +108,10 @@ export const deleteFile = async (
   path: string
 ): Promise<void> => {
   try {
+    if (isRehacerSnapshotPath(path)) {
+      console.warn(`Omitiendo borrado de snapshot de rehacer: ${bucket}/${path}`);
+      return;
+    }
     const { error } = await supabase.storage
       .from(bucket)
       .remove([path]);
@@ -511,4 +522,74 @@ export const generateFilePath = (
   
   return `ordenes/${orderId}/${type}_${sanitizedName}_${timestamp}.${extension}`;
 };
+
+function extensionFromUrlOrPath(urlOrPath: string): string {
+  const clean = urlOrPath.split('?')[0]?.split('#')[0] ?? urlOrPath;
+  const match = clean.match(/\.([a-z0-9]+)$/i);
+  return match?.[1]?.toLowerCase() || 'bin';
+}
+
+export function buildRehacerSnapshotPath(
+  eventoId: string,
+  kind: 'base' | 'vector' | 'base_mejorada',
+  sourceUrl: string,
+): string {
+  return `${REHACER_SNAPSHOT_PREFIX}${eventoId}/${kind}.${extensionFromUrlOrPath(sourceUrl)}`;
+}
+
+/**
+ * Copia un objeto de Storage a un path de snapshot (mismo o distinto bucket).
+ * Si `copy` falla, descarga y vuelve a subir. No sobrescribe el archivo operativo del sello.
+ */
+export async function copyUrlToRehacerSnapshot(params: {
+  sourceUrl: string;
+  destBucket: BucketType;
+  destPath: string;
+}): Promise<string> {
+  const { sourceUrl, destBucket, destPath } = params;
+  if (isRehacerSnapshotPath(destPath) === false) {
+    throw new Error('El path de snapshot debe estar bajo rehacer-snapshots/');
+  }
+
+  const sourceRef = resolveStorageRefFromUrl(sourceUrl);
+  if (!sourceRef) {
+    throw new Error('No se pudo resolver el archivo fuente para el snapshot');
+  }
+
+  const publicUrlOf = (path: string): string => {
+    const { data: urlData } = supabase.storage.from(destBucket).getPublicUrl(path);
+    return urlData.publicUrl;
+  };
+
+  if (sourceRef.bucket === destBucket) {
+    const { error: copyError } = await supabase.storage
+      .from(destBucket)
+      .copy(sourceRef.path, destPath);
+    if (!copyError) return publicUrlOf(destPath);
+  }
+
+  // Cross-bucket o copy no disponible: download + upload
+  const { data: blob, error: downloadError } = await supabase.storage
+    .from(sourceRef.bucket)
+    .download(sourceRef.path);
+  if (downloadError || !blob) {
+    // URLs públicas (p. ej. mockups): fetch directo
+    const response = await fetch(sourceUrl);
+    if (!response.ok) {
+      throw downloadError ?? new Error(`No se pudo descargar el archivo (${response.status})`);
+    }
+    const fetched = await response.blob();
+    const { error: uploadError } = await supabase.storage
+      .from(destBucket)
+      .upload(destPath, fetched, { cacheControl: '31536000', upsert: true });
+    if (uploadError) throw uploadError;
+    return publicUrlOf(destPath);
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from(destBucket)
+    .upload(destPath, blob, { cacheControl: '31536000', upsert: true });
+  if (uploadError) throw uploadError;
+  return publicUrlOf(destPath);
+}
 

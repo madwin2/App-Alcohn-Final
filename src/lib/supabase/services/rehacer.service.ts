@@ -3,10 +3,16 @@ import type { ReworkCharge } from '@/lib/types';
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 import { invokeBotWebhook } from './botWebhook.service';
 import { notifyRehacer } from '@/lib/notificaciones/events';
+import {
+  buildRehacerSnapshotPath,
+  copyUrlToRehacerSnapshot,
+} from './storage.service';
 
 export const REHACER_MOTIVOS = [
   'ERROR_DETECTADO_EN_MAQUINA',
-  'ERROR_MEDIDA_O_VECTOR',
+  'ERROR_EN_LA_MEDIDA',
+  'ERROR_EN_EL_VECTOR',
+  'ERROR_EN_PROGRAMACION_ASPIRE',
   'RECLAMO_CLIENTE_PRE_ENTREGA',
   'DANIO_O_ERROR_EN_ENVIO',
   'RECLAMO_CLIENTE_POST_ENTREGA',
@@ -17,12 +23,27 @@ export type RehacerMotivo = (typeof REHACER_MOTIVOS)[number];
 
 export const REHACER_MOTIVO_LABELS: Record<RehacerMotivo, string> = {
   ERROR_DETECTADO_EN_MAQUINA: 'Error detectado en máquina',
-  ERROR_MEDIDA_O_VECTOR: 'Error de medida o vector',
+  ERROR_EN_LA_MEDIDA: 'Error en la Medida',
+  ERROR_EN_EL_VECTOR: 'Error en el Vector',
+  ERROR_EN_PROGRAMACION_ASPIRE: 'Error en Programación Aspire',
   RECLAMO_CLIENTE_PRE_ENTREGA: 'Reclamo del cliente (antes de entregar)',
   DANIO_O_ERROR_EN_ENVIO: 'Daño o error en el envío',
   RECLAMO_CLIENTE_POST_ENTREGA: 'Reclamo del cliente (después de entregar)',
   OTRO: 'Otro',
 };
+
+/** Motivos viejos que ya no se ofrecen al marcar Rehacer, pero siguen en eventos históricos. */
+const REHACER_MOTIVO_LABELS_LEGACY: Record<string, string> = {
+  ERROR_MEDIDA_O_VECTOR: 'Error de medida o vector (histórico)',
+};
+
+export function labelRehacerMotivo(motivo: string): string {
+  return (
+    REHACER_MOTIVO_LABELS[motivo as RehacerMotivo] ??
+    REHACER_MOTIVO_LABELS_LEGACY[motivo] ??
+    motivo
+  );
+}
 
 const ORDERS_IN_QUERY_CHUNK_SIZE = 150;
 
@@ -59,6 +80,18 @@ type OrdenJoin = {
   seguimiento_enviado_at: string | null;
   clientes: ClienteJoin | ClienteJoin[] | null;
 } | null;
+
+type SelloArchivosRow = {
+  id: string;
+  archivo_base: string | null;
+  archivo_base_mejorado: string | null;
+  archivo_vector_preview: string | null;
+};
+
+type RegistrarRehacerRpcRow = {
+  evento_id: string;
+  sello_id: string;
+};
 
 const firstJoin = <T>(value: T | T[] | null | undefined): T | null => {
   if (!value) return null;
@@ -131,8 +164,97 @@ export interface RegistrarRehacerInput {
   cobroConcepto?: string | null;
 }
 
+async function fetchSelloArchivosParaSnapshot(
+  selloIds: string[],
+): Promise<Map<string, SelloArchivosRow>> {
+  const map = new Map<string, SelloArchivosRow>();
+  if (!selloIds.length) return map;
+  const { data, error } = await supabase
+    .from('sellos')
+    .select('id, archivo_base, archivo_base_mejorado, archivo_vector_preview')
+    .in('id', selloIds);
+  if (error) throw error;
+  for (const row of data ?? []) {
+    map.set(row.id as string, {
+      id: row.id as string,
+      archivo_base: (row.archivo_base as string | null) ?? null,
+      archivo_base_mejorado:
+        ((row as { archivo_base_mejorado?: string | null }).archivo_base_mejorado) ?? null,
+      archivo_vector_preview: (row.archivo_vector_preview as string | null) ?? null,
+    });
+  }
+  return map;
+}
+
+async function snapshotArchivosRehacer(
+  eventos: RegistrarRehacerRpcRow[],
+  archivosBySello: Map<string, SelloArchivosRow>,
+): Promise<void> {
+  for (const evento of eventos) {
+    const archivos = archivosBySello.get(evento.sello_id);
+    if (!archivos) continue;
+
+    const patch: {
+      archivo_base_snapshot?: string | null;
+      archivo_vector_snapshot?: string | null;
+      archivo_base_mejorado_snapshot?: string | null;
+    } = {};
+
+    try {
+      if (archivos.archivo_base) {
+        patch.archivo_base_snapshot = await copyUrlToRehacerSnapshot({
+          sourceUrl: archivos.archivo_base,
+          destBucket: 'base',
+          destPath: buildRehacerSnapshotPath(evento.evento_id, 'base', archivos.archivo_base),
+        });
+      }
+      if (archivos.archivo_vector_preview) {
+        patch.archivo_vector_snapshot = await copyUrlToRehacerSnapshot({
+          sourceUrl: archivos.archivo_vector_preview,
+          destBucket: 'vector',
+          destPath: buildRehacerSnapshotPath(
+            evento.evento_id,
+            'vector',
+            archivos.archivo_vector_preview,
+          ),
+        });
+      }
+      if (archivos.archivo_base_mejorado) {
+        patch.archivo_base_mejorado_snapshot = await copyUrlToRehacerSnapshot({
+          sourceUrl: archivos.archivo_base_mejorado,
+          destBucket: 'base',
+          destPath: buildRehacerSnapshotPath(
+            evento.evento_id,
+            'base_mejorada',
+            archivos.archivo_base_mejorado,
+          ),
+        });
+      }
+
+      if (Object.keys(patch).length === 0) continue;
+
+      const { error } = await supabase
+        .from('sello_rehacer_eventos')
+        .update(patch)
+        .eq('id', evento.evento_id);
+      if (error) {
+        console.warn('No se pudieron guardar URLs de snapshot de rehacer:', error);
+      }
+    } catch (err) {
+      console.warn(
+        `Snapshot de archivos falló para evento ${evento.evento_id} (el Rehacer ya quedó registrado):`,
+        err,
+      );
+    }
+  }
+}
+
 export async function registrarRehacer(input: RegistrarRehacerInput): Promise<void> {
-  const { error } = await supabase.rpc('registrar_rehacer', {
+  // Leer archivos antes del RPC: la foto puede borrarse; base/vector se conservan pero
+  // conviene congelar el estado exacto del momento del error.
+  const archivosBySello = await fetchSelloArchivosParaSnapshot(input.selloIds);
+
+  const { data, error } = await supabase.rpc('registrar_rehacer', {
     p_sello_ids: input.selloIds,
     p_motivo: input.motivo,
     p_descripcion: input.descripcion?.trim() || null,
@@ -140,6 +262,11 @@ export async function registrarRehacer(input: RegistrarRehacerInput): Promise<vo
     p_cobro_concepto: input.cobroConcepto?.trim() || null,
   });
   if (error) throw error;
+
+  const eventos = (Array.isArray(data) ? data : []) as RegistrarRehacerRpcRow[];
+  if (eventos.length) {
+    await snapshotArchivosRehacer(eventos, archivosBySello);
+  }
 
   const { error: priorityError } = await supabase
     .from('sellos')
@@ -162,8 +289,7 @@ async function notifyRehacerInApp(input: RegistrarRehacerInput): Promise<void> {
       list.push(ctx);
       byOrden.set(ctx.ordenId, list);
     }
-    const motivoTexto =
-      REHACER_MOTIVO_LABELS[input.motivo as RehacerMotivo] ?? input.motivo;
+    const motivoTexto = labelRehacerMotivo(input.motivo);
     for (const [ordenId, rows] of byOrden) {
       notifyRehacer({
         selloIds: rows.map((r) => r.selloId),

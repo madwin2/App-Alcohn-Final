@@ -36,6 +36,7 @@ A la izquierda está el menú. Está achicado (solo íconos): pasá el mouse por
 | **Vectorización** | Diseños a vector ([capítulo 4](04-vectorizacion.md)) |
 | **Producción** | Tabla de sellos para fabricar ([capítulo 6](06-produccion.md)) |
 | **Programas** | Programas de la CNC ([capítulo 5](05-programas.md)) |
+| **Errores** | Rehaceres: métricas y archivos del error ([capítulo 17](17-errores.md)) |
 | **Verificación** | Aparece en gris: todavía no existe |
 | **WhatsApp Bot** | Conexión con Meta ([capítulo 14](14-configuracion-y-whatsapp.md)) |
 | **Economía**, **Gastos**, **Precios**, **Áreas** | Administración ([capítulos 12 a 14](13-economia-y-gastos.md)). Economía y Gastos solo los ve Julián |

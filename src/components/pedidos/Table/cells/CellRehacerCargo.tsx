@@ -9,8 +9,7 @@ import { es } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
 import {
   markReworkChargeCollected,
-  REHACER_MOTIVO_LABELS,
-  type RehacerMotivo,
+  labelRehacerMotivo,
 } from '@/lib/supabase/services/rehacer.service';
 
 const money = new Intl.NumberFormat('es-AR', {
@@ -20,7 +19,7 @@ const money = new Intl.NumberFormat('es-AR', {
 });
 
 function motivoLabel(motivo: string): string {
-  return REHACER_MOTIVO_LABELS[motivo as RehacerMotivo] || motivo;
+  return labelRehacerMotivo(motivo);
 }
 
 export function CellRehacerCargo({ order }: { order: Order }) {

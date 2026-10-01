@@ -217,9 +217,12 @@ export function RehacerDialog({ open, selloIds, onOpenChange, onConfirmed }: Reh
                 id="rehacer-desc"
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
-                placeholder="Qué pasó, qué hay que cambiar…"
+                placeholder="Qué se vio mal, en qué parte, qué hay que corregir…"
                 className="min-h-[80px] text-sm"
               />
+              <p className="text-[11px] text-muted-foreground">
+                Si no la cargás ahora, después se puede completar en la hoja Errores.
+              </p>
             </div>
 
             {resumen?.showCobro ? (

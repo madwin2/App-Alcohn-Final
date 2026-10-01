@@ -467,6 +467,60 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 25,
+    date: '2026-09-30',
+    title: 'Novedades',
+    version: '1.43',
+    slides: [
+      {
+        heading: 'Hoja de Errores',
+        body: 'En el menú hay Errores: métricas de rehaceres por motivo y período, y el detalle de cada caso.',
+        icon: AlertTriangle,
+      },
+      {
+        heading: 'El vector del error queda guardado',
+        body: 'Al marcar Rehacer se congela una copia de la base y del vector. Aunque después los reemplaces, en Errores seguís viendo la versión que falló.',
+        icon: Archive,
+      },
+    ],
+  },
+  {
+    id: 26,
+    date: '2026-10-01',
+    title: 'Novedades',
+    version: '1.44',
+    slides: [
+      {
+        heading: 'Completá la nota del error después',
+        body: 'En Errores abrís un rehacer y escribís qué falló, aunque al marcarlo no lo hayas cargado. Las filas sin descripción se marcan para completar.',
+        icon: FileText,
+      },
+      {
+        heading: 'Métricas más útiles',
+        body: 'Ves cuántos faltan de describir, el peso de cada motivo, quién marcó más y los cobros. Tocá un motivo o “Sin descripción” para filtrar.',
+        icon: AlertTriangle,
+      },
+    ],
+  },
+  {
+    id: 27,
+    date: '2026-10-01',
+    title: 'Novedades',
+    version: '1.45',
+    slides: [
+      {
+        heading: 'Motivos de rehacer más claros',
+        body: 'En lugar de “medida o vector” ahora elegís: Error en la Medida, Error en el Vector, o Error en Programación Aspire.',
+        icon: Ruler,
+      },
+      {
+        heading: 'Podés corregir el tipo en Errores',
+        body: 'Si el motivo quedó mal o es uno viejo, abrís el caso en Errores y lo cambiás al tipo correcto.',
+        icon: AlertTriangle,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

@@ -104,6 +104,7 @@ flowchart TB
 | `/economia` | Economía | sí |
 | `/produccion` | Producción | no |
 | `/programas` | Programas | no |
+| `/errores` | Errores (rehaceres) | no |
 | `/vectorizacion` | Vectorización | no |
 | `/stock` | Stock | no |
 | `/mockups` | Generador de Mockups | no |

@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Settings,
   BookOpen,
+  AlertTriangle,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SidebarItem } from './SidebarItem';
@@ -43,6 +44,7 @@ const sidebarItems = [
   { icon: Layers, label: 'Vectorización', path: '/vectorizacion', disabled: false },
   { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },
   { icon: Calendar, label: 'Programas', path: '/programas' },
+  { icon: AlertTriangle, label: 'Errores', path: '/errores', disabled: false },
   { icon: CheckCircle, label: 'Verificación', path: '/verificacion', disabled: true },
   { icon: MessageCircle, label: 'WhatsApp Bot', path: '/whatsapp', disabled: false },
 ];

@@ -5,6 +5,7 @@ import ProduccionPage from './app/produccion/index'
 import ProgramasPage from './app/programas/index'
 import EnviosPage from './app/envios/index'
 import EnviosHistorialPage from './app/envios/historial/index'
+import ErroresPage from './app/errores/index'
 import StockPage from './app/stock/index'
 import EconomiaPage from './app/economia/index'
 import GastosPage from './app/gastos/index'
@@ -52,6 +53,7 @@ function App() {
             </Route>
             <Route path="/produccion" element={<ProduccionPage />} />
             <Route path="/programas" element={<ProgramasPage />} />
+            <Route path="/errores" element={<ErroresPage />} />
             <Route path="/stock" element={<StockPage />} />
             <Route path="/gastos" element={<GastosPage />} />
             <Route path="/mockups" element={<MockupsPage />} />

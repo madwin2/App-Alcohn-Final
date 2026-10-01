@@ -347,7 +347,7 @@ Implicancia para mejoras: el cuello de botella natural es **Producción** (una p
 | Ingresos | 🔶 Economía |
 | Deudores | ✅ Cola "Deudores" en Inicio y estado de venta Deudor |
 | Gasto en publicidad | ❓ No sabemos si se carga en Gastos |
-| Errores | 🔶 Los rehacer guardan motivo; no hay reporte |
+| Errores | ✅ Hoja `/errores`: métricas por motivo/mes y snapshots de base/vector al Rehacer |
 | Ticket promedio | ❓ No verificado |
 | Cantidad de mensajes | 🔶 Los registros de WhatsApp existen; no hay indicador |
 | Tiempo de producción | ❌ No se mide (ver 6.6) |

@@ -13,26 +13,32 @@
 
 ## Diálogo
 
-- Motivo (obligatorio): `ERROR_DETECTADO_EN_MAQUINA`, `ERROR_MEDIDA_O_VECTOR`, `RECLAMO_CLIENTE_PRE_ENTREGA`, `DANIO_O_ERROR_EN_ENVIO`, `RECLAMO_CLIENTE_POST_ENTREGA`, `OTRO` (descripción obligatoria si es Otro).
+- Motivo (obligatorio): `ERROR_DETECTADO_EN_MAQUINA`, `ERROR_EN_LA_MEDIDA`, `ERROR_EN_EL_VECTOR`, `ERROR_EN_PROGRAMACION_ASPIRE`, `RECLAMO_CLIENTE_PRE_ENTREGA`, `DANIO_O_ERROR_EN_ENVIO`, `RECLAMO_CLIENTE_POST_ENTREGA`, `OTRO` (descripción obligatoria si es Otro). El motivo viejo `ERROR_MEDIDA_O_VECTOR` solo aparece en eventos históricos.
 - Descripción (opcional).
 - "Corresponde cobrar algo al cliente" → monto (>0) y concepto.
 
 ## Qué hace `registrar_rehacer` (✅ SQL en la base)
 
 Por cada ítem:
-1. Inserta `sello_rehacer_eventos` con la **foto de estado previo**: fabricación, venta, foto, estado de envío, seguimiento, empresa y fecha de seguimiento enviado de la orden, y el cobro adicional.
-2. Actualiza el sello: `estado_fabricacion='Rehacer'`, `es_prioritario=true`, `estado_aspire=NULL`; si la venta estaba `'Foto'` → borra la foto y vuelve a `'Señado'`.
+1. Inserta `sello_rehacer_eventos` con la **foto de estado previo**: fabricación, venta, foto, estado de envío, seguimiento, empresa y fecha de seguimiento enviado de la orden, cobro adicional, **medidas** (`ancho_real`/`largo_real`, fabricación mm) y `programa_id` previos.
+2. Devuelve `(evento_id, sello_id)`.
+3. Actualiza el sello: `estado_fabricacion='Rehacer'`, `es_prioritario=true`, `estado_aspire=NULL`; si la venta estaba `'Foto'` → borra la foto y vuelve a `'Señado'`.
 
 Por cada orden afectada:
-3. Si el envío no estaba en `Sin envio` → `estado_envio='Sin envio'`, borra `seguimiento` y `seguimiento_enviado_at`.
-4. Si todos los ítems de la orden quedan con el mismo estado de venta, lo copia a `estado_orden`.
+4. Si el envío no estaba en `Sin envio` → `estado_envio='Sin envio'`, borra `seguimiento` y `seguimiento_enviado_at`.
+5. Si todos los ítems de la orden quedan con el mismo estado de venta, lo copia a `estado_orden`.
 
 Además (desde el navegador):
-5. Refuerza `es_prioritario=true`.
-6. Notificaciones internas **p2** (Producción) y **v2** (Ventas) con motivo y cobro.
-7. **WhatsApp al cliente** tipo `sello_rehacer` con los ítems afectados — se envía **siempre**, sin importar el motivo. ✅ Intencional: transparencia con el cliente (Q-VEN-006).
+6. Copia **base**, **vector** (`archivo_vector_preview`) y **base mejorada** (si hay) a `rehacer-snapshots/{evento_id}/…` y guarda las URLs en `archivo_*_snapshot`. Si la copia falla, el Rehacer igual queda registrado.
+7. Refuerza `es_prioritario=true`.
+8. Notificaciones internas **p2** (Producción) y **v2** (Ventas) con motivo y cobro.
+9. **WhatsApp al cliente** tipo `sello_rehacer` con los ítems afectados — se envía **siempre**, sin importar el motivo. ✅ Intencional: transparencia con el cliente (Q-VEN-006).
 
 Trigger adicional: `sellos_rehacer_auto_prioridad` pone prioridad cada vez que un sello entra a `Rehacer` por cualquier camino.
+
+## Snapshots de archivos
+
+✅ Las URLs `archivo_base_snapshot` / `archivo_vector_snapshot` / `archivo_base_mejorado_snapshot` apuntan a copias inmutables. Borrar o reemplazar el archivo operativo del sello no las elimina. Se consultan en la [hoja de Errores](../errores/README.md).
 
 ## Cargos de rehacer
 
