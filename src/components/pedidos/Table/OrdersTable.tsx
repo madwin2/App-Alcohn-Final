@@ -71,11 +71,23 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   const { toggleRow, isExpanded, isCollapsing, isExpanding } = useExpandableRows();
   const [addStampDialogOpen, setAddStampDialogOpen] = useState(false);
   const [selectedOrderForStamp, setSelectedOrderForStamp] = useState<Order | null>(null);
+  /** true = diálogo abierto como "Sumar regalo" (fuerza isGift). */
+  const [addStampAsGift, setAddStampAsGift] = useState(false);
   const [clienteProfileOrder, setClienteProfileOrder] = useState<Order | null>(null);
   const [rehacerOpen, setRehacerOpen] = useState(false);
   const [rehacerSelloIds, setRehacerSelloIds] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(ORDERS_PAGE_SIZE);
   const { fetchOrders } = useOrdersActions();
+
+  const openAddStamp = (order: Order, asGift = false) => {
+    setSelectedOrderForStamp(order);
+    setAddStampAsGift(asGift);
+    setAddStampDialogOpen(true);
+  };
+
+  /** Sumar regalo solo en ventas (en Regalo todo ítem ya es regalo; en Prueba no aplica). */
+  const canSumarRegalo = (order: Order) =>
+    Boolean(onAddStamp) && (order.orderType ?? 'VENTA') === 'VENTA';
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -628,11 +640,13 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                       <ContextMenuItem onSelect={() => setEditingRow(order.id)}>Editar pedido</ContextMenuItem>
                       {hojaAbcMenuItem(order, order.items[0])}
                       {onAddStamp && (
-                        <ContextMenuItem onSelect={() => {
-                          setSelectedOrderForStamp(order);
-                          setAddStampDialogOpen(true);
-                        }}>
+                        <ContextMenuItem onSelect={() => openAddStamp(order, false)}>
                           Agregar sello
+                        </ContextMenuItem>
+                      )}
+                      {canSumarRegalo(order) && (
+                        <ContextMenuItem onSelect={() => openAddStamp(order, true)}>
+                          Sumar regalo
                         </ContextMenuItem>
                       )}
                       {order.shipping?.carrier === 'ANDREANI' ? (
@@ -707,11 +721,13 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                     <ContextMenuItem onSelect={() => setEditingRow(order.id)}>Editar pedido</ContextMenuItem>
                     {hojaAbcMenuItem(order)}
                     {onAddStamp && (
-                      <ContextMenuItem onSelect={() => {
-                        setSelectedOrderForStamp(order);
-                        setAddStampDialogOpen(true);
-                      }}>
+                      <ContextMenuItem onSelect={() => openAddStamp(order, false)}>
                         Agregar sello
+                      </ContextMenuItem>
+                    )}
+                    {canSumarRegalo(order) && (
+                      <ContextMenuItem onSelect={() => openAddStamp(order, true)}>
+                        Sumar regalo
                       </ContextMenuItem>
                     )}
                     <ContextMenuSeparator />
@@ -788,11 +804,13 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                         <ContextMenuItem onSelect={() => setEditingRow(order.id)}>Editar pedido</ContextMenuItem>
                         {hojaAbcMenuItem(order, item)}
                         {onAddStamp && (
-                          <ContextMenuItem onSelect={() => {
-                            setSelectedOrderForStamp(order);
-                            setAddStampDialogOpen(true);
-                          }}>
+                          <ContextMenuItem onSelect={() => openAddStamp(order, false)}>
                             Agregar sello
+                          </ContextMenuItem>
+                        )}
+                        {canSumarRegalo(order) && (
+                          <ContextMenuItem onSelect={() => openAddStamp(order, true)}>
+                            Sumar regalo
                           </ContextMenuItem>
                         )}
                         {onDeleteStamp && order.items.length > 1 && (
@@ -861,12 +879,20 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
       {selectedOrderForStamp && onAddStamp && (
         <AddStampDialog
           open={addStampDialogOpen}
-          onOpenChange={setAddStampDialogOpen}
+          onOpenChange={(open) => {
+            setAddStampDialogOpen(open);
+            if (!open) {
+              setSelectedOrderForStamp(null);
+              setAddStampAsGift(false);
+            }
+          }}
           order={selectedOrderForStamp}
+          forceGift={addStampAsGift}
           onAddStamp={async (orderId, item, files) => {
             await onAddStamp(orderId, item, files);
             setAddStampDialogOpen(false);
             setSelectedOrderForStamp(null);
+            setAddStampAsGift(false);
           }}
         />
       )}

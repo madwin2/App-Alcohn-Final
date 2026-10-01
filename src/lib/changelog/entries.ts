@@ -616,6 +616,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 34,
+    date: '2026-10-01',
+    title: 'Novedades',
+    version: '1.52',
+    slides: [
+      {
+        heading: 'Sumar regalo a un pedido',
+        body: 'Clic derecho sobre un pedido de venta y elegí “Sumar regalo”. Se agrega un ítem sin cargo que viaja con ese pedido.',
+        icon: Gift,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

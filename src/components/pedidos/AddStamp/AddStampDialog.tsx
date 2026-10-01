@@ -68,6 +68,8 @@ interface AddStampDialogProps {
   onOpenChange: (open: boolean) => void;
   order: Order;
   onAddStamp: (orderId: string, item: Partial<any>, files?: { base?: File; vector?: File; photo?: File }) => Promise<void>;
+  /** Abierto desde "Sumar regalo": fuerza ítem sin cargo (solo tiene sentido en Venta). */
+  forceGift?: boolean;
 }
 
 const stampTypeOptions = [
@@ -111,7 +113,7 @@ const shippingOptions = [
   { value: 'SEGUIMIENTO_ENVIADO', label: 'Seguimiento Enviado' },
 ];
 
-export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddStampDialogProps) {
+export function AddStampDialog({ open, onOpenChange, order, onAddStamp, forceGift = false }: AddStampDialogProps) {
   const { toast } = useToast();
   const [files, setFiles] = useState<{
     base?: File;
@@ -132,6 +134,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
       saleState: 'SEÑADO',
       shippingState: 'SIN_ENVIO',
       isPriority: false,
+      isGift: forceGift,
       itemValue: 0,
       depositValueItem: 0,
       requestedWidthMm: 1,
@@ -161,10 +164,20 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
 
   const orderType = order.orderType ?? 'VENTA';
   const ordenSinCargo = esOrdenSinCargo(order);
-  /** Casilla "Regalo (sin cargo)" (solo en órdenes Venta). */
-  const itemIsGiftCheckbox = watch('isGift') === true && orderType === 'VENTA';
+  /** Regalo forzado desde el menú, o casilla en una Venta. */
+  const itemIsGiftCheckbox =
+    forceGift || (watch('isGift') === true && orderType === 'VENTA');
   /** Valor y seña bloqueados en 0: orden Regalo/Prueba o ítem marcado como regalo. */
   const valoresBloqueados = ordenSinCargo || itemIsGiftCheckbox;
+
+  useEffect(() => {
+    if (!open) return;
+    setValue('isGift', forceGift, { shouldDirty: false });
+    if (forceGift) {
+      setValue('itemValue', 0, { shouldDirty: false });
+      setValue('depositValueItem', 0, { shouldDirty: false });
+    }
+  }, [open, forceGift, setValue]);
 
   useEffect(() => {
     if (!valoresBloqueados) return;
@@ -292,8 +305,8 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
           stampType: data.stampType,
           itemConfig: itemConfigFromForm(data.itemType, data),
           notes: data.notes,
-          // Regalo: todo ítem nuevo es regalo. Prueba: valor 0. Venta: según la casilla.
-          isGift: orderType === 'REGALO' || (orderType === 'VENTA' && data.isGift === true),
+          // Regalo: todo ítem nuevo es regalo. Prueba: valor 0. Venta: según la casilla / forceGift.
+          isGift: orderType === 'REGALO' || forceGift || (orderType === 'VENTA' && data.isGift === true),
           itemValue: valoresBloqueados ? 0 : data.itemValue,
           depositValueItem: valoresBloqueados ? 0 : data.depositValueItem,
           restPaidAmountItem: valoresBloqueados ? 0 : restante,
@@ -323,8 +336,10 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                 ? 'base remachadora'
                 : 'sello';
       toast({
-        title: '¡Ítem agregado!',
-        description: `Se ha agregado ${itemLabel} al pedido`,
+        title: forceGift || data.isGift ? '¡Regalo agregado!' : '¡Ítem agregado!',
+        description: forceGift || data.isGift
+          ? `Se sumó ${itemLabel} sin cargo al pedido`
+          : `Se ha agregado ${itemLabel} al pedido`,
       });
 
       reset();
@@ -358,11 +373,16 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-8">
         <DialogHeader className="pb-6">
           <DialogTitle className="text-xl">
-            Agregar Ítem al Pedido
+            {forceGift ? 'Sumar regalo al pedido' : 'Agregar Ítem al Pedido'}
           </DialogTitle>
-          <p className="text-sm text-muted-foreground mt-2 flex items-center gap-2">
+          <p className="text-sm text-muted-foreground mt-2 flex items-center gap-2 flex-wrap">
             Cliente: {order.customer.firstName} {order.customer.lastName}
             <OrderTypeBadge orderType={order.orderType} />
+            {forceGift ? (
+              <span className="text-xs rounded-md border border-white/15 px-2 py-0.5 text-muted-foreground">
+                Sin cargo
+              </span>
+            ) : null}
           </p>
         </DialogHeader>
         
@@ -531,12 +551,18 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp }: AddSta
                 <Checkbox
                   id="isGiftItem"
                   checked={itemIsGiftCheckbox}
-                  onCheckedChange={(c) => handleItemGiftToggle(c === true)}
+                  disabled={forceGift}
+                  onCheckedChange={(c) => {
+                    if (forceGift) return;
+                    handleItemGiftToggle(c === true);
+                  }}
                 />
-                <Label htmlFor="isGiftItem" className="text-sm font-medium cursor-pointer">
+                <Label htmlFor="isGiftItem" className={`text-sm font-medium ${forceGift ? '' : 'cursor-pointer'}`}>
                   🎁 Regalo (sin cargo)
                   <span className="ml-2 text-xs font-normal text-muted-foreground">
-                    Viaja con el pedido pero no se cobra.
+                    {forceGift
+                      ? 'Este ítem viaja con el pedido y no se cobra.'
+                      : 'Viaja con el pedido pero no se cobra.'}
                   </span>
                 </Label>
               </div>
