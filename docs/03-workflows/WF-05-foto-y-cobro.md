@@ -12,7 +12,7 @@
 1. ❓ Sacar la foto del sello terminado → [FR-05](../10-operational-boundaries/README.md#fr-05).
 2. Subirla: celda **Foto** o **Subir fotos** (masivo, asigna a ítems Hecho+Señado sin foto). Con Andreani, verifica que haya links en el pool.
 3. ✅ Venta → `'Foto'`. Trigger → WhatsApp **`pedido_listo`** con foto y monto:
-   - Último ítem con foto de la orden → **total restante de la orden** (incluye costo de envío si hay empresa). Andreani: solo producto + **link de envío** asignado del pool. Sin empresa: solo producto y se le pregunta Andreani o Correo. Correo: total con opciones sucursal/domicilio; **envío gratis con ≥3 sellos**.
+   - Último ítem con foto en la app de la orden (sin contar accesorios) → **total restante de la orden** (incluye costo de envío si hay empresa). Andreani: solo producto + **link de envío** asignado del pool. Sin empresa: solo producto y se le pregunta Andreani o Correo. Correo: total con opciones sucursal/domicilio; **envío gratis con ≥3 sellos**.
    - No es el último → restante de ese ítem y aviso "estamos terminando el resto del pedido".
 4. ❓ El cliente transfiere; alguien verifica el ingreso → [FR-06](../10-operational-boundaries/README.md#fr-06).
 5. ✅ Pasa a `Transferido` por alguno de estos caminos:

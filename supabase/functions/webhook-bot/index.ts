@@ -144,6 +144,21 @@ const tieneFotoSello = (row: { foto_sello?: unknown }): boolean => {
   return String(f).trim() !== "";
 };
 
+/** Misma lista que `trigger_accesorio_listo` (BR-WA-009): no usan foto_sello en la app. */
+const ACCESORIO_ITEM_TYPES = new Set([
+  "SOLDADOR",
+  "MANGO_GOLPE",
+  "BASE_REMACHADORA",
+]);
+
+const itemRequiereFotoCliente = (row: { item_type?: unknown }): boolean => {
+  const raw = row?.item_type;
+  const t = raw === null || raw === undefined || raw === ""
+    ? "SELLO"
+    : String(raw).toUpperCase();
+  return !ACCESORIO_ITEM_TYPES.has(t);
+};
+
 /** URL pública de Storage (misma lógica que trigger_foto_sello_subida en SQL). */
 const resolveFotoSelloUrl = (fotoSello: unknown): string | null => {
   const f = typeof fotoSello === "string" ? fotoSello.trim() : "";
@@ -302,12 +317,17 @@ Deno.serve(async (req: Request) => {
 
         const rawSellos = sellosError || !sellos ? [] : sellos;
 
+        const itemsConFotoEnApp = rawSellos.filter((s: { item_type?: unknown }) =>
+          itemRequiereFotoCliente(s)
+        );
+
         const todosLosItemsTienenFoto =
-          rawSellos.length > 0 && rawSellos.every((s: { foto_sello?: unknown }) =>
+          itemsConFotoEnApp.length > 0 &&
+          itemsConFotoEnApp.every((s: { foto_sello?: unknown }) =>
             tieneFotoSello(s),
           );
 
-        const itemsSinFoto = rawSellos.filter((s: { foto_sello?: unknown }) =>
+        const itemsSinFoto = itemsConFotoEnApp.filter((s: { foto_sello?: unknown }) =>
           !tieneFotoSello(s),
         ).length;
 
@@ -471,7 +491,7 @@ Deno.serve(async (req: Request) => {
         if (esPedidoListo && todosLosItemsTienenFoto && !esUltimoSelloPayload) {
           console.log("es_ultimo_sello inferido por DB (todas las fotos presentes)", {
             numero_pedido: numeroPedido,
-            total_items: rawSellos.length,
+            total_items_con_foto_app: itemsConFotoEnApp.length,
           });
         }
 
@@ -504,7 +524,13 @@ Deno.serve(async (req: Request) => {
           delete body.datos.costo_envio_sucursal;
           delete body.datos.costo_envio_domicilio;
 
-          if (!esUltimoSello && rawSellos.length > 0) {
+          const sellosConFotoEnApp = itemsConFotoEnApp.filter((s: { foto_sello?: unknown }) =>
+            tieneFotoSello(s),
+          ).length;
+          body.datos.total_sellos = itemsConFotoEnApp.length;
+          body.datos.sellos_con_foto = sellosConFotoEnApp;
+
+          if (!esUltimoSello && itemsConFotoEnApp.length > 0) {
             const otros = itemsSinFoto;
             body.datos.texto_sellos_pendientes =
               otros > 0

@@ -17,7 +17,7 @@ Todos pasan por la edge `webhook-bot` hacia el **bot externo** (ver [07-integrat
 
 ## Reglas de monto en `pedido_listo` (✅ edge `webhook-bot`)
 
-Solo cuando es el **último ítem** con foto (o tipo "completado/finalizado"):
+Solo cuando es el **último ítem que lleva foto en la app** (sellos/abecedarios; **no** accesorios — esos van por `accesorio_listo`) o tipo "completado/finalizado":
 
 | Empresa de la orden | Mensaje | Monto |
 |---|---|---|

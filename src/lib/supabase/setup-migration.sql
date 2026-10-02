@@ -249,18 +249,24 @@ BEGIN
         END IF;
       END IF;
 
-      -- Métricas multi-sellos (fuente de verdad)
+      -- Métricas multi-sellos (solo ítems con foto en app; accesorios → accesorio_listo)
       SELECT COUNT(*)
       INTO v_total_sellos
       FROM sellos
-      WHERE orden_id = v_orden_id;
+      WHERE orden_id = v_orden_id
+        AND COALESCE(NULLIF(UPPER(TRIM(item_type::text)), ''), 'SELLO') NOT IN (
+          'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA'
+        );
 
       SELECT COUNT(*)
       INTO v_sellos_con_foto
       FROM sellos
       WHERE orden_id = v_orden_id
         AND foto_sello IS NOT NULL
-        AND foto_sello != '';
+        AND foto_sello != ''
+        AND COALESCE(NULLIF(UPPER(TRIM(item_type::text)), ''), 'SELLO') NOT IN (
+          'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA'
+        );
 
       v_es_ultimo_sello := (v_total_sellos > 0 AND v_sellos_con_foto >= v_total_sellos);
 
