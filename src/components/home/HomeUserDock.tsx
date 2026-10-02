@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils/cn';
 import { ChromaKeyVideo } from '@/components/home/ChromaKeyVideo';
 
@@ -26,11 +27,14 @@ function scaleFromDistance(distance: number): number {
 
 interface HomeUserDockProps {
   users: DockUser[];
+  /** Id del usuario logueado: su foto navega a /perfil. */
+  currentUserId?: string | null;
   className?: string;
 }
 
 /** Barra de avatares con efecto dock estilo macOS (magnificación por proximidad al cursor). */
-export function HomeUserDock({ users, className }: HomeUserDockProps) {
+export function HomeUserDock({ users, currentUserId, className }: HomeUserDockProps) {
+  const navigate = useNavigate();
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -92,9 +96,30 @@ export function HomeUserDock({ users, className }: HomeUserDockProps) {
                 if (node) itemRefs.current.set(u.id, node);
                 else itemRefs.current.delete(u.id);
               }}
-              title={u.name}
+              title={
+                currentUserId && u.id === currentUserId
+                  ? `${u.name} · Mi perfil`
+                  : u.name
+              }
+              role={currentUserId && u.id === currentUserId ? 'link' : undefined}
+              tabIndex={currentUserId && u.id === currentUserId ? 0 : undefined}
               style={{ width: BASE_SIZE, height: BASE_SIZE, clipPath: 'circle(50%)' }}
               className="relative shrink-0 origin-bottom overflow-hidden cursor-pointer bg-transparent will-change-transform"
+              onClick={() => {
+                if (currentUserId && u.id === currentUserId) {
+                  navigate('/perfil');
+                }
+              }}
+              onKeyDown={(e) => {
+                if (
+                  currentUserId &&
+                  u.id === currentUserId &&
+                  (e.key === 'Enter' || e.key === ' ')
+                ) {
+                  e.preventDefault();
+                  navigate('/perfil');
+                }
+              }}
               onMouseEnter={() => {
                 if (hasVideo) setHoveredId(u.id);
               }}

@@ -11,7 +11,7 @@ Reglas que el equipo **confirmó** (respuestas a `14-open-questions`, 2026-09-28
 | POL-005 | La **fecha límite** es la fecha en que el pedido tiene que estar **listo y despachado**; la usa todo el equipo. | Q-PED-004 | Sí (avisos p4 y l2) |
 | POL-006 | **Transferido** = pagó todo lo que debía, incluido el envío si correspondía. Con Andreani el envío lo paga el cliente en la página de Andreani, así que no se incluye. | Q-VEN-003 | Sí |
 | POL-007 | Los **datos de envío se cargan solo después de que el cliente pagó** (por eso guardarlos pasa a Transferido). | Q-VEN-002 | Sí (BR-VEN-005) |
-| POL-008 | **Deudor** a los 10 días fijos desde que se mandó la foto sin pago; **recordatorio cada ~15 días** mientras siga deudor. | Q-VEN-004 | Sí: el paso a Deudor es diario; el recordatorio lo manda el cron `recordatorio-pago-pendiente` **todos los jueves** (semanal, no cada 15 días; desde 2026-10-01; ver [Q-WA-006](../14-open-questions/whatsapp-bot.md#q-wa-006)) |
+| POL-008 | **Deudor** a los 10 días fijos desde que se mandó la foto sin pago; **recordatorio WhatsApp todos los jueves a las 11:00 AR** mientras siga deudor. | Q-VEN-004 | Sí (cron `recordatorio-pago-pendiente` → `recordatorio_pago_pendiente`) |
 | POL-009 | La **foto** se manda **por ítem**, apenas ese ítem está Hecho. | Q-VEN-005 | Sí |
 | POL-010 | Avisar al cliente de todo **Rehacer** es intencional (transparencia: sabe que hubo un error y que va a demorar). | Q-VEN-006 | Sí |
 | POL-011 | El cargo adicional de un Rehacer se cobra o no según de quién fue el error; se le informa el monto al cliente y lo paga. | Q-VEN-007 | Informativo en el sistema |
@@ -41,3 +41,20 @@ Reglas que el equipo **confirmó** (respuestas a `14-open-questions`, 2026-09-28
 | POL-035 | Pruebas y regalos **no** suman a ventas; su costo resta en Economía como gasto "Pruebas"/"Regalos" (D6). | PLAN_PEDIDOS_PRUEBA_Y_REGALO | Sí |
 | POL-036 | No se guarda valor de lista de lo regalado; alcanza el costo de fabricación (D7). | PLAN_PEDIDOS_PRUEBA_Y_REGALO | Sí |
 | POL-037 | El tipo de pedido y la marca `es_regalo` **no se pueden cambiar** después de creados (D8). | PLAN_PEDIDOS_PRUEBA_Y_REGALO | Sí (triggers) |
+| POL-038 | Cada integrante tiene **su** página personal y entra **solo a la suya**; no se navega al perfil de un compañero (D1). | PLAN_PAGINA_PERSONAL · Q-EQ | Sí (`/perfil` sin parámetro) |
+| POL-039 | Hay un **rol de administrador** liviano (`perfiles_equipo.es_admin`) para dejar feedback y sumar tareas; no es un sistema de permisos por pantalla (D2). | PLAN_PAGINA_PERSONAL · Q-EQ-003 | Sí (Etapa 1) |
+| POL-040 | Las **anotaciones personales son privadas**: solo las ve quien las escribe, **ni el admin** (D3). | PLAN_PAGINA_PERSONAL | Sí (Etapa 4) |
+| POL-041 | El **calendario del equipo** (vacaciones, cambios de día, feriados, cumpleaños) lo ve **todo el equipo** (D4). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 2) |
+| POL-042 | Todos trabajan de **lunes a viernes** (D5). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 2–3) |
+| POL-043 | Vacaciones y cambios de día se **cargan directamente**: sin aprobación, sin pedido y sin motivo obligatorio (D6). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 2) |
+| POL-044 | Cada uno tiene **10 días hábiles** de vacaciones anuales (D7); el período y la acumulación están en D18/D19. | PLAN_PAGINA_PERSONAL · Q-EQ-001 | Sí (campo `dias_vacaciones_anuales`; cálculo en Etapa 2) |
+| POL-045 | **Feriados**: nacionales de fuente pública + días propios de la empresa que carga el admin (D8). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 2) |
+| POL-046 | Las **tareas semanales** las define cada uno (crear, editar, pausar y borrar las suyas); el admin también puede sumarles (notificación al destinatario). En esta fase solo se definen (marcar hechas va al Inicio, más adelante) (D9). | PLAN_PAGINA_PERSONAL | Sí (Etapa 3; aclaración dueño 2026-10-02) |
+| POL-047 | **Mis números** son personales: cada uno ve solo los suyos (D10). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 7) |
+| POL-048 | **Producción**: por ahora todos los sellos que pasan a `Hecho` se atribuyen a quien tenga área principal **producción** (hoy Fede). Más adelante se precisará (D11). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 7) |
+| POL-049 | **Ventas por persona** no se muestran hasta existir un campo "vendido por"; `ordenes.taken_by` no alcanza (D12). | PLAN_PAGINA_PERSONAL | — (backlog) |
+| POL-050 | **Corcho** compartido; cada persona tiene un **color**; se puede filtrar por color/persona (D13). | PLAN_PAGINA_PERSONAL | Sí (Etapa 6) |
+| POL-051 | Corcho — estados: cartel **"Nueva"** la primera vez que cada persona la ve; luego puede quedar **descartada** o **aprobada** (D14). | PLAN_PAGINA_PERSONAL | Sí (Etapa 6) |
+| POL-052 | Corcho — votos: cada persona puede reaccionar con 👍 o 👎 (D15). | PLAN_PAGINA_PERSONAL | Sí (Etapa 6) |
+| POL-053 | Datos personales en el perfil: solo **cumpleaños** y **fecha de ingreso** (más puesto/área). Nada de DNI, dirección, salud ni datos bancarios (D16). | PLAN_PAGINA_PERSONAL | Sí (`perfiles_equipo`) |
+| POL-054 | "Quién cubre cuando falta" **no** se hace por ahora (D17). | PLAN_PAGINA_PERSONAL | — |

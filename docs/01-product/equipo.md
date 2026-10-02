@@ -21,4 +21,4 @@ Ayuda cruzada: en picos de vectorización puede ayudar otra persona; el túnel d
 
 - Producción es **una sola persona** que vectoriza, programa y opera las máquinas: cualquier mejora en Vectorización/Programas impacta directo en su jornada.
 - Ventas y logística se superponen (Cachi hace ambas).
-- No hay roles ni permisos en la app y el equipo **no los necesita por ahora** ([Q-USR-005](../14-open-questions/usuarios-permisos.md#q-usr-005)).
+- No hay roles ni permisos generales en la app y el equipo **no los necesita por ahora** ([Q-USR-005](../14-open-questions/usuarios-permisos.md#q-usr-005)). Sí hay un **admin de equipo** liviano (`perfiles_equipo.es_admin`, Julián Moreno) solo para la [página personal](../02-modules/perfil/README.md).

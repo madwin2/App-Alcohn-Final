@@ -540,7 +540,9 @@ export default function HomePage() {
               return <div className="min-h-[120px]" />;
             }
 
-            return <HomeUserDock users={usersWithPhoto} />;
+            return (
+              <HomeUserDock users={usersWithPhoto} currentUserId={user?.id ?? null} />
+            );
           })()}
 
           {/* Botones add - al mismo nivel que Objetivos y usuarios */}

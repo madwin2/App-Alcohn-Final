@@ -27,6 +27,7 @@ A la izquierda está el menú. Está achicado (solo íconos): pasá el mouse por
 | Opción | Qué es |
 |---|---|
 | **Inicio** | Tu pantalla personal ([capítulo 2](02-inicio.md)) |
+| **Mi perfil** | Tu espacio personal: calendario, tareas y equipo ([capítulo 18](18-mi-perfil.md)) |
 | **Pedidos** | La tabla de todos los pedidos ([capítulo 3](03-pedidos.md)) |
 | **Envíos** | Datos de envío, etiquetas y despachos ([capítulo 7](07-envios.md)) |
 | **Stock** | Insumos ([capítulo 8](08-stock.md)) |

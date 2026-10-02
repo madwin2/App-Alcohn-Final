@@ -24,6 +24,7 @@ Módulos funcionales detectados en el código (no solo los del menú). Cada uno 
 | Configuración | `/configuracion` | Activo (solo áreas de notificación) | [configuracion-usuarios](configuracion-usuarios/README.md) |
 | WhatsApp Bot | `/whatsapp` | Parcial: conecta con Meta pero no persiste ni vincula al bot | [whatsapp-bot](whatsapp-bot/README.md) |
 | Centro Alcohn | `/centro`, `/centro/articulos/:slug` | Activo (2026-10-01): visible para todo el equipo; manual, búsqueda y chat; Sobre Alcohn y Actividades aún “próximamente” | [centro-informacion](centro-informacion/README.md) |
+| Mi perfil (página personal) | `/perfil` · `/corcho` | Etapas 1–7 (2026-10-02): encabezado, calendario, tareas, anotaciones, necesidades, crecimiento, feedback, corcho, Mis números + galería. Ver `PLAN_PAGINA_PERSONAL.md` | [perfil](perfil/README.md) |
 | Login / registro | `/login` | Activo | [configuracion-usuarios](configuracion-usuarios/README.md) |
 | Verificación | `/verificacion` (menú deshabilitado) | **No implementado** | [produccion](produccion/README.md#verificación) |
 

@@ -13,7 +13,7 @@
 |---|---|---|
 | Hero | Imagen o video de bienvenida del usuario. Los medios están **hardcodeados por nombre** de 4 personas en `src/lib/utils/userImages.ts` (`public/usuarios/`). | ✅ |
 | **Objetivos** | "Ventas totales del mes" vs meta **200** y "Ventas del día" vs meta **10** (cantidad de ítems). Metas fijas en código (`MONTHLY_GOAL`, `DAILY_GOAL`). Vigentes; a futuro configurables y escalonadas (Q-GEN-004) | ✅ |
-| Usuarios | Cápsula con los usuarios aprobados que tienen foto; video de hover. | ✅ |
+| Usuarios | Cápsula con los usuarios aprobados que tienen foto; video de hover. Clic en la **propia** foto → `/perfil`. | ✅ |
 | Notas personales | Post-its arrastrables guardados **solo en el navegador** (`localStorage` `dashboard_notes_<userId>`). | ✅ |
 | Tareas de compañeros | `tareas_dashboard` asignadas al usuario (arrastrables, posición persistida). "Asignar tarea a compañero" crea la tarea y notifica **t1**. Completar = borrar. | ✅ |
 | Reposición de stock | Tareas `[STOCK_REPLENISH]` (ver [stock](../stock/README.md)). Tarjeta compacta; permite cargar el ingreso. | ✅ |

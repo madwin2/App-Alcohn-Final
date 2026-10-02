@@ -27,7 +27,7 @@ Cuentan ítems (sellos y accesorios), no pesos. Las metas son iguales para todos
 
 ### Compañeros
 
-Las fotos del equipo. Pasá el mouse por encima para ver el video de cada uno.
+Las fotos del equipo. Pasá el mouse por encima para ver el video de cada uno. Si tocás **tu propia foto**, vas a [Mi perfil](18-mi-perfil.md).
 
 ### Notas y tareas
 
@@ -57,7 +57,7 @@ Cuatro columnas con los pedidos que tienen sellos terminados y esperan una acci�
 
 | Columna | Qué pedidos hay | Qué tenés que hacer |
 |---|---|---|
-| **Enviar foto** | Sello **Hecho** y venta **Señado** | Sacarle la foto y subirla ([cómo](03-pedidos.md#subir-fotos-de-sellos-terminados)) |
+| **Enviar foto** | Sello **Hecho** y venta **Señado** | Sacarle la foto y subirla ([cómo](03-pedidos.md#subir-fotos-de-sellos-terminados)). Los **accesorios** (soldador, mango, base) no aparecen acá: al marcarlos Hecho ya se manda el mensaje con foto y pasan a **Foto Enviada**. |
 | **Esperando pago** | Sello **Hecho** y venta **Foto Enviada** | Esperar el pago; cuando llega, pasar a **Transferido** |
 | **Para enviar** | Sello **Hecho**, venta **Transferido** y envío **Sin Envío** | Cargar los datos de envío ([Envíos](07-envios.md)) |
 | **Deudores** | Venta **Deudor** (pasaron 10 días desde la foto sin pago) | Contactar al cliente para cobrar |
