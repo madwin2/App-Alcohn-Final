@@ -469,9 +469,12 @@ export default function GastosPage() {
   const extrasSinEnvio = gastosExtrasSinEnvioParaEconomia(bundle.extras);
   const totalExtrasAll = EXTRA_FIELDS.reduce((s, f) => s + (bundle.extras[f.key] || 0), 0);
   const esResumen = isResumenMensual(bundle);
+  const totalAutoMes = gastosAuto.porMes[selectedMonth]?.total ?? 0;
+  const inicioAuto = gastosAuto.data?.config.fechaInicio;
+  const mesConGastosAuto = !!inicioAuto && selectedMonth >= inicioAuto.slice(0, 7);
   const totalProyectadoMes = esResumen
     ? Number(bundle.gastos_reales) || 0
-    : totalFijos + totalExtrasAll;
+    : totalFijos + totalExtrasAll + totalAutoMes;
 
   const pagosResumen = useMemo(() => {
     const pg = bundle.pagos;
@@ -619,10 +622,21 @@ export default function GastosPage() {
                     </li>
                   </ul>
                 </section>
+                {totalAutoMes > 0 ? (
+                  <section className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Automáticos</h4>
+                    <ul className="space-y-1.5 rounded-lg border bg-muted/20 px-3 py-2">
+                      <li className="flex justify-between gap-3">
+                        <span className="text-muted-foreground">Meta, Google, OpenAI y recurrentes (con IVA)</span>
+                        <span className="font-mono tabular-nums">{formatArs(totalAutoMes)}</span>
+                      </li>
+                    </ul>
+                  </section>
+                ) : null}
                 <div className="rounded-lg bg-primary/10 px-4 py-3 text-center">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Gasto mensual proyectado</p>
                   <p className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{formatArs(totalProyectadoMes)}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">Fijos + extras (todas las categorías)</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">Fijos + extras + automáticos</p>
                 </div>
               </div>
             </DialogContent>
@@ -686,7 +700,9 @@ export default function GastosPage() {
                 <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
                   {esResumen
                     ? 'Resumen histórico (gastos reales del mes). Fabricación no se suma otra vez en Economía.'
-                    : 'Fijos + extras del mes · Click para desglose (fabricación no entra).'}
+                    : totalAutoMes > 0
+                      ? `Fijos + extras + ${formatArs(totalAutoMes)} automáticos · Click para desglose.`
+                      : 'Fijos + extras del mes · Click para desglose (fabricación no entra).'}
                 </p>
               </button>
 
@@ -759,6 +775,24 @@ export default function GastosPage() {
               </div>
             </div>
           ) : null}
+
+          <div className="grid gap-4 lg:grid-cols-5 lg:items-start">
+            <div className="lg:col-span-3">
+              <GastosAutoCard
+                mes={selectedMonth}
+                etiquetaMes={etiquetaMesSeleccionado}
+                valuacion={gastosAuto.porMes[selectedMonth]}
+                data={gastosAuto.data}
+                blueHoy={gastosAuto.blueHoy}
+                loading={gastosAuto.loading}
+                error={gastosAuto.error}
+                onReload={gastosAuto.reload}
+              />
+            </div>
+            <div className="lg:col-span-2">
+              <GastosRecurrentesCard onChanged={gastosAuto.reload} />
+            </div>
+          </div>
 
           <div className="grid gap-6 lg:grid-cols-2 lg:items-start 2xl:gap-8">
             <Card className="min-w-0 border-border/70 shadow-sm">
@@ -957,6 +991,13 @@ export default function GastosPage() {
                     <GastoMontoRow
                       key={f.key}
                       label={f.label}
+                      hint={
+                        mesConGastosAuto && f.key === 'publicidad'
+                          ? 'Meta y Google se suman solos. Acá, solo otra publicidad.'
+                          : mesConGastosAuto && f.key === 'impuestos'
+                            ? 'Los impuestos de los dólares automáticos se suman solos.'
+                            : undefined
+                      }
                       value={bundle.extras[f.key]}
                       onChange={(n) => updateExtras({ [f.key]: n } as Partial<ExtrasMonth>)}
                       paid={!!bundle.pagos?.extras?.[f.key]}
@@ -974,19 +1015,6 @@ export default function GastosPage() {
               </CardContent>
             </Card>
           </div>
-
-          <GastosAutoCard
-            mes={selectedMonth}
-            etiquetaMes={etiquetaMesSeleccionado}
-            valuacion={gastosAuto.porMes[selectedMonth]}
-            data={gastosAuto.data}
-            blueHoy={gastosAuto.blueHoy}
-            loading={gastosAuto.loading}
-            error={gastosAuto.error}
-            onReload={gastosAuto.reload}
-          />
-
-          <GastosRecurrentesCard onChanged={gastosAuto.reload} />
 
           <Card className="w-full border-border/70 shadow-sm">
             <CardHeader className="space-y-4 border-b border-border/50 bg-muted/15 px-4 py-4">

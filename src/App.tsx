@@ -24,6 +24,7 @@ import AppUpdateSandboxPage from './app/dev/AppUpdateSandboxPage'
 import ProgramasCardSandboxPage from './app/dev/ProgramasCardSandboxPage'
 import ProgramasBoardSandboxPage from './app/dev/ProgramasBoardSandboxPage'
 import ProgramasTourSandboxPage from './app/dev/ProgramasTourSandboxPage'
+import ControlGastosSandboxPage from './app/dev/ControlGastosSandboxPage'
 import StockPendienteSandboxPage from './app/stock-pendiente/index'
 import CentroPage from './app/centro/index'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
@@ -76,6 +77,7 @@ function App() {
               <Route path="/dev/programas-card" element={<ProgramasCardSandboxPage />} />
               <Route path="/dev/programas" element={<ProgramasBoardSandboxPage />} />
               <Route path="/dev/programas-tour" element={<ProgramasTourSandboxPage />} />
+              <Route path="/dev/control-gastos" element={<ControlGastosSandboxPage />} />
             </>
           ) : null}
         </Routes>
