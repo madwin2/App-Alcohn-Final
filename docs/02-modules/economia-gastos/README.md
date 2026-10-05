@@ -52,4 +52,15 @@ El script `scripts/seed-economia-resumen-excel.mjs` (dry-run por defecto; `--wri
 
 Margen = valor − costo (por ítem y por orden).
 
+## Gastos automáticos y Mes en curso (Etapa 1 de control de gastos, 2026-10)
+
+✅ Plan: [`PLAN_CONTROL_GASTOS.md`](../../../PLAN_CONTROL_GASTOS.md) · Decisión: [control-de-gastos](../../13-decisions/control-de-gastos.md) · Integraciones: [gastos-automaticos](../../07-integrations/gastos-automaticos.md).
+
+- **Tablas**: `gastos_registros` (un día × campaña/proyecto/recurrente, en su moneda original), `gastos_pagos_usd` (pagos de los USD de un mes), `gastos_recurrentes`, `cotizaciones_usd` (blue venta diario), `control_gastos_config` (objetivo 25 %, IVA 21 %, otros impuestos USD 2 %, `fecha_inicio` 2026-09-29), `gastos_sync_log`. RLS: solo la cuenta dueña (`precios_catalog_owner_user_id()`).
+- **Valuación** (`src/lib/gastos/gastosAuto.ts`, con tests): el gasto cuenta en el **mes en que ocurrió**; los USD se pasan a pesos con el **blue del día del pago** (pagos cargados en Gastos → «Marcar pago»); lo no pagado, al **blue de hoy** («estimado»). En la categoría va gasto + IVA; el 2 % de otros recargos va a `impuestos`. El valor en pesos no se guarda: se calcula al leer.
+- **Economía**: `sumarGastosAutoAMeses` **suma** lo automático a lo cargado a mano en `economia_gastos_mensuales` (no lo persiste). Desde `fecha_inicio` no hay que cargar a mano la publicidad de la tarjeta (se duplicaría). Meses anteriores no cambian.
+- **Gastos**: tarjeta «Gastos automáticos» (desglose por plataforma/campaña, estado de sync, «Actualizar ahora», «Marcar pago») y «Gastos recurrentes».
+- **Economía → Mes en curso** (pestaña por defecto): ventas y ganancia a hoy (fijos prorrateados), proyección a fin de mes (ventas al ritmo del mes; publicidad al ritmo de los últimos 7 días) y **publicidad por día** que permite llegar al objetivo (también en USD aprox.). Si el mes no tiene fijos cargados, usa los del mes anterior.
+- Pendiente (Etapa 2): alertas automáticas, atribución de ventas por campaña.
+
 ❓ Preguntas: [economia.md](../../14-open-questions/economia.md).

@@ -45,6 +45,9 @@ import {
   insertFabricacionParamsVersion,
 } from '@/lib/supabase/services/fabricacionParametros.service';
 import { loadGastosMensualesIntoCache, upsertGastosMensualesMerged } from '@/lib/supabase/services/gastosMensuales.service';
+import { GastosAutoCard } from '@/components/gastos/GastosAutoCard';
+import { GastosRecurrentesCard } from '@/components/gastos/GastosRecurrentesCard';
+import { useGastosAuto } from '@/lib/hooks/useGastosAuto';
 
 export type { VariableCostsState };
 
@@ -236,6 +239,7 @@ export default function GastosPage() {
   const skipNextPersistRef = useRef(false);
 
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
+  const gastosAuto = useGastosAuto(isAllowed);
 
   const appUserIdSet = useMemo(() => new Set(approvedUsers.map((u) => u.id)), [approvedUsers]);
 
@@ -970,6 +974,19 @@ export default function GastosPage() {
               </CardContent>
             </Card>
           </div>
+
+          <GastosAutoCard
+            mes={selectedMonth}
+            etiquetaMes={etiquetaMesSeleccionado}
+            valuacion={gastosAuto.porMes[selectedMonth]}
+            data={gastosAuto.data}
+            blueHoy={gastosAuto.blueHoy}
+            loading={gastosAuto.loading}
+            error={gastosAuto.error}
+            onReload={gastosAuto.reload}
+          />
+
+          <GastosRecurrentesCard onChanged={gastosAuto.reload} />
 
           <Card className="w-full border-border/70 shadow-sm">
             <CardHeader className="space-y-4 border-b border-border/50 bg-muted/15 px-4 py-4">

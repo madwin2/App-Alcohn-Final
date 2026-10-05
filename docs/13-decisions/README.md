@@ -27,6 +27,7 @@ Decisiones de producto/arquitectura **reconstruidas** a partir de los planes en 
 | ADR-021 | Máquina **Grande solo P12 y P38**; **XL solo P63**. | Implementada (2026-09-27) | changelog #19, `material.ts` |
 | ADR-022 | Envío **gratis desde 3 sellos** en el mensaje de cobro. 🔶 Motivación comercial no escrita. | Implementada (solo en el mensaje) | `webhook-bot` |
 | ADR-023 | **Centro Alcohn**: catálogo compartido (manual/búsqueda/chat), actividades diferidas, chat documental autenticado sin datos en vivo. | Implementada (2026-09-29) | `PLAN_CENTRO_INFORMACION_ALCOHN.md`, [ADR-023](ADR-023-centro-alcohn-catalogo-compartido.md) |
+| — | **Control de gastos**: gasto por día desde las plataformas, USD al blue del día del pago, IVA + 2 %, objetivo 25 %. | Etapa 1 implementada en código (2026-10-05) | `PLAN_CONTROL_GASTOS.md`, [control-de-gastos](control-de-gastos.md) |
 
 ## Cómo registrar una nueva decisión
 

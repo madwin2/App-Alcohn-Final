@@ -38,6 +38,7 @@ Aparecen en **Movimientos cargados**; **Quitar** para borrar uno.
 
 | Pestaña | Qué muestra |
 |---|---|
+| **Mes en curso** (se abre por defecto) | Ganancia a hoy, proyección a fin de mes y **publicidad por día** que permite llegar al 25 % (en pesos y USD aprox.), con la publicidad por plataforma |
 | **Volumen** | Cards con **teórica** y **ganancia real** por año (desglose USD / inversiones), gráficos y tabla mes a mes |
 | **Por producto** | Ventas por producto: sellos chicos, medianos, grandes y XL (misma clasificación que Precios), 3 mm, lacre, alimento, abecedarios, soldadores y accesorios. Tabla **mes × producto** |
 | **P&L mensual** | **Registro por mes**: ventas, gastos y transferido. Tocá **Gastos** o **Ganancias** en el encabezado de la tabla para ver el desglose (y otra vez para contraer) |
@@ -67,6 +68,16 @@ Algunos meses viejos (antes de la carga fina) tienen un **gasto real** único to
 **Publicidad**, **Envíos** (monto manual), **Inversiones de la empresa**, **Compra de dólares**, **Gastos varios**, **Automatizaciones**, **Remodelaciones**, **Impuestos**, **Inversiones en Cyprea**.
 
 **Seguimiento de pagos**: marcá **Pagado** en cada gasto para controlar qué falta pagar. No afecta Economía.
+
+### Gastos automáticos (desde octubre 2026)
+
+La publicidad de **Meta** y **Google**, el gasto de **OpenAI** y los **gastos recurrentes** (apps, servidor) se cargan solos todos los días a las 7:00. También podés tocar **Actualizar ahora**.
+
+- **No cargues a mano la publicidad del resumen de la tarjeta** desde octubre 2026: se duplicaría.
+- Los dólares se muestran **estimados al blue de hoy** hasta que marcás el pago. Cuando pagás, tocá **Marcar pago**, poné la fecha (trae el blue de ese día; lo podés corregir) y los USD. Desde ahí el mes queda fijo con esa cotización. Si pagás en partes, cargá cada pago.
+- En **Gastos recurrentes** das de alta una vez cada suscripción (nombre, moneda, monto, día del mes, si suma IVA).
+
+En **Economía → Mes en curso** ves la ganancia a hoy, la proyección a fin de mes y **cuánto podés gastar por día en publicidad** para llegar al 25 %.
 
 ### Costos variables de fabricación
 

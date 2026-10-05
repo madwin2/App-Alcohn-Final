@@ -15,6 +15,7 @@ Nunca se documentan valores de secretos: solo el **nombre** de la variable y dó
 | **vector-worker** (propio) | Vectorización automática (apagada) | Pedidos | `/api/vectorize-enqueue` → worker Python; `vector_jobs` | [vector-worker.md](vector-worker.md) |
 | **CloudConvert** | Preview PNG de archivos EPS | Pedidos, Producción | Llamada **desde el navegador** con `VITE_CLOUDCONVERT_API_KEY` | [cloudconvert.md](cloudconvert.md) |
 | **Openpay** | Pago con tarjeta en la web | Tienda web | 🔶 Solo en la tienda (Alcohn AI ve `openpay_order_id`, `metodo_pago='Openpay'`) | [tienda-web.md](tienda-web.md) |
+| **Gastos automáticos** (Meta Ads, Google Ads, OpenAI costos, dolarapi) | Gasto diario por campaña/proyecto y dólar blue para Economía | Economía, Gastos | Edge `gastos-sync`, `gastos-ingest-google`, script de Google Ads | [gastos-automaticos](gastos-automaticos.md) |
 | **Supabase** | Base, auth, storage, realtime, edge functions, cron | Todo | SDK `@supabase/supabase-js` | [12-architecture](../12-architecture/README.md) |
 
 ## Infraestructura externa inferida

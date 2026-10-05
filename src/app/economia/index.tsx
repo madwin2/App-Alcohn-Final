@@ -33,6 +33,9 @@ import {
   type EconomiaCajaRow,
 } from '@/lib/supabase/services/economiaSettings.service';
 import { loadGastosMensualesIntoCache } from '@/lib/supabase/services/gastosMensuales.service';
+import { MesEnCursoPanel } from '@/components/economia/MesEnCursoPanel';
+import { sumarGastosAutoAMeses } from '@/lib/gastos/gastosAuto';
+import { useGastosAuto } from '@/lib/hooks/useGastosAuto';
 import { getShippingCost } from '@/lib/supabase/services/orders.service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/toaster';
@@ -73,6 +76,7 @@ import {
   inversionesExtrasArs,
   isResumenMensual,
   loadAllMonthlyCosts,
+  monthHasDetailedFixedCosts,
   monthHasEconomiaSignal,
   readLegacyFixedScalar,
 } from '@/lib/gastos/monthlyEconomiaCosts';
@@ -593,6 +597,7 @@ export default function EconomiaPage() {
   const orders = useMemo(() => ordersRaw.map(pedidoEnPesos), [ordersRaw]);
   const { toast } = useToast();
   const isAllowed = user?.email?.toLowerCase() === ALLOWED_EMAIL;
+  const gastosAuto = useGastosAuto(isAllowed);
 
   useEffect(() => {
     if (!authLoading && isAllowed) {
@@ -778,7 +783,8 @@ export default function EconomiaPage() {
   }, [orders]);
 
   const monthly = useMemo<MonthlyRow[]>(() => {
-    const gastosPorMes = loadAllMonthlyCosts();
+    // Gastos automáticos (Meta, Google, OpenAI, recurrentes) se suman a lo cargado a mano.
+    const gastosPorMes = sumarGastosAutoAMeses(loadAllMonthlyCosts(), gastosAuto.porMes);
     const legacyFixed = readLegacyFixedScalar();
     const byMonth = new Map<string, MonthlyRow>();
 
@@ -947,7 +953,22 @@ export default function EconomiaPage() {
     }
 
     return Array.from(byMonth.values()).sort((a, b) => a.key.localeCompare(b.key));
-  }, [orders, usdRate, gastosStorageTick, shippingCostByOrderId]);
+  }, [orders, usdRate, gastosStorageTick, shippingCostByOrderId, gastosAuto.porMes]);
+
+  const mesEnCurso = useMemo(() => {
+    const hoy = todayArgentinaDateKey();
+    const mes = hoy.slice(0, 7);
+    const [y, m] = mes.split('-').map(Number);
+    const anterior = `${m === 1 ? y - 1 : y}-${String(m === 1 ? 12 : m - 1).padStart(2, '0')}`;
+    return {
+      hoy,
+      mes,
+      row: monthly.find((r) => r.key === mes),
+      fijosMesAnterior: monthly.find((r) => r.key === anterior)?.costosFijos ?? 0,
+      fijosCargados: monthHasDetailedFixedCosts(loadAllMonthlyCosts()[mes]),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthly, gastosStorageTick]);
 
   const totals = useMemo(() => {
     return monthly.reduce(
@@ -1701,9 +1722,10 @@ export default function EconomiaPage() {
             </Dialog>
           </div>
 
-          <Tabs defaultValue="ventas" className="space-y-4">
+          <Tabs defaultValue="mes-en-curso" className="space-y-4">
             <div className="-mx-1 overflow-x-auto px-1">
               <TabsList className="inline-flex h-auto w-max min-w-full justify-start gap-1 sm:min-w-0">
+                <TabsTrigger value="mes-en-curso">Mes en curso</TabsTrigger>
                 <TabsTrigger value="ventas">Volumen</TabsTrigger>
                 <TabsTrigger value="desglose">Por producto</TabsTrigger>
                 <TabsTrigger value="mensual">P&amp;L mensual</TabsTrigger>
@@ -1711,6 +1733,22 @@ export default function EconomiaPage() {
                 <TabsTrigger value="tendencias">Por año</TabsTrigger>
               </TabsList>
             </div>
+
+            <TabsContent value="mes-en-curso">
+              <MesEnCursoPanel
+                mes={mesEnCurso.mes}
+                etiquetaMes={monthKeyLabelLong(mesEnCurso.mes)}
+                hoy={mesEnCurso.hoy}
+                row={mesEnCurso.row}
+                fijosMesAnterior={mesEnCurso.fijosMesAnterior}
+                fijosCargados={mesEnCurso.fijosCargados}
+                valuacion={gastosAuto.porMes[mesEnCurso.mes]}
+                registros={gastosAuto.data?.registros ?? []}
+                config={gastosAuto.data?.config ?? null}
+                blueHoy={gastosAuto.blueHoy}
+                loading={gastosAuto.loading}
+              />
+            </TabsContent>
 
             <TabsContent value="ventas">
               <div className="flex flex-col gap-3">

@@ -19,3 +19,18 @@
 - **Evidencia**: una sola versión en `fabricacion_parametros` (fecha 1970).
 - **Impacto**: medio (márgenes en Economía).
 - Respuesta: Si, estan vigentes. Se actualizan cada vez que hay cambios significativos en los costos. Variable.
+
+### Q-ECO-004
+- **Módulo**: Economía / Gastos · **Estado**: documentada (2026-10-05)
+- **Pregunta**: ¿Cómo se registra la publicidad y en qué moneda/cotización?
+- Respuesta: Se pagaba con varias tarjetas (del dueño y familiares) y se cargaba el total del resumen en el mes. Meta y Google cobran en USD (sep-2026 ≈ 2.500 / 800 USD). Decidido: gasto por día desde las plataformas, valuado al blue del día del pago, gasto + IVA en la categoría y 2 % extra en impuestos; objetivo 25 % de rentabilidad. Ver [decisión](../13-decisions/control-de-gastos.md).
+
+### Q-ECO-005
+- **Módulo**: Gastos · **Estado**: abierta
+- **Pregunta**: ¿Qué % exacto suman los recargos de los cargos en USD además del IVA (IIBB servicios digitales, sellos, etc.)? ¿Alguno es recuperable?
+- **Impacto**: bajo-medio (hoy se estima 2 %, configurable en `control_gastos_config.otros_impuestos_usd_pct`).
+
+### Q-ECO-006
+- **Módulo**: Gastos · **Estado**: abierta
+- **Pregunta**: ¿Dónde se factura el costo de conversaciones de WhatsApp Business (bot)? ¿Es la misma cuenta que la publicidad?
+- **Impacto**: bajo (fuera de la Etapa 1).

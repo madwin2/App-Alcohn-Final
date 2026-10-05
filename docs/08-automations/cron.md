@@ -10,6 +10,7 @@
 | `comercial-seguimientos-clientes` | `26 15 * * 1-5` (12:26 AR) | `procesar_seguimientos_clientes_pendientes(10,'cron')` | Hasta 10 clientes para recompra ([WF-10](../03-workflows/WF-10-recompra.md)) |
 | `confirmar-webhooks-pendientes` | `*/2 * * * *` | `confirmar_webhooks_pendientes()` | Lee respuestas de `pg_net` de los últimos 48 h (50 por corrida): marca éxito/fallo; `pedido_enviado` OK → `Seguimiento Enviado`; contacto comercial OK → marca mockup |
 | `reintentar-webhooks-fallidos` | `*/5 * * * *` | `reintentar_webhooks_fallidos()` | Reenvía (máx. 3, solo < 1 h, 10 por corrida) **directo** al bot |
+| `gastos-sync-diario` | `0 10 * * *` (07:00 AR) | edge `gastos-sync` vía `pg_net` | Cotización blue → recurrentes del mes → Meta Ads → OpenAI ([gastos-automaticos](../07-integrations/gastos-automaticos.md)) |
 
 ## No existe (pero se sugiere en documentación)
 
