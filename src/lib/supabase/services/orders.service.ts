@@ -38,8 +38,7 @@ import {
   phoneSearchVariants,
 } from '../../utils/phoneNormalization';
 import {
-  getAssignedAndreaniLinksByOrdenIds,
-  getAssignedAndreaniLinkUrl,
+  getAndreaniLinksInfoByOrdenIds,
   liberarLinkAndreani,
 } from './andreani.service';
 import { fetchReworkChargesForOrders } from './rehacer.service';
@@ -381,9 +380,12 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
     tareasPorOrden.set(tarea.orden_id, lista);
   });
 
-  let andreaniLinksByOrden = new Map<string, string>();
+  let andreaniUrlsByOrden = new Map<string, string>();
+  let andreaniTuvoLink = new Set<string>();
   try {
-    andreaniLinksByOrden = await getAssignedAndreaniLinksByOrdenIds(ordenIds);
+    const info = await getAndreaniLinksInfoByOrdenIds(ordenIds);
+    andreaniUrlsByOrden = info.urlsAsignadas;
+    andreaniTuvoLink = info.tuvoLink;
   } catch (error) {
     // Tabla/migración aún no aplicada: no bloquear listado de pedidos
     console.warn('Error fetching Andreani links:', error);
@@ -409,7 +411,8 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
         ? usersMap.get(shippingLoadedByUserId)!
         : null;
     const order = mapOrdenToOrder(orden, cliente, sellosDeOrden, tareasDeOrden, takenBy, shippingDataLoadedBy);
-    order.andreaniLinkUrl = andreaniLinksByOrden.get(orden.id) ?? null;
+    order.andreaniLinkUrl = andreaniUrlsByOrden.get(orden.id) ?? null;
+    order.andreaniTuvoLink = andreaniTuvoLink.has(orden.id);
     order.reworkCharges = reworkChargesByOrden.get(orden.id) ?? [];
     return order;
   });
@@ -563,10 +566,13 @@ export const getOrderById = async (orderId: string): Promise<Order | null> => {
     }
     const order = mapOrdenToOrder(orden, cliente, sellos || [], tareas || [], takenBy, shippingDataLoadedBy);
     try {
-      order.andreaniLinkUrl = await getAssignedAndreaniLinkUrl(orderId);
+      const info = await getAndreaniLinksInfoByOrdenIds([orderId]);
+      order.andreaniLinkUrl = info.urlsAsignadas.get(orderId) ?? null;
+      order.andreaniTuvoLink = info.tuvoLink.has(orderId);
     } catch (linkError) {
       console.warn('Error fetching Andreani link for order:', linkError);
       order.andreaniLinkUrl = null;
+      order.andreaniTuvoLink = false;
     }
     try {
       const charges = await fetchReworkChargesForOrders([orderId]);

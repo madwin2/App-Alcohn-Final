@@ -1,7 +1,7 @@
 import type { Order } from '@/lib/types';
 
-// v2: las órdenes cacheadas ahora incluyen orderType / isGift (pedidos de prueba y regalo).
-const STORAGE_KEY = 'alcohn_economia_orders_v2';
+// v3: incluye andreaniTuvoLink para no imputar envío Andreani pagado en su web.
+const STORAGE_KEY = 'alcohn_economia_orders_v3';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 type EconomiaOrdersCachePayload = {

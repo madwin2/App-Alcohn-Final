@@ -629,6 +629,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 35,
+    date: '2026-10-05',
+    title: 'Novedades',
+    version: '1.53',
+    slides: [
+      {
+        heading: 'Economía ya no suma envíos Andreani con link',
+        body: 'Si el cliente pagó el envío en Andreani (pedido con link), ese monto no entra a las ventas del mes. Se recalcula también en meses anteriores.',
+        icon: WalletCards,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

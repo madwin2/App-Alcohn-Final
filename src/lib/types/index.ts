@@ -155,6 +155,11 @@ export interface Order {
   };
   /** Link Andreani de pago asignado desde el pool (`envios_andreani_links`). */
   andreaniLinkUrl?: string | null;
+  /**
+   * True si la orden tiene o tuvo un link Andreani con `orden_id`
+   * (estado `asignado` o `descartado`). Economía no imputa ese envío a ventas.
+   */
+  andreaniTuvoLink?: boolean;
   items: OrderItem[];
   tasks?: Task[];
   progressStep?: ProgressStep;

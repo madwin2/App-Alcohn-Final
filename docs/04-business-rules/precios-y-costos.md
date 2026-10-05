@@ -10,3 +10,4 @@
 | BR-COS-003 | Los parámetros de fabricación se versionan por "vigente desde"; nunca se editan en el lugar. | `insertFabricacionParamsVersion` | Servicio |
 | BR-COS-004 | Consumo de bronce valorizado al precio por cm vigente al momento de marcar `Hecho` (no al de creación). | `registrar_bronce_consumo_sello` (`fabricacion_params_at(NOW())`) | DB |
 | BR-COS-005 | Envío gratis si la orden tiene ≥3 ítems tipo SELLO — **solo** en el cálculo del mensaje de WhatsApp (el `restante` de la base sigue sumando el costo de envío). | edge `webhook-bot` | Edge |
+| BR-COS-006 | En Economía, el envío de un pedido **Andreani que tuvo link asignado** (actual o histórico en `envios_andreani_links`) **no** se imputa a ventas brutas / transferido / costo regalos: el cliente lo paga en Andreani y esa plata no entra a Alcohn. Aplica a todos los meses al recalcular. | `economiaEnvioImputadoArs` | Servicio |

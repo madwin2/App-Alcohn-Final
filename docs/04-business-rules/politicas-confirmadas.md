@@ -41,3 +41,4 @@ Reglas que el equipo **confirmó** (respuestas a `14-open-questions`, 2026-09-28
 | POL-035 | Pruebas y regalos **no** suman a ventas; su costo resta en Economía como gasto "Pruebas"/"Regalos" (D6). | PLAN_PEDIDOS_PRUEBA_Y_REGALO | Sí |
 | POL-036 | No se guarda valor de lista de lo regalado; alcanza el costo de fabricación (D7). | PLAN_PEDIDOS_PRUEBA_Y_REGALO | Sí |
 | POL-037 | El tipo de pedido y la marca `es_regalo` **no se pueden cambiar** después de creados (D8). | PLAN_PEDIDOS_PRUEBA_Y_REGALO | Sí (triggers) |
+| POL-038 | En Economía, **Andreani con link asignado** no suma el costo de envío a ventas (el cliente lo paga en Andreani). | Q-VEN-003 + corrección 2026-10-05 | Sí (BR-COS-006) |

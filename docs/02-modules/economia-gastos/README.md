@@ -9,6 +9,7 @@
 ✅ Tablero financiero calculado en el navegador a partir de **todas** las órdenes (con caché local `economiaOrdersCache`):
 
 - **Mes actual**: sellos vendidos, ventas brutas, rentabilidad en pesos y en USD (con cotización de referencia).
+- **Envío en ventas brutas**: se imputa el costo de `costos_de_envio` solo cuando el pedido ya está Despachado / Seguimiento enviado. **Excepción**: Andreani con link asignado (actual o histórico en `envios_andreani_links`) **no** suma envío — el cliente lo paga en Andreani y esa plata no entra (BR-COS-006).
 - **Pendiente de cobro** desglosado por estado de venta: Deudor, Foto enviada, Señado.
 - **Cajas** (saldo manual): efectivo, Mercado Pago, dos cuentas Santander (a nombre de dos personas), BBVA; cotización USD de referencia → `economia_settings` (RLS **por usuario**).
 - **Movimientos reales**: compra de USD (ahorro), inversión en la empresa, inversión "Cyprea" → `economia_movimientos_reales` (RLS por creador). Cyprea = marca paralela de Alcohn de sellos de lacre (Q-ECO-001). Las cajas se cargan a mano y hoy están desactualizadas (Q-ECO-002).

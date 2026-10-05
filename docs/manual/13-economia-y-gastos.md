@@ -19,8 +19,8 @@ Son las pantallas de números del negocio. En el menú **solo le aparecen a Juli
 
 ### Cómo se calcula
 
-- **Ventas brutas**: total del pedido; el envío se suma solo cuando el pedido ya está **Despachado** o **Seguimiento enviado**.
-- **Transferido**: lo cobrado por ítem en estado Transferido, más ese envío.
+- **Ventas brutas**: total del pedido; el envío se suma solo cuando el pedido ya está **Despachado** o **Seguimiento enviado**. Si el envío es **Andreani con link** (el cliente paga en la página de Andreani), ese monto **no** se suma.
+- **Transferido**: lo cobrado por ítem en estado Transferido, más ese envío (misma regla de Andreani con link).
 - **Costos ventas**: el costo de fabricación de cada ítem (bronce, piezas, amortización), que la app calcula sola con los parámetros de Gastos. Solo entra en el total de gastos si el mes está cargado en **detalle**.
 - **Rentabilidad** (mes en detalle) = ventas − fijos − costos ventas − gastos extras − publicidad − envíos.
 - **Rentabilidad** (mes en **resumen histórico**, p. ej. cierre Excel): ventas − **gastos reales** del mes (ese total ya incluye publicidad; no se resta otra vez la fabricación).

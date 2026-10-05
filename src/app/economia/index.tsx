@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { AppMain } from '@/components/layout/AppMain';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useOrders } from '@/lib/hooks/useOrders';
-import { aPesos, pedidoEnPesos } from '@/lib/internacional';
+import { pedidoEnPesos } from '@/lib/internacional';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -55,6 +55,13 @@ import {
   type EconomiaMetricMode,
 } from '@/lib/economia/productCategory';
 import {
+  ECONOMIA_ENVIO_SIN_TIPO_ARS,
+  economiaEnvioImputadoArs,
+  economiaPedidoListoParaImputarEnvio,
+  orderHasShippingCarrierAndService,
+  ordenAndreaniConLinkAsignado,
+} from '@/lib/economia/envioImputado';
+import {
   GASTOS_MONTHLY_UPDATED_EVENT,
   applyResumenVentasOverride,
   gananciaInversionesExtrasArs,
@@ -73,23 +80,6 @@ import { Banknote, ChevronDown, CircleDollarSign, HelpCircle, Wallet } from 'luc
 import { itemCuentaComoVenta, ordenCuentaComoVenta } from '@/lib/pedidos/tipoPedido';
 
 const ALLOWED_EMAIL = 'julian.475@hotmail.com';
-
-/** Si la orden no tiene empresa/servicio de envío cargado, imputamos este costo (todo se envía). */
-const ECONOMIA_ENVIO_SIN_TIPO_ARS = 5000;
-
-function orderHasShippingCarrierAndService(order: Order): boolean {
-  const c = order.shipping?.carrier;
-  const s = order.shipping?.service;
-  return Boolean(c && c !== 'OTRO' && c !== 'RETIRO_EN_PERSONA' && s);
-}
-
-/** Envío imputado a ventas solo si ya salió el envío (no antes, para no inflar plata). Todos los ítems deben estar en Despachado o Seguimiento enviado. */
-function economiaPedidoListoParaImputarEnvio(order: Order): boolean {
-  if (!order.items.length) return false;
-  return order.items.every(
-    (it) => it.shippingState === 'DESPACHADO' || it.shippingState === 'SEGUIMIENTO_ENVIADO',
-  );
-}
 
 type MonthlyRow = {
   key: string;
@@ -761,7 +751,10 @@ export default function EconomiaPage() {
       return;
     }
     const conEnvioCargado = orders.filter(
-      (o) => orderHasShippingCarrierAndService(o) && economiaPedidoListoParaImputarEnvio(o),
+      (o) =>
+        orderHasShippingCarrierAndService(o) &&
+        economiaPedidoListoParaImputarEnvio(o) &&
+        !ordenAndreaniConLinkAsignado(o),
     );
     if (!conEnvioCargado.length) {
       setShippingCostByOrderId({});
@@ -841,13 +834,7 @@ export default function EconomiaPage() {
       // Pruebas y regalos aparte no suman a pedidos.
       if (esVenta) row.pedidos += 1;
       const fab = Number(order.fabricationCostTotal || 0);
-      const envioImputadoVentas = economiaPedidoListoParaImputarEnvio(order)
-        ? order.international
-          ? aPesos(Number(order.internationalShipping || 0), order.international)
-          : orderHasShippingCarrierAndService(order)
-            ? (shippingCostByOrderId[order.id] ?? ECONOMIA_ENVIO_SIN_TIPO_ARS)
-            : ECONOMIA_ENVIO_SIN_TIPO_ARS
-        : 0;
+      const envioImputadoVentas = economiaEnvioImputadoArs(order, shippingCostByOrderId);
       // Ventas: solo pedidos Venta (el envío imputado y el valor del pedido no incluyen regalos/pruebas).
       if (esVenta) row.ventasBrutas += Number(order.totalValue || 0) + envioImputadoVentas;
       if (!resumen) {
@@ -1377,6 +1364,8 @@ export default function EconomiaPage() {
                 <strong className="text-foreground">Ventas brutas</strong>: total del pedido + envío imputado solo cuando
                 todos los ítems están Despachado o Seguimiento enviado (tabla de costos o{' '}
                 {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método).{' '}
+                <strong className="text-foreground">Andreani con link</strong>: no se suma el envío (el cliente lo paga
+                en Andreani; esa plata no entra).{' '}
                 <strong className="text-foreground">Costos ventas</strong>: solo fabricación de lo vendido (meses en detalle).{' '}
                 <strong className="text-foreground">Regalos</strong> (fabricación de ítems regalo + envío de pedidos de
                 regalo) y <strong className="text-foreground">Pruebas</strong> (fabricación de pruebas internas) no suman a

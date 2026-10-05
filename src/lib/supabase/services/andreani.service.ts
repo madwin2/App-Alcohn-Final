@@ -96,28 +96,51 @@ export const getAssignedAndreaniLinkUrl = async (ordenId: string): Promise<strin
   return data?.url ?? null;
 };
 
-/** Mapa ordenId → url para links asignados (carga en lote de la tabla de pedidos). */
-export const getAssignedAndreaniLinksByOrdenIds = async (
+export type AndreaniLinksByOrden = {
+  /** URL del link actualmente `asignado` (UI Pedidos / WhatsApp). */
+  urlsAsignadas: Map<string, string>;
+  /**
+   * Órdenes que tienen (o tuvieron) un link con `orden_id` cargado
+   * (`asignado` o `descartado`). Sirve para Economía: esa plata la paga el
+   * cliente en Andreani y no entra a Alcohn.
+   */
+  tuvoLink: Set<string>;
+};
+
+/** Links Andreani por orden: URL vigente + rastro histórico (asignado/descartado). */
+export const getAndreaniLinksInfoByOrdenIds = async (
   ordenIds: string[],
-): Promise<Map<string, string>> => {
-  const map = new Map<string, string>();
+): Promise<AndreaniLinksByOrden> => {
+  const urlsAsignadas = new Map<string, string>();
+  const tuvoLink = new Set<string>();
   const ids = [...new Set(ordenIds.filter(Boolean))];
-  if (!ids.length) return map;
+  if (!ids.length) return { urlsAsignadas, tuvoLink };
 
   const CHUNK = 150;
   for (let i = 0; i < ids.length; i += CHUNK) {
     const chunk = ids.slice(i, i + CHUNK);
     const { data, error } = await supabase
       .from('envios_andreani_links')
-      .select('orden_id, url')
-      .eq('estado', 'asignado')
+      .select('orden_id, url, estado')
       .in('orden_id', chunk);
     if (error) throw error;
     for (const row of data ?? []) {
-      if (row.orden_id && row.url) map.set(row.orden_id, row.url);
+      if (!row.orden_id) continue;
+      tuvoLink.add(row.orden_id);
+      if (row.estado === 'asignado' && row.url) {
+        urlsAsignadas.set(row.orden_id, row.url);
+      }
     }
   }
-  return map;
+  return { urlsAsignadas, tuvoLink };
+};
+
+/** Mapa ordenId → url para links asignados (carga en lote de la tabla de pedidos). */
+export const getAssignedAndreaniLinksByOrdenIds = async (
+  ordenIds: string[],
+): Promise<Map<string, string>> => {
+  const { urlsAsignadas } = await getAndreaniLinksInfoByOrdenIds(ordenIds);
+  return urlsAsignadas;
 };
 
 export const countAndreaniLinksDisponibles = async (): Promise<number> => {
