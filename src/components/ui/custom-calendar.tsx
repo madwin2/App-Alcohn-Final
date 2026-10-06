@@ -11,13 +11,16 @@ interface CustomCalendarProps {
   onSelect?: (date: Date | undefined) => void
   defaultMonth?: Date
   className?: string
+  /** Días que no se pueden elegir (se muestran atenuados y no responden al clic). */
+  isDateDisabled?: (date: Date) => boolean
 }
 
 export function CustomCalendar({
   selected,
   onSelect,
   defaultMonth = new Date(),
-  className
+  className,
+  isDateDisabled
 }: CustomCalendarProps) {
   const safeSelected = selected instanceof Date && !isNaN(selected.getTime()) ? selected : undefined;
   const safeDefaultMonth = defaultMonth instanceof Date && !isNaN(defaultMonth.getTime()) ? defaultMonth : new Date();
@@ -39,16 +42,23 @@ export function CustomCalendar({
   while (day <= endDate) {
     for (let i = 0; i < 7; i++) {
       const cloneDay = day
+      const disabled = isDateDisabled?.(cloneDay) ?? false
       days.push(
         <div
           key={day.toString()}
+          aria-disabled={disabled || undefined}
           className={cn(
-            "h-9 w-9 flex items-center justify-center text-sm cursor-pointer rounded-md hover:bg-accent hover:text-accent-foreground",
+            "h-9 w-9 flex items-center justify-center text-sm rounded-md",
+            disabled
+              ? "cursor-not-allowed opacity-30"
+              : "cursor-pointer hover:bg-accent hover:text-accent-foreground",
             !isSameMonth(day, monthStart) && "text-muted-foreground opacity-50",
             isSameDay(day, safeSelected ?? new Date()) && "bg-primary text-primary-foreground",
             isSameDay(day, new Date()) && !isSameDay(day, safeSelected ?? new Date()) && "bg-accent text-accent-foreground"
           )}
-          onClick={() => onSelect?.(cloneDay)}
+          onClick={() => {
+            if (!disabled) onSelect?.(cloneDay)
+          }}
         >
           {format(day, dateFormat)}
         </div>

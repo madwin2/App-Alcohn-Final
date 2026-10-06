@@ -22,10 +22,13 @@ export type NotificacionTipo =
   | 'v4_deudor'
   | 't1_tarea_asignada'
   | 'e1_vacaciones_cargadas'
+  | 'e1_vacaciones_cambiadas'
+  | 'e1_vacaciones_canceladas'
   | 'e2_tarea_recurrente_asignada'
   | 'e3_necesidad_nueva'
   | 'e3_necesidad_resuelta'
   | 'e4_feedback_nuevo'
+  | 'e4_feedback_editado'
   | 'e5_idea_nueva'
   | 'e5_idea_estado';
 

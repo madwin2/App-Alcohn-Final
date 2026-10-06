@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/select';
 import { createDashboardTask } from '@/lib/supabase/services/dashboard-tasks.service';
 import { useToast } from '@/components/ui/use-toast';
-import { UserPlus } from 'lucide-react';
+import { StickyNote } from 'lucide-react';
 
 interface AddTaskToColleagueDialogProps {
   open: boolean;
@@ -40,12 +40,15 @@ export function AddTaskToColleagueDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
+  const selectedName =
+    colleagues.find((c) => c.id === selectedUserId)?.name?.split(/\s+/)[0] || 'un compañero';
+
   const handleSubmit = async () => {
     const trimmed = text.trim();
     if (!trimmed || !selectedUserId) {
       toast({
         title: 'Completá los datos',
-        description: 'Elegí un compañero y escribí la tarea.',
+        description: 'Elegí un compañero y escribí la nota.',
         variant: 'destructive',
       });
       return;
@@ -62,8 +65,8 @@ export function AddTaskToColleagueDialog({
 
     if (selectedUserId === currentUserId) {
       toast({
-        title: 'No podés asignarte a vos mismo',
-        description: 'Elegí otro compañero para asignarle la tarea.',
+        title: 'No podés dejarte una nota a vos mismo',
+        description: 'Elegí otro compañero.',
         variant: 'destructive',
       });
       return;
@@ -73,17 +76,17 @@ export function AddTaskToColleagueDialog({
     try {
       await createDashboardTask(selectedUserId, currentUserId, trimmed);
       toast({
-        title: 'Tarea asignada',
-        description: 'Tu compañero verá la tarea en su inicio.',
+        title: 'Nota enviada',
+        description: 'Tu compañero la va a ver en su inicio.',
       });
       setText('');
       setSelectedUserId('');
       onTaskCreated();
       onOpenChange(false);
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
-        description: 'No se pudo asignar la tarea. Intentá de nuevo.',
+        description: 'No se pudo enviar la nota. Intentá de nuevo.',
         variant: 'destructive',
       });
     } finally {
@@ -98,8 +101,10 @@ export function AddTaskToColleagueDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5" />
-            Asignar tarea a un compañero
+            <StickyNote className="h-5 w-5" />
+            {selectedUserId
+              ? `Dejar una nota a ${selectedName}`
+              : 'Dejar una nota a…'}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -107,7 +112,7 @@ export function AddTaskToColleagueDialog({
             <Label htmlFor="colleague">Compañero</Label>
             <Select value={selectedUserId} onValueChange={setSelectedUserId}>
               <SelectTrigger id="colleague">
-                <SelectValue placeholder="Elegí a quién asignar..." />
+                <SelectValue placeholder="Elegí a quién…" />
               </SelectTrigger>
               <SelectContent>
                 {colleaguesToShow.length === 0 ? (
@@ -125,10 +130,10 @@ export function AddTaskToColleagueDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="task-text">Tarea</Label>
+            <Label htmlFor="task-text">Nota</Label>
             <Textarea
               id="task-text"
-              placeholder="Escribí la tarea que querés asignar..."
+              placeholder="Escribí el aviso o la nota…"
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={4}
@@ -144,7 +149,7 @@ export function AddTaskToColleagueDialog({
             onClick={handleSubmit}
             disabled={isSubmitting || colleaguesToShow.length === 0 || !currentUserId}
           >
-            {isSubmitting ? 'Enviando...' : 'Asignar'}
+            {isSubmitting ? 'Enviando...' : 'Dejar nota'}
           </Button>
         </DialogFooter>
       </DialogContent>

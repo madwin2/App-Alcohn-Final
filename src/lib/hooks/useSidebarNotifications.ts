@@ -7,11 +7,13 @@ import {
 } from '@/lib/supabase/services/sidebarNotifications.service';
 import { contarIdeasCorchoNuevas } from '@/lib/supabase/services/equipoCorcho.service';
 import { useLocation } from 'react-router-dom';
+import { useEquipoRol } from '@/lib/hooks/useEquipoRol';
 
 const POLL_MS = 60_000;
 
 export function useSidebarNotifications() {
   const location = useLocation();
+  const { esMiembroActivo, loading: rolLoading } = useEquipoRol();
   const [pedidosBadge, setPedidosBadge] = useState(0);
   const [comercialBadge, setComercialBadge] = useState(0);
   const [programasBadge, setProgramasBadge] = useState(0);
@@ -50,13 +52,19 @@ export function useSidebarNotifications() {
   }, []);
 
   const refreshCorcho = useCallback(async () => {
+    // Q-EQ-008: sin perfil activo no hay corcho ni badge.
+    if (rolLoading) return;
+    if (!esMiembroActivo) {
+      setCorchoBadge(0);
+      return;
+    }
     try {
       const count = await contarIdeasCorchoNuevas();
       setCorchoBadge(count);
     } catch (err) {
       console.warn('[sidebar] corcho badge:', err);
     }
-  }, []);
+  }, [esMiembroActivo, rolLoading]);
 
   useEffect(() => {
     void refreshPedidos();

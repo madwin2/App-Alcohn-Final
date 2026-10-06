@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { BarChart3, Loader2, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -109,7 +109,12 @@ export function MisNumerosTab({
   const [galeriaLoading, setGaleriaLoading] = useState(false);
   const [detalle, setDetalle] = useState<GaleriaItem | null>(null);
 
+  // EQ-R29: ids de request; una respuesta de un período que ya no es el actual se ignora.
+  const snapReqRef = useRef(0);
+  const galeriaReqRef = useRef(0);
+
   const loadSnapshot = useCallback(async () => {
+    const reqId = ++snapReqRef.current;
     setLoading(true);
     try {
       const s = await getMisNumerosSnapshot({
@@ -117,8 +122,10 @@ export function MisNumerosTab({
         areaPrincipal,
         periodo,
       });
+      if (reqId !== snapReqRef.current) return;
       setSnap(s);
     } catch (err) {
+      if (reqId !== snapReqRef.current) return;
       toast({
         title: 'No se pudieron cargar tus números',
         description: err instanceof Error ? err.message : 'Error',
@@ -126,16 +133,18 @@ export function MisNumerosTab({
       });
       setSnap(null);
     } finally {
-      setLoading(false);
+      if (reqId === snapReqRef.current) setLoading(false);
     }
   }, [userId, areaPrincipal, periodo, toast]);
 
   const loadGaleria = useCallback(
     async (mode: MisNumerosSnapshot['galeriaModo'], offset: number) => {
+      const reqId = ++galeriaReqRef.current;
       if (mode === 'pronto') {
         setGaleria([]);
         setGaleriaTotal(0);
         setGaleriaHasMore(false);
+        setGaleriaLoading(false);
         return;
       }
       setGaleriaLoading(true);
@@ -144,17 +153,19 @@ export function MisNumerosTab({
           mode === 'produccion'
             ? await getGaleriaProduccion({ periodo, offset })
             : await getGaleriaEnvios({ userId, periodo, offset });
+        if (reqId !== galeriaReqRef.current) return;
         setGaleria((prev) => (offset === 0 ? result.items : [...prev, ...result.items]));
         setGaleriaTotal(result.total);
         setGaleriaHasMore(result.hasMore);
       } catch (err) {
+        if (reqId !== galeriaReqRef.current) return;
         toast({
           title: 'No se pudo cargar la galería',
           description: err instanceof Error ? err.message : 'Error',
           variant: 'destructive',
         });
       } finally {
-        setGaleriaLoading(false);
+        if (reqId === galeriaReqRef.current) setGaleriaLoading(false);
       }
     },
     [periodo, userId, toast],
@@ -166,8 +177,10 @@ export function MisNumerosTab({
 
   useEffect(() => {
     if (!snap) return;
+    // El snapshot puede ser del período anterior mientras llega el nuevo.
+    if (snap.periodo !== periodo) return;
     void loadGaleria(snap.galeriaModo, 0);
-  }, [snap, loadGaleria]);
+  }, [snap, periodo, loadGaleria]);
   const currentMonthKey = snap?.serie6Meses.length
     ? snap.serie6Meses[snap.serie6Meses.length - 1]?.key
     : undefined;

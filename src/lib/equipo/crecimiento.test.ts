@@ -3,6 +3,7 @@ import {
   labelEstadoObjetivo,
   labelTipoObjetivo,
   particionarObjetivos,
+  patchEstadoObjetivo,
   siguienteEstadoObjetivo,
   type ObjetivoParticionable,
 } from './crecimiento';
@@ -56,6 +57,23 @@ describe('crecimiento', () => {
     expect(p.objetivosLogrados.map((x) => x.id)).toEqual(['o2']);
     expect(p.aprenderActivos.map((x) => x.id)).toEqual(['a1']);
     expect(p.aprenderLogrados.map((x) => x.id)).toEqual(['a2']);
+  });
+
+  it('patchEstadoObjetivo no toca logrado_at si el estado no cambia', () => {
+    expect(patchEstadoObjetivo('logrado', 'logrado', '2026-11-01T00:00:00Z')).toEqual({
+      estado: 'logrado',
+    });
+    expect(patchEstadoObjetivo('en_curso', 'logrado', '2026-11-01T00:00:00Z')).toEqual({
+      estado: 'logrado',
+      logrado_at: '2026-11-01T00:00:00Z',
+    });
+    expect(patchEstadoObjetivo('logrado', 'en_curso', '2026-11-01T00:00:00Z')).toEqual({
+      estado: 'en_curso',
+      logrado_at: null,
+    });
+    expect(patchEstadoObjetivo('pendiente', 'en_curso', '2026-11-01T00:00:00Z')).toEqual({
+      estado: 'en_curso',
+    });
   });
 
   it('logrados ordenados por logradoAt desc', () => {

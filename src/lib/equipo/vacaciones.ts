@@ -88,10 +88,13 @@ export function saldoVacaciones(input: SaldoVacacionesInput): SaldoVacaciones {
 
   let usados = 0;
   let planificados = 0;
+  const diasYaContados = new Set<string>();
 
   for (const a of input.ausencias) {
     const dias = diasVacacionesContables(a, baseFecha, feriados);
     for (const d of dias) {
+      if (diasYaContados.has(d)) continue;
+      diasYaContados.add(d);
       if (compareDateKeys(d, hoy) <= 0) usados += 1;
       else planificados += 1;
     }

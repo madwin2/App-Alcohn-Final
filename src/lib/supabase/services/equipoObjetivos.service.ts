@@ -1,5 +1,6 @@
 import { supabase } from '../client';
-import type { EstadoObjetivo, TipoObjetivo } from '@/lib/equipo/crecimiento';
+import { patchEstadoObjetivo, type EstadoObjetivo, type TipoObjetivo } from '@/lib/equipo/crecimiento';
+import { asegurarFilaAfectada, mapPostgrestError } from './rlsAffected';
 
 export type { EstadoObjetivo, TipoObjetivo };
 
@@ -107,6 +108,8 @@ export async function actualizarObjetivo(input: {
   titulo?: string;
   descripcion?: string | null;
   estado?: EstadoObjetivo;
+  /** Estado actual en UI; si no se pasa y viene `estado`, se lee de la fila. */
+  estadoAnterior?: EstadoObjetivo;
   fechaObjetivo?: string | null;
 }): Promise<ObjetivoPersonal> {
   const patch: Record<string, unknown> = {};
@@ -122,11 +125,25 @@ export async function actualizarObjetivo(input: {
     patch.fecha_objetivo = input.fechaObjetivo || null;
   }
   if (input.estado !== undefined) {
-    patch.estado = input.estado;
-    if (input.estado === 'logrado') {
-      patch.logrado_at = new Date().toISOString();
-    } else {
-      patch.logrado_at = null;
+    let anterior = input.estadoAnterior;
+    if (anterior === undefined) {
+      const { data: row, error: readErr } = await supabase
+        .from('objetivos_personales')
+        .select('estado')
+        .eq('id', input.id)
+        .maybeSingle();
+      if (readErr) throw mapPostgrestError(readErr);
+      if (!row) throw mapPostgrestError({ code: 'PGRST116' });
+      anterior = (row as { estado: EstadoObjetivo }).estado;
+    }
+    const estadoPatch = patchEstadoObjetivo(
+      anterior,
+      input.estado,
+      new Date().toISOString(),
+    );
+    patch.estado = estadoPatch.estado;
+    if (estadoPatch.logrado_at !== undefined) {
+      patch.logrado_at = estadoPatch.logrado_at;
     }
   }
 
@@ -137,11 +154,16 @@ export async function actualizarObjetivo(input: {
     .select(SELECT)
     .single();
 
-  if (error) throw error;
-  return mapObjetivo(data as ObjetivoRow);
+  if (error) throw mapPostgrestError(error);
+  return mapObjetivo(asegurarFilaAfectada(data) as ObjetivoRow);
 }
 
 export async function borrarObjetivo(id: string): Promise<void> {
-  const { error } = await supabase.from('objetivos_personales').delete().eq('id', id);
-  if (error) throw error;
+  const { data, error } = await supabase
+    .from('objetivos_personales')
+    .delete()
+    .eq('id', id)
+    .select('id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data);
 }

@@ -1,5 +1,6 @@
 import { FB_TEST_EMAIL } from '@/lib/auth/access';
 import { supabase } from '../client';
+import { asegurarFilaAfectada, mapPostgrestError } from './rlsAffected';
 
 export type AreaPrincipalEquipo = 'ventas' | 'logistica' | 'produccion' | 'administracion';
 
@@ -222,9 +223,11 @@ export async function upsertPerfil(input: UpsertPerfilInput): Promise<PerfilEqui
 
 /** Desactivar (no borrar) un perfil. Solo admin. */
 export async function desactivarPerfil(userId: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('perfiles_equipo')
     .update({ activo: false })
-    .eq('user_id', userId);
-  if (error) throw error;
+    .eq('user_id', userId)
+    .select('user_id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data);
 }

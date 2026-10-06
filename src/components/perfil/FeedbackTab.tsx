@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { useNombreAdmin } from '@/lib/hooks/useNombreAdmin';
 import { cn } from '@/lib/utils/cn';
 import { renderCentroChatMarkdown } from '@/lib/centro/markdown';
 import {
@@ -41,10 +42,13 @@ const FILTROS: { value: TipoFeedback | 'todos'; label: string }[] = [
 
 export interface FeedbackTabProps {
   onUnreadChange?: (count: number) => void;
+  /** Cambia al llegar desde una notificación estando ya en la pestaña (EQ-R21). */
+  refreshKey?: number;
 }
 
-export function FeedbackTab({ onUnreadChange }: FeedbackTabProps) {
+export function FeedbackTab({ onUnreadChange, refreshKey = 0 }: FeedbackTabProps) {
   const { toast } = useToast();
+  const adminNombre = useNombreAdmin();
   const [items, setItems] = useState<FeedbackEquipo[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<TipoFeedback | 'todos'>('todos');
@@ -70,7 +74,7 @@ export function FeedbackTab({ onUnreadChange }: FeedbackTabProps) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const lista = useMemo(
     () =>
@@ -118,7 +122,7 @@ export function FeedbackTab({ onUnreadChange }: FeedbackTabProps) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Lo que te deja Julián sobre tu trabajo. Podés marcarlo como leído; por ahora no hay respuestas.
+        Lo que te deja {adminNombre} sobre tu trabajo. Podés marcarlo como leído; por ahora no hay respuestas.
       </p>
 
       <div className="flex flex-wrap gap-1.5">
@@ -179,8 +183,10 @@ export function FeedbackTab({ onUnreadChange }: FeedbackTabProps) {
                       <p className={cn('mt-1.5 text-white', noLeido && 'font-semibold')}>
                         {f.titulo?.trim() || labelTipoFeedback(f.tipo)}
                       </p>
-                      {!abierto ? (
-                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{f.texto}</p>
+                      {f.editadoAt ? (
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          Editado el {fmtFecha(f.editadoAt)}
+                        </p>
                       ) : null}
                     </div>
                     <span className="shrink-0 text-[10px] text-muted-foreground">

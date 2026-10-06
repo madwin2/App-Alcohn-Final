@@ -128,6 +128,35 @@ export function ordenarIdeasCorcho<T extends IdeaCorchoBase>(
   });
 }
 
+/**
+ * Recarga silenciosa del corcho (Realtime): conserva las "Nueva" de la sesión
+ * que siguen existiendo y suma las ideas que aparecieron desde la lista anterior
+ * y son nuevas para mí (EQ-R12). Una idea que ya estaba en la lista y que
+ * todavía no era "Nueva de sesión" no se agrega (ya la vi / es mía).
+ */
+export function mergeNuevasSesion(opts: {
+  nuevasSesion: ReadonlySet<string>;
+  idsAnteriores: ReadonlySet<string> | readonly string[];
+  ideas: Pick<IdeaCorchoBase, 'id' | 'autorUserId' | 'vistaPorMi'>[];
+  viewerUserId: string;
+}): Set<string> {
+  const previos =
+    opts.idsAnteriores instanceof Set
+      ? opts.idsAnteriores
+      : new Set(opts.idsAnteriores as readonly string[]);
+  const next = new Set<string>();
+  for (const idea of opts.ideas) {
+    if (opts.nuevasSesion.has(idea.id)) {
+      next.add(idea.id);
+      continue;
+    }
+    if (!previos.has(idea.id) && esIdeaNuevaParaMi(idea, opts.viewerUserId)) {
+      next.add(idea.id);
+    }
+  }
+  return next;
+}
+
 export function contarIdeasNuevas(
   ideas: IdeaCorchoBase[],
   viewerUserId: string,

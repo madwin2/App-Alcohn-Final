@@ -1,4 +1,5 @@
 import { supabase } from '../client';
+import { asegurarFilaAfectada, mapPostgrestError } from './rlsAffected';
 import type { EstadoIdeaCorcho, ValorVotoCorcho, VotoCorcho } from '@/lib/equipo/corcho';
 
 export type { EstadoIdeaCorcho, ValorVotoCorcho };
@@ -81,17 +82,18 @@ async function fetchVotosPorIdea(ideaIds: string[]): Promise<Map<string, VotoCor
   return map;
 }
 
+/** EQ-R24: solo por user_id (evita `.in` enorme); cruce en memoria. */
 async function fetchMisVistas(ideaIds: string[], userId: string): Promise<Set<string>> {
   const set = new Set<string>();
   if (ideaIds.length === 0 || !userId) return set;
+  const wanted = new Set(ideaIds);
   const { data, error } = await supabase
     .from('ideas_corcho_vistas')
     .select('idea_id')
-    .eq('user_id', userId)
-    .in('idea_id', ideaIds);
+    .eq('user_id', userId);
   if (error) throw error;
   for (const row of (data as VistaRow[] | null) ?? []) {
-    set.add(row.idea_id);
+    if (wanted.has(row.idea_id)) set.add(row.idea_id);
   }
   return set;
 }
@@ -194,15 +196,16 @@ export async function actualizarIdeaCorcho(input: {
     .eq('id', input.id)
     .select(SELECT_IDEA)
     .single();
-  if (error) throw error;
+  if (error) throw mapPostgrestError(error);
 
-  const hydrated = await hydrateIdeas([data as IdeaRow]);
+  const hydrated = await hydrateIdeas([asegurarFilaAfectada(data) as IdeaRow]);
   return hydrated[0]!;
 }
 
 export async function borrarIdeaCorcho(id: string): Promise<void> {
-  const { error } = await supabase.from('ideas_corcho').delete().eq('id', id);
-  if (error) throw error;
+  const { data, error } = await supabase.from('ideas_corcho').delete().eq('id', id).select('id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data);
 }
 
 /** Admin: cambia estado (propuesta / aprobada / descartada) con comentario opcional. */
@@ -225,9 +228,9 @@ export async function cambiarEstadoIdeaCorcho(input: {
     .eq('id', input.id)
     .select(SELECT_IDEA)
     .single();
-  if (error) throw error;
+  if (error) throw mapPostgrestError(error);
 
-  const hydrated = await hydrateIdeas([data as IdeaRow]);
+  const hydrated = await hydrateIdeas([asegurarFilaAfectada(data) as IdeaRow]);
   return hydrated[0]!;
 }
 
@@ -247,8 +250,9 @@ export async function setVotoIdeaCorcho(
       .from('ideas_corcho_votos')
       .delete()
       .eq('idea_id', ideaId)
-      .eq('user_id', auth.user.id);
-    if (error) throw error;
+      .eq('user_id', auth.user.id)
+      .select('idea_id');
+    if (error) throw mapPostgrestError(error);
     return;
   }
 

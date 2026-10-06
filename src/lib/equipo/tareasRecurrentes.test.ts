@@ -189,4 +189,46 @@ describe('describirFrecuencia', () => {
   it('mensual', () => {
     expect(describirFrecuencia({ frecuencia: 'mensual', diaMes: 1 })).toBe('El 1 de cada mes');
   });
+
+  it('unica', () => {
+    expect(describirFrecuencia({ frecuencia: 'unica', fecha: '2026-10-08' })).toBe(
+      'Solo el 08/10',
+    );
+    expect(
+      describirFrecuencia({ frecuencia: 'unica', semanaInicio: '2026-10-08' }),
+    ).toBe('Solo el 08/10');
+  });
+});
+
+describe('ocurrenciasEnSemana — unica', () => {
+  it('aparece solo el día elegido de esa semana', () => {
+    const tarea: TareaRecurrenteDef = {
+      frecuencia: 'unica',
+      fecha: '2026-10-08', // jueves
+    };
+    expect(ocurrenciasEnSemana(tarea, '2026-10-05', []).map((o) => o.fecha)).toEqual([
+      '2026-10-08',
+    ]);
+    expect(ocurrenciasEnSemana(tarea, '2026-10-12', [])).toEqual([]);
+  });
+
+  it('fallback legacy semanaInicio si no hay fecha', () => {
+    const tarea: TareaRecurrenteDef = {
+      frecuencia: 'unica',
+      semanaInicio: '2026-10-08',
+    };
+    expect(ocurrenciasEnSemana(tarea, '2026-10-05', []).map((o) => o.fecha)).toEqual([
+      '2026-10-08',
+    ]);
+  });
+
+  it('también en fin de semana de la misma semana calendario', () => {
+    const tarea: TareaRecurrenteDef = {
+      frecuencia: 'unica',
+      fecha: '2026-10-10', // sábado
+    };
+    expect(ocurrenciasEnSemana(tarea, '2026-10-05', []).map((o) => o.fecha)).toEqual([
+      '2026-10-10',
+    ]);
+  });
 });

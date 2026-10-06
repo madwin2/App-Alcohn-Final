@@ -3,7 +3,7 @@
 > Ruta: `/perfil` · Página: `src/app/perfil/index.tsx` · Componentes: `src/components/perfil/*`
 > Corcho: `/corcho` · `src/app/corcho/index.tsx` · `src/components/corcho/*`
 > Plan de diseño: [`PLAN_PAGINA_PERSONAL.md`](../../../PLAN_PAGINA_PERSONAL.md)
-> Última verificación contra código: 2026-10-02 (Etapa 7)
+> Última verificación contra código: 2026-10-05 (Etapa 7 + revisión EQ-R*)
 
 ## Propósito
 
@@ -36,9 +36,11 @@ Cada usuario aprobado entra **solo a su** página (`/perfil`, sin parámetro de 
 - Pestañas **Inicio del perfil**, **Calendario**, **Mis tareas**, **Anotaciones**, **Lo que necesito**, **Crecimiento**, **Feedback**, **Mis ideas**, **Mis números** y, para el admin, **Equipo**.
 - Calendario mensual del equipo: vacaciones, cambios de día (falta / recupero), feriados nacionales y de empresa, cumpleaños. Filtro por persona. “Hoy no están”.
 - Carga directa de vacaciones y cambios de día (sin aprobación). Aviso si el saldo queda negativo (no bloquea). Editar/borrar futuros (admin: también pasados).
-- Notificación `e1_vacaciones_cargadas` al resto del equipo.
+- Notificaciones `e1_vacaciones_cargadas`, `e1_vacaciones_cambiadas` y `e1_vacaciones_canceladas` al resto del equipo (POL-058).
+- Aviso en el **encabezado** (admin) si faltan feriados nacionales del año en curso o del siguiente (EQ-R09).
+- Quien no es admin solo elige fechas **futuras** al cargar vacaciones o cambio de día; el admin corrige cualquier fecha desde **Equipo** → **Ver ausencias** (POL-056).
 - Feriados: importación desde ArgentinaDatos (`api.argentinadatos.com`) + días de la empresa (admin).
-- **Tareas recurrentes** (`tareas_recurrentes`): diaria / semanal / quincenal / mensual. Vista lista (reordenar, pausar) y “Mi semana”. Cada uno crea y edita **sus** tareas; el admin también puede sumarles (badge “Sumada por…”, notificación `e2_tarea_recurrente_asignada`). Completar/posponer queda para el Inicio (futuro).
+- **Tareas recurrentes** (`tareas_recurrentes`): diaria / semanal / quincenal / mensual / **unica** (un solo día concreto; la fecha va en `fecha` o legacy `semana_inicio`). Pestaña **Tareas** = gestión (crear, reordenar, pausar); **Mi día** = marcar ocurrencias (`AccionesTarea`). Cada uno crea y edita **sus** tareas; el admin también puede sumarles (badge “Sumada por…”, notificación `e2_tarea_recurrente_asignada`).
 - **Anotaciones** (`notas_personales`, D3): solo las ve quien las escribe; ni el admin. Lista + editor Markdown con vista previa, autoguardado (~800 ms), fijar y buscar. Los post-its del Inicio **no** se migran.
 - **Lo que necesito** (`necesidades_equipo`, S8): la persona carga pedidos; los ve el admin. Notificación `e3_necesidad_nueva` al admin; al resolver, `e3_necesidad_resuelta` a la persona. Bandeja **Necesidades pendientes** en la pestaña Equipo.
 - **Crecimiento** (`objetivos_personales`, S9): dos columnas **Mis objetivos** / **Quiero aprender**; estados Pendiente → En curso → Logrado (y Abandonado); sección Logrados. Lo ven la persona y el admin; solo la persona edita.
@@ -70,11 +72,12 @@ Ver [equipo](../../05-data/entidades/equipo.md) y [usuarios](../../05-data/entid
 
 ## Preguntas abiertas
 
-[Q-EQ-*](../../14-open-questions/equipo.md) (todas respondidas al 2026-10-02).
+[Q-EQ-*](../../14-open-questions/equipo.md) (Q-EQ-001 a 016 documentadas al 2026-10-05).
 
 ## Implementación relacionada
 
-- `migration_equipo_perfiles.sql`, `migration_equipo_calendario.sql`, `migration_equipo_tareas_recurrentes.sql`, `migration_equipo_notas_necesidades.sql`, `migration_equipo_crecimiento_feedback.sql`, `migration_equipo_corcho.sql` (⚠️ no aplicar sin OK del dueño)
+- `migration_equipo_perfiles.sql`, `migration_equipo_calendario.sql`, `migration_equipo_tareas_recurrentes.sql`, `migration_equipo_notas_necesidades.sql`, `migration_equipo_crecimiento_feedback.sql`, `migration_equipo_corcho.sql` — **aplicadas en Supabase** (verificado 2026-10-05).
+- `migration_equipo_fix_rls.sql` — correcciones RLS/schema (EQ-R05, R11, R13, R15, R34): **pendiente de OK del dueño** antes de aplicar en producción.
 - `src/lib/supabase/services/equipo.service.ts`, `equipoCalendario.service.ts`, `equipoTareas.service.ts`, `equipoNotas.service.ts`, `equipoNecesidades.service.ts`, `equipoObjetivos.service.ts`, `equipoFeedback.service.ts`, `equipoCorcho.service.ts`, `equipoNumeros.service.ts`
 - `src/lib/equipo/` (antigüedad, cumpleaños, colores, días hábiles, vacaciones, calendario, tareasRecurrentes, notasPersonales, crecimiento, feedback, corcho, misNumeros)
 - `src/lib/hooks/useEquipoRol.ts`

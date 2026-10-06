@@ -751,6 +751,106 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 43,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.61',
+    slides: [
+      {
+        heading: 'Anotaciones: ya no se pierde lo que escribís',
+        body: 'Si seguís escribiendo mientras guarda, o cambiás de pestaña rápido, el texto se mantiene y se guarda antes de salir.',
+        icon: FileText,
+      },
+      {
+        heading: 'Julián puede corregir vacaciones de cualquiera',
+        body: 'En Equipo, Ver ausencias abre la lista de cada persona para editar o borrar, también lo que ya empezó.',
+        icon: CalendarDays,
+      },
+      {
+        heading: 'Mis números más justos',
+        body: 'Las etiquetas cuentan envíos distintos por período, y el saldo de vacaciones usa feriados y rangos completos aunque cambies de año en el calendario.',
+        icon: BarChart3,
+      },
+      {
+        heading: 'Corcho solo para el equipo activo',
+        body: 'Si no tenés perfil de equipo o estás desactivado, Mi perfil y el Corcho te avisan en lugar de mostrar datos del resto.',
+        icon: UserCircle,
+      },
+    ],
+  },
+  {
+    id: 44,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.62',
+    slides: [
+      {
+        heading: 'Inicio del perfil con tu resumen',
+        body: 'Ves de un vistazo tus próximas vacaciones, quién no está hoy, feedback sin leer, tareas de hoy, ideas nuevas del corcho y tus pedidos.',
+        icon: UserCircle,
+      },
+      {
+        heading: 'Avisos si cambian o cancelan vacaciones',
+        body: 'Si alguien mueve las fechas de sus vacaciones o las cancela, el equipo recibe un aviso. En Mis tareas, la semana marca los días de vacaciones o de cambio.',
+        icon: Bell,
+      },
+    ],
+  },
+  {
+    id: 45,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.63',
+    slides: [
+      {
+        heading: 'Tareas de un solo día',
+        body: 'En Mis tareas podés cargar algo solo para una fecha (hoy, esta semana o la que viene). No se repite la semana siguiente.',
+        icon: ListTodo,
+      },
+    ],
+  },
+  {
+    id: 46,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.64',
+    slides: [
+      {
+        heading: 'Mi perfil más simple',
+        body: 'Mi día junta el resumen y el calendario. Tareas queda para crear y ordenar; Lo mío agrupa anotaciones, pedidos, crecimiento y feedback.',
+        icon: UserCircle,
+      },
+      {
+        heading: 'Marcá tus tareas desde Mi día',
+        body: 'Las de hoy y las atrasadas aparecen arriba con Hecha, Posponer o Mover. También podés sumar vacaciones, cambio de día o una tarea para hoy desde ahí.',
+        icon: ListTodo,
+      },
+      {
+        heading: 'Notas y tareas son cosas distintas',
+        body: 'En el Inicio, los post-its son notas o avisos (para vos o un compañero). Las tareas —lo que tenés que hacer— viven en Mi perfil y el calendario.',
+        icon: Pin,
+      },
+    ],
+  },
+  {
+    id: 47,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.65',
+    slides: [
+      {
+        heading: 'Calendario con tus tareas',
+        body: 'En Mi día ves vacaciones del equipo y tus tareas en la misma grilla. Tocá un día o un chip para marcar, editar o cargar algo.',
+        icon: CalendarDays,
+      },
+      {
+        heading: 'Agregar desde el calendario',
+        body: 'Un botón + Agregar (o clic derecho en un día) abre tarea, vacaciones o cambio de día con la fecha ya elegida. Podés arrastrar varios días para un rango de vacaciones.',
+        icon: MousePointerClick,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

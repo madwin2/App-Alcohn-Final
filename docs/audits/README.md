@@ -4,7 +4,7 @@ Resultado de recorrer el código y la base mientras se construía esta documenta
 
 | Documento | Contenido | Ítems |
 |---|---|---|
-| [inconsistencias.md](inconsistencias.md) | Reglas implementadas de formas distintas, estados duplicados, datos contradictorios | 25 |
+| [inconsistencias.md](inconsistencias.md) | Reglas implementadas de formas distintas, estados duplicados, datos contradictorios | 26 |
 | [posible-codigo-muerto.md](posible-codigo-muerto.md) | Código, tablas, estados y archivos sin uso aparente | 16 |
 | [comportamientos-no-documentados.md](comportamientos-no-documentados.md) | Efectos sorprendentes que un usuario/agente no esperaría | 12 |
 | [observaciones-de-arquitectura.md](observaciones-de-arquitectura.md) | Riesgos y patrones estructurales | 11 |

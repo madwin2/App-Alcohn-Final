@@ -43,10 +43,14 @@ function highlightTitle(item: NotificacionItem): ReactNode {
     return (
       <>
         <span className="font-semibold text-white">{item.autorNombre}</span>
-        {' te asignó: '}
+        {' te dejó una nota: '}
         <span className="font-semibold text-white">{item.metadata.itemNombre || item.titulo}</span>
       </>
     );
+  }
+
+  if (/te asignó/i.test(item.titulo)) {
+    return item.titulo.replace(/te asignó/gi, 'te dejó una nota');
   }
 
   if (!highlights.length) {

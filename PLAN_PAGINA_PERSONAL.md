@@ -20,14 +20,16 @@
 | Etapa | Qué | Estado |
 |---|---|---|
 | 0 | Documentación previa y preguntas | ✅ 2026-10-02 |
-| 1 | Base: perfiles, rol admin, ruta `/perfil`, encabezado, panel "Equipo" | ✅ 2026-10-02 (migración pendiente de aplicar en Supabase) |
-| 2 | Calendario del equipo: feriados, vacaciones, cambios de día, cumpleaños | ✅ 2026-10-02 (migración pendiente de aplicar en Supabase) |
-| 3 | Tareas semanales (definición) | ✅ 2026-10-02 (migración pendiente de aplicar en Supabase) |
-| 4 | Anotaciones y "Lo que necesito" | ✅ 2026-10-02 (migración pendiente de aplicar en Supabase) |
-| 5 | Crecimiento y Feedback | ✅ 2026-10-02 (migración pendiente de aplicar en Supabase) |
-| 6 | Corcho de ideas | ✅ 2026-10-02 (migración pendiente de aplicar en Supabase) |
+| 1 | Base: perfiles, rol admin, ruta `/perfil`, encabezado, panel "Equipo" | ✅ 2026-10-02 · migraciones aplicadas en Supabase (2026-10-05) |
+| 2 | Calendario del equipo: feriados, vacaciones, cambios de día, cumpleaños | ✅ 2026-10-02 · migraciones aplicadas en Supabase (2026-10-05) |
+| 3 | Tareas semanales (definición) | ✅ 2026-10-02 · migraciones aplicadas en Supabase (2026-10-05) |
+| 4 | Anotaciones y "Lo que necesito" | ✅ 2026-10-02 · migraciones aplicadas en Supabase (2026-10-05) |
+| 5 | Crecimiento y Feedback | ✅ 2026-10-02 · migraciones aplicadas en Supabase (2026-10-05) |
+| 6 | Corcho de ideas | ✅ 2026-10-02 · migraciones aplicadas en Supabase (2026-10-05) |
 | 7 | Mis números y galería | ✅ 2026-10-02 (sin migración nueva) |
 | — | (Futuro, **no implementar**) Integración con Inicio | — |
+
+Las seis migraciones `migration_equipo_*.sql` están **aplicadas en Supabase** (verificado 2026-10-05). Correcciones RLS adicionales en `migration_equipo_fix_rls.sql` (**pendiente de OK** del dueño; ver [`REVISION_EQUIPO_LOGICA_DE_USO.md`](REVISION_EQUIPO_LOGICA_DE_USO.md) §7).
 
 ---
 
@@ -67,7 +69,7 @@ La página es **nueva** (`/perfil`). Más adelante se decide qué partes se mues
 | D6 | Las vacaciones y los cambios de día **se cargan directamente**: no hay aprobación ni pedido. Tampoco hay que justificar el motivo. La idea es dar libertad. |
 | D7 | Cada uno tiene **10 días hábiles** de vacaciones (ver Q-EQ-001 para el período). |
 | D8 | **Feriados**: se traen los nacionales de una fuente pública y el admin puede agregar días propios de la empresa. |
-| D9 | Las **tareas semanales** las define cada uno; el admin también puede sumarles. En esta etapa **solo se definen**: marcarlas hechas / posponer va en el Inicio, más adelante (sección 10). |
+| D9 | Las **tareas** las define cada uno; el admin también puede sumarles. Se **marcan** en el calendario / Mi día: Hecha, Posponer, Mover, No hecha (Q-EQ-018). |
 | D10 | **Mis números** son personales: cada uno ve solo los suyos. Es un detalle, no el centro de la página. |
 | D11 | **Producción**: por ahora todos los sellos que pasan a `Hecho` se le suman a quien tenga el área principal **producción** (hoy Fede, que hace todo). Más adelante se hará más preciso. |
 | D12 | **Ventas**: el pedido **no** es necesariamente de quien lo cargó (`ordenes.taken_by`). Por eso **no** se muestran "ventas" por persona hasta que exista un campo "vendido por" (backlog, sección 10). |
@@ -609,9 +611,11 @@ La página tiene que leer `?tab=` para abrir la pestaña correcta.
 
 ---
 
-## 10. Futuro (NO implementar en este plan)
+## 10. Futuro / historial
 
-- **Inicio**: modal "Tareas de la semana" para marcar hechas, posponer, etc. (tabla de registro por semana sobre `tareas_recurrentes`); "Hoy no están"; cumpleaños del día; feedback sin leer; ideas nuevas en el corcho.
+> **Actualizado 2026-10-05 (Q-EQ-018):** marcar tareas **ya no es futuro**. Vive en el calendario / Mi día con `tareas_registro` (ver `REVISION_EQUIPO_USABILIDAD.md`).
+
+- ~~**Inicio**: modal "Tareas de la semana" para marcar hechas, posponer…~~ → hecho en calendario + Mi día.
 - **"Vendido por"** al cargar un pedido (el que lo carga puede indicar que la venta es de otro) → recién ahí se suman métricas de ventas por persona (D12). Va al backlog.
 - Producción más precisa: guardar **quién** cambia cada estado en `estado_historial` (D11).
 - Respuestas al feedback; comentarios en las ideas del corcho; idea aprobada → proyecto de Innovación.

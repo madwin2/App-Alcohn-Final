@@ -192,6 +192,101 @@ describe('saldoVacaciones — bordes', () => {
   });
 });
 
+describe('EQ-R07 / EQ-R10 — ventana larga y superposición', () => {
+  it('vacaciones nov-2026 con feriado: mismo descuento en 2026 y en 2028', () => {
+    const ausencias = [
+      {
+        tipo: 'vacaciones' as const,
+        fechaDesde: '2026-11-16', // lun
+        fechaHasta: '2026-11-20', // vie; 20=feriado ficticio → 4 hábiles
+      },
+    ];
+    const feriados = ['2026-11-20'];
+    const base = {
+      saldoBase: 10,
+      saldoBaseFecha: '2026-10-02',
+      diasAnuales: 10,
+      ausencias,
+      feriados,
+    };
+    const en2026 = saldoVacaciones({ ...base, hoy: '2026-10-05' });
+    const en2028 = saldoVacaciones({ ...base, hoy: '2028-03-01' });
+    expect(en2026.planificados).toBe(4);
+    // En 2028 esos días ya pasaron → usados; el descuento neto es el mismo (4)
+    expect(en2028.usados).toBe(4);
+    expect(en2026.disponiblesDespuesDePlanificadas).toBe(6);
+    // 2028: +10 (2027) +10 (2028) acreditados − 4 usados = 10+20−4=26; sin planificados
+    expect(en2028.acreditados).toBe(20);
+    expect(en2028.disponiblesHoy).toBe(26);
+  });
+
+  it('vacaciones superpuestas no restan el mismo día dos veces', () => {
+    const saldo = saldoVacaciones({
+      saldoBase: 10,
+      saldoBaseFecha: '2026-10-02',
+      diasAnuales: 10,
+      ausencias: [
+        { tipo: 'vacaciones', fechaDesde: '2026-11-09', fechaHasta: '2026-11-13' },
+        { tipo: 'vacaciones', fechaDesde: '2026-11-11', fechaHasta: '2026-11-13' },
+      ],
+      feriados: [],
+      hoy: '2026-10-05',
+    });
+    // lun–vie = 5 días únicos (no 5+3)
+    expect(saldo.planificados).toBe(5);
+  });
+});
+
+describe('saldoVacaciones — EQ-R07 / EQ-R10', () => {
+  const VAC_NOV_2026 = {
+    tipo: 'vacaciones' as const,
+    fechaDesde: '2026-11-16', // lun
+    fechaHasta: '2026-11-20', // vie — 20/11 feriado (puente/trasladable) → 4 hábiles
+  };
+
+  it('EQ-R07: vacaciones de nov-2026 con feriado adentro descuentan lo mismo en 2028 que en 2026', () => {
+    const base = {
+      ...CACHI,
+      ausencias: [VAC_NOV_2026],
+      feriados: ['2026-11-20'],
+    };
+    const en2026 = saldoVacaciones({ ...base, hoy: '2026-12-01' });
+    const en2028 = saldoVacaciones({ ...base, hoy: '2028-03-01' });
+
+    expect(en2026.usados).toBe(4);
+    expect(en2028.usados).toBe(en2026.usados);
+    expect(en2028.planificados).toBe(0);
+    // 2026: 0 + 0 − 4 ; 2028: 0 + 20 (1/1/2027 y 1/1/2028) − 4
+    expect(en2026.disponiblesHoy).toBe(-4);
+    expect(en2028.disponiblesHoy).toBe(16);
+  });
+
+  it('EQ-R10: dos vacaciones superpuestas no cuentan dos veces el mismo día', () => {
+    const saldo = saldoVacaciones({
+      ...CACHI,
+      ausencias: [
+        { tipo: 'vacaciones', fechaDesde: '2026-11-09', fechaHasta: '2026-11-13' },
+        { tipo: 'vacaciones', fechaDesde: '2026-11-11', fechaHasta: '2026-11-18' },
+      ],
+      feriados: [],
+      hoy: '2026-10-02',
+    });
+    // 9–13 (5) + 16–18 (3) = 8 días únicos
+    expect(saldo.planificados).toBe(8);
+  });
+
+  it('EQ-R10: la misma ausencia duplicada resta una sola vez', () => {
+    const dup = { tipo: 'vacaciones' as const, fechaDesde: '2026-11-09', fechaHasta: '2026-11-13' };
+    const saldo = saldoVacaciones({
+      ...CACHI,
+      ausencias: [dup, dup],
+      feriados: [],
+      hoy: '2026-10-02',
+    });
+    expect(saldo.planificados).toBe(5);
+  });
+});
+
 describe('saldoProyectado y preview', () => {
   it('al cargar vacaciones de enero 2027 en nov 2026 suma los 10 del 1/1', () => {
     const input = {

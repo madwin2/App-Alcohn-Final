@@ -1,4 +1,5 @@
 import { supabase } from '../client';
+import { asegurarFilaAfectada, mapPostgrestError } from './rlsAffected';
 import { fetchFeriadosNacionalesApi } from '@/lib/equipo/feriadosArgentina';
 
 export type FeriadoOrigen = 'nacional' | 'empresa';
@@ -188,8 +189,9 @@ export async function crearFeriadoEmpresa(input: {
 }
 
 export async function borrarFeriado(id: string): Promise<void> {
-  const { error } = await supabase.from('feriados').delete().eq('id', id);
-  if (error) throw error;
+  const { data, error } = await supabase.from('feriados').delete().eq('id', id).select('id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data);
 }
 
 /** Ausencias que solapan un rango (para el calendario del mes). */
@@ -232,6 +234,69 @@ export async function getAusenciasDeUsuario(userId: string): Promise<AusenciaEqu
     .order('fecha_desde', { ascending: false });
   if (error) throw error;
   return ((data as AusenciaRow[] | null) ?? []).map(mapAusencia);
+}
+
+/**
+ * EQ-R07: datos para calcular el saldo de vacaciones, sin ventanas de años fijas.
+ * - `ausencias`: todas las vacaciones de esas personas con `fecha_hasta` posterior a su
+ *   `vacaciones_saldo_base_fecha` (las anteriores ya están dentro del saldo base).
+ * - `feriados`: desde la menor fecha base hasta la mayor `fecha_hasta` de esas ausencias.
+ */
+export async function getDatosSaldoVacaciones(
+  userIds: string[],
+): Promise<{ ausencias: AusenciaEquipo[]; feriados: Feriado[] }> {
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (ids.length === 0) return { ausencias: [], feriados: [] };
+
+  const [perfilesRes, ausenciasRes] = await Promise.all([
+    supabase
+      .from('perfiles_equipo')
+      .select('user_id, vacaciones_saldo_base_fecha')
+      .in('user_id', ids),
+    supabase
+      .from('ausencias_equipo')
+      .select(AUSENCIA_SELECT)
+      .eq('tipo', 'vacaciones')
+      .in('user_id', ids)
+      .order('fecha_desde', { ascending: true }),
+  ]);
+  if (perfilesRes.error) throw perfilesRes.error;
+  if (ausenciasRes.error) throw ausenciasRes.error;
+
+  const baseFechaPorUser = new Map<string, string>();
+  for (const p of (perfilesRes.data as Array<{
+    user_id: string;
+    vacaciones_saldo_base_fecha: string | null;
+  }> | null) ?? []) {
+    if (p.vacaciones_saldo_base_fecha) {
+      baseFechaPorUser.set(p.user_id, p.vacaciones_saldo_base_fecha);
+    }
+  }
+
+  const ausencias = ((ausenciasRes.data as AusenciaRow[] | null) ?? [])
+    .map(mapAusencia)
+    .filter((a) => {
+      const base = baseFechaPorUser.get(a.userId);
+      // Sin perfil/fecha base conocida: se deja pasar (el cálculo filtra por su cuenta).
+      return !base || a.fechaHasta > base;
+    });
+
+  if (ausencias.length === 0) return { ausencias, feriados: [] };
+
+  let desde = ausencias[0].fechaDesde;
+  let hasta = ausencias[0].fechaHasta;
+  for (const a of ausencias) {
+    if (a.fechaDesde < desde) desde = a.fechaDesde;
+    if (a.fechaHasta > hasta) hasta = a.fechaHasta;
+  }
+  const bases = Array.from(baseFechaPorUser.values());
+  if (bases.length > 0) {
+    const menorBase = bases.reduce((min, b) => (b < min ? b : min));
+    if (menorBase < desde) desde = menorBase;
+  }
+
+  const feriados = await getFeriados({ desde, hasta });
+  return { ausencias, feriados };
 }
 
 export async function crearVacaciones(input: CrearVacacionesInput): Promise<AusenciaEquipo> {
@@ -283,11 +348,16 @@ export async function actualizarAusencia(
     .eq('id', input.id)
     .select(AUSENCIA_SELECT)
     .single();
-  if (error) throw error;
-  return mapAusencia(data as AusenciaRow);
+  if (error) throw mapPostgrestError(error);
+  return mapAusencia(asegurarFilaAfectada(data) as AusenciaRow);
 }
 
 export async function borrarAusencia(id: string): Promise<void> {
-  const { error } = await supabase.from('ausencias_equipo').delete().eq('id', id);
-  if (error) throw error;
+  const { data, error } = await supabase
+    .from('ausencias_equipo')
+    .delete()
+    .eq('id', id)
+    .select('id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data);
 }

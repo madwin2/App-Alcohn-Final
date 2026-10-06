@@ -23,7 +23,12 @@ function dateToKey(d: Date | undefined): string | null {
   return `${y}-${m}-${day}`;
 }
 
-export function EquipoFeriadosPanel() {
+interface EquipoFeriadosPanelProps {
+  /** Se importaron feriados nuevos (cambia el saldo de vacaciones y el aviso de faltantes). */
+  onImported?: () => void;
+}
+
+export function EquipoFeriadosPanel({ onImported }: EquipoFeriadosPanelProps = {}) {
   const { toast } = useToast();
   const { year } = argentinaDateParts();
   const [feriados, setFeriados] = useState<Feriado[]>([]);
@@ -65,6 +70,12 @@ export function EquipoFeriadosPanel() {
     setImporting(true);
     try {
       const { agregados, totalApi } = await importarFeriadosNacionales(anio);
+      if (totalApi === 0) {
+        toast({
+          title: `La fuente todavía no publicó feriados de ${anio}`,
+        });
+        return;
+      }
       toast({
         title: `Feriados ${anio}`,
         description:
@@ -73,6 +84,7 @@ export function EquipoFeriadosPanel() {
             : `Se agregaron ${agregados} de ${totalApi}.`,
       });
       await load();
+      if (agregados > 0) onImported?.();
     } catch (err) {
       toast({
         title: 'No se pudo importar',

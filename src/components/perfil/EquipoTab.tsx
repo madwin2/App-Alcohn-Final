@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, HeartHandshake, ListTodo, Loader2, Pencil, Plus, Repeat, UserMinus } from 'lucide-react';
+import { CalendarDays, CalendarRange, HeartHandshake, ListTodo, Loader2, Pencil, Plus, Repeat, UserMinus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -40,8 +40,7 @@ import {
 import {
   crearCambioDia,
   crearVacaciones,
-  getAusencias,
-  getFeriados,
+  getDatosSaldoVacaciones,
   type AusenciaEquipo,
 } from '@/lib/supabase/services/equipoCalendario.service';
 import type { TareaRecurrente } from '@/lib/supabase/services/equipoTareas.service';
@@ -54,6 +53,8 @@ import {
 import { EquipoFeriadosPanel } from '@/components/perfil/EquipoFeriadosPanel';
 import { CargarVacacionesDialog } from '@/components/perfil/CargarVacacionesDialog';
 import { CambioDiaDialog } from '@/components/perfil/CambioDiaDialog';
+import { AusenciasPersonaDialog } from '@/components/perfil/AusenciasPersonaDialog';
+import { FALLBACK_NOMBRE_ADMIN, nombreAdminEquipo } from '@/lib/equipo/admin';
 import { TareasTab } from '@/components/perfil/TareasTab';
 import { EquipoNecesidadesBandeja } from '@/components/perfil/EquipoNecesidadesBandeja';
 import { EquipoFeedbackDialog } from '@/components/perfil/EquipoFeedbackDialog';
@@ -78,6 +79,8 @@ type FormState = {
   color: string;
   diasVacacionesAnuales: number;
   vacacionesSaldoBase: number;
+  /** Fecha a la que corresponde el saldo base (EQ-R20). */
+  saldoBaseFecha: Date | undefined;
   vacacionesSinLimite: boolean;
   esAdmin: boolean;
   /** Si el admin tocó el saldo base en esta edición. */
@@ -93,6 +96,7 @@ const emptyForm = (): FormState => ({
   color: COLORES_EQUIPO[0],
   diasVacacionesAnuales: 10,
   vacacionesSaldoBase: 0,
+  saldoBaseFecha: undefined,
   vacacionesSinLimite: false,
   esAdmin: false,
   saldoBaseEditado: false,
@@ -108,9 +112,11 @@ function dateToKey(d: Date | undefined): string | null {
 
 interface EquipoTabProps {
   onChanged?: () => void;
+  /** Se importaron feriados: el encabezado recalcula saldo y aviso de faltantes. */
+  onFeriadosChanged?: () => void;
 }
 
-export function EquipoTab({ onChanged }: EquipoTabProps) {
+export function EquipoTab({ onChanged, onFeriadosChanged }: EquipoTabProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [miembros, setMiembros] = useState<PerfilEquipo[]>([]);
@@ -128,21 +134,21 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
   const [cambioOpen, setCambioOpen] = useState(false);
   const [tareasOpen, setTareasOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [ausenciasOpen, setAusenciasOpen] = useState(false);
   const [savingAusencia, setSavingAusencia] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
-      const hoy = todayArgentinaDateKey();
-      const anio = Number(hoy.slice(0, 4));
-      const [m, s, a, f] = await Promise.all([
+      const [m, s] = await Promise.all([
         getMiembrosEquipo({ incluirInactivos: true }),
         getUsuariosSinPerfil(),
-        getAusencias({ desde: `${anio - 1}-01-01`, hasta: `${anio + 1}-12-31` }),
-        getFeriados({ desde: `${anio - 1}-01-01`, hasta: `${anio + 1}-12-31` }),
       ]);
       setMiembros(m);
       setSinPerfil(s);
+      const { ausencias: a, feriados: f } = await getDatosSaldoVacaciones(
+        m.map((x) => x.userId),
+      );
       setAusencias(a);
       setFeriadosKeys(f.map((x) => x.fecha));
     } catch (err) {
@@ -194,11 +200,15 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
       .map((m) => m.color);
   }, [miembros, form.userId]);
 
+  // Nombre del/los admin(s) para textos ("pedíselo a …"); fallback "el admin" (EQ-R27).
+  const adminNombre = useMemo(() => nombreAdminEquipo(miembros), [miembros]);
+
   const openVacacionesPara = (p: PerfilEquipo) => {
     setTargetPerfil(p);
     setCambioOpen(false);
     setTareasOpen(false);
     setFeedbackOpen(false);
+    setAusenciasOpen(false);
     setVacOpen(true);
   };
   const openCambioPara = (p: PerfilEquipo) => {
@@ -206,6 +216,7 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
     setVacOpen(false);
     setTareasOpen(false);
     setFeedbackOpen(false);
+    setAusenciasOpen(false);
     setCambioOpen(true);
   };
   const openTareasPara = (p: PerfilEquipo) => {
@@ -213,6 +224,7 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
     setVacOpen(false);
     setCambioOpen(false);
     setFeedbackOpen(false);
+    setAusenciasOpen(false);
     setTareasOpen(true);
   };
   const openFeedbackPara = (p: PerfilEquipo) => {
@@ -220,7 +232,16 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
     setVacOpen(false);
     setCambioOpen(false);
     setTareasOpen(false);
+    setAusenciasOpen(false);
     setFeedbackOpen(true);
+  };
+  const openAusenciasPara = (p: PerfilEquipo) => {
+    setTargetPerfil(p);
+    setVacOpen(false);
+    setCambioOpen(false);
+    setTareasOpen(false);
+    setFeedbackOpen(false);
+    setAusenciasOpen(true);
   };
 
   const nombresPorUserId = useMemo(() => {
@@ -235,7 +256,8 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
     if (!targetPerfil || !user?.id) return;
     if (tarea.userId === user.id) return;
     const autor = miembros.find((m) => m.userId === user.id);
-    const autorNombre = (autor?.nombre || 'Julián').split(/\s+/)[0] || 'Julián';
+    const autorNombre =
+      (autor?.nombre || '').split(/\s+/)[0] || adminNombre || FALLBACK_NOMBRE_ADMIN;
     notifyTareaRecurrenteAsignada({
       autorNombre,
       titulo: tarea.titulo,
@@ -244,6 +266,7 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
         diasSemana: tarea.diasSemana as (1 | 2 | 3 | 4 | 5)[] | null,
         diaMes: tarea.diaMes,
         semanaInicio: tarea.semanaInicio,
+        fecha: tarea.fecha,
       }),
       destinatarioUserId: tarea.userId,
       tareaId: tarea.id,
@@ -327,6 +350,8 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
     setForm({
       ...emptyForm(),
       color: primerLibre ?? COLORES_EQUIPO[0],
+      saldoBaseFecha: parseOrderDateLocal(todayArgentinaDateKey()),
+      saldoBaseEditado: true,
     });
     setColorAviso(null);
     setDialogOpen(true);
@@ -345,6 +370,9 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
       color: p.color,
       diasVacacionesAnuales: p.diasVacacionesAnuales,
       vacacionesSaldoBase: p.vacacionesSaldoBase,
+      saldoBaseFecha: p.vacacionesSaldoBaseFecha
+        ? parseOrderDateLocal(p.vacacionesSaldoBaseFecha)
+        : undefined,
       vacacionesSinLimite: p.vacacionesSinLimite,
       esAdmin: p.esAdmin,
       saldoBaseEditado: false,
@@ -367,12 +395,19 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
       toast({ title: 'Elegí un usuario', variant: 'destructive' });
       return;
     }
+    if (mode === 'edit' && form.userId === user?.id && !form.esAdmin) {
+      toast({
+        title: 'No podés quitarte el rol a vos mismo',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSaving(true);
     try {
       const hoy = todayArgentinaDateKey();
       const saldoFecha =
         mode === 'create' || form.saldoBaseEditado
-          ? hoy
+          ? dateToKey(form.saldoBaseFecha) || hoy
           : undefined;
 
       await upsertPerfil({
@@ -387,7 +422,7 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
         ...(saldoFecha ? { vacacionesSaldoBaseFecha: saldoFecha } : {}),
         vacacionesSinLimite: form.vacacionesSinLimite,
         esAdmin: form.esAdmin,
-        activo: true,
+        // No mandar `activo` acá: editar no debe reactivar (EQ-R11).
       });
       invalidateEquipoRolCache(form.userId);
       toast({
@@ -408,6 +443,13 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
   };
 
   const handleDesactivar = async (p: PerfilEquipo) => {
+    if (p.userId === user?.id) {
+      toast({
+        title: 'No podés desactivarte a vos mismo',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (!window.confirm(`¿Desactivar a ${p.nombre}? Seguirá en la base como inactivo.`)) {
       return;
     }
@@ -457,8 +499,8 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
         <div>
           <h2 className="text-sm font-semibold text-white">Equipo</h2>
           <p className="text-xs text-muted-foreground">
-            Perfiles laborales. Al crear a Fede / Cachi / Juli B usá los saldos iniciales del 2026-10-02
-            (Fede 10, Cachi 0, Juli B 3).
+            Perfiles laborales del equipo. Al cargar el saldo base, indicá la fecha a la que
+            corresponden esos días (las vacaciones futuras ya cargadas se restan solas).
           </p>
         </div>
         <Button
@@ -602,6 +644,17 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
+                        title="Ver ausencias (corregir)"
+                        onClick={() => openAusenciasPara(m)}
+                        aria-label={`Ver ausencias de ${m.nombre}`}
+                      >
+                        <CalendarRange className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
                         onClick={() => openEdit(m)}
                         aria-label={`Editar ${m.nombre}`}
                       >
@@ -614,6 +667,12 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
                           size="icon"
                           className="h-7 w-7 text-muted-foreground hover:text-destructive"
                           onClick={() => void handleDesactivar(m)}
+                          disabled={m.userId === user?.id}
+                          title={
+                            m.userId === user?.id
+                              ? 'No podés quitarte el rol a vos mismo'
+                              : `Desactivar ${m.nombre}`
+                          }
                           aria-label={`Desactivar ${m.nombre}`}
                         >
                           <UserMinus className="h-3.5 w-3.5" />
@@ -638,7 +697,13 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
         </div>
       )}
 
-      <EquipoFeriadosPanel />
+      <EquipoFeriadosPanel
+        onImported={() => {
+          // El saldo cambia al sumar feriados: recalcular sin parpadeo y avisar al encabezado.
+          void load({ silent: true });
+          onFeriadosChanged?.();
+        }}
+      />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -649,7 +714,7 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
             <DialogDescription>
               {mode === 'create'
                 ? 'Elegí un usuario aprobado y completá sus datos laborales.'
-                : 'Si corregís el saldo de vacaciones, la fecha base pasa a ser hoy.'}
+                : 'Podés corregir el saldo y elegir la fecha a la que corresponde.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -801,18 +866,32 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
                         ...f,
                         vacacionesSaldoBase: Number(e.target.value) || 0,
                         saldoBaseEditado: true,
+                        saldoBaseFecha:
+                          f.saldoBaseFecha ?? parseOrderDateLocal(todayArgentinaDateKey()),
                       }))
                     }
                   />
-                  {mode === 'edit' && form.saldoBaseEditado ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      Le quedan {form.vacacionesSaldoBase} días al día de hoy.
-                    </p>
-                  ) : mode === 'create' ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      Fecha base: hoy ({todayArgentinaDateKey()}).
-                    </p>
-                  ) : null}
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <Label>Fecha del saldo base</Label>
+                  <div className="rounded-md border border-input px-3 py-2">
+                    <DatePicker
+                      date={form.saldoBaseFecha}
+                      onDateChange={(d) =>
+                        setForm((f) => ({
+                          ...f,
+                          saldoBaseFecha: d,
+                          saldoBaseEditado: true,
+                        }))
+                      }
+                      placeholder="Fecha base"
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Días disponibles a esa fecha, sin contar las vacaciones futuras ya
+                    cargadas (esas se restan solas). Hoy tiene{' '}
+                    {saldosPorUser.get(form.userId)?.planificados ?? 0} días planificados.
+                  </p>
                 </div>
               </div>
             ) : null}
@@ -821,12 +900,23 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
               <Checkbox
                 id="es-admin"
                 checked={form.esAdmin}
+                disabled={mode === 'edit' && form.userId === user?.id}
+                title={
+                  mode === 'edit' && form.userId === user?.id
+                    ? 'No podés quitarte el rol a vos mismo'
+                    : undefined
+                }
                 onCheckedChange={(v) =>
                   setForm((f) => ({ ...f, esAdmin: v === true }))
                 }
               />
               <Label htmlFor="es-admin" className="font-normal">
                 Administrador del equipo
+                {mode === 'edit' && form.userId === user?.id ? (
+                  <span className="ml-1 text-[11px] text-muted-foreground">
+                    (no podés quitarte el rol a vos mismo)
+                  </span>
+                ) : null}
               </Label>
             </div>
           </div>
@@ -864,9 +954,8 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
             }}
             perfil={targetPerfil}
             miembros={miembros.filter((m) => m.activo)}
-            ausencias={ausencias}
-            feriadosKeys={feriadosKeys}
             saving={savingAusencia}
+            esAdmin
             onConfirm={handleVacacionesAdmin}
           />
           <CambioDiaDialog
@@ -876,8 +965,8 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
               if (!v) setTargetPerfil(null);
             }}
             perfil={targetPerfil}
-            feriadosKeys={feriadosKeys}
             saving={savingAusencia}
+            esAdmin
             onConfirm={handleCambioAdmin}
           />
           <Dialog
@@ -915,8 +1004,22 @@ export function EquipoTab({ onChanged }: EquipoTabProps) {
             }}
             perfil={targetPerfil}
             autorNombre={
-              (user?.id && nombresPorUserId[user.id]) || 'Julián'
+              (user?.id && nombresPorUserId[user.id]) || adminNombre
             }
+          />
+          <AusenciasPersonaDialog
+            open={ausenciasOpen}
+            onOpenChange={(v) => {
+              setAusenciasOpen(v);
+              if (!v) setTargetPerfil(null);
+            }}
+            perfil={targetPerfil}
+            miembros={miembros}
+            adminNombre={adminNombre}
+            onChanged={() => {
+              void load({ silent: true });
+              onChanged?.();
+            }}
           />
         </>
       ) : null}

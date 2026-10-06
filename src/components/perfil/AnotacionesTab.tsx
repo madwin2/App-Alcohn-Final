@@ -4,7 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { cn } from '@/lib/utils/cn';
+import {
+  colaAutoguardadoVacia,
+  encolarAutoguardado,
+  flushAutoguardado,
+  notaVacia,
+  respuestaAutoguardadoVigente,
+  type EstadoColaAutoguardado,
+  type PatchAutoguardado,
+} from '@/lib/equipo/autoguardado';
 import { filtrarYOrdenarNotas } from '@/lib/equipo/notasPersonales';
 import { renderCentroChatMarkdown } from '@/lib/centro/markdown';
 import {
@@ -28,8 +38,14 @@ export function AnotacionesTab() {
   const [fijada, setFijada] = useState(false);
   const [preview, setPreview] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [confirmarBorrar, setConfirmarBorrar] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const draftRef = useRef({ titulo: '', contenido: '', fijada: false });
+  const colaRef = useRef<EstadoColaAutoguardado>(colaAutoguardadoVacia());
+  const selectedIdRef = useRef<string | null>(null);
+  const editorRef = useRef({ titulo: '', contenido: '', fijada: false });
+
+  selectedIdRef.current = selectedId;
+  editorRef.current = { titulo, contenido, fijada };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,7 +54,7 @@ export function AnotacionesTab() {
       setNotas(list);
       if (list.length === 0) {
         setSelectedId(null);
-      } else if (!selectedId || !list.some((n) => n.id === selectedId)) {
+      } else if (!selectedIdRef.current || !list.some((n) => n.id === selectedIdRef.current)) {
         setSelectedId(list[0].id);
       }
     } catch (err) {
@@ -50,12 +66,11 @@ export function AnotacionesTab() {
     } finally {
       setLoading(false);
     }
-  }, [selectedId, toast]);
+  }, [toast]);
 
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [load]);
 
   const lista = useMemo(
     () =>
@@ -72,24 +87,25 @@ export function AnotacionesTab() {
     [notas, busqueda],
   );
 
+  // Solo al cambiar de nota: no pisar el editor cuando vuelve un persist.
   useEffect(() => {
     const n = notas.find((x) => x.id === selectedId);
     if (!n) {
       setTitulo('');
       setContenido('');
       setFijada(false);
-      draftRef.current = { titulo: '', contenido: '', fijada: false };
+      setSaveState('idle');
       return;
     }
     setTitulo(n.titulo);
     setContenido(n.contenido);
     setFijada(n.fijada);
-    draftRef.current = { titulo: n.titulo, contenido: n.contenido, fijada: n.fijada };
     setSaveState('saved');
-  }, [selectedId, notas]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo selectedId
+  }, [selectedId]);
 
   const persist = useCallback(
-    async (id: string, patch: { titulo: string; contenido: string; fijada: boolean }) => {
+    async (id: string, patch: PatchAutoguardado, version: number) => {
       setSaveState('saving');
       try {
         const updated = await actualizarNotaPersonal({
@@ -99,11 +115,15 @@ export function AnotacionesTab() {
           fijada: patch.fijada,
         });
         setNotas((prev) => prev.map((n) => (n.id === id ? updated : n)));
-        setSaveState('saved');
+        if (respuestaAutoguardadoVigente(colaRef.current, id, version)) {
+          setSaveState('saved');
+        }
       } catch (err) {
-        setSaveState('error');
+        if (respuestaAutoguardadoVigente(colaRef.current, id, version)) {
+          setSaveState('error');
+        }
         toast({
-          title: 'No se pudo guardar',
+          title: 'Error al guardar · Reintentar',
           description: err instanceof Error ? err.message : 'Error',
           variant: 'destructive',
         });
@@ -112,23 +132,80 @@ export function AnotacionesTab() {
     [toast],
   );
 
+  const flushPendiente = useCallback(
+    (id?: string) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      const { estado, enviado } = flushAutoguardado(colaRef.current, id);
+      colaRef.current = estado;
+      if (enviado) {
+        void persist(enviado.id, enviado.patch, enviado.version);
+      }
+    },
+    [persist],
+  );
+
   const scheduleSave = useCallback(
-    (id: string, patch: { titulo: string; contenido: string; fijada: boolean }) => {
-      draftRef.current = patch;
+    (id: string, patch: PatchAutoguardado) => {
+      colaRef.current = encolarAutoguardado(colaRef.current, id, patch);
       setSaveState('pending');
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        void persist(id, patch);
+        debounceRef.current = null;
+        const { estado, enviado } = flushAutoguardado(colaRef.current, id);
+        colaRef.current = estado;
+        if (enviado) void persist(enviado.id, enviado.patch, enviado.version);
       }, 800);
     },
     [persist],
   );
 
+  const borrarSiVacia = useCallback(
+    async (id: string, tituloNota: string, contenidoNota: string) => {
+      if (!notaVacia(tituloNota, contenidoNota)) return false;
+      try {
+        await borrarNotaPersonal(id);
+        setNotas((prev) => prev.filter((n) => n.id !== id));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [],
+  );
+
+  const selectNota = useCallback(
+    async (nextId: string | null) => {
+      const prevId = selectedIdRef.current;
+      if (prevId && prevId !== nextId) {
+        flushPendiente(prevId);
+        const draft = editorRef.current;
+        const borrada = await borrarSiVacia(prevId, draft.titulo, draft.contenido);
+        if (borrada && nextId === prevId) {
+          setSelectedId(null);
+          return;
+        }
+      }
+      setSelectedId(nextId);
+    },
+    [borrarSiVacia, flushPendiente],
+  );
+
   useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flushPendiente();
     };
-  }, []);
+    const onPageHide = () => flushPendiente();
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onPageHide);
+      flushPendiente();
+    };
+  }, [flushPendiente]);
 
   const handleFieldChange = (
     field: 'titulo' | 'contenido' | 'fijada',
@@ -146,11 +223,21 @@ export function AnotacionesTab() {
     scheduleSave(selectedId, next);
   };
 
+  const handleRetry = () => {
+    if (!selectedId) return;
+    scheduleSave(selectedId, { titulo, contenido, fijada });
+  };
+
   const handleNueva = async () => {
+    await selectNota(null);
+    flushPendiente();
     try {
       const creada = await crearNotaPersonal();
       setNotas((prev) => [creada, ...prev]);
       setSelectedId(creada.id);
+      setTitulo('');
+      setContenido('');
+      setFijada(false);
       setSaveState('saved');
     } catch (err) {
       toast({
@@ -161,24 +248,37 @@ export function AnotacionesTab() {
     }
   };
 
-  const handleBorrar = async () => {
+  const solicitarBorrar = () => {
     if (!selectedId) return;
-    const n = notas.find((x) => x.id === selectedId);
-    const label = n?.titulo?.trim() || 'Sin título';
-    if (!window.confirm(`¿Borrar la anotación “${label}”?`)) return;
-    try {
-      await borrarNotaPersonal(selectedId);
-      const rest = notas.filter((x) => x.id !== selectedId);
-      setNotas(rest);
-      setSelectedId(rest[0]?.id ?? null);
-    } catch (err) {
-      toast({
-        title: 'No se pudo borrar',
-        description: err instanceof Error ? err.message : 'Error',
-        variant: 'destructive',
-      });
-    }
+    setConfirmarBorrar(true);
   };
+
+  const ejecutarBorrar = () => {
+    const id = selectedId;
+    if (!id) return;
+    flushPendiente(id);
+    void (async () => {
+      try {
+        await borrarNotaPersonal(id);
+        const rest = notas.filter((x) => x.id !== id);
+        setNotas(rest);
+        setSelectedId(rest[0]?.id ?? null);
+        toast({ title: 'Anotación borrada' });
+      } catch (err) {
+        toast({
+          title: 'No se pudo borrar',
+          description: err instanceof Error ? err.message : 'Error',
+          variant: 'destructive',
+        });
+      }
+    })();
+  };
+
+  const labelBorrarAnotacion = useMemo(() => {
+    if (!selectedId) return '';
+    const n = notas.find((x) => x.id === selectedId);
+    return n?.titulo?.trim() || 'Sin título';
+  }, [notas, selectedId]);
 
   const previewHtml = useMemo(
     () => (contenido.trim() ? renderCentroChatMarkdown(contenido) : ''),
@@ -186,15 +286,13 @@ export function AnotacionesTab() {
   );
 
   const saveLabel =
-    saveState === 'pending'
+    saveState === 'pending' || saveState === 'saving'
       ? 'Guardando…'
-      : saveState === 'saving'
-        ? 'Guardando…'
-        : saveState === 'saved'
-          ? 'Guardado'
-          : saveState === 'error'
-            ? 'Error al guardar'
-            : '';
+      : saveState === 'saved'
+        ? 'Guardado'
+        : saveState === 'error'
+          ? 'Error al guardar · Reintentar'
+          : '';
 
   if (loading) {
     return (
@@ -237,7 +335,7 @@ export function AnotacionesTab() {
                   <li key={n.id}>
                     <button
                       type="button"
-                      onClick={() => setSelectedId(n.id)}
+                      onClick={() => void selectNota(n.id)}
                       className={cn(
                         'flex w-full items-start gap-2 border-b border-white/[0.06] px-3 py-2.5 text-left text-xs transition-colors last:border-0',
                         selectedId === n.id ? 'bg-white/10 text-white' : 'text-muted-foreground hover:bg-white/[0.04]',
@@ -299,19 +397,24 @@ export function AnotacionesTab() {
                   variant="ghost"
                   size="icon"
                   className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                  onClick={() => void handleBorrar()}
+                  onClick={solicitarBorrar}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
                 {saveLabel ? (
-                  <span
+                  <button
+                    type="button"
+                    disabled={saveState !== 'error'}
+                    onClick={handleRetry}
                     className={cn(
                       'text-[10px] uppercase tracking-wide',
-                      saveState === 'error' ? 'text-destructive' : 'text-muted-foreground',
+                      saveState === 'error'
+                        ? 'cursor-pointer text-destructive underline-offset-2 hover:underline'
+                        : 'text-muted-foreground',
                     )}
                   >
                     {saveLabel}
-                  </span>
+                  </button>
                 ) : null}
               </div>
 
@@ -332,6 +435,15 @@ export function AnotacionesTab() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmarBorrar}
+        onOpenChange={setConfirmarBorrar}
+        title="Borrar anotación"
+        description={`¿Borrar la anotación “${labelBorrarAnotacion}”?`}
+        confirmLabel="Borrar"
+        variant="destructive"
+        onConfirm={ejecutarBorrar}
+      />
     </div>
   );
 }

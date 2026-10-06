@@ -1,4 +1,5 @@
 import { supabase } from '../client';
+import { asegurarFilaAfectada, mapPostgrestError } from './rlsAffected';
 
 export interface NotaPersonal {
   id: string;
@@ -74,11 +75,16 @@ export async function actualizarNotaPersonal(input: {
     .select(SELECT)
     .single();
 
-  if (error) throw error;
-  return mapNota(data as NotaRow);
+  if (error) throw mapPostgrestError(error);
+  return mapNota(asegurarFilaAfectada(data) as NotaRow);
 }
 
 export async function borrarNotaPersonal(id: string): Promise<void> {
-  const { error } = await supabase.from('notas_personales').delete().eq('id', id);
-  if (error) throw error;
+  const { data, error } = await supabase
+    .from('notas_personales')
+    .delete()
+    .eq('id', id)
+    .select('id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data);
 }

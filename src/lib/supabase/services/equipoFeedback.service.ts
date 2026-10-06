@@ -1,4 +1,5 @@
 import { supabase } from '../client';
+import { asegurarFilaAfectada, mapPostgrestError } from './rlsAffected';
 import type { TipoFeedback } from '@/lib/equipo/feedback';
 
 export type { TipoFeedback };
@@ -11,6 +12,8 @@ export interface FeedbackEquipo {
   titulo: string | null;
   texto: string;
   leidoAt: string | null;
+  /** Presente tras migration_equipo_fix_rls.sql (EQ-R15). */
+  editadoAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -23,10 +26,12 @@ type FeedbackRow = {
   titulo: string | null;
   texto: string;
   leido_at: string | null;
+  editado_at?: string | null;
   created_at: string;
   updated_at: string;
 };
 
+// Tras aplicar migration_equipo_fix_rls.sql, sumar `editado_at` al SELECT.
 const SELECT =
   'id, para_user_id, autor_user_id, tipo, titulo, texto, leido_at, created_at, updated_at';
 
@@ -39,6 +44,7 @@ function mapFeedback(row: FeedbackRow): FeedbackEquipo {
     titulo: row.titulo,
     texto: row.texto,
     leidoAt: row.leido_at,
+    editadoAt: row.editado_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -116,12 +122,18 @@ export async function actualizarFeedback(input: {
   texto?: string;
 }): Promise<FeedbackEquipo> {
   const patch: Record<string, unknown> = {};
+  const contenidoCambia =
+    input.tipo !== undefined || input.titulo !== undefined || input.texto !== undefined;
   if (input.tipo !== undefined) patch.tipo = input.tipo;
   if (input.titulo !== undefined) patch.titulo = input.titulo?.trim() || null;
   if (input.texto !== undefined) {
     const texto = input.texto.trim();
     if (!texto) throw new Error('El texto no puede estar vacío');
     patch.texto = texto;
+  }
+  // EQ-R15: vuelve a Nuevo. `editado_at` se setea cuando exista la columna (migración).
+  if (contenidoCambia) {
+    patch.leido_at = null;
   }
 
   const { data, error } = await supabase
@@ -131,13 +143,18 @@ export async function actualizarFeedback(input: {
     .select(SELECT)
     .single();
 
-  if (error) throw error;
-  return mapFeedback(data as FeedbackRow);
+  if (error) throw mapPostgrestError(error);
+  return mapFeedback(asegurarFilaAfectada(data) as FeedbackRow);
 }
 
 export async function borrarFeedback(id: string): Promise<void> {
-  const { error } = await supabase.from('feedback_equipo').delete().eq('id', id);
-  if (error) throw error;
+  const { data, error } = await supabase
+    .from('feedback_equipo')
+    .delete()
+    .eq('id', id)
+    .select('id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data);
 }
 
 /** Destinatario: RPC SECURITY DEFINER (no puede editar el texto). */

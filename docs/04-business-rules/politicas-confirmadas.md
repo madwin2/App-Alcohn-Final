@@ -45,17 +45,36 @@ Reglas que el equipo **confirmó** (respuestas a `14-open-questions`, 2026-09-28
 | POL-039 | Cada integrante tiene **su** página personal y entra **solo a la suya**; no se navega al perfil de un compañero (D1). | PLAN_PAGINA_PERSONAL · Q-EQ | Sí (`/perfil` sin parámetro) |
 | POL-040 | Hay un **rol de administrador** liviano (`perfiles_equipo.es_admin`) para dejar feedback y sumar tareas; no es un sistema de permisos por pantalla (D2). | PLAN_PAGINA_PERSONAL · Q-EQ-003 | Sí (Etapa 1) |
 | POL-041 | Las **anotaciones personales son privadas**: solo las ve quien las escribe, **ni el admin** (D3). | PLAN_PAGINA_PERSONAL | Sí (Etapa 4) |
-| POL-042 | El **calendario del equipo** (vacaciones, cambios de día, feriados, cumpleaños) lo ve **todo el equipo** (D4). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 2) |
-| POL-043 | Todos trabajan de **lunes a viernes** (D5). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 2–3) |
-| POL-044 | Vacaciones y cambios de día se **cargan directamente**: sin aprobación, sin pedido y sin motivo obligatorio (D6). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 2) |
+| POL-042 | El **calendario del equipo** (vacaciones, cambios de día, feriados, cumpleaños) lo ve **todo el equipo** (D4). | PLAN_PAGINA_PERSONAL | Sí (Etapa 2) |
+| POL-043 | Todos trabajan de **lunes a viernes** (D5). | PLAN_PAGINA_PERSONAL | Sí (Etapa 2–3) |
+| POL-044 | Vacaciones y cambios de día se **cargan directamente**: sin aprobación, sin pedido y sin motivo obligatorio (D6). | PLAN_PAGINA_PERSONAL | Sí (Etapa 2) |
 | POL-045 | Cada uno tiene **10 días hábiles** de vacaciones anuales (D7); el período y la acumulación están en D18/D19. | PLAN_PAGINA_PERSONAL · Q-EQ-001 | Sí (campo `dias_vacaciones_anuales`; cálculo en Etapa 2) |
-| POL-046 | **Feriados**: nacionales de fuente pública + días propios de la empresa que carga el admin (D8). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 2) |
-| POL-047 | Las **tareas semanales** las define cada uno (crear, editar, pausar y borrar las suyas); el admin también puede sumarles (notificación al destinatario). En esta fase solo se definen (marcar hechas va al Inicio, más adelante) (D9). | PLAN_PAGINA_PERSONAL | Sí (Etapa 3; aclaración dueño 2026-10-02) |
-| POL-048 | **Mis números** son personales: cada uno ve solo los suyos (D10). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 7) |
-| POL-049 | **Producción**: por ahora todos los sellos que pasan a `Hecho` se atribuyen a quien tenga área principal **producción** (hoy Fede). Más adelante se precisará (D11). | PLAN_PAGINA_PERSONAL | Pendiente (Etapa 7) |
+| POL-046 | **Feriados**: nacionales de fuente pública + días propios de la empresa que carga el admin (D8). | PLAN_PAGINA_PERSONAL | Sí (Etapa 2) |
+| POL-047 | Las **tareas** las define cada uno (crear, editar, pausar y borrar las suyas); el admin también puede sumarles. Se **marcan** en el calendario / Mi día (Hecha, Posponer, Mover, No hecha) (D9 · Q-EQ-018). | PLAN_PAGINA_PERSONAL · Q-EQ-018 | Parcial (código; migración `tareas_registro` pendiente de OK) |
+| POL-048 | **Mis números** son personales: cada uno ve solo los suyos (D10). | PLAN_PAGINA_PERSONAL | Sí (Etapa 7) |
+| POL-049 | **Producción**: por ahora todos los sellos que pasan a `Hecho` se atribuyen a quien tenga área principal **producción** (hoy Fede). Más adelante se precisará (D11). | PLAN_PAGINA_PERSONAL | Sí (Etapa 7) |
 | POL-050 | **Ventas por persona** no se muestran hasta existir un campo "vendido por"; `ordenes.taken_by` no alcanza (D12). | PLAN_PAGINA_PERSONAL | — (backlog) |
 | POL-051 | **Corcho** compartido; cada persona tiene un **color**; se puede filtrar por color/persona (D13). | PLAN_PAGINA_PERSONAL | Sí (Etapa 6) |
 | POL-052 | Corcho — estados: cartel **"Nueva"** la primera vez que cada persona la ve; luego puede quedar **descartada** o **aprobada** (D14). | PLAN_PAGINA_PERSONAL | Sí (Etapa 6) |
 | POL-053 | Corcho — votos: cada persona puede reaccionar con 👍 o 👎 (D15). | PLAN_PAGINA_PERSONAL | Sí (Etapa 6) |
 | POL-054 | Datos personales en el perfil: solo **cumpleaños** y **fecha de ingreso** (más puesto/área). Nada de DNI, dirección, salud ni datos bancarios (D16). | PLAN_PAGINA_PERSONAL | Sí (`perfiles_equipo`) |
 | POL-055 | "Quién cubre cuando falta" **no** se hace por ahora (D17). | PLAN_PAGINA_PERSONAL | — |
+| POL-056 | Ausencias: quien **no** es admin solo carga vacaciones y cambios de día con **fecha de inicio futura** (hora Argentina). Hoy o retroactivo lo carga el admin (para sí o para otros). | Q-EQ-007 · REVISION_EQUIPO | Sí (UI; RLS en `migration_equipo_fix_rls.sql` pendiente de OK) |
+| POL-057 | Mi perfil y corcho: solo **integrantes activos** (`perfiles_equipo.activo = true`). Usuario aprobado sin perfil o desactivado no accede. | Q-EQ-008 · REVISION_EQUIPO | UI parcial; RLS en `migration_equipo_fix_rls.sql` pendiente de OK |
+| POL-058 | Si alguien **cambia fechas** o **cancela** vacaciones, el resto del equipo recibe aviso (mismo alcance que al cargar). | Q-EQ-009 · REVISION_EQUIPO | Sí (`e1_vacaciones_cambiadas` / `e1_vacaciones_canceladas`) |
+| POL-059 | Si el admin **edita** un feedback ya leído: vuelve a no leído, badge **Editado** y notificación al destinatario (sin repetir el texto). | Q-EQ-010 · REVISION_EQUIPO | Sí (app); columna `feedback_equipo.editado_at` en migración pendiente de OK |
+| POL-060 | "Lo que necesito": solo estados **Pendiente** y **Resuelta** (sin "No se puede" ni estados intermedios). | Q-EQ-011 · REVISION_EQUIPO | Sí |
+| POL-061 | Cambio de día: el **día de recupero** puede ser **antes** del día que falta; solo avisos si coincide con la falta, feriado o vacaciones propias. | Q-EQ-012 · REVISION_EQUIPO | Sí |
+| POL-062 | Mis números — **Etiquetas**: cuenta **envíos distintos** (cada orden una vez por período), no cada acción sobre la misma orden. | Q-EQ-013 · REVISION_EQUIPO | Sí |
+| POL-063 | **No** se avisa al admin cuando alguien borra/pausa una tarea que él sumó ni cuando alguien logra un objetivo. | Q-EQ-014 · REVISION_EQUIPO | Sí (sin notificación) |
+| POL-064 | Cumpleaños: en la base puede guardarse **con año**; en pantalla se muestra **sin año**. Visible por API para el equipo está OK. | Q-EQ-015 · REVISION_EQUIPO | Sí |
+| POL-065 | Corcho: idea **aprobada** no tiene seguimiento extra (Hecha, responsable, Innovación); queda en **Aprobada**. | Q-EQ-016 · REVISION_EQUIPO | Sí |
+| POL-066 | **Un solo calendario**: lo público del equipo lo ven todos; encima, cada uno ve **sus tareas** (privadas). | Q-EQ-017 · REVISION_USABILIDAD | Parcial (código; migración `tareas_registro` pendiente de OK) |
+| POL-067 | Todas las tareas se **marcan por ocurrencia**: Hecha, Posponer, Mover a otro día, No hecha (solo en las que se repiten). | Q-EQ-018 · REVISION_USABILIDAD | Parcial (código; migración pendiente de OK) |
+| POL-068 | Si una tarea **no se marca**, **se arrastra** al día siguiente hasta marcarla. | Q-EQ-019 · REVISION_USABILIDAD | Parcial (lógica `tareasAgenda`; requiere registros en DB) |
+| POL-069 | **Post-its = notas/avisos** del Inicio; **tareas** viven en Mi perfil/calendario. No se unifican. | Q-EQ-020 · REVISION_USABILIDAD | Sí (textos; modelo sin cambios) |
+| POL-070 | Marcar tarea: **dueño y admin**. Quien la asignó ve el estado. | Q-EQ-023 · REVISION_USABILIDAD | Parcial (RLS en migración pendiente de OK) |
+| POL-071 | Ocurrencia en feriado/vacaciones/día que falto → **próximo hábil** que trabaje; si hay varias en el mismo período, **solo una** se mueve (S13). | Q-EQ-024 · REVISION_USABILIDAD | Sí (`tareasAgenda.aplicarS13`) |
+| POL-072 | Varias atrasadas de la misma tarea → **una sola tarjeta** "atrasada (N veces)" (S14). | Q-EQ-024 · REVISION_USABILIDAD | Sí (`agruparAtrasadas`) |
+| POL-073 | El arrastre **no es retroactivo**: cuenta desde la publicación de la función (S15). | Q-EQ-024 · REVISION_USABILIDAD | Sí (`FECHA_INICIO_ARRASTRE_TAREAS`) |
+| POL-074 | Reposición de stock (`tareas_dashboard`) **no** va al calendario de tareas (S17). | Q-EQ-024 · REVISION_USABILIDAD | Sí (sin cambios) |

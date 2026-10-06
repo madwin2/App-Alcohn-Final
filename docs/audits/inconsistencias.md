@@ -138,3 +138,12 @@ Hallazgos detectados durante la documentación (2026-09-27). **No se corrigió n
 
 ### AUD-INC-025 · Guardas de arquitectura incumplidas
 - **Evidencia**: `ARCHITECTURE_GUARDRAILS.md` pide archivos ≤250 líneas; `app/envios/index.tsx` 2.220, `ProgramCardDesign.tsx` 2.410, `programs.service.ts` 2.038, `orders.service.ts` 1.913, etc.
+
+<a id="aud-inc-026"></a>
+
+### AUD-INC-026 · RLS: DELETE/UPDATE “silencioso” (0 filas, sin error)
+- **Origen**: [EQ-R03](../../REVISION_EQUIPO_LOGICA_DE_USO.md#eq-r03--acciones-que-funcionan-pero-no-hicieron-nada-rls-filtra-en-silencio) (revisión Mi perfil / Equipo, 2026-10-05).
+- **Evidencia**: Con RLS, un `DELETE` o `UPDATE` sobre filas no permitidas **no falla**: PostgREST devuelve éxito con 0 filas afectadas. Varios servicios mostraban toast “Borrado” y la UI quitaba el ítem igual. Los `.update().select().single()` fallan con `PGRST116` (mensaje críptico).
+- **Alcance**: confirmado en `equipo*.service.ts`; **probable** en otros módulos con el mismo patrón (`tareas_dashboard`, innovación, etc.).
+- **Mitigación en curso**: helper `asegurarFilaAfectada` + `.select('id')` en writes del equipo; mapear `PGRST116` a mensaje legible; no optimizar la UI hasta confirmar en servidor.
+- **Impacto**: el usuario cree que borró o cambió algo y no ocurrió; datos inconsistentes con lo mostrado.

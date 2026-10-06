@@ -645,11 +645,11 @@ export default function HomePage() {
               type="button"
               onClick={() => setIsAddToColleagueOpen(true)}
               className="w-[82px] h-[82px] flex-shrink-0 p-0 border-0 bg-transparent cursor-pointer hover:scale-105 active:scale-95 transition-transform duration-200 focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-background rounded-lg"
-              aria-label="Asignar tarea a compañero"
+              aria-label="Dejar una nota a un compañero"
             >
               <img
                 src={stickyNoteAddWorkmateSvg}
-                alt="Asignar tarea a compañero"
+                alt="Dejar una nota a un compañero"
                 className="w-full h-full object-contain drop-shadow-[0_4px_20px_rgba(0,0,0,0.4)]"
               />
             </button>

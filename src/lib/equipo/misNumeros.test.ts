@@ -10,6 +10,7 @@ import {
   paginarIds,
   rangoPeriodo,
   rangoPeriodoAnterior,
+  rangoPeriodoAnteriorComparable,
   rangoToUtcBounds,
   serieMensualSellos,
   textoComparacion,
@@ -76,6 +77,19 @@ describe('misNumeros períodos', () => {
     expect(clampRangoHastaHoy({ desde: '2026-10-01', hasta: '2026-10-31' }, '2026-10-02')).toEqual({
       desde: '2026-10-01',
       hasta: '2026-10-02',
+    });
+  });
+
+  it('rangoPeriodoAnteriorComparable usa el mismo tramo transcurrido', () => {
+    // Lunes 2026-10-05 → tramo de 1 día; anterior = lunes 2026-09-28
+    expect(rangoPeriodoAnteriorComparable('semana', '2026-10-05')).toEqual({
+      desde: '2026-09-28',
+      hasta: '2026-09-28',
+    });
+    // Día 2 del mes → anterior 1–2 del mes previo
+    expect(rangoPeriodoAnteriorComparable('mes', '2026-10-02')).toEqual({
+      desde: '2026-09-01',
+      hasta: '2026-09-02',
     });
   });
 });
@@ -145,10 +159,12 @@ describe('misNumeros textos y área', () => {
     expect(textoComparacion(5, 5, 'la semana anterior')).toBe('0 vs la semana anterior');
   });
 
-  it('labelPeriodoAnterior mes sin año', () => {
-    expect(labelPeriodoAnterior('mes', '2026-10-02')).toBe('septiembre');
-    expect(labelPeriodoAnterior('semana', '2026-10-02')).toBe('la semana anterior');
-    expect(labelPeriodoAnterior('anio', '2026-10-02')).toBe('2025');
+  it('labelPeriodoAnterior usa tramo comparable', () => {
+    expect(labelPeriodoAnterior('mes', '2026-10-02')).toBe('a esta altura de septiembre');
+    expect(labelPeriodoAnterior('semana', '2026-10-02')).toBe(
+      'a esta altura de la semana pasada',
+    );
+    expect(labelPeriodoAnterior('anio', '2026-10-02')).toBe('a esta altura de 2025');
   });
 
   it('esAreaProduccion', () => {

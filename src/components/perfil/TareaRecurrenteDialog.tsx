@@ -49,6 +49,8 @@ export type TareaRecurrenteFormValue = {
   diasSemana: number[] | null;
   diaMes: number | null;
   semanaInicio: string | null;
+  /** Única: fecha del día. */
+  fecha: string | null;
 };
 
 interface TareaRecurrenteDialogProps {
@@ -60,6 +62,8 @@ interface TareaRecurrenteDialogProps {
   personaNombre: string;
   saving?: boolean;
   onSave: (value: TareaRecurrenteFormValue) => void | Promise<void>;
+  /** Prefija "Un solo día" con esta fecha al crear. */
+  fechaInicial?: string;
 }
 
 export function TareaRecurrenteDialog({
@@ -69,6 +73,7 @@ export function TareaRecurrenteDialog({
   personaNombre,
   saving,
   onSave,
+  fechaInicial,
 }: TareaRecurrenteDialogProps) {
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -76,6 +81,7 @@ export function TareaRecurrenteDialog({
   const [diasSemana, setDiasSemana] = useState<number[]>([1]);
   const [diaMes, setDiaMes] = useState(1);
   const [semanaInicio, setSemanaInicio] = useState<Date | undefined>(undefined);
+  const [fechaUnica, setFechaUnica] = useState<Date | undefined>(undefined);
 
   useEffect(() => {
     if (!open) return;
@@ -86,18 +92,27 @@ export function TareaRecurrenteDialog({
       setDiasSemana(initial.diasSemana?.length ? [...initial.diasSemana] : [1]);
       setDiaMes(initial.diaMes ?? 1);
       setSemanaInicio(
-        initial.semanaInicio ? parseOrderDateLocal(initial.semanaInicio) : undefined,
+        initial.frecuencia === 'quincenal' && initial.semanaInicio
+          ? parseOrderDateLocal(initial.semanaInicio)
+          : undefined,
       );
+      const fechaUnicaKey =
+        initial.frecuencia === 'unica'
+          ? (initial.fecha ?? initial.semanaInicio)
+          : null;
+      setFechaUnica(fechaUnicaKey ? parseOrderDateLocal(fechaUnicaKey) : undefined);
     } else {
       setTitulo('');
       setDescripcion('');
-      setFrecuencia('semanal');
+      const hoy = todayArgentinaDateKey();
+      const pre = fechaInicial ?? hoy;
+      setFrecuencia(fechaInicial ? 'unica' : 'semanal');
       setDiasSemana([1]);
       setDiaMes(1);
-      const hoy = todayArgentinaDateKey();
       setSemanaInicio(parseOrderDateLocal(lunesDeSemana(hoy)));
+      setFechaUnica(parseOrderDateLocal(pre));
     }
-  }, [open, initial]);
+  }, [open, initial, fechaInicial]);
 
   const toggleDia = (d: number) => {
     setDiasSemana((prev) => {
@@ -123,8 +138,11 @@ export function TareaRecurrenteDialog({
     if (frecuencia === 'quincenal' && !dateToKey(semanaInicio)) {
       return 'Elegí la semana de inicio (un lunes)';
     }
+    if (frecuencia === 'unica' && !dateToKey(fechaUnica)) {
+      return 'Elegí el día';
+    }
     return null;
-  }, [titulo, frecuencia, diasSemana, diaMes, semanaInicio]);
+  }, [titulo, frecuencia, diasSemana, diaMes, semanaInicio, fechaUnica]);
 
   const handleSave = async () => {
     if (error) return;
@@ -132,6 +150,7 @@ export function TareaRecurrenteDialog({
     if (frecuencia === 'quincenal' && semanaKey) {
       semanaKey = lunesDeSemana(semanaKey);
     }
+    const unicaKey = dateToKey(fechaUnica);
     await onSave({
       titulo: titulo.trim(),
       descripcion: descripcion.trim() || null,
@@ -140,6 +159,7 @@ export function TareaRecurrenteDialog({
         frecuencia === 'semanal' || frecuencia === 'quincenal' ? diasSemana : null,
       diaMes: frecuencia === 'mensual' ? diaMes : null,
       semanaInicio: frecuencia === 'quincenal' ? semanaKey : null,
+      fecha: frecuencia === 'unica' ? unicaKey : null,
     });
   };
 
@@ -151,7 +171,7 @@ export function TareaRecurrenteDialog({
           <DialogDescription>
             {initial
               ? `Tarea de ${personaNombre}.`
-              : `Definí qué tiene que hacer ${personaNombre} y con qué frecuencia.`}
+              : `Definí qué tiene que hacer ${personaNombre}: un día puntual o con frecuencia.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -188,6 +208,7 @@ export function TareaRecurrenteDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="unica">Un solo día</SelectItem>
                 <SelectItem value="diaria">Diaria (lun–vie)</SelectItem>
                 <SelectItem value="semanal">Semanal</SelectItem>
                 <SelectItem value="quincenal">Cada 15 días</SelectItem>
@@ -195,6 +216,22 @@ export function TareaRecurrenteDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {frecuencia === 'unica' ? (
+            <div className="space-y-1.5">
+              <Label>Día</Label>
+              <div className="rounded-md border border-input px-3 py-2">
+                <DatePicker
+                  date={fechaUnica}
+                  onDateChange={setFechaUnica}
+                  placeholder="Elegir día"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Solo aparece ese día (hoy, esta semana o una futura). No se repite.
+              </p>
+            </div>
+          ) : null}
 
           {frecuencia === 'semanal' || frecuencia === 'quincenal' ? (
             <div className="space-y-1.5">

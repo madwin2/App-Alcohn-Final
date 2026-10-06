@@ -14,6 +14,7 @@ import {
 } from '@/lib/supabase/services/equipoNecesidades.service';
 import { notifyNecesidadNueva } from '@/lib/notificaciones/events';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useNombreAdmin } from '@/lib/hooks/useNombreAdmin';
 
 function fmtFecha(iso: string): string {
   try {
@@ -28,9 +29,17 @@ function fmtFecha(iso: string): string {
   }
 }
 
-export function NecesidadesTab({ personaNombre }: { personaNombre: string }) {
+export function NecesidadesTab({
+  personaNombre,
+  refreshKey = 0,
+}: {
+  personaNombre: string;
+  /** Cambia al llegar desde una notificación estando ya en la pestaña (EQ-R21). */
+  refreshKey?: number;
+}) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const adminNombre = useNombreAdmin();
   const [items, setItems] = useState<NecesidadEquipo[]>([]);
   const [loading, setLoading] = useState(true);
   const [nuevoTexto, setNuevoTexto] = useState('');
@@ -55,7 +64,7 @@ export function NecesidadesTab({ personaNombre }: { personaNombre: string }) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const pendientes = useMemo(() => items.filter((n) => n.estado === 'pendiente'), [items]);
   const resueltas = useMemo(() => items.filter((n) => n.estado === 'resuelta'), [items]);
@@ -79,7 +88,7 @@ export function NecesidadesTab({ personaNombre }: { personaNombre: string }) {
         necesidadId: creada.id,
       });
 
-      toast({ title: 'Pedido enviado', description: 'Julián recibe un aviso.' });
+      toast({ title: 'Pedido enviado', description: `Le llega un aviso a ${adminNombre}.` });
     } catch (err) {
       toast({
         title: 'No se pudo enviar',
@@ -136,7 +145,7 @@ export function NecesidadesTab({ personaNombre }: { personaNombre: string }) {
   return (
     <div className="space-y-6">
       <p className="text-xs text-muted-foreground">
-        Pedí algo puntual (herramienta, insumo, lo que sea). Lo ves vos y Julián; cuando lo resuelva te
+        Pedí algo puntual (herramienta, insumo, lo que sea). Lo ves vos y {adminNombre}; cuando lo resuelva te
         avisa acá.
       </p>
 
@@ -238,10 +247,17 @@ export function NecesidadesTab({ personaNombre }: { personaNombre: string }) {
                   'rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm',
                 )}
               >
-                <p className="text-muted-foreground line-through">{n.texto}</p>
+                {/* EQ-R16: con respuesta no se tacha (puede ser un "no se puede"). */}
+                <p
+                  className={cn(
+                    n.respuestaAdmin ? 'text-white' : 'text-muted-foreground line-through',
+                  )}
+                >
+                  {n.texto}
+                </p>
                 {n.respuestaAdmin ? (
-                  <p className="mt-2 text-white">
-                    <span className="text-xs text-muted-foreground">Respuesta: </span>
+                  <p className="mt-2 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] px-3 py-2 text-white">
+                    <span className="text-xs font-medium text-emerald-300">Respuesta: </span>
                     {n.respuestaAdmin}
                   </p>
                 ) : null}

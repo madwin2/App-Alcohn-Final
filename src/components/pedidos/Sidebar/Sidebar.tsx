@@ -29,6 +29,7 @@ import { useOrdersStore } from '@/lib/state/orders.store';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/cn';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { useEquipoRol } from '@/lib/hooks/useEquipoRol';
 import { isFbTestUser } from '@/lib/auth/access';
 import { useToast } from '@/components/ui/use-toast';
 import { useSidebarNotifications } from '@/lib/hooks/useSidebarNotifications';
@@ -57,6 +58,7 @@ function SidebarInner() {
   const location = useLocation();
   const navigate = useNavigate();
   const { pedidosBadge, comercialBadge, programasBadge, corchoBadge } = useSidebarNotifications();
+  const { esMiembroActivo } = useEquipoRol();
 
   const isExpanded = sidebarExpanded || sidebarHovered;
 
@@ -171,7 +173,7 @@ function SidebarInner() {
             />
           </div>
         )}
-        {!isRestrictedUser && (
+        {!isRestrictedUser && esMiembroActivo && (
           <div className="flex justify-start">
             <SidebarItem
               icon={Pin}

@@ -45,6 +45,27 @@ export function siguienteEstadoObjetivo(estado: EstadoObjetivo): EstadoObjetivo 
 }
 
 /**
+ * Patch de `logrado_at` solo cuando el estado cambia (EQ-R06).
+ * Si el estado no cambia, no toca la fecha de logro.
+ */
+export function patchEstadoObjetivo(
+  estadoAnterior: EstadoObjetivo,
+  estadoNuevo: EstadoObjetivo,
+  ahoraIso: string,
+): { estado: EstadoObjetivo; logrado_at?: string | null } {
+  if (estadoAnterior === estadoNuevo) {
+    return { estado: estadoNuevo };
+  }
+  if (estadoNuevo === 'logrado') {
+    return { estado: estadoNuevo, logrado_at: ahoraIso };
+  }
+  if (estadoAnterior === 'logrado') {
+    return { estado: estadoNuevo, logrado_at: null };
+  }
+  return { estado: estadoNuevo };
+}
+
+/**
  * Separa por tipo y dentro: activos (pendiente / en curso / abandonado) vs logrados.
  * Activos: en curso primero, después pendiente, abandonado al final; por creación desc.
  * Logrados: por logradoAt desc (fallback createdAt).

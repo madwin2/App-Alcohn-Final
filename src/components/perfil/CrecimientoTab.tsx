@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
+import { useNombreAdmin } from '@/lib/hooks/useNombreAdmin';
 import { cn } from '@/lib/utils/cn';
 import { parseOrderDateLocal } from '@/lib/utils/format';
 import {
@@ -249,6 +250,7 @@ export interface CrecimientoTabProps {
 
 export function CrecimientoTab({ readOnly, items: itemsProp }: CrecimientoTabProps) {
   const { toast } = useToast();
+  const adminNombre = useNombreAdmin();
   const [items, setItems] = useState<ObjetivoPersonal[]>(itemsProp ?? []);
   const [loading, setLoading] = useState(!itemsProp);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -307,11 +309,15 @@ export function CrecimientoTab({ readOnly, items: itemsProp }: CrecimientoTabPro
     setSaving(true);
     try {
       if (form.id) {
+        const prev = items.find((x) => x.id === form.id);
+        const estadoChanged = prev && prev.estado !== form.estado;
         const updated = await actualizarObjetivo({
           id: form.id,
           titulo,
           descripcion: form.descripcion,
-          estado: form.estado,
+          ...(estadoChanged
+            ? { estado: form.estado, estadoAnterior: prev.estado }
+            : {}),
           fechaObjetivo: dateToKey(form.fechaObjetivo),
         });
         setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
@@ -342,7 +348,11 @@ export function CrecimientoTab({ readOnly, items: itemsProp }: CrecimientoTabPro
     const next = siguienteEstadoObjetivo(o.estado);
     if (!next) return;
     try {
-      const updated = await actualizarObjetivo({ id: o.id, estado: next });
+      const updated = await actualizarObjetivo({
+        id: o.id,
+        estado: next,
+        estadoAnterior: o.estado,
+      });
       setItems((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
     } catch (err) {
       toast({
@@ -378,7 +388,7 @@ export function CrecimientoTab({ readOnly, items: itemsProp }: CrecimientoTabPro
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">Esto lo ven vos y Julián.</p>
+      <p className="text-xs text-muted-foreground">Esto lo ven vos y {adminNombre}.</p>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Columna

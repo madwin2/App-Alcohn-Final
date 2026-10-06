@@ -3,14 +3,19 @@ import { addDaysToKey, isWeekday, parseDateOnly, toDateKey, weekdayOfKey } from 
 /** 1=lunes … 5=viernes (como en `tareas_recurrentes.dias_semana`). */
 export type DiaSemana = 1 | 2 | 3 | 4 | 5;
 
-export type FrecuenciaTarea = 'diaria' | 'semanal' | 'quincenal' | 'mensual';
+export type FrecuenciaTarea = 'diaria' | 'semanal' | 'quincenal' | 'mensual' | 'unica';
 
 export interface TareaRecurrenteDef {
   frecuencia: FrecuenciaTarea;
   diasSemana?: DiaSemana[] | null;
   diaMes?: number | null;
-  /** Lunes de referencia para quincenal (YYYY-MM-DD). */
+  /** Quincenal: lunes de referencia. */
   semanaInicio?: string | null;
+  /**
+   * Única: fecha concreta del único día (YYYY-MM-DD).
+   * Fallback legacy: `semanaInicio` si `fecha` viene vacío.
+   */
+  fecha?: string | null;
   activa?: boolean;
 }
 
@@ -180,11 +185,26 @@ export function ocurrenciasEnSemana(
       out.sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
       break;
     }
+    case 'unica': {
+      const fecha = tarea.fecha ?? tarea.semanaInicio;
+      if (!fecha) break;
+      const domingo = addDaysToKey(lunes, 6);
+      if (fecha >= lunes && fecha <= domingo) {
+        out.push({ fecha, esFeriado: set.has(fecha) });
+      }
+      break;
+    }
     default:
       break;
   }
 
   return out;
+}
+
+function fmtDiaMesCorto(fecha: string): string {
+  const p = parseDateOnly(fecha);
+  if (!p) return fecha;
+  return `${String(p.d).padStart(2, '0')}/${String(p.m).padStart(2, '0')}`;
 }
 
 export function describirFrecuencia(tarea: TareaRecurrenteDef): string {
@@ -221,6 +241,11 @@ export function describirFrecuencia(tarea: TareaRecurrenteDef): string {
       const d = tarea.diaMes;
       if (d == null) return 'Mensual';
       return `El ${d} de cada mes`;
+    }
+    case 'unica': {
+      const fecha = tarea.fecha ?? tarea.semanaInicio;
+      if (!fecha) return 'Un solo día';
+      return `Solo el ${fmtDiaMesCorto(fecha)}`;
     }
     default:
       return '';

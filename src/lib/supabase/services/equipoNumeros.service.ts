@@ -3,13 +3,13 @@ import { resolveStorageDisplayUrl } from '@/lib/utils/storageUrlUtils';
 import { storageFileKindFromUrl } from '@/lib/utils/storageFileKind';
 import {
   clampRangoHastaHoy,
+  rangoPeriodoAnteriorComparable,
   conteoSellosPeriodo,
   esAreaProduccion,
   galeriaEnviosDisponible,
   ordenarSellosPorRecencia,
   paginarIds,
   rangoPeriodo,
-  rangoPeriodoAnterior,
   rangoToUtcBounds,
   serieMensualSellos,
   textoComparacion,
@@ -25,6 +25,8 @@ import type { AreaPrincipalEquipo } from './equipo.service';
 
 const PAGE_SIZE_HISTORIAL = 1000;
 const GALERIA_PAGE_DEFAULT = 24;
+/** Miniaturas que se resuelven a la vez (EQ-R29). */
+const GALERIA_CONCURRENCIA = 6;
 
 export type MetricCard = {
   key: string;
@@ -114,21 +116,27 @@ async function countOrdenesEnvioDatos(userId: string, rango: RangoFecha): Promis
   return count ?? 0;
 }
 
+/** EQ-R22 / Q-EQ-013: cuenta envíos distintos (órdenes), no eventos. */
 async function countEnvioEventos(
   userId: string,
   rango: RangoFecha,
   tipos: string[],
 ): Promise<number> {
   const { gte, lt } = rangoToUtcBounds(rango);
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from('envio_eventos')
-    .select('id', { count: 'exact', head: true })
+    .select('orden_id')
     .eq('created_by', userId)
     .in('tipo_evento', tipos)
     .gte('created_at', gte)
     .lt('created_at', lt);
   if (error) throw error;
-  return count ?? 0;
+  const ids = new Set(
+    ((data as Array<{ orden_id: string | null }> | null) ?? [])
+      .map((r) => r.orden_id)
+      .filter((id): id is string => !!id),
+  );
+  return ids.size;
 }
 
 async function fetchEnvioDatosMensual(
@@ -196,7 +204,7 @@ export async function getMisNumerosSnapshot(params: {
   const periodo = params.periodo;
   const esProduccion = esAreaProduccion(params.areaPrincipal);
   const actual = clampRangoHastaHoy(rangoPeriodo(periodo, hoy), hoy);
-  const anterior = rangoPeriodoAnterior(periodo, hoy);
+  const anterior = rangoPeriodoAnteriorComparable(periodo, hoy);
   const labelAnt = labelPeriodoAnterior(periodo, hoy);
   const meses = ultimosNMeses(hoy, 6);
   const metricas: MetricCard[] = [];
@@ -222,7 +230,12 @@ export async function getMisNumerosSnapshot(params: {
         cActual.total,
         cAnterior.total,
         labelAnt,
-        cActual.pruebas > 0 ? `${cActual.pruebas} de pedidos Prueba` : undefined,
+        [
+          'Todo lo que se terminó en el taller (todavía no se registra quién)',
+          cActual.pruebas > 0 ? `${cActual.pruebas} de pedidos Prueba` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || undefined,
       ),
     );
 
@@ -249,7 +262,7 @@ export async function getMisNumerosSnapshot(params: {
     metric('envio_datos', 'Datos de envío cargados', envAct, envAnt, labelAnt),
   );
   metricas.push(
-    metric('etiquetas', 'Etiquetas generadas / descargadas', etiqAct, etiqAnt, labelAnt),
+    metric('etiquetas', 'Envíos con etiqueta', etiqAct, etiqAnt, labelAnt),
   );
 
   if (!esProduccion) {
@@ -328,20 +341,30 @@ async function mapSellosGaleria(
   rows: SelloGaleriaRow[],
   fechaPorSello: Map<string, string>,
 ): Promise<GaleriaItem[]> {
-  const items: GaleriaItem[] = [];
-  for (const row of rows) {
-    const orden = row.ordenes;
-    const thumbUrl = await resolveThumbUrl(row.foto_sello, row.archivo_vector_preview);
-    items.push({
-      selloId: row.id,
-      ordenId: row.orden_id,
-      diseno: row.diseno?.trim() || 'Sin diseño',
-      clienteNombre: clienteLabel(orden?.clientes ?? null),
-      fecha: fechaPorSello.get(row.id) ?? '',
-      thumbUrl,
-      esPrueba: orden?.tipo_pedido === 'Prueba',
-    });
-  }
+  // EQ-R29: miniaturas en paralelo, con tope de concurrencia (antes: una por una).
+  const items: GaleriaItem[] = new Array(rows.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < rows.length) {
+      const i = next;
+      next += 1;
+      const row = rows[i];
+      const orden = row.ordenes;
+      const thumbUrl = await resolveThumbUrl(row.foto_sello, row.archivo_vector_preview);
+      items[i] = {
+        selloId: row.id,
+        ordenId: row.orden_id,
+        diseno: row.diseno?.trim() || 'Sin diseño',
+        clienteNombre: clienteLabel(orden?.clientes ?? null),
+        fecha: fechaPorSello.get(row.id) ?? '',
+        thumbUrl,
+        esPrueba: orden?.tipo_pedido === 'Prueba',
+      };
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(GALERIA_CONCURRENCIA, rows.length) }, () => worker()),
+  );
   return items;
 }
 

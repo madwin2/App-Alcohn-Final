@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Loader2, Pin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,12 +14,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { cn } from '@/lib/utils/cn';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { useEquipoRol } from '@/lib/hooks/useEquipoRol';
 import {
   esIdeaNuevaParaMi,
   filtrarIdeasCorcho,
+  mergeNuevasSesion,
   ordenarIdeasCorcho,
   siguienteVoto,
   type FiltroEstadoCorcho,
@@ -65,6 +68,7 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const { esAdmin } = useEquipoRol();
+  const [searchParams] = useSearchParams();
   const viewerUserId = user?.id ?? '';
 
   const [ideas, setIdeas] = useState<IdeaCorcho[]>([]);
@@ -78,8 +82,12 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
   const [nuevasSesion, setNuevasSesion] = useState<Set<string>>(() => new Set());
   const vistasEnCurso = useRef<Set<string>>(new Set());
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Ids de la lista anterior: sirve para detectar ideas que llegan en vivo (EQ-R12). */
+  const idsPrevios = useRef<Set<string>>(new Set());
+  const nuevasSesionRef = useRef<Set<string>>(new Set());
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const deepLinkHandled = useRef(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -92,14 +100,36 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
   } | null>(null);
   const [comentarioEstado, setComentarioEstado] = useState('');
   const [savingEstado, setSavingEstado] = useState(false);
+  const [ideaABorrar, setIdeaABorrar] = useState<IdeaCorcho | null>(null);
 
+  useEffect(() => {
+    if (deepLinkHandled.current) return;
+    deepLinkHandled.current = true;
+    if (searchParams.get('soloNuevas') === '1') setSoloNuevas(true);
+    if (searchParams.get('pinchar') === '1') {
+      setEditId(null);
+      setTitulo('');
+      setDescripcion('');
+      setDialogOpen(true);
+    }
+  }, [searchParams]);
+
+  // EQ-R13: se piden también los inactivos para no mostrar "Alguien" en ideas viejas.
   const nombresPorUserId = useMemo(() => {
     const map: Record<string, string> = {};
     miembros.forEach((m) => {
-      map[m.userId] = m.nombre;
+      map[m.userId] = m.activo ? m.nombre : `${m.nombre} (ya no está)`;
     });
     return map;
   }, [miembros]);
+
+  const miembrosActivos = useMemo(() => miembros.filter((m) => m.activo), [miembros]);
+
+  /** Para filtrar por persona: activos + inactivos que dejaron ideas. */
+  const miembrosFiltro = useMemo(() => {
+    const autores = new Set(ideas.map((i) => i.autorUserId));
+    return miembros.filter((m) => m.activo || autores.has(m.userId));
+  }, [miembros, ideas]);
 
   const colorPorUserId = useMemo(() => {
     const map: Record<string, string> = {};
@@ -115,7 +145,7 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
       try {
         const [list, team] = await Promise.all([
           getIdeasCorcho(),
-          getMiembrosEquipo(),
+          getMiembrosEquipo({ incluirInactivos: true }),
         ]);
         setIdeas(list);
         setMiembros(team);
@@ -125,13 +155,24 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
               .filter((i) => esIdeaNuevaParaMi(i, viewerUserId))
               .map((i) => i.id),
           );
+          nuevasSesionRef.current = nuevas;
           setNuevasSesion(nuevas);
           onNuevasChange?.(nuevas.size);
         } else {
+          // EQ-R12: las ideas que llegan en vivo también muestran "Nueva" y se marcan vistas.
+          const merged = mergeNuevasSesion({
+            nuevasSesion: nuevasSesionRef.current,
+            idsAnteriores: idsPrevios.current,
+            ideas: list,
+            viewerUserId,
+          });
+          nuevasSesionRef.current = merged;
+          setNuevasSesion(merged);
           onNuevasChange?.(
             list.filter((i) => esIdeaNuevaParaMi(i, viewerUserId)).length,
           );
         }
+        idsPrevios.current = new Set(list.map((i) => i.id));
       } catch (err) {
         toast({
           title: 'No se pudo cargar el corcho',
@@ -220,7 +261,7 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
         toast({ title: 'Idea actualizada' });
       } else {
         const created = await crearIdeaCorcho({ titulo: t, descripcion });
-        const destinatarios = miembros
+        const destinatarios = miembrosActivos
           .filter((m) => m.userId !== viewerUserId)
           .map((m) => m.userId);
         const autorNombre =
@@ -247,24 +288,31 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
     }
   };
 
-  const handleBorrar = async (idea: IdeaCorcho) => {
-    if (!window.confirm(`¿Borrar “${idea.titulo}”?`)) return;
-    try {
-      await borrarIdeaCorcho(idea.id);
-      setNuevasSesion((prev) => {
-        const next = new Set(prev);
-        next.delete(idea.id);
-        return next;
-      });
-      await load({ silent: true, preserveNuevasSesion: true });
-      toast({ title: 'Idea borrada' });
-    } catch (err) {
-      toast({
-        title: 'No se pudo borrar',
-        description: err instanceof Error ? err.message : 'Error',
-        variant: 'destructive',
-      });
-    }
+  const solicitarBorrarIdea = (idea: IdeaCorcho) => {
+    setIdeaABorrar(idea);
+  };
+
+  const confirmarBorrarIdea = () => {
+    const idea = ideaABorrar;
+    if (!idea) return;
+    void (async () => {
+      try {
+        await borrarIdeaCorcho(idea.id);
+        setNuevasSesion((prev) => {
+          const next = new Set(prev);
+          next.delete(idea.id);
+          return next;
+        });
+        await load({ silent: true, preserveNuevasSesion: true });
+        toast({ title: 'Idea borrada' });
+      } catch (err) {
+        toast({
+          title: 'No se pudo borrar',
+          description: err instanceof Error ? err.message : 'Error',
+          variant: 'destructive',
+        });
+      }
+    })();
   };
 
   const handleVotar = async (idea: IdeaCorcho, click: ValorVotoCorcho) => {
@@ -411,11 +459,11 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
         >
           Todas
         </button>
-        {miembros.map((m) => (
+        {miembrosFiltro.map((m) => (
           <button
             key={m.userId}
             type="button"
-            title={m.nombre}
+            title={nombresPorUserId[m.userId] ?? m.nombre}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs',
               filtroAutor === m.userId
@@ -431,6 +479,7 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
               style={{ backgroundColor: m.color }}
             />
             {m.nombre.split(' ')[0]}
+            {m.activo ? null : <span className="opacity-70">(ya no está)</span>}
           </button>
         ))}
       </div>
@@ -511,7 +560,7 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
                   onVotar={(v) => void handleVotar(idea, v)}
                   onMarcarVista={() => void handleMarcarVista(idea.id)}
                   onEditar={() => abrirEditar(idea)}
-                  onBorrar={() => void handleBorrar(idea)}
+                  onBorrar={() => solicitarBorrarIdea(idea)}
                   onAprobar={() => {
                     setComentarioEstado('');
                     setEstadoDialog({ idea, estado: 'aprobada' });
@@ -579,6 +628,20 @@ export function CorchoBoard({ onNuevasChange }: CorchoBoardProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!ideaABorrar}
+        onOpenChange={(open) => {
+          if (!open) setIdeaABorrar(null);
+        }}
+        title="Borrar idea"
+        description={
+          ideaABorrar ? `¿Borrar “${ideaABorrar.titulo}”?` : ''
+        }
+        confirmLabel="Borrar"
+        variant="destructive"
+        onConfirm={confirmarBorrarIdea}
+      />
 
       <Dialog
         open={!!estadoDialog}

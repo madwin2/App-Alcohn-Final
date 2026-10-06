@@ -63,11 +63,12 @@ export function EquipoNecesidadesBandeja({ nombresPorUserId }: EquipoNecesidades
       });
       setItems((prev) => prev.filter((x) => x.id !== n.id));
       const adminNombre =
-        (user?.id && nombresPorUserId[user.id]?.split(/\s+/)[0]) || 'Julián';
+        (user?.id && nombresPorUserId[user.id]?.split(/\s+/)[0]) || 'El admin';
       notifyNecesidadResuelta({
         adminNombre,
         destinatarioUserId: n.userId,
         necesidadId: n.id,
+        respuestaAdmin: respuestas[n.id] ?? null,
       });
       toast({ title: 'Pedido marcado como resuelto' });
     } catch (err) {

@@ -27,7 +27,7 @@ import {
   labelTipoFeedback,
   type TipoFeedback,
 } from '@/lib/equipo/feedback';
-import { notifyFeedbackNuevo } from '@/lib/notificaciones/events';
+import { notifyFeedbackEditado, notifyFeedbackNuevo } from '@/lib/notificaciones/events';
 import {
   actualizarFeedback,
   borrarFeedback,
@@ -148,7 +148,13 @@ export function EquipoFeedbackDialog({
           texto,
         });
         setFeedback((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
-        toast({ title: 'Feedback actualizado' });
+        const autorCorto = autorNombre.split(/\s+/)[0] || autorNombre;
+        notifyFeedbackEditado({
+          autorNombre: autorCorto,
+          destinatarioUserId: perfil.userId,
+          feedbackId: updated.id,
+        });
+        toast({ title: 'Feedback actualizado', description: `${perfil.nombre} recibe un aviso.` });
       } else {
         const created = await crearFeedback({
           paraUserId: perfil.userId,

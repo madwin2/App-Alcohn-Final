@@ -1,8 +1,6 @@
 import * as React from "react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { Calendar as CalendarIcon } from "lucide-react"
-
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { CustomCalendar } from "@/components/ui/custom-calendar"
@@ -15,6 +13,8 @@ interface DatePickerProps {
   placeholder?: string
   disabled?: boolean
   className?: string
+  /** Días no elegibles (ej. fechas pasadas para quien no es admin). */
+  isDateDisabled?: (date: Date) => boolean
 }
 
 export function DatePicker({
@@ -22,7 +22,8 @@ export function DatePicker({
   onDateChange,
   placeholder = "Seleccionar fecha",
   disabled = false,
-  className
+  className,
+  isDateDisabled
 }: DatePickerProps) {
   const validDate = React.useMemo(() => {
     if (date == null) return undefined;
@@ -54,6 +55,7 @@ export function DatePicker({
           onSelect={onDateChange}
           defaultMonth={validDate}
           className="bg-card"
+          isDateDisabled={isDateDisabled}
         />
       </PopoverContent>
     </Popover>

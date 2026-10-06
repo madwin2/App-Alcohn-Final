@@ -97,6 +97,35 @@ export function rangoPeriodoAnterior(tipo: PeriodoNumeros, hoy: string): RangoFe
   return { desde: `${y}-01-01`, hasta: `${y}-12-31` };
 }
 
+/**
+ * EQ-R22: mismo tramo transcurrido del período anterior (lunes→hoy vs lunes→lunes,
+ * 1→día del mes vs 1→mismo día del mes pasado, 1/1→hoy vs 1/1→misma fecha año pasado).
+ */
+export function rangoPeriodoAnteriorComparable(
+  tipo: PeriodoNumeros,
+  hoy: string,
+): RangoFecha {
+  const actualClamped = clampRangoHastaHoy(rangoPeriodo(tipo, hoy), hoy);
+  const diasTranscurridos =
+    daysBetweenInclusive(actualClamped.desde, actualClamped.hasta) - 1;
+  const anteriorCompleto = rangoPeriodoAnterior(tipo, hoy);
+  const hastaComparable = addDaysToKey(anteriorCompleto.desde, diasTranscurridos);
+  const hasta =
+    compareDateKeys(hastaComparable, anteriorCompleto.hasta) > 0
+      ? anteriorCompleto.hasta
+      : hastaComparable;
+  return { desde: anteriorCompleto.desde, hasta };
+}
+
+function daysBetweenInclusive(desde: string, hasta: string): number {
+  const a = parseDateOnly(desde);
+  const b = parseDateOnly(hasta);
+  if (!a || !b) return 1;
+  const t0 = Date.UTC(a.y, a.m - 1, a.d);
+  const t1 = Date.UTC(b.y, b.m - 1, b.d);
+  return Math.floor((t1 - t0) / 86_400_000) + 1;
+}
+
 function shiftMonth(p: FechaParts, delta: number): FechaParts {
   const d = new Date(Date.UTC(p.y, p.m - 1 + delta, 1, 12, 0, 0));
   return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: 1 };
@@ -123,20 +152,22 @@ export function ultimosNMeses(hoy: string, n = 6): Array<{ key: string; label: s
 export function labelPeriodoAnterior(tipo: PeriodoNumeros, hoy: string): string {
   const prev = rangoPeriodoAnterior(tipo, hoy);
   if (tipo === 'semana') {
-    return `la semana anterior`;
+    return 'a esta altura de la semana pasada';
   }
   if (tipo === 'mes') {
     const key = prev.desde.slice(0, 7);
     const long = monthKeyLabelLong(key);
-    // "Septiembre de 2026" / "Septiembre 2026" → "septiembre"
     const mes = long
       .replace(/\s+de\s+\d{4}$/i, '')
       .replace(/\s+\d{4}$/, '')
       .trim()
       .toLowerCase();
-    return mes || key;
+    return `a esta altura de ${mes || key}`;
   }
-  return String(parseDateOnly(hoy)?.y ? (parseDateOnly(hoy)!.y - 1) : prev.desde.slice(0, 4));
+  const anio = parseDateOnly(hoy)?.y
+    ? parseDateOnly(hoy)!.y - 1
+    : Number(prev.desde.slice(0, 4));
+  return `a esta altura de ${anio}`;
 }
 
 export function textoComparacion(actual: number, anterior: number, labelAnterior: string): string {

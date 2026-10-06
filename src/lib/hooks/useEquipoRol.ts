@@ -27,6 +27,8 @@ export function invalidateEquipoRolCache(userId?: string): void {
 export function useEquipoRol(): {
   perfil: PerfilEquipo | null;
   esAdmin: boolean;
+  /** Perfil existente y activo: único caso en que se usa Corcho y lo del equipo (Q-EQ-008). */
+  esMiembroActivo: boolean;
   loading: boolean;
   refresh: () => Promise<void>;
 } {
@@ -74,6 +76,7 @@ export function useEquipoRol(): {
   return {
     perfil,
     esAdmin: Boolean(perfil?.esAdmin && perfil?.activo),
+    esMiembroActivo: Boolean(perfil?.activo),
     loading,
     refresh,
   };

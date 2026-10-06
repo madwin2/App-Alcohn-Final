@@ -336,13 +336,24 @@ export function notifyTareaAsignada(params: {
   emitNotificacionSafe({
     tipo: 't1_tarea_asignada',
     area: null,
-    titulo: `Te asignó: ${params.texto}`,
+    titulo: `te dejó una nota: ${params.texto}`,
     entidadTipo: 'tarea',
     entidadId: params.asignadoAUserId,
     linkPath: '/',
     userIds: [params.asignadoAUserId],
     metadata: { itemNombre: params.texto },
   });
+}
+
+function fmtFechaCorta(iso: string): string {
+  const [, m, d] = iso.split('-');
+  return `${d}/${m}`;
+}
+
+function rangoVacaciones(fechaDesde: string, fechaHasta: string): string {
+  return fechaDesde === fechaHasta
+    ? fmtFechaCorta(fechaDesde)
+    : `${fmtFechaCorta(fechaDesde)} al ${fmtFechaCorta(fechaHasta)}`;
 }
 
 /** Vacaciones cargadas: avisa a todo el equipo menos el autor (S6). */
@@ -354,21 +365,63 @@ export function notifyVacacionesCargadas(params: {
   ausenciaId: string;
 }): void {
   if (!params.destinatarioUserIds.length) return;
-  const fmt = (iso: string) => {
-    const [, m, d] = iso.split('-');
-    return `${d}/${m}`;
-  };
-  const rango =
-    params.fechaDesde === params.fechaHasta
-      ? fmt(params.fechaDesde)
-      : `${fmt(params.fechaDesde)} al ${fmt(params.fechaHasta)}`;
   emitNotificacionSafe({
     tipo: 'e1_vacaciones_cargadas',
     area: null,
-    titulo: `${params.nombre} se toma vacaciones del ${rango}`,
+    titulo: `${params.nombre} se toma vacaciones del ${rangoVacaciones(params.fechaDesde, params.fechaHasta)}`,
     entidadTipo: 'ausencia',
     entidadId: params.ausenciaId,
-    linkPath: '/perfil?tab=calendario',
+    linkPath: '/perfil?tab=dia',
+    userIds: params.destinatarioUserIds,
+    metadata: {
+      itemNombre: params.nombre,
+      fechaDesde: params.fechaDesde,
+      fechaHasta: params.fechaHasta,
+    },
+  });
+}
+
+/** Vacaciones movidas de fecha (EQ-R14 / Q-EQ-009). */
+export function notifyVacacionesCambiadas(params: {
+  nombre: string;
+  fechaDesde: string;
+  fechaHasta: string;
+  destinatarioUserIds: string[];
+  ausenciaId: string;
+}): void {
+  if (!params.destinatarioUserIds.length) return;
+  emitNotificacionSafe({
+    tipo: 'e1_vacaciones_cambiadas',
+    area: null,
+    titulo: `${params.nombre} cambió sus vacaciones: ahora del ${rangoVacaciones(params.fechaDesde, params.fechaHasta)}`,
+    entidadTipo: 'ausencia',
+    entidadId: params.ausenciaId,
+    linkPath: '/perfil?tab=dia',
+    userIds: params.destinatarioUserIds,
+    metadata: {
+      itemNombre: params.nombre,
+      fechaDesde: params.fechaDesde,
+      fechaHasta: params.fechaHasta,
+    },
+  });
+}
+
+/** Vacaciones canceladas (EQ-R14 / Q-EQ-009). */
+export function notifyVacacionesCanceladas(params: {
+  nombre: string;
+  fechaDesde: string;
+  fechaHasta: string;
+  destinatarioUserIds: string[];
+  ausenciaId: string;
+}): void {
+  if (!params.destinatarioUserIds.length) return;
+  emitNotificacionSafe({
+    tipo: 'e1_vacaciones_canceladas',
+    area: null,
+    titulo: `${params.nombre} canceló sus vacaciones del ${rangoVacaciones(params.fechaDesde, params.fechaHasta)}`,
+    entidadTipo: 'ausencia',
+    entidadId: params.ausenciaId,
+    linkPath: '/perfil?tab=dia',
     userIds: params.destinatarioUserIds,
     metadata: {
       itemNombre: params.nombre,
@@ -400,21 +453,42 @@ export function notifyNecesidadNueva(params: {
   });
 }
 
-/** Admin marcó resuelta una necesidad (S8). */
+/** Admin marcó resuelta una necesidad (S8). Incluye respuesta en cuerpo si hay (EQ-R16). */
 export function notifyNecesidadResuelta(params: {
   adminNombre: string;
   destinatarioUserId: string;
   necesidadId: string;
+  respuestaAdmin?: string | null;
 }): void {
+  const cuerpo = params.respuestaAdmin?.trim() || null;
   emitNotificacionSafe({
     tipo: 'e3_necesidad_resuelta',
     area: null,
     titulo: `${params.adminNombre} resolvió tu pedido`,
+    cuerpo,
     entidadTipo: 'necesidad_equipo',
     entidadId: params.necesidadId,
-    linkPath: '/perfil?tab=necesidades',
+    linkPath: '/perfil?tab=lo-mio&sub=necesidades',
     userIds: [params.destinatarioUserId],
     metadata: { itemNombre: params.adminNombre },
+  });
+}
+
+/** Admin editó un feedback ya leído (EQ-R15 / Q-EQ-010). Sin contenido. */
+export function notifyFeedbackEditado(params: {
+  autorNombre: string;
+  destinatarioUserId: string;
+  feedbackId: string;
+}): void {
+  emitNotificacionSafe({
+    tipo: 'e4_feedback_editado',
+    area: null,
+    titulo: `${params.autorNombre} editó un feedback que te dejó`,
+    entidadTipo: 'feedback_equipo',
+    entidadId: params.feedbackId,
+    linkPath: '/perfil?tab=lo-mio&sub=feedback',
+    userIds: [params.destinatarioUserId],
+    metadata: { itemNombre: params.autorNombre },
   });
 }
 
@@ -431,7 +505,7 @@ export function notifyFeedbackNuevo(params: {
     titulo: `${params.autorNombre} te dejó ${fraseTipoFeedbackNotificacion(params.tipo)}`,
     entidadTipo: 'feedback_equipo',
     entidadId: params.feedbackId,
-    linkPath: '/perfil?tab=feedback',
+    linkPath: '/perfil?tab=lo-mio&sub=feedback',
     userIds: [params.destinatarioUserId],
     metadata: { itemNombre: params.autorNombre, tipoFeedback: params.tipo },
   });

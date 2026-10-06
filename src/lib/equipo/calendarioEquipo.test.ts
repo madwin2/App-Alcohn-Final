@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   armarMesCalendario,
   esDiaHabilParaCambio,
+  mensajeHoyNoTrabaja,
   quienesFaltanHoy,
   solapamientosVacaciones,
 } from './calendarioEquipo';
@@ -102,6 +103,51 @@ describe('armarMesCalendario', () => {
     expect(
       dia28.eventos.some((e) => e.kind === 'cumpleanios' && e.nombre === 'Cachi'),
     ).toBe(true);
+  });
+});
+
+describe('mensajeHoyNoTrabaja', () => {
+  it('detecta fin de semana y feriado', () => {
+    expect(mensajeHoyNoTrabaja('2026-10-10', [])).toMatch(/fin de semana|sábado/i);
+    expect(
+      mensajeHoyNoTrabaja('2026-10-12', [
+        {
+          id: 'f1',
+          fecha: '2026-10-12',
+          nombre: 'Feriado',
+          origen: 'nacional',
+        },
+      ]),
+    ).toMatch(/feriado/i);
+    expect(mensajeHoyNoTrabaja('2026-10-08', [])).toBeNull();
+  });
+});
+
+describe('armarMesCalendario tareas', () => {
+  it('incluye eventos tarea sin filtro de personas', () => {
+    const mes = armarMesCalendario({
+      year: 2026,
+      month: 10,
+      personas,
+      ausencias: [],
+      feriados: [],
+      filtroUserIds: ['fede'],
+      tareasEventos: [
+        {
+          fecha: '2026-10-08',
+          evento: {
+            kind: 'tarea',
+            tareaId: 't1',
+            titulo: 'Limpiar CNC',
+            estado: 'pendiente',
+            fechaProgramada: '2026-10-08',
+            fechaVisible: '2026-10-08',
+          },
+        },
+      ],
+    });
+    const dia8 = mes.dias.find((d) => d.fecha === '2026-10-08')!;
+    expect(dia8.eventos.some((e) => e.kind === 'tarea' && e.titulo === 'Limpiar CNC')).toBe(true);
   });
 });
 

@@ -1,4 +1,5 @@
 import { supabase } from '../client';
+import { asegurarFilaAfectada, mapPostgrestError } from './rlsAffected';
 
 export type EstadoNecesidad = 'pendiente' | 'resuelta';
 
@@ -40,11 +41,15 @@ function mapNecesidad(row: NecesidadRow): NecesidadEquipo {
   };
 }
 
-/** Pedidos del usuario logueado. */
+/** Pedidos del usuario logueado (filtra explícito: el admin ve todos vía RLS). */
 export async function getMisNecesidades(): Promise<NecesidadEquipo[]> {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error('no autenticado');
+
   const { data, error } = await supabase
     .from('necesidades_equipo')
     .select(SELECT)
+    .eq('user_id', auth.user.id)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -91,13 +96,18 @@ export async function actualizarNecesidadPendiente(input: {
     .select(SELECT)
     .single();
 
-  if (error) throw error;
-  return mapNecesidad(data as NecesidadRow);
+  if (error) throw mapPostgrestError(error);
+  return mapNecesidad(asegurarFilaAfectada(data) as NecesidadRow);
 }
 
 export async function borrarNecesidadPendiente(id: string): Promise<void> {
-  const { error } = await supabase.from('necesidades_equipo').delete().eq('id', id);
-  if (error) throw error;
+  const { data, error } = await supabase
+    .from('necesidades_equipo')
+    .delete()
+    .eq('id', id)
+    .select('id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data);
 }
 
 /** Solo admin (RLS). */
@@ -116,6 +126,6 @@ export async function resolverNecesidad(input: {
     .select(SELECT)
     .single();
 
-  if (error) throw error;
-  return mapNecesidad(data as NecesidadRow);
+  if (error) throw mapPostgrestError(error);
+  return mapNecesidad(asegurarFilaAfectada(data) as NecesidadRow);
 }

@@ -6,6 +6,7 @@ import {
   filtrarIdeasCorcho,
   fraseEstadoIdeaNotificacion,
   labelEstadoIdea,
+  mergeNuevasSesion,
   ordenarIdeasCorcho,
   puedeVotarIdea,
   puntajeIdea,
@@ -135,5 +136,64 @@ describe('corcho', () => {
       idea({ id: '3', autorUserId: 'otro', vistaPorMi: true }),
     ];
     expect(contarIdeasNuevas(items, 'yo')).toBe(1);
+  });
+});
+
+describe('mergeNuevasSesion (EQ-R12)', () => {
+  const viewer = 'yo';
+
+  it('suma una idea que llegó en vivo y es nueva para mí', () => {
+    const vieja = idea({ id: 'a', autorUserId: 'x', vistaPorMi: true });
+    const llegada = idea({ id: 'b', autorUserId: 'x' });
+    const res = mergeNuevasSesion({
+      nuevasSesion: new Set(),
+      idsAnteriores: ['a'],
+      ideas: [vieja, llegada],
+      viewerUserId: viewer,
+    });
+    expect([...res]).toEqual(['b']);
+  });
+
+  it('no suma ideas propias ni ya vistas', () => {
+    const propia = idea({ id: 'p', autorUserId: viewer });
+    const vista = idea({ id: 'v', autorUserId: 'x', vistaPorMi: true });
+    const res = mergeNuevasSesion({
+      nuevasSesion: new Set(),
+      idsAnteriores: [],
+      ideas: [propia, vista],
+      viewerUserId: viewer,
+    });
+    expect(res.size).toBe(0);
+  });
+
+  it('conserva las Nueva de la sesión aunque ya estén marcadas vistas', () => {
+    const marcada = idea({ id: 'a', autorUserId: 'x', vistaPorMi: true });
+    const res = mergeNuevasSesion({
+      nuevasSesion: new Set(['a']),
+      idsAnteriores: ['a'],
+      ideas: [marcada],
+      viewerUserId: viewer,
+    });
+    expect(res.has('a')).toBe(true);
+  });
+
+  it('saca las que ya no existen (borradas)', () => {
+    const res = mergeNuevasSesion({
+      nuevasSesion: new Set(['a', 'zzz']),
+      idsAnteriores: ['a', 'zzz'],
+      ideas: [idea({ id: 'a', autorUserId: 'x' })],
+      viewerUserId: viewer,
+    });
+    expect([...res]).toEqual(['a']);
+  });
+
+  it('una idea que ya estaba y no era Nueva de sesión no se agrega de nuevo', () => {
+    const res = mergeNuevasSesion({
+      nuevasSesion: new Set(),
+      idsAnteriores: ['a'],
+      ideas: [idea({ id: 'a', autorUserId: 'x', vistaPorMi: false })],
+      viewerUserId: viewer,
+    });
+    expect(res.size).toBe(0);
   });
 });

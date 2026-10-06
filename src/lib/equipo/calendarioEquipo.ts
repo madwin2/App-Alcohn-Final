@@ -8,6 +8,8 @@ import {
   parseDateOnly,
   weekdayOfKey,
 } from './fechas';
+import type { EstadoOcurrenciaAgenda, EstadoRegistroTarea, OcurrenciaAgenda } from './tareasAgenda';
+import type { FrecuenciaTarea } from './tareasRecurrentes';
 
 export type CalendarioPersona = {
   userId: string;
@@ -65,6 +67,22 @@ export type EventoCalendario =
       userId: string;
       nombre: string;
       color: string;
+    }
+  | {
+      kind: 'tarea';
+      tareaId: string;
+      titulo: string;
+      estado: EstadoOcurrenciaAgenda;
+      frecuencia?: FrecuenciaTarea;
+      fechaProgramada: string;
+      fechaVisible: string;
+      vecesAtrasada?: number;
+      fechasAgrupadas?: string[];
+      atrasadaDesde?: string;
+      registroEstado?: EstadoRegistroTarea;
+      fechaDestino?: string | null;
+      /** Vista mes: chip único "☐ N tareas". */
+      resumenCount?: number;
     };
 
 export type DiaCalendario = {
@@ -81,6 +99,38 @@ export type MesCalendario = {
   month: number;
   dias: DiaCalendario[];
 };
+
+export type TareaEventoCalendario = Extract<EventoCalendario, { kind: 'tarea' }>;
+
+/** Límites de la grilla lun–dom del mes (incluye días de meses adyacentes). */
+export function rangoGrillaMes(year: number, month: number): { desde: string; hasta: string } {
+  const mesInicio = monthStartKey(year, month);
+  const mesFin = monthEndKey(year, month);
+  const startWd = weekdayOfKey(mesInicio);
+  const offsetLunes = startWd === 0 ? 6 : startWd - 1;
+  const gridStartParts = parseDateOnly(mesInicio)!;
+  const gridStartDate = new Date(
+    Date.UTC(gridStartParts.y, gridStartParts.m - 1, gridStartParts.d - offsetLunes, 12),
+  );
+  const endWd = weekdayOfKey(mesFin);
+  const offsetDomingo = endWd === 0 ? 0 : 7 - endWd;
+  const gridEndParts = parseDateOnly(mesFin)!;
+  const gridEndDate = new Date(
+    Date.UTC(gridEndParts.y, gridEndParts.m - 1, gridEndParts.d + offsetDomingo, 12),
+  );
+  return {
+    desde: toDateKey({
+      y: gridStartDate.getUTCFullYear(),
+      m: gridStartDate.getUTCMonth() + 1,
+      d: gridStartDate.getUTCDate(),
+    }),
+    hasta: toDateKey({
+      y: gridEndDate.getUTCFullYear(),
+      m: gridEndDate.getUTCMonth() + 1,
+      d: gridEndDate.getUTCDate(),
+    }),
+  };
+}
 
 function nombreDe(
   personas: Map<string, CalendarioPersona>,
@@ -99,8 +149,10 @@ export function armarMesCalendario(input: {
   personas: CalendarioPersona[];
   ausencias: CalendarioAusencia[];
   feriados: CalendarioFeriado[];
-  /** Filtrar eventos de persona (userId). null = todas. */
+  /** Filtrar eventos de persona (userId). null = todas. No aplica a tareas privadas. */
   filtroUserIds?: string[] | null;
+  /** Ocurrencias de tareas ya resueltas; se agregan sin filtro de personas. */
+  tareasEventos?: Array<{ fecha: string; evento: TareaEventoCalendario }>;
 }): MesCalendario {
   const { year, month } = input;
   const filtro =
@@ -109,32 +161,7 @@ export function armarMesCalendario(input: {
       : null;
 
   const personasMap = new Map(input.personas.map((p) => [p.userId, p]));
-  const mesInicio = monthStartKey(year, month);
-  const mesFin = monthEndKey(year, month);
-
-  // Grilla: desde el lunes de la semana del 1 hasta el domingo de la semana del último día.
-  const startWd = weekdayOfKey(mesInicio); // 0=dom…6=sáb
-  const offsetLunes = startWd === 0 ? 6 : startWd - 1; // días a retroceder hasta lunes
-  const gridStartParts = parseDateOnly(mesInicio)!;
-  const gridStartDate = new Date(
-    Date.UTC(gridStartParts.y, gridStartParts.m - 1, gridStartParts.d - offsetLunes, 12),
-  );
-  const endWd = weekdayOfKey(mesFin);
-  const offsetDomingo = endWd === 0 ? 0 : 7 - endWd;
-  const gridEndParts = parseDateOnly(mesFin)!;
-  const gridEndDate = new Date(
-    Date.UTC(gridEndParts.y, gridEndParts.m - 1, gridEndParts.d + offsetDomingo, 12),
-  );
-  const gridStart = toDateKey({
-    y: gridStartDate.getUTCFullYear(),
-    m: gridStartDate.getUTCMonth() + 1,
-    d: gridStartDate.getUTCDate(),
-  });
-  const gridEnd = toDateKey({
-    y: gridEndDate.getUTCFullYear(),
-    m: gridEndDate.getUTCMonth() + 1,
-    d: gridEndDate.getUTCDate(),
-  });
+  const { desde: gridStart, hasta: gridEnd } = rangoGrillaMes(year, month);
 
   const eventosPorDia = new Map<string, EventoCalendario[]>();
   const push = (fecha: string, ev: EventoCalendario) => {
@@ -142,6 +169,14 @@ export function armarMesCalendario(input: {
     list.push(ev);
     eventosPorDia.set(fecha, list);
   };
+
+  const mesInicio = monthStartKey(year, month);
+  const mesFin = monthEndKey(year, month);
+
+  for (const t of input.tareasEventos ?? []) {
+    if (t.fecha < gridStart || t.fecha > gridEnd) continue;
+    push(t.fecha, t.evento);
+  }
 
   for (const f of input.feriados) {
     if (f.fecha < mesInicio || f.fecha > mesFin) {
@@ -263,6 +298,47 @@ export function quienesFaltanHoy(input: {
     }
   }
   return out;
+}
+
+/** Fin de semana o feriado: mensaje para "Hoy no se trabaja…" (UX-05f / UX-10). */
+export function cartelDiaLaboral(
+  hoy: string,
+  feriados: Iterable<{ fecha: string; nombre: string }>,
+): { esLaborable: boolean; mensaje?: string } {
+  if (!isWeekday(hoy)) {
+    const wd = weekdayOfKey(hoy);
+    const label = wd === 0 ? 'domingo' : 'sábado';
+    return { esLaborable: false, mensaje: `Hoy no se trabaja (${label}).` };
+  }
+  for (const f of feriados) {
+    if (f.fecha === hoy) {
+      return { esLaborable: false, mensaje: `Hoy no se trabaja (feriado: ${f.nombre}).` };
+    }
+  }
+  return { esLaborable: true };
+}
+
+/** Alias corto para UI: null si hoy es día laboral. */
+export function mensajeHoyNoTrabaja(hoy: string, feriados: CalendarioFeriado[]): string | null {
+  const { esLaborable, mensaje } = cartelDiaLaboral(hoy, feriados);
+  return esLaborable ? null : mensaje ?? 'Hoy no se trabaja.';
+}
+
+export function tareaEventoDesdeOcurrencia(oc: OcurrenciaAgenda): TareaEventoCalendario {
+  return {
+    kind: 'tarea',
+    tareaId: oc.tareaId,
+    titulo: oc.titulo,
+    estado: oc.estado,
+    frecuencia: oc.frecuencia,
+    fechaProgramada: oc.fechaProgramada,
+    fechaVisible: oc.fechaVisible,
+    vecesAtrasada: oc.vecesAtrasada,
+    fechasAgrupadas: oc.fechasAgrupadas,
+    atrasadaDesde: oc.atrasadaDesde,
+    registroEstado: oc.registroEstado,
+    fechaDestino: oc.fechaDestino,
+  };
 }
 
 /** ¿El día es hábil (lun–vie y no feriado)? Para validar cambio de día. */
