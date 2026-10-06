@@ -47,27 +47,19 @@ Aparecen en **Movimientos cargados**; **Quitar** para borrar uno.
 
 ## Gastos
 
-Carga mensual de los costos, que después usa Economía.
+Se lee de arriba hacia abajo:
 
-### Elegir el mes
+1. **Elegir el mes** con las flechas ‹ › de arriba a la derecha (tocá el nombre del mes para saltar a otro; «Ir al mes actual» vuelve).
+2. **Resumen**: el gasto total del mes con una barra de colores (sueldos y fijos, publicidad, automatizaciones, otros), la comparación con el mes anterior y qué parte ya está marcada como pagada.
+3. **Gastos automáticos** y **Gastos recurrentes** (ver abajo).
+4. **Sueldos y gastos fijos**: sueldos (uno por persona del equipo; «Agregar otro sueldo» para alguien que no usa la app), aguinaldo (se calcula solo: sueldos ÷ 12), fijos (monotributos, contador, alquiler, seguro, crédito) y servicios (luz, agua, internet).
+5. **Otros gastos del mes**: publicidad que no sea Meta/Google, automatizaciones, envíos, impuestos, varios, remodelaciones.
+6. **Inversiones y ahorro**: compra de dólares e inversiones. **No son gastos**: Economía los muestra aparte y no restan de la ganancia.
+7. **Costos de fabricación por unidad** (cerrado; tocá para abrir).
 
-Arriba: **Mes a editar** (**Calendario**, **Mes actual**). En un mes nuevo, **Inicializar vacío**. La tarjeta **Gasto proyectado** muestra fijos + extras del mes (o el **gasto real** si el mes es un resumen histórico); clic para el desglose.
+Los meses viejos que se cargaron como **cierre histórico** muestran arriba un aviso con un solo campo, «Gasto real del mes»: Economía usa ese total y no suma el detalle.
 
-### Meses con resumen histórico
-
-Algunos meses viejos (antes de la carga fina) tienen un **gasto real** único tomado del cierre en Excel, más publicidad / dólares / inversión como desglose. En esos meses Economía no suma otra vez la fabricación de los pedidos. Si abrís uno, vas a ver un aviso y el campo **Gastos reales**.
-
-### Costos fijos
-
-- **Sueldos**: una fila por persona (**+ Sueldo** para agregar), con **Monto ARS** y si está **Pagado**. El **Aguinaldo** se calcula solo (sueldos ÷ 12).
-- **Monotributos**, **Contador**, **Alquiler**, **Seguro**, **Crédito**.
-- **Servicios**: **Electricidad**, **Agua**, **Internet**.
-
-### Gastos extras del mes
-
-**Publicidad**, **Envíos** (monto manual), **Inversiones de la empresa**, **Compra de dólares**, **Gastos varios**, **Automatizaciones**, **Remodelaciones**, **Impuestos**, **Inversiones en Cyprea**.
-
-**Seguimiento de pagos**: marcá **Pagado** en cada gasto para controlar qué falta pagar. No afecta Economía.
+En cada fila escribís el monto (podés usar puntos de miles: «1.500.000») y tocás el círculo ✓ cuando está pagado. Se guarda solo.
 
 ### Gastos automáticos (desde octubre 2026)
 
