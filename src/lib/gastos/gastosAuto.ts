@@ -426,6 +426,10 @@ export type VentasNecesarias = {
   porDia: number | null;
   /** Ritmo actual por día hábil. */
   ritmoActual: number;
+  /** Ventas del mes para no perder plata (ganancia 0). */
+  ventasEquilibrio: number | null;
+  /** Por día hábil que queda para llegar al equilibrio. */
+  porDiaEquilibrio: number | null;
 };
 
 /**
@@ -436,11 +440,20 @@ export type VentasNecesarias = {
 export function calcularVentasNecesarias(i: MesEnCursoInput, r: MesEnCurso): VentasNecesarias {
   const ritmoActual = r.ritmoDiario;
   const pctVariable = i.ventas > 0 ? i.costosVariables / i.ventas : 0;
+  const gastosNoVariables = r.proyeccion.publicidad + r.proyeccion.otros + i.fijos;
+  const dias = Math.max(1, i.habiles.restantes);
+  // Lo necesario por día se mide desde hoy (incluido) igual que la proyección: sobre lo vendido en
+  // hábiles terminados. Así «ritmo ≥ necesario» ⇔ «la proyección llega».
+  const base = i.habiles.completos > 0 ? i.ventasDiasCompletos : 0;
+  // Equilibrio: V − variable%·V − gastos = 0.
+  const margenEq = 1 - pctVariable;
+  const ventasEquilibrio = margenEq > 0 ? gastosNoVariables / margenEq : null;
+  const porDiaEquilibrio = ventasEquilibrio != null ? Math.max(0, ventasEquilibrio - base) / dias : null;
   const margen = 1 - i.objetivo - pctVariable;
-  if (margen <= 0) return { ventasMes: null, faltan: null, porDia: null, ritmoActual };
-  const ventasMes = (r.proyeccion.publicidad + r.proyeccion.otros + i.fijos) / margen;
+  if (margen <= 0) return { ventasMes: null, faltan: null, porDia: null, ritmoActual, ventasEquilibrio, porDiaEquilibrio };
+  const ventasMes = gastosNoVariables / margen;
   const faltan = Math.max(0, ventasMes - i.ventas);
-  return { ventasMes, faltan, porDia: faltan / Math.max(1, i.habiles.restantes), ritmoActual };
+  return { ventasMes, faltan, porDia: Math.max(0, ventasMes - base) / dias, ritmoActual, ventasEquilibrio, porDiaEquilibrio };
 }
 
 /** Recurrentes activos que todavía no se cobraron este mes (su día es posterior a hoy), en pesos con IVA. */
@@ -559,4 +572,70 @@ export function publicidadArsAUsd(
     const cot = cotizacionDe(r.fecha);
     return cot ? { ...r, moneda: 'USD', monto: r.monto / cot } : r;
   });
+}
+
+export type ZonaGanancia = 'perdida' | 'aceptable' | 'ideal';
+
+export type ObjetivoSellos = {
+  vendidos: number;
+  /** Venta promedio por sello del mes (incluye los accesorios que se venden con él y el envío). */
+  ventaPorSello: number;
+  /** Sellos del mes para no perder plata. */
+  equilibrio: number | null;
+  /** Sellos del mes para llegar al objetivo de ganancia. */
+  objetivo: number | null;
+  /** Por día hábil que queda (incluye hoy si es hábil). */
+  porDiaEquilibrio: number | null;
+  porDiaObjetivo: number | null;
+  /** Ritmo actual por día hábil, en sellos (el ritmo en pesos ÷ venta por sello). */
+  ritmo: number;
+  /** Cierre del mes al ritmo actual, en sellos (misma proyección en pesos que la ganancia). */
+  proyeccion: number;
+  /** Lo que habría que llevar a hoy para ir en línea con el objetivo (proporcional a los hábiles). */
+  objetivoAHoy: number | null;
+  /** Dónde cae la proyección. */
+  zona: ZonaGanancia | null;
+};
+
+/**
+ * Meta **dinámica** en sellos (decisión del dueño 2026-10-06): reemplaza a la meta fija de 200.
+ * Las ventas necesarias (en pesos) para el equilibrio y para el objetivo de ganancia se pasan a sellos
+ * con la **venta promedio por sello** del mes (ventas ÷ sellos). Así los accesorios compensan solos:
+ * si se venden más con cada sello, cada sello «trae» más plata y la meta baja; si suben los gastos, sube.
+ */
+export function calcularObjetivoSellos(i: {
+  vendidos: number;
+  habiles: ResumenHabiles;
+  ventas: number;
+  ventasEquilibrio: number | null;
+  ventasObjetivo: number | null;
+  /** Proyección de ventas del mes y ritmo por día hábil en pesos (de `calcularMesEnCurso`). */
+  ventasProyectadas: number;
+  ritmoVentas: number;
+  porDiaEquilibrioVentas: number | null;
+  porDiaObjetivoVentas: number | null;
+}): ObjetivoSellos {
+  const { total, completos, hoyEsHabil } = i.habiles;
+  const ventaPorSello = i.vendidos > 0 ? i.ventas / i.vendidos : 0;
+  // Una sola fuente de verdad: la proyección en pesos (la misma que da la ganancia), pasada a sellos.
+  const ritmo = ventaPorSello > 0 ? i.ritmoVentas / ventaPorSello : 0;
+  const proyeccion = ventaPorSello > 0 ? Math.max(i.vendidos, i.ventasProyectadas / ventaPorSello) : i.vendidos;
+  const aSellos = (v: number | null) => (v != null && ventaPorSello > 0 ? v / ventaPorSello : null);
+  const equilibrio = aSellos(i.ventasEquilibrio);
+  const objetivo = aSellos(i.ventasObjetivo);
+  const transcurrido = total > 0 ? Math.min(1, (completos + (hoyEsHabil ? 1 : 0)) / total) : 1;
+  const zona: ZonaGanancia | null =
+    equilibrio == null ? null : proyeccion < equilibrio ? 'perdida' : objetivo != null && proyeccion >= objetivo ? 'ideal' : 'aceptable';
+  return {
+    vendidos: i.vendidos,
+    ventaPorSello,
+    equilibrio,
+    objetivo,
+    porDiaEquilibrio: aSellos(i.porDiaEquilibrioVentas),
+    porDiaObjetivo: aSellos(i.porDiaObjetivoVentas),
+    ritmo,
+    proyeccion,
+    objetivoAHoy: objetivo != null ? objetivo * transcurrido : null,
+    zona,
+  };
 }

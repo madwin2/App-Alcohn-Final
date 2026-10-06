@@ -1,8 +1,9 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { diasHabilesDelMes, resumenHabiles, ventasPorDiaHabil, type VentaDiaHabil } from '@/lib/gastos/diasHabiles';
 import {
   PROVEEDOR_LABEL,
   calcularMesEnCurso,
+  calcularObjetivoSellos,
   calcularVentasNecesarias,
   publicidadDiariaReciente,
   recurrentesPendientesArs,
@@ -11,6 +12,9 @@ import {
   type GastoProveedor,
   type GastoRegistro,
   type MesEnCursoInput,
+  type ObjetivoSellos,
+  type VentasNecesarias,
+  type ZonaGanancia,
   type ValuacionMes,
 } from '@/lib/gastos/gastosAuto';
 import type { GastoRecurrente } from '@/lib/supabase/services/gastosAuto.service';
@@ -40,9 +44,12 @@ export type MesEnCursoRow = {
   publicidad: number;
   enviosManual: number;
   pedidos?: number;
+  /** Ítems que son venta (sellos + accesorios). */
+  unidades?: number;
+  sellos?: number;
 };
 
-export type VentaDia = { fecha: string; ventas: number; pedidos: number };
+export type VentaDia = { fecha: string; ventas: number; pedidos: number; items?: number; sellos?: number };
 
 export type MesHistorial = {
   mes: string;
@@ -72,6 +79,8 @@ type Props = {
   config: ControlGastosConfig | null;
   blueHoy: number | null;
   loading: boolean;
+  /** Se llama cuando cambia la meta del mes en sellos (para publicarla al equipo en Inicio). */
+  onMetaSellos?: (meta: { equilibrio: number; objetivo: number; objetivoPct: number }) => void;
 };
 
 type Vista = 'fin' | 'hoy';
@@ -110,6 +119,7 @@ export function MesEnCursoPanel({
   config,
   blueHoy,
   loading,
+  onMetaSellos,
 }: Props) {
   const [vista, setVista] = useState<Vista>('fin');
   const objetivo = config?.objetivoRentabilidad ?? 0.25;
@@ -162,6 +172,31 @@ export function MesEnCursoPanel({
   );
   const r = useMemo(() => calcularMesEnCurso(entrada), [entrada]);
   const nec = useMemo(() => calcularVentasNecesarias(entrada, r), [entrada, r]);
+  const objetivoSellosRef = useRef<string>('');
+  const objetivoSellos = useMemo(
+    () =>
+      calcularObjetivoSellos({
+        vendidos: row?.sellos ?? serieHabil.reduce((s, d) => s + d.sellos, 0),
+        habiles,
+        ventas: ventasHoy,
+        ventasEquilibrio: nec.ventasEquilibrio,
+        ventasObjetivo: nec.ventasMes,
+        ventasProyectadas: r.proyeccion.ventas,
+        ritmoVentas: r.ritmoDiario,
+        porDiaEquilibrioVentas: nec.porDiaEquilibrio,
+        porDiaObjetivoVentas: nec.porDia,
+      }),
+    [row, serieHabil, habiles, ventasHoy, nec, r.proyeccion.ventas, r.ritmoDiario],
+  );
+
+  // Publicar la meta del mes (solo sellos) cuando hay datos y cambia el número redondeado.
+  useEffect(() => {
+    if (!onMetaSellos || loading || objetivoSellos.equilibrio == null || objetivoSellos.objetivo == null) return;
+    const clave = `${Math.round(objetivoSellos.equilibrio)}|${Math.round(objetivoSellos.objetivo)}|${objetivo}`;
+    if (clave === objetivoSellosRef.current) return;
+    objetivoSellosRef.current = clave;
+    onMetaSellos({ equilibrio: objetivoSellos.equilibrio, objetivo: objetivoSellos.objetivo, objetivoPct: objetivo });
+  }, [objetivoSellos.equilibrio, objetivoSellos.objetivo, objetivo, loading, onMetaSellos]);
   const pedidosHoy = row?.pedidos ?? ventasPorDia.reduce((s, d) => s + d.pedidos, 0);
   const ticket = pedidosHoy > 0 ? ventasHoy / pedidosHoy : 0;
   const sinVentas = ventasHoy <= 0;
@@ -262,10 +297,14 @@ export function MesEnCursoPanel({
                 {r.origenPublicidad === 'sin_datos' ? (
                   <Estado tono="aviso">{avisoPublicidad}</Estado>
                 ) : llega ? (
-                  <Estado tono="ok">Por encima del objetivo.</Estado>
+                  <Estado tono="ok">En el objetivo o por encima: ideal.</Estado>
+                ) : r.proyeccion.ganancia >= 0 ? (
+                  <Estado tono="aviso">
+                    Aceptable: gana, pero faltan {formatArsCorto(faltante)} de ganancia para el {formatPct(objetivo)}.
+                  </Estado>
                 ) : (
                   <Estado tono="mal">
-                    Faltan {formatArsCorto(faltante)} de ganancia para llegar al {formatPct(objetivo)}.
+                    Por debajo del equilibrio: el mes cerraría perdiendo {formatArsCorto(-r.proyeccion.ganancia)}.
                   </Estado>
                 )}
               </div>
@@ -297,11 +336,8 @@ export function MesEnCursoPanel({
           className="xl:col-span-5"
           serie={serieHabil}
           hoy={hoy}
-          ritmo={nec.ritmoActual}
-          necesario={nec.porDia}
-          ventasMes={nec.ventasMes}
-          faltan={nec.faltan}
-          ticket={ticket}
+          nec={nec}
+          sellos={objetivoSellos}
           objetivo={objetivo}
           sinVentas={sinVentas}
           restantes={habiles.restantes}
@@ -547,91 +583,173 @@ function FilaDesglose({
   );
 }
 
+type ModoVentas = 'sellos' | 'pesos';
+
+const ZONA_TEXTO: Record<ZonaGanancia, { tono: 'mal' | 'aviso' | 'ok'; titulo: string }> = {
+  perdida: { tono: 'mal', titulo: 'por debajo del equilibrio: el mes perdería plata' },
+  aceptable: { tono: 'aviso', titulo: 'entre el equilibrio y el objetivo: gana, pero menos del' },
+  ideal: { tono: 'ok', titulo: 'en el objetivo o por encima' },
+};
+
 /**
- * Ritmo de ventas por día hábil contra lo necesario, con una barra por día hábil del mes.
- * Lo que entró en fin de semana o feriado está sumado al hábil siguiente (se aclara en el tooltip).
+ * ¿Vendemos lo suficiente? La meta es **dinámica**: los sellos (o pesos) que hacen falta para el
+ * **equilibrio** (no perder) y para el **objetivo** de ganancia, recalculados con los gastos del mes.
+ * Una barra por día hábil; lo que entró en fin de semana o feriado está sumado al hábil siguiente.
  */
 function VentasPanel({
   className,
   serie,
   hoy,
-  ritmo,
-  necesario,
-  ventasMes,
-  faltan,
-  ticket,
+  nec,
+  sellos,
   objetivo,
   sinVentas,
   restantes,
   aviso,
 }: {
   className?: string;
-  restantes: number;
-  /** Supuesto de publicidad que afecta a «Necesario». */
-  aviso: string | null;
   serie: VentaDiaHabil[];
   hoy: string;
-  ritmo: number;
-  necesario: number | null;
-  ventasMes: number | null;
-  faltan: number | null;
-  ticket: number;
+  nec: VentasNecesarias;
+  sellos: ObjetivoSellos;
   objetivo: number;
   sinVentas: boolean;
+  restantes: number;
+  /** Supuesto de publicidad que afecta a las metas. */
+  aviso: string | null;
 }) {
-  const max = Math.max(1, necesario ?? 0, ...serie.map((d) => d.ventas));
-  const lineaPct = necesario != null ? Math.min(1, necesario / max) : null;
-  const alcanza = necesario != null && ritmo >= necesario;
+  const [modo, setModo] = useState<ModoVentas>('sellos');
+  const enSellos = modo === 'sellos';
+  const fmtSellos = (n: number) => new Intl.NumberFormat('es-AR', { maximumFractionDigits: n < 10 ? 1 : 0 }).format(n);
+  const fmt = (n: number) => (enSellos ? fmtSellos(n) : formatArsCorto(n));
+
+  // Valores del modo elegido
+  const vendidoMes = enSellos ? sellos.vendidos : serie.reduce((s, d) => s + d.ventas, 0);
+  const equilibrioMes = enSellos ? sellos.equilibrio : nec.ventasEquilibrio;
+  const objetivoMes = enSellos ? sellos.objetivo : nec.ventasMes;
+  const proyeccionMes = enSellos ? sellos.proyeccion : null;
+  const ritmo = enSellos ? sellos.ritmo : nec.ritmoActual;
+  const porDiaEq = enSellos ? sellos.porDiaEquilibrio : nec.porDiaEquilibrio;
+  const porDiaObj = enSellos ? sellos.porDiaObjetivo : nec.porDia;
+  const valorDia = (d: VentaDiaHabil) => (enSellos ? d.sellos : d.ventas);
+  const zona = sellos.zona;
+
+  // Regla del mes: 0 → equilibrio → objetivo, con aire a la derecha.
+  const tope = Math.max(1, objetivoMes ?? 0, equilibrioMes ?? 0, vendidoMes, proyeccionMes ?? 0) * 1.12;
+  const pos = (v: number | null) => (v == null ? null : Math.min(1, Math.max(0, v / tope)));
+  const pEq = pos(equilibrioMes);
+  const pObj = pos(objetivoMes);
+  const pVend = pos(vendidoMes) ?? 0;
+  const pProy = pos(proyeccionMes);
+
+  // Gráfico por día hábil con dos líneas: equilibrio y objetivo por día.
+  const maxDia = Math.max(1, porDiaObj ?? 0, porDiaEq ?? 0, ...serie.map(valorDia));
   const etiquetas = serie.length ? [serie[0], serie[Math.floor((serie.length - 1) / 2)], serie[serie.length - 1]] : [];
+  const hoyHabil = serie.find((d) => d.fecha === hoy);
 
   return (
     <Panel className={cn('flex flex-col', className)}>
-      <PanelTitle title="Ventas" sub="Por día hábil · lo de fines de semana y feriados suma al día hábil siguiente" />
+      <PanelTitle
+        title="Ventas"
+        sub="Meta dinámica: se recalcula con los gastos del mes · por día hábil"
+        right={
+          <Segmentado<ModoVentas>
+            valor={modo}
+            onChange={setModo}
+            opciones={[
+              { valor: 'sellos', label: 'Sellos' },
+              { valor: 'pesos', label: 'Pesos' },
+            ]}
+          />
+        }
+      />
 
-      {sinVentas ? (
+      {sinVentas || (enSellos && sellos.vendidos === 0) ? (
         <p className="text-sm text-muted-foreground">Todavía no hay ventas este mes.</p>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
-          <Stat label="Ritmo actual" value={formatArsCorto(ritmo)} hint="por día hábil" />
-          <Stat
-            label={`Necesario para ${formatPct(objetivo)}`}
-            value={necesario != null ? formatArsCorto(necesario) : '—'}
-            hint={ventasMes != null ? `para cerrar en ${formatArsCorto(ventasMes)}` : 'no alcanzable con este costo'}
-          />
-        </div>
+        <>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+            <p className="text-4xl font-semibold tabular-nums tracking-tight">
+              {fmt(vendidoMes)}
+              <span className="ml-1.5 text-lg font-medium text-muted-foreground">{enSellos ? 'sellos vendidos' : 'vendido'}</span>
+            </p>
+            {enSellos && hoyHabil ? <p className="text-sm text-muted-foreground">hoy {hoyHabil.sellos}</p> : null}
+          </div>
+
+          {/* Regla: pérdida | aceptable | ideal */}
+          <div className="mt-6">
+            <div className="relative h-3 w-full overflow-hidden rounded-full bg-white/[0.05]">
+              {pEq != null ? <div className="absolute inset-y-0 left-0 bg-red-400/[0.12]" style={{ width: `${pEq * 100}%` }} /> : null}
+              {pObj != null ? <div className="absolute inset-y-0 right-0 bg-[#e0812f]/[0.14]" style={{ left: `${pObj * 100}%` }} /> : null}
+              <div
+                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#8a4a1c] via-[#e0812f] to-[#f6c46b] transition-[width] duration-700"
+                style={{ width: `${pVend * 100}%` }}
+              />
+              {pProy != null && pProy > pVend ? (
+                <div
+                  className="absolute inset-y-0 rounded-r-full border border-l-0 border-dashed border-white/40"
+                  style={{ left: `${pVend * 100}%`, width: `${(pProy - pVend) * 100}%` }}
+                  title={`Cierre al ritmo actual: ${fmt(proyeccionMes ?? 0)}`}
+                />
+              ) : null}
+            </div>
+            <div className="relative mt-1 h-10 text-xs">
+              {pEq != null ? (
+                <div className="absolute -translate-x-1/2 text-center" style={{ left: `${pEq * 100}%` }}>
+                  <div className="mx-auto -mt-[1.15rem] h-4 w-px bg-white/60" />
+                  <p className="whitespace-nowrap text-muted-foreground">Equilibrio</p>
+                  <p className="whitespace-nowrap font-medium tabular-nums">{fmt(equilibrioMes ?? 0)}</p>
+                </div>
+              ) : null}
+              {pObj != null ? (
+                <div className="absolute -translate-x-1/2 text-center" style={{ left: `${pObj * 100}%` }}>
+                  <div className="mx-auto -mt-[1.15rem] h-4 w-px bg-[#f0a35a]" />
+                  <p className="whitespace-nowrap text-[#f0a35a]">Objetivo {formatPct(objetivo)}</p>
+                  <p className="whitespace-nowrap font-medium tabular-nums">{fmt(objetivoMes ?? 0)}</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-3 gap-4">
+            <Stat label="Ritmo actual" value={fmt(ritmo)} hint={enSellos ? "por día hábil (en plata, pasado a sellos)" : "por día hábil"} />
+            <Stat label="Para no perder" value={porDiaEq != null ? (porDiaEq > 0 ? fmt(porDiaEq) : 'Cubierto') : '—'} hint={porDiaEq ? 'por día hábil' : undefined} />
+            <Stat label={`Para el ${formatPct(objetivo)}`} value={porDiaObj != null ? (porDiaObj > 0 ? fmt(porDiaObj) : 'Cubierto') : '—'} hint={porDiaObj ? `por día hábil · quedan ${restantes}` : undefined} />
+          </div>
+        </>
       )}
 
       <div className="mt-7">
-        <div className="relative flex h-36 items-end gap-1">
+        <div className="relative flex h-28 items-end gap-1">
           {serie.map((d) => {
             const futuro = d.fecha > hoy;
             const esHoy = d.fecha === hoy;
+            const v = valorDia(d);
             const tip = futuro
               ? fechaCorta(d.fecha)
-              : `${fechaCorta(d.fecha)}: ${formatArs(d.ventas)} · ${d.pedidos} pedidos${
+              : `${fechaCorta(d.fecha)}: ${d.sellos} sellos (${d.items} ítems) · ${formatArs(d.ventas)} · ${d.pedidos} pedidos${
                   d.trasladadasDe.length ? ` (incluye ${d.trasladadasDe.map(fechaCorta).join(', ')})` : ''
-                }${d.fecha === hoy ? ' · hoy, parcial' : ''}`;
+                }${esHoy ? ' · hoy, parcial' : ''}`;
             return (
               <div key={d.fecha} title={tip} className="group flex h-full flex-1 flex-col items-center justify-end">
                 <div
                   className={cn(
                     'w-full rounded-t-[4px] transition-colors',
-                    futuro
-                      ? 'h-1 rounded-[2px] bg-white/[0.06]'
-                      : esHoy
-                        ? 'bg-white/35'
-                        : alcanza || necesario == null || d.ventas >= necesario
-                          ? 'bg-white/75 group-hover:bg-white'
-                          : 'bg-white/45 group-hover:bg-white/70',
+                    futuro ? 'h-1 rounded-[2px] bg-white/[0.06]' : esHoy ? 'bg-white/35' : 'bg-white/70 group-hover:bg-white',
                   )}
-                  style={futuro ? undefined : { height: `${Math.max(2, (d.ventas / max) * 100)}%` }}
+                  style={futuro ? undefined : { height: `${Math.max(2, (v / maxDia) * 100)}%` }}
                 />
               </div>
             );
           })}
-          {lineaPct != null && !sinVentas ? (
-            <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-[#e0812f]/80" style={{ bottom: `${lineaPct * 100}%` }}>
-              <span className="absolute -top-5 right-0 rounded bg-[#0b0b0b]/80 px-1 text-[11px] text-[#f0a35a]">necesario</span>
+          {!sinVentas && porDiaEq != null && porDiaEq > 0 ? (
+            <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-white/40" style={{ bottom: `${(porDiaEq / maxDia) * 100}%` }}>
+              <span className="absolute -top-5 left-0 rounded bg-[#0b0b0b]/80 px-1 text-[11px] text-muted-foreground">no perder</span>
+            </div>
+          ) : null}
+          {!sinVentas && porDiaObj != null && porDiaObj > 0 ? (
+            <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-[#e0812f]/80" style={{ bottom: `${(porDiaObj / maxDia) * 100}%` }}>
+              <span className="absolute -top-5 right-0 rounded bg-[#0b0b0b]/80 px-1 text-[11px] text-[#f0a35a]">objetivo</span>
             </div>
           ) : null}
         </div>
@@ -640,21 +758,21 @@ function VentasPanel({
             <span key={`${d.fecha}-${i}`}>{fechaCorta(d.fecha)}</span>
           ))}
         </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">Las líneas son lo que hace falta por día hábil de acá a fin de mes.</p>
       </div>
 
-      {!sinVentas && necesario != null ? (
-        <div className="mt-auto space-y-2 pt-6">
+      {!sinVentas && zona ? (
+        <div className="mt-auto space-y-2 pt-5">
+          <Estado tono={ZONA_TEXTO[zona].tono}>
+            Al ritmo actual cierra en ~{fmtSellos(sellos.proyeccion)} sellos, {ZONA_TEXTO[zona].titulo}
+            {zona === 'aceptable' ? ` ${formatPct(objetivo)}` : ''}.
+          </Estado>
           {aviso ? <Estado tono="aviso">{aviso}</Estado> : null}
-          {alcanza ? (
-            <Estado tono="ok">El ritmo de ventas alcanza para el objetivo.</Estado>
-          ) : (
-            <Estado tono="mal">
-              {faltan != null && faltan > 0 ? `Hay que vender ${formatArsCorto(faltan)} en ${restantes} días hábiles: ` : ''}
-              {ticket > 0
-                ? `unos ${Math.ceil((necesario - ritmo) / ticket)} pedidos más por día que ahora.`
-                : `${formatPct(necesario / Math.max(1, ritmo) - 1)} más por día que ahora.`}
-            </Estado>
-          )}
+          {enSellos && sellos.ventaPorSello > 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              Cada sello deja en promedio {formatArsCorto(sellos.ventaPorSello)} con los accesorios que se venden con él: si suben los accesorios, la meta baja.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </Panel>

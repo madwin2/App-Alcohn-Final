@@ -31,7 +31,7 @@ Reglas que el equipo **confirmó** (respuestas a `14-open-questions`, 2026-09-28
 | POL-025 | Un envío Andreani **no se despacha hasta que el cliente completó y pagó el link**. | Q-AND-004 | Sí (la etiqueta no existe hasta que paga) |
 | POL-026 | Los links de Andreani los generan los vendedores **antes de mandar las fotos**; no hay refill automático porque depende del túnel en una PC de la oficina. | Q-AND-002 | Sí (manual) |
 | POL-027 | Las **cajas** de Economía se actualizan a mano (hoy desactualizadas). Los costos de fabricación se actualizan cuando cambian significativamente. | Q-ECO-002, Q-ECO-003 | Sí (manual) |
-| POL-028 | Las metas de venta (200/mes, 10/día) están vigentes; a futuro deberían ser configurables y escalonadas (mínimo de equilibrio, bueno, objetivo). | Q-GEN-004 | Parcial (fijas en código) |
+| POL-028 | Las metas de venta (200/mes, 10/día) están vigentes; a futuro deberían ser configurables y escalonadas (mínimo de equilibrio, bueno, objetivo). | Q-GEN-004 | Reemplazada (2026-10-06) por la **meta dinámica en sellos** (equilibrio / objetivo 25 %); 200/10 quedan solo como respaldo en Inicio |
 | POL-029 | La prioridad caliente/tibio/frío de Comercial **no se usa**: el equipo no confía en el criterio. No se trabaja la lista de potenciales a mano. | Q-COM-001 | — |
 | POL-030 | **Prueba** descuenta stock y se da por cerrada cuando **todos** sus ítems quedan `Hecho` (D1). | PLAN_PEDIDOS_PRUEBA_Y_REGALO | Sí (BR-STK-007) |
 | POL-031 | **Prueba** se carga al cliente interno fijo sin teléfono; motivo obligatorio; nunca WhatsApp (D2). | PLAN_PEDIDOS_PRUEBA_Y_REGALO | Sí (BR-PED-013) |

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AppMain } from '@/components/layout/AppMain';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -47,6 +47,7 @@ import {
   thCls,
 } from '@/components/economia/EconomiaGraficos';
 import { MontoInput } from '@/components/gastos/GastosUi';
+import { publicarMetaVentas } from '@/lib/supabase/services/metasVentas.service';
 import { estimarFijos, sumarGastosAutoAMeses } from '@/lib/gastos/gastosAuto';
 import { useGastosAuto } from '@/lib/hooks/useGastosAuto';
 import { getShippingCost } from '@/lib/supabase/services/orders.service';
@@ -762,13 +763,19 @@ export default function EconomiaPage() {
 
   /** Ventas por día del mes en curso (mismo criterio que P&L mensual: valor + envío imputado). */
   const ventasPorDiaMes = useMemo(() => {
-    const porDia = new Map<string, { ventas: number; pedidos: number }>();
+    const porDia = new Map<string, { ventas: number; pedidos: number; items: number; sellos: number }>();
     for (const order of orders) {
       if (!ordenCuentaComoVenta(order) || orderBusinessMonthKey(order) !== mesEnCurso.mes) continue;
       const dia = order.createdAt ? toArgentinaDateKey(order.createdAt) : mesEnCurso.hoy;
-      const d = porDia.get(dia) ?? { ventas: 0, pedidos: 0 };
+      const d = porDia.get(dia) ?? { ventas: 0, pedidos: 0, items: 0, sellos: 0 };
       d.ventas += Number(order.totalValue || 0) + economiaEnvioImputadoArs(order, shippingCostByOrderId);
       d.pedidos += 1;
+      // Ítems que son venta (mismo criterio que la meta de Inicio, POL-028).
+      for (const item of order.items) {
+        if (!itemCuentaComoVenta(order, item)) continue;
+        d.items += 1;
+        if (itemTypeOf(item) === 'SELLO') d.sellos += 1;
+      }
       porDia.set(dia, d);
     }
     return [...porDia.entries()].map(([fecha, v]) => ({ fecha, ...v }));
@@ -791,6 +798,16 @@ export default function EconomiaPage() {
   );
 
   const totals = useMemo(() => sumarFilas(monthly), [monthly]);
+
+  /** La meta del mes en sellos se publica para Inicio (el equipo la ve sin montos). */
+  const publicarMeta = useCallback(
+    (m: { equilibrio: number; objetivo: number; objetivoPct: number }) => {
+      void publicarMetaVentas({ mes: mesEnCurso.mes, equilibrioSellos: m.equilibrio, objetivoSellos: m.objetivo, objetivoPct: m.objetivoPct }).catch(
+        (e) => console.warn('No se pudo publicar la meta de ventas:', e instanceof Error ? e.message : e),
+      );
+    },
+    [mesEnCurso.mes],
+  );
 
   const yearly = useMemo<YearlyRow[]>(() => {
     const byYear = new Map<string, YearlyRow>();
@@ -1398,7 +1415,8 @@ export default function EconomiaPage() {
               feriados={gastosAuto.data?.feriados ?? []}
               config={gastosAuto.data?.config ?? null}
               blueHoy={gastosAuto.blueHoy}
-              loading={gastosAuto.loading}
+              loading={gastosAuto.loading || !gastosAuto.data}
+              onMetaSellos={publicarMeta}
             />
           </TabsContent>
 

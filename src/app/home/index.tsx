@@ -1,4 +1,8 @@
 import { useMemo, useEffect, useState, useCallback, useRef, useDeferredValue } from 'react';
+import { META_ITEMS_DIA, META_ITEMS_MES } from '@/lib/metas';
+import { metaDelDia, type MetaVentasMes } from '@/lib/metas/dinamica';
+import { fetchMetaVentasVigente } from '@/lib/supabase/services/metasVentas.service';
+import { fetchFeriados } from '@/lib/supabase/services/gastosAuto.service';
 import { AppMain } from '@/components/layout/AppMain';
 import { useOrdersState } from '@/lib/hooks/useOrders';
 import { useAuth } from '@/lib/hooks/useAuth';
@@ -398,10 +402,11 @@ export default function HomePage() {
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
 
-  const { monthlyItems, dailyItems, stampsEnviarFoto, stampsEsperandoPago, stampsParaEnviar, stampsDeudores, priorityStamps } =
+  const { monthlyItems, dailyItems, sellosPorDia, stampsEnviarFoto, stampsEsperandoPago, stampsParaEnviar, stampsDeudores, priorityStamps } =
     useMemo(() => {
       let monthly = 0;
       let daily = 0;
+      const sellosDia = new Map<string, number>();
 
       const allStamps: StampWithOrder[] = [];
 
@@ -423,6 +428,9 @@ export default function HomePage() {
           if (itemCuentaComoVenta(order, item)) {
             if (orderInCurrentMonth) monthly += 1;
             if (orderIsToday) daily += 1;
+            // Meta dinámica: cuenta sellos (los accesorios ya están en la venta por sello de la meta).
+            const esSello = (item.itemType ?? (item.stampType === 'ABC' ? 'ABECEDARIO' : 'SELLO')) === 'SELLO';
+            if (orderInCurrentMonth && esSello) sellosDia.set(refDateStr, (sellosDia.get(refDateStr) ?? 0) + 1);
           }
           allStamps.push({ order, item });
         }
@@ -464,6 +472,7 @@ export default function HomePage() {
       return {
         monthlyItems: monthly,
         dailyItems: daily,
+        sellosPorDia: [...sellosDia.entries()].map(([fecha, sellos]) => ({ fecha, sellos })),
         stampsEnviarFoto,
         stampsEsperandoPago,
         stampsParaEnviar,
@@ -472,9 +481,34 @@ export default function HomePage() {
       };
     }, [deferredOrders, currentMonth, currentYear, todayKey]);
 
-  // Objetivos fijos (por ahora definidos en código; más adelante pueden venir de BD)
-  const MONTHLY_GOAL = 200;
-  const DAILY_GOAL = 10;
+  // Objetivos del equipo (POL-028), compartidos con Economía. Respaldo si no hay meta dinámica publicada.
+  const MONTHLY_GOAL = META_ITEMS_MES;
+  const DAILY_GOAL = META_ITEMS_DIA;
+
+  // Meta dinámica (sellos para no perder y para el objetivo de ganancia) publicada por Economía.
+  const mesKey = todayKey.slice(0, 7);
+  const [metaVentas, setMetaVentas] = useState<MetaVentasMes | null>(null);
+  const [feriadosAnio, setFeriadosAnio] = useState<string[]>([]);
+  useEffect(() => {
+    let cancel = false;
+    void fetchMetaVentasVigente(mesKey)
+      .then((m) => !cancel && setMetaVentas(m))
+      .catch(() => {});
+    void fetchFeriados(`${mesKey.slice(0, 4)}-01-01`, `${mesKey.slice(0, 4)}-12-31`)
+      .then((f) => !cancel && setFeriadosAnio(f))
+      .catch(() => {});
+    return () => {
+      cancel = true;
+    };
+  }, [mesKey]);
+  const metaHoy = useMemo(
+    () =>
+      metaVentas
+        ? metaDelDia({ meta: metaVentas, sellosPorDia, mes: mesKey, hoy: todayKey, feriados: feriadosAnio })
+        : null,
+    [metaVentas, sellosPorDia, mesKey, todayKey, feriadosAnio],
+  );
+  const metaDeOtroMes = !!metaVentas && metaVentas.mes !== mesKey;
 
   const monthlyProgress = MONTHLY_GOAL > 0 ? Math.min((monthlyItems / MONTHLY_GOAL) * 100, 100) : 0;
   const dailyProgress = DAILY_GOAL > 0 ? Math.min((dailyItems / DAILY_GOAL) * 100, 100) : 0;
@@ -492,6 +526,52 @@ export default function HomePage() {
           {/* Objetivos */}
           <div className="flex flex-col justify-center gap-3 text-xs h-[120px] w-[220px]">
             <h2 className="text-lg font-semibold tracking-tight">Objetivos</h2>
+            {metaVentas && metaHoy ? (
+              <>
+                <div className="space-y-1 w-[220px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Sellos del mes</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {metaHoy.vendidosMes.toLocaleString('es-AR')} / {metaVentas.objetivoSellos.toLocaleString('es-AR')}
+                    </span>
+                  </div>
+                  <div className="relative h-2 rounded-full bg-zinc-800 overflow-hidden w-full">
+                    <div
+                      className="absolute inset-y-0 left-0 bg-zinc-300 transition-all"
+                      style={{ width: `${Math.min(100, (metaHoy.vendidosMes / Math.max(1, metaVentas.objetivoSellos)) * 100)}%` }}
+                    />
+                    <div
+                      className="absolute inset-y-0 w-0.5 bg-zinc-950"
+                      style={{ left: `${Math.min(100, (metaVentas.equilibrioSellos / Math.max(1, metaVentas.objetivoSellos)) * 100)}%` }}
+                      title={`Para no perder plata: ${metaVentas.equilibrioSellos} sellos`}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1 w-[220px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Sellos de hoy</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {metaHoy.hoyEsHabil
+                        ? `${metaHoy.vendidosHoy} / ${Math.ceil(metaHoy.necesarioPorDiaObjetivo)}`
+                        : 'hoy no es día hábil'}
+                    </span>
+                  </div>
+                  <div className="relative h-2 rounded-full bg-zinc-800 overflow-hidden w-full">
+                    <div
+                      className="absolute inset-y-0 left-0 bg-red-500 transition-all"
+                      style={{
+                        width: `${metaHoy.hoyEsHabil ? Math.min(100, (metaHoy.vendidosHoy / Math.max(1, Math.ceil(metaHoy.necesarioPorDiaObjetivo))) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] leading-tight text-muted-foreground w-[220px]">
+                  Mínimo para no perder: {metaVentas.equilibrioSellos} en el mes ({Math.ceil(metaHoy.necesarioPorDiaEquilibrio)} por día).
+                  {metaDeOtroMes ? ' Meta del mes anterior hasta que se actualice.' : ''}
+                </p>
+              </>
+            ) : (
+              <>
             <div className="space-y-1 w-[220px]">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Ventas totales del mes</span>
@@ -520,6 +600,8 @@ export default function HomePage() {
                 />
               </div>
             </div>
+              </>
+            )}
           </div>
           </div>
 

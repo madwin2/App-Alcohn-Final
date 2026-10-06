@@ -20,10 +20,10 @@ El Inicio no se scrollea como una página común: **cada movimiento de la rueda 
 
 Dos barras:
 
-- **Ventas totales del mes**: cuántos ítems se vendieron en el mes contra la meta de **200**.
-- **Ventas del día**: cuántos ítems se vendieron hoy contra la meta de **10**.
+- **Sellos del mes**: cuántos sellos se vendieron en el mes contra el **objetivo**. La rayita oscura en la barra es el **mínimo para no perder plata**.
+- **Sellos de hoy**: cuántos sellos se vendieron hoy contra **lo que hace falta por día** para llegar al objetivo. Los sábados, domingos y feriados dice «hoy no es día hábil»: lo que entra esos días suma al día hábil siguiente.
 
-Cuentan ítems (sellos y accesorios), no pesos. Las metas son iguales para todos.
+La meta **no es fija**: la calcula Economía con los gastos del mes (si suben los gastos, sube; si se venden más accesorios con cada sello, baja) y se actualiza cada vez que el dueño entra a Economía. Lo de cada día se recalcula solo. Si todavía no hay meta del mes (por ejemplo el día 1), se usa la del mes anterior y se avisa. Las metas son iguales para todos y no muestran montos de plata.
 
 ### Compañeros
 

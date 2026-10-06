@@ -88,6 +88,8 @@ export default function ControlGastosSandboxPage() {
   const row = {
     ventasBrutas: ventas,
     pedidos: 33,
+    unidades: 38,
+    sellos: 30,
     costosVentas: ventas * 0.155,
     costoRegalos: 40_000,
     costoPruebas: 12_000,
@@ -121,12 +123,12 @@ export default function ControlGastosSandboxPage() {
         fijos={{ total: 8_900_000, estimado: 8_550_000, faltan: ['Sueldos', 'Alquiler', 'Electricidad'] }}
         etiquetaMesAnterior="septiembre"
         ventasPorDia={[
-          { fecha: '2026-10-01', ventas: ventas * 0.22, pedidos: 8 },
-          { fecha: '2026-10-02', ventas: ventas * 0.26, pedidos: 9 },
-          { fecha: '2026-10-03', ventas: ventas * 0.07, pedidos: 2 },
-          { fecha: '2026-10-04', ventas: ventas * 0.05, pedidos: 2 },
-          { fecha: '2026-10-05', ventas: ventas * 0.28, pedidos: 9 },
-          { fecha: '2026-10-06', ventas: ventas * 0.12, pedidos: 3 },
+          { fecha: '2026-10-01', ventas: ventas * 0.22, pedidos: 8, items: 9, sellos: 7 },
+          { fecha: '2026-10-02', ventas: ventas * 0.26, pedidos: 9, items: 11, sellos: 9 },
+          { fecha: '2026-10-03', ventas: ventas * 0.07, pedidos: 2, items: 2, sellos: 2 },
+          { fecha: '2026-10-04', ventas: ventas * 0.05, pedidos: 2, items: 2, sellos: 1 },
+          { fecha: '2026-10-05', ventas: ventas * 0.28, pedidos: 9, items: 10, sellos: 8 },
+          { fecha: '2026-10-06', ventas: ventas * 0.12, pedidos: 3, items: 4, sellos: 3 },
         ]}
         historial={HISTORIAL}
         valuacion={oct}

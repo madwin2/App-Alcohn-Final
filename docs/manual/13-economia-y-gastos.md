@@ -53,7 +53,7 @@ La publicidad de **Meta** y **Google**, el gasto de **OpenAI** y los **gastos re
 
 En **Economía → Mes en curso** se lee de arriba hacia abajo:
 1. **Al ritmo actual, el mes cierra con…**: la ganancia proyectada contra el objetivo del 25 %, lo vendido y la ganancia a hoy, y cuántos días hábiles quedan.
-2. **Ventas**: el ritmo por día hábil contra lo necesario para el 25 %, con una barra por cada día hábil del mes. Sábados, domingos y feriados no aparecen: lo que entra esos días (por ejemplo, por la web) suma al día hábil siguiente (pasá el mouse por la barra para verlo).
+2. **Ventas** (elegís **Sellos** o **Pesos**): la **meta es dinámica**, no un número fijo. Se calcula con los gastos del mes: **equilibrio** = lo que hay que vender para no perder plata; **objetivo** = lo que hay que vender para el 25 % de ganancia. La regla muestra los sellos vendidos, hasta dónde llegaría el mes al ritmo actual (punteado) y las dos marcas; abajo, cuánto hace falta por día hábil para cada una. Entre el equilibrio y el objetivo es *aceptable*; desde el objetivo, *ideal*. Cada sello cuenta con los accesorios que se venden con él: si suben los accesorios, la meta en sellos baja. Sábados, domingos y feriados no aparecen: lo que entra esos días suma al día hábil siguiente.
 3. **Publicidad**: cuánto podés gastar **por día corrido** (las campañas no paran el fin de semana) contra lo que se gasta hoy, en USD para comparar con Meta y Google; y en qué plataforma se fue y cuánto costó cada pedido.
 4. **De dónde sale la ganancia**: cada gasto como % de lo vendido (fin de mes o a hoy).
 5. **Últimos meses**: la ganancia de los últimos 6 meses contra el 25 % y el mes en curso proyectado.

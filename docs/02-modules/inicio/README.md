@@ -12,7 +12,7 @@
 | Bloque | Qué muestra | Fuente |
 |---|---|---|
 | Hero | Imagen o video de bienvenida del usuario. Los medios están **hardcodeados por nombre** de 4 personas en `src/lib/utils/userImages.ts` (`public/usuarios/`). | ✅ |
-| **Objetivos** | "Ventas totales del mes" vs meta **200** y "Ventas del día" vs meta **10** (cantidad de ítems). Metas fijas en código (`MONTHLY_GOAL`, `DAILY_GOAL`). Vigentes; a futuro configurables y escalonadas (Q-GEN-004) | ✅ |
+| **Objetivos** | **Meta dinámica en sellos** (2026-10-06): «Sellos del mes» vs objetivo (marca de equilibrio) y «Sellos de hoy» vs lo necesario por día hábil. La meta del mes la publica Economía en `metas_ventas` (solo sellos; lectura para todos, escritura solo dueño); lo diario se calcula en vivo (`src/lib/metas/dinamica.ts`, días hábiles con `feriados`). Si no hay meta publicada: la del mes anterior; si no hay ninguna, la fija 200/10 (`src/lib/metas`) | ✅ |
 | Usuarios | Cápsula con los usuarios aprobados que tienen foto; video de hover. | ✅ |
 | Notas personales | Post-its arrastrables guardados **solo en el navegador** (`localStorage` `dashboard_notes_<userId>`). | ✅ |
 | Tareas de compañeros | `tareas_dashboard` asignadas al usuario (arrastrables, posición persistida). "Asignar tarea a compañero" crea la tarea y notifica **t1**. Completar = borrar. | ✅ |

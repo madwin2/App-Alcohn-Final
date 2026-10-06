@@ -3,6 +3,7 @@ import { emptyBundle } from '@/lib/gastos/monthlyEconomiaCosts';
 import {
   DEFAULT_CONTROL_GASTOS_CONFIG as CFG,
   calcularMesEnCurso,
+  calcularObjetivoSellos,
   calcularVentasNecesarias,
   estimarFijos,
   publicidadArsAUsd,
@@ -256,6 +257,9 @@ describe('calcularVentasNecesarias', () => {
     expect(n.faltan).toBeCloseTo(12_500_000 / 0.6 - 5_000_000, 0);
     expect(n.porDia).toBeCloseTo((12_500_000 / 0.6 - 5_000_000) / 13, 2);
     expect(n.ritmoActual).toBe(625_000);
+    // equilibrio: (3M + 0,5M + 9M) / 0,85
+    expect(n.ventasEquilibrio).toBeCloseTo(12_500_000 / 0.85, 0);
+    expect(n.porDiaEquilibrio).toBeCloseTo((12_500_000 / 0.85 - 5_000_000) / 13, 2);
   });
 
   it('null si el costo variable no deja margen', () => {
@@ -325,5 +329,66 @@ describe('publicidadArsAUsd', () => {
     const r1 = reg({ moneda: 'ARS', monto: 5000, proveedor: 'recurrente', categoria: 'automatizaciones' });
     const r2 = reg({ moneda: 'USD', monto: 10 });
     expect(publicidadArsAUsd([r1, r2], cots, 1545)).toEqual([r1, r2]);
+  });
+});
+
+describe('calcularObjetivoSellos', () => {
+  const habiles = { total: 21, completos: 8, restantes: 13, hoyEsHabil: true };
+  const base = {
+    vendidos: 60,
+    habiles,
+    ventas: 6_000_000, // $100.000 por sello (con accesorios)
+    ventasEquilibrio: 14_000_000,
+    ventasObjetivo: 21_000_000,
+    ventasProyectadas: 14_700_000,
+    ritmoVentas: 700_000,
+    porDiaEquilibrioVentas: 800_000,
+    porDiaObjetivoVentas: 1_500_000,
+  };
+  it('pasa equilibrio, objetivo y proyección en pesos a sellos con la venta promedio por sello', () => {
+    const r = calcularObjetivoSellos(base);
+    expect(r.ventaPorSello).toBe(100_000);
+    expect(r.equilibrio).toBe(140);
+    expect(r.objetivo).toBe(210);
+    expect(r.ritmo).toBe(7);
+    expect(r.proyeccion).toBe(147);
+    expect(r.porDiaEquilibrio).toBe(8);
+    expect(r.porDiaObjetivo).toBe(15);
+    expect(r.objetivoAHoy).toBeCloseTo((210 * 9) / 21, 6);
+    expect(r.zona).toBe('aceptable');
+  });
+  it('la zona coincide con la ganancia proyectada en pesos', () => {
+    // proyección < equilibrio en pesos ⇔ ganancia proyectada < 0
+    expect(calcularObjetivoSellos({ ...base, ventasProyectadas: 13_900_000 }).zona).toBe('perdida');
+    expect(calcularObjetivoSellos({ ...base, ventasProyectadas: 21_000_000 }).zona).toBe('ideal');
+  });
+  it('si los accesorios suben la venta por sello, la meta en sellos baja', () => {
+    const sinAcc = calcularObjetivoSellos(base);
+    const conAcc = calcularObjetivoSellos({ ...base, ventas: 7_200_000 });
+    expect(conAcc.objetivo!).toBeLessThan(sinAcc.objetivo!);
+  });
+});
+
+describe('coherencia ritmo / necesario / proyección', () => {
+  it('ritmo ≥ necesario por día ⇔ la proyección llega (aunque hoy ya haya ventas parciales)', () => {
+    for (const ventasHoyParcial of [0, 300_000, 900_000]) {
+      for (const ritmoCompletos of [700_000, 950_000, 1_300_000]) {
+        const input = {
+          mes: '2026-10', hoy: '2026-10-13',
+          ventas: ritmoCompletos * 8 + ventasHoyParcial,
+          ventasDiasCompletos: ritmoCompletos * 8,
+          habiles: { total: 21, completos: 8, restantes: 13, hoyEsHabil: true },
+          costosVariables: (ritmoCompletos * 8 + ventasHoyParcial) * 0.15,
+          fijos: 9_000_000, publicidad: 1_300_000, otros: 400_000, otrosPendientes: 0,
+          publicidadDiaria: 100_000, objetivo: 0.25,
+        };
+        const r = calcularMesEnCurso(input);
+        const n = calcularVentasNecesarias(input, r);
+        const llegaEq = r.proyeccion.ganancia >= 0;
+        expect(r.ritmoDiario >= n.porDiaEquilibrio! - 1e-6).toBe(llegaEq);
+        const llegaObj = r.proyeccion.rentabilidad >= 0.25 - 1e-9;
+        expect(r.ritmoDiario >= n.porDia! - 1e-6).toBe(llegaObj);
+      }
+    }
   });
 });

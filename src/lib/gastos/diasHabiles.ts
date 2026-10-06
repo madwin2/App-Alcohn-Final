@@ -64,22 +64,29 @@ export type VentaDiaHabil = {
   fecha: string;
   ventas: number;
   pedidos: number;
+  /** Ítems que son venta (sellos + accesorios), como la meta del equipo. */
+  items: number;
+  sellos: number;
   /** Fechas no hábiles cuyas ventas se sumaron a este día. */
   trasladadasDe: string[];
 };
 
 /** Agrupa ventas por día calendario en días hábiles (lo de fines de semana y feriados pasa al próximo hábil). */
 export function ventasPorDiaHabil(
-  ventas: ReadonlyArray<{ fecha: string; ventas: number; pedidos: number }>,
+  ventas: ReadonlyArray<{ fecha: string; ventas: number; pedidos: number; items?: number; sellos?: number }>,
   habilesMes: readonly string[],
 ): VentaDiaHabil[] {
-  const map = new Map<string, VentaDiaHabil>(habilesMes.map((h) => [h, { fecha: h, ventas: 0, pedidos: 0, trasladadasDe: [] }]));
+  const map = new Map<string, VentaDiaHabil>(
+    habilesMes.map((h) => [h, { fecha: h, ventas: 0, pedidos: 0, items: 0, sellos: 0, trasladadasDe: [] }]),
+  );
   for (const v of ventas) {
     const destino = diaHabilImputado(v.fecha, habilesMes);
     if (!destino) continue;
     const d = map.get(destino)!;
     d.ventas += v.ventas;
     d.pedidos += v.pedidos;
+    d.items += v.items ?? 0;
+    d.sellos += v.sellos ?? 0;
     if (destino !== v.fecha && !d.trasladadasDe.includes(v.fecha)) d.trasladadasDe.push(v.fecha);
   }
   return habilesMes.map((h) => map.get(h)!);
