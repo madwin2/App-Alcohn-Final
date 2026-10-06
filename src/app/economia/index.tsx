@@ -47,6 +47,7 @@ import {
   monthKeyLabel,
   monthKeyLabelLong,
   orderBusinessMonthKey,
+  toArgentinaDateKey,
   todayArgentinaDateKey,
 } from '@/lib/utils/argentinaDate';
 import {
@@ -970,6 +971,37 @@ export default function EconomiaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthly, gastosStorageTick]);
 
+  /** Ventas por día del mes en curso (mismo criterio que P&L mensual: valor + envío imputado). */
+  const ventasPorDiaMes = useMemo(() => {
+    const porDia = new Map<string, { ventas: number; pedidos: number }>();
+    for (const order of orders) {
+      if (!ordenCuentaComoVenta(order) || orderBusinessMonthKey(order) !== mesEnCurso.mes) continue;
+      const dia = order.createdAt ? toArgentinaDateKey(order.createdAt) : mesEnCurso.hoy;
+      const d = porDia.get(dia) ?? { ventas: 0, pedidos: 0 };
+      d.ventas += Number(order.totalValue || 0) + economiaEnvioImputadoArs(order, shippingCostByOrderId);
+      d.pedidos += 1;
+      porDia.set(dia, d);
+    }
+    return [...porDia.entries()].map(([fecha, v]) => ({ fecha, ...v }));
+  }, [orders, mesEnCurso.mes, mesEnCurso.hoy, shippingCostByOrderId]);
+
+  /** Últimos meses cerrados para comparar (sin el mes en curso). */
+  const historialMeses = useMemo(
+    () =>
+      monthly
+        .filter((r) => r.key < mesEnCurso.mes && r.ventasBrutas > 0)
+        .slice(-6)
+        .map((r) => ({
+          mes: r.key,
+          label: r.label,
+          ventas: r.ventasBrutas,
+          publicidad: r.publicidad,
+          ganancia: r.rentabilidadPesos,
+          pedidos: r.pedidos,
+        })),
+    [monthly, mesEnCurso.mes],
+  );
+
   const totals = useMemo(() => {
     return monthly.reduce(
       (acc, r) => {
@@ -1742,6 +1774,8 @@ export default function EconomiaPage() {
                 row={mesEnCurso.row}
                 fijosMesAnterior={mesEnCurso.fijosMesAnterior}
                 fijosCargados={mesEnCurso.fijosCargados}
+                ventasPorDia={ventasPorDiaMes}
+                historial={historialMeses}
                 valuacion={gastosAuto.porMes[mesEnCurso.mes]}
                 registros={gastosAuto.data?.registros ?? []}
                 config={gastosAuto.data?.config ?? null}

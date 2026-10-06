@@ -61,6 +61,7 @@ export default function ControlGastosSandboxPage() {
   const ventas = esc === 'bien' ? 4_100_000 : 3_150_000;
   const row = {
     ventasBrutas: ventas,
+    pedidos: 33,
     costosVentas: ventas * 0.155,
     costoRegalos: 40_000,
     costoPruebas: 12_000,
@@ -72,7 +73,7 @@ export default function ControlGastosSandboxPage() {
 
   return (
     <div className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-8">
-      <div className="mx-auto mb-8 flex max-w-6xl items-center justify-between gap-4">
+      <div className="mb-8 flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">Vista previa · control de gastos</h1>
         <Segmentado<Escenario>
           valor={esc}
@@ -85,7 +86,7 @@ export default function ControlGastosSandboxPage() {
         />
       </div>
 
-      <p className="mx-auto mb-3 max-w-6xl text-[13px] text-muted-foreground">Economía → Mes en curso</p>
+      <p className="mb-3 text-[13px] text-muted-foreground">Economía → Mes en curso</p>
       <MesEnCursoPanel
         mes="2026-10"
         etiquetaMes="Octubre 2026"
@@ -93,6 +94,21 @@ export default function ControlGastosSandboxPage() {
         row={row}
         fijosMesAnterior={8_700_000}
         fijosCargados={false}
+        ventasPorDia={[
+          { fecha: '2026-10-01', ventas: ventas * 0.24, pedidos: 8 },
+          { fecha: '2026-10-02', ventas: ventas * 0.3, pedidos: 10 },
+          { fecha: '2026-10-03', ventas: ventas * 0.18, pedidos: 6 },
+          { fecha: '2026-10-04', ventas: ventas * 0.08, pedidos: 3 },
+          { fecha: '2026-10-05', ventas: ventas * 0.2, pedidos: 6 },
+        ]}
+        historial={[
+          { mes: '2026-04', label: 'abr 26', ventas: 17_376_940, publicidad: 3_500_000, ganancia: 2_100_000, pedidos: 172 },
+          { mes: '2026-05', label: 'may 26', ventas: 15_371_393, publicidad: 2_615_000, ganancia: 1_200_000, pedidos: 149 },
+          { mes: '2026-06', label: 'jun 26', ventas: 18_198_575, publicidad: 3_569_000, ganancia: 2_900_000, pedidos: 219 },
+          { mes: '2026-07', label: 'jul 26', ventas: 22_381_935, publicidad: 3_200_000, ganancia: 4_920_000, pedidos: 249 },
+          { mes: '2026-08', label: 'ago 26', ventas: 19_936_761, publicidad: 3_347_000, ganancia: 780_000, pedidos: 233 },
+          { mes: '2026-09', label: 'sep 26', ventas: 19_642_916, publicidad: 5_221_000, ganancia: 50_000, pedidos: 204 },
+        ]}
         valuacion={oct}
         registros={registros}
         config={config}
@@ -100,8 +116,8 @@ export default function ControlGastosSandboxPage() {
         loading={false}
       />
 
-      <p className="mx-auto mb-3 mt-12 max-w-6xl text-[13px] text-muted-foreground">Gastos</p>
-      <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-5 lg:items-start">
+      <p className="mb-3 mt-12 text-[13px] text-muted-foreground">Gastos</p>
+      <div className="grid gap-4 lg:grid-cols-5 lg:items-start">
         <div className="lg:col-span-3">
           <GastosAutoCard
             mes="2026-10"

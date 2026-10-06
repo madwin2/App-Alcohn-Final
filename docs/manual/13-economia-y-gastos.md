@@ -81,8 +81,11 @@ La publicidad de **Meta** y **Google**, el gasto de **OpenAI** y los **gastos re
 En **Economía → Mes en curso** se lee de arriba hacia abajo:
 1. **Al ritmo actual, el mes cierra con…**: la ganancia proyectada y la barra contra el objetivo del 25 %.
 2. **Publicidad**: cuánto podés gastar **por día** (en USD, para comparar con los presupuestos de Meta y Google) contra lo que se gasta hoy.
-3. **De dónde sale la ganancia**: cada gasto como % de lo vendido (fin de mes o a hoy).
-4. **Publicidad del mes**: cuánto fue a cada plataforma.
+3. **Ventas**: cuánto vendés por día contra cuánto haría falta para el 25 % (y cuántos pedidos más por día).
+4. **De dónde sale la ganancia**: cada gasto como % de lo vendido (fin de mes o a hoy).
+5. **Ventas por día**: barras de cada día del mes con la línea de lo necesario.
+6. **Publicidad del mes**: cuánto fue a cada plataforma, cuánta publicidad costó cada pedido y el ticket promedio.
+7. **Últimos meses**: la ganancia de los últimos 6 meses contra el 25 %, con ventas y % de publicidad, y el mes en curso proyectado.
 
 ### Costos variables de fabricación
 

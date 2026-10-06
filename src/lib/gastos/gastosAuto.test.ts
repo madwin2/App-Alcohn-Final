@@ -3,6 +3,7 @@ import { emptyBundle } from '@/lib/gastos/monthlyEconomiaCosts';
 import {
   DEFAULT_CONTROL_GASTOS_CONFIG as CFG,
   calcularMesEnCurso,
+  calcularVentasNecesarias,
   publicidadDiariaReciente,
   sumarGastosAutoAMeses,
   valuarGastosPorMes,
@@ -196,5 +197,37 @@ describe('calcularMesEnCurso', () => {
     });
     expect(r.proyeccion.publicidad).toBeCloseTo(1_550_000, 0);
     expect(r.pocosDatos).toBe(true);
+  });
+});
+
+describe('calcularVentasNecesarias', () => {
+  it('despeja las ventas que dan el objetivo', () => {
+    const input = {
+      mes: '2026-10',
+      hoy: '2026-10-10',
+      ventas: 5_000_000,
+      costosVariables: 750_000, // 15 %
+      fijos: 9_000_000,
+      fijosEstimados: false,
+      publicidad: 1_000_000,
+      otros: 500_000,
+      publicidadDiaria: 100_000,
+      objetivo: 0.25,
+    };
+    const r = calcularMesEnCurso(input);
+    const n = calcularVentasNecesarias(input, r);
+    // pub proy = 1M + 100k × 21 = 3,1M → V = (3,1M + 0,5M + 9M) / 0,6 = 21M
+    expect(n.ventasMes).toBeCloseTo(21_000_000, 0);
+    expect(n.faltan).toBeCloseTo(16_000_000, 0);
+    expect(n.porDia).toBeCloseTo(16_000_000 / 21, 2);
+    expect(n.ritmoActual).toBe(500_000);
+  });
+
+  it('null si el costo variable no deja margen', () => {
+    const input = {
+      mes: '2026-10', hoy: '2026-10-10', ventas: 100, costosVariables: 80, fijos: 0, fijosEstimados: false,
+      publicidad: 0, otros: 0, publicidadDiaria: null, objetivo: 0.25,
+    };
+    expect(calcularVentasNecesarias(input, calcularMesEnCurso(input)).ventasMes).toBeNull();
   });
 });

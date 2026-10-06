@@ -370,3 +370,29 @@ export function calcularMesEnCurso(i: MesEnCursoInput): MesEnCurso {
     publicidadPorDia: diasRestantes > 0 ? restante / diasRestantes : restante,
   };
 }
+
+export type VentasNecesarias = {
+  /** Ventas del mes que darían exactamente el objetivo (null si no es alcanzable con este costo variable). */
+  ventasMes: number | null;
+  /** Lo que falta vender de acá a fin de mes. */
+  faltan: number | null;
+  /** Por día, en los días que quedan (incluye hoy si no hay días restantes). */
+  porDia: number | null;
+  /** Ritmo actual de ventas por día. */
+  ritmoActual: number;
+};
+
+/**
+ * Ventas que harían falta para cerrar el mes en el objetivo, con la publicidad proyectada,
+ * los fijos y los otros gastos dados. El costo variable se toma como % de las ventas de hoy:
+ * `V = (publicidad + otros + fijos) / (1 − objetivo − variable%)`.
+ */
+export function calcularVentasNecesarias(i: MesEnCursoInput, r: MesEnCurso): VentasNecesarias {
+  const ritmoActual = i.ventas / r.diasTranscurridos;
+  const pctVariable = i.ventas > 0 ? i.costosVariables / i.ventas : 0;
+  const margen = 1 - i.objetivo - pctVariable;
+  if (margen <= 0) return { ventasMes: null, faltan: null, porDia: null, ritmoActual };
+  const ventasMes = (r.proyeccion.publicidad + i.otros + i.fijos) / margen;
+  const faltan = Math.max(0, ventasMes - i.ventas);
+  return { ventasMes, faltan, porDia: faltan / Math.max(1, r.diasRestantes), ritmoActual };
+}
