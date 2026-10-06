@@ -524,3 +524,39 @@ export function estimarFijos(actual: FixedCostsMonth, anterior: FixedCostsMonth 
   estimado += sueldosEstimados + sueldosEstimados / 12;
   return { total, estimado, faltan };
 }
+
+/** Plataformas de publicidad que facturan en pesos pero llegan a la tarjeta en dólares. */
+const PUBLICIDAD_COBRADA_EN_USD: ReadonlySet<GastoProveedor> = new Set(['meta_ads', 'google_ads']);
+
+export type CotizacionDia = { fecha: string; oficial: number | null; blue: number };
+
+/**
+ * Meta/Google pueden informar el gasto en pesos (moneda de la cuenta) aunque a la tarjeta llegue en
+ * dólares (decisión del dueño 2026-10-06). Se pasa a USD con el **oficial** del día del gasto (el que usa
+ * la plataforma para facturar); desde ahí sigue el circuito de los dólares: IVA + otros impuestos y
+ * blue del día del pago. Sin oficial de ese día, se usa el anterior más cercano; sin ninguno, el primero
+ * disponible o el blue de hoy.
+ */
+export function publicidadArsAUsd(
+  registros: GastoRegistro[],
+  cotizaciones: readonly CotizacionDia[],
+  blueHoy: number | null,
+): GastoRegistro[] {
+  const tabla = [...cotizaciones]
+    .map((c) => ({ fecha: c.fecha, valor: c.oficial && c.oficial > 0 ? c.oficial : c.blue }))
+    .filter((c) => c.valor > 0)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const cotizacionDe = (fecha: string): number | null => {
+    let elegido: number | null = null;
+    for (const c of tabla) {
+      if (c.fecha <= fecha) elegido = c.valor;
+      else break;
+    }
+    return elegido ?? tabla[0]?.valor ?? (blueHoy && blueHoy > 0 ? blueHoy : null);
+  };
+  return registros.map((r) => {
+    if (r.moneda !== 'ARS' || !PUBLICIDAD_COBRADA_EN_USD.has(r.proveedor)) return r;
+    const cot = cotizacionDe(r.fecha);
+    return cot ? { ...r, moneda: 'USD', monto: r.monto / cot } : r;
+  });
+}

@@ -5,6 +5,7 @@ import {
   calcularMesEnCurso,
   calcularVentasNecesarias,
   estimarFijos,
+  publicidadArsAUsd,
   recurrentesPendientesArs,
   publicidadDiariaReciente,
   sumarGastosAutoAMeses,
@@ -294,5 +295,35 @@ describe('estimarFijos', () => {
   it('sin mes anterior usa lo cargado', () => {
     const e = estimarFijos(fijos({ alquiler: 100 }), undefined);
     expect(e).toEqual({ total: 100, estimado: 0, faltan: [] });
+  });
+});
+
+describe('publicidadArsAUsd', () => {
+  const cots = [
+    { fecha: '2026-10-05', oficial: 1500, blue: 1545 },
+    { fecha: '2026-10-07', oficial: 1600, blue: 1650 },
+  ];
+  it('pasa Meta en pesos a USD con el oficial del día (o el anterior más cercano)', () => {
+    const out = publicidadArsAUsd(
+      [
+        reg({ fecha: '2026-10-05', moneda: 'ARS', monto: 150_000 }),
+        reg({ fecha: '2026-10-06', moneda: 'ARS', monto: 150_000 }),
+        reg({ fecha: '2026-10-08', moneda: 'ARS', monto: 160_000, proveedor: 'google_ads' }),
+        reg({ fecha: '2026-09-29', moneda: 'ARS', monto: 150_000 }), // antes de toda cotización → la primera
+      ],
+      cots,
+      1545,
+    );
+    expect(out.map((r) => [r.moneda, r.monto])).toEqual([
+      ['USD', 100],
+      ['USD', 100],
+      ['USD', 100],
+      ['USD', 100],
+    ]);
+  });
+  it('no toca recurrentes ni lo que ya está en USD', () => {
+    const r1 = reg({ moneda: 'ARS', monto: 5000, proveedor: 'recurrente', categoria: 'automatizaciones' });
+    const r2 = reg({ moneda: 'USD', monto: 10 });
+    expect(publicidadArsAUsd([r1, r2], cots, 1545)).toEqual([r1, r2]);
   });
 });

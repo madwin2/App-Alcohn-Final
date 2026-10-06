@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { diasHabilesDelMes, resumenHabiles, ventasPorDiaHabil, type VentaDiaHabil } from '@/lib/gastos/diasHabiles';
 import {
   PROVEEDOR_LABEL,
@@ -211,7 +211,7 @@ export function MesEnCursoPanel({
       { label: 'Sueldos y fijos', monto: fin ? fijos.total : r.aHoy.fijosProrrateados },
       { label: 'Otros gastos', monto: fin ? r.proyeccion.otros : otrosHoy },
     ];
-    return { ventas, filas, ganancia: fin ? r.proyeccion.ganancia : r.aHoy.ganancia };
+    return { ventas, filas, ganancia: fin ? r.proyeccion.ganancia : r.aHoy.ganancia, fin };
   }, [vista, r, variablesHoy, publicidadHoy, fijos.total, otrosHoy]);
 
   // ---- Notas (supuestos que conviene ver) ----
@@ -442,19 +442,23 @@ export function MesEnCursoPanel({
         <Panel className="xl:col-span-5">
           <PanelTitle
             title="De dónde sale la ganancia"
-            sub="Cada gasto como parte de lo vendido"
+            sub={
+              vista === 'fin'
+                ? 'Estimación del mes completo: ventas y gastos al ritmo de hoy'
+                : 'Lo real hasta hoy: lo vendido y lo gastado (los fijos, en proporción a los días hábiles)'
+            }
             right={
               <Segmentado<Vista>
                 valor={vista}
                 onChange={setVista}
                 opciones={[
-                  { valor: 'fin', label: 'Fin de mes' },
-                  { valor: 'hoy', label: 'A hoy' },
+                  { valor: 'fin', label: 'Estimado a fin de mes' },
+                  { valor: 'hoy', label: 'Real a hoy' },
                 ]}
               />
             }
           />
-          <FilaDesglose label="Ventas" monto={desglose.ventas} proporcion={desglose.ventas > 0 ? 1 : 0} pct={desglose.ventas > 0 ? 1 : null} fuerte />
+          <FilaDesglose label={desglose.fin ? 'Ventas estimadas' : 'Vendido'} monto={desglose.ventas} proporcion={desglose.ventas > 0 ? 1 : 0} pct={desglose.ventas > 0 ? 1 : null} fuerte />
           {desglose.filas.map((f) => (
             <FilaDesglose
               key={f.label}
@@ -467,16 +471,18 @@ export function MesEnCursoPanel({
           ))}
           <div className="mt-2 border-t border-white/[0.08] pt-2">
             <FilaDesglose
-              label="Ganancia"
+              label={desglose.fin ? 'Ganancia estimada' : 'Ganancia a hoy'}
               monto={desglose.ganancia}
               proporcion={desglose.ventas > 0 ? Math.max(0, desglose.ganancia) / desglose.ventas : 0}
               pct={desglose.ventas > 0 ? desglose.ganancia / desglose.ventas : null}
               total
             />
           </div>
-          {vista === 'hoy' ? (
-            <p className="mt-3 text-xs text-muted-foreground">A hoy, los fijos cuentan en proporción a los días hábiles que pasaron.</p>
-          ) : null}
+          <p className="mt-3 text-xs text-muted-foreground">
+            {vista === 'fin'
+              ? `Ventas y fabricación al ritmo por día hábil; publicidad al ritmo de los últimos 7 días; fijos completos${fijos.faltan.length ? ' (lo que falta cargar, con el mes anterior)' : ''}.`
+              : 'Cambiá a «Estimado a fin de mes» para ver cómo cerraría el mes.'}
+          </p>
         </Panel>
       </div>
 
@@ -655,62 +661,117 @@ function VentasPanel({
   );
 }
 
-/** Rentabilidad de los últimos meses contra el objetivo, más el mes en curso proyectado. */
+/**
+ * Ganancia de los últimos meses contra el objetivo, más el mes en curso proyectado.
+ * Gráfico y tabla comparten la misma grilla: etiquetas una sola vez a la izquierda, un mes por columna.
+ */
 function HistorialPanel({ historial, actual, objetivo }: { historial: MesHistorial[]; actual: MesHistorial | null; objetivo: number }) {
   const meses = actual ? [...historial, actual] : historial;
   if (!meses.length) return null;
   const rent = (m: MesHistorial) => (m.ventas > 0 ? m.ganancia / m.ventas : 0);
-  const escala = Math.max(objetivo * 1.6, ...meses.map((m) => rent(m)));
-  const ALTO = 140; // px del área de barras
+  const escala = Math.max(objetivo * 1.4, ...meses.map((m) => rent(m))) * 1.12; // aire arriba para el número
+  const ALTO = 200; // px del área de barras
+  const yObjetivo = (objetivo / escala) * ALTO;
+
+  const cerrados = historial.filter((m) => m.ventas > 0);
+  const promedio = cerrados.length ? cerrados.reduce((s, m) => s + rent(m), 0) / cerrados.length : null;
+  const mejor = cerrados.reduce<MesHistorial | null>((a, m) => (!a || rent(m) > rent(a) ? m : a), null);
+  const alcanzaron = cerrados.filter((m) => rent(m) >= objetivo).length;
+
+  const columnas = { gridTemplateColumns: `8.5rem repeat(${meses.length}, minmax(0, 1fr))` };
+  const esActual = (m: MesHistorial) => actual?.mes === m.mes;
 
   return (
     <Panel>
-      <PanelTitle
-        title="Últimos meses"
-        sub="Ganancia sobre ventas con el mismo cálculo. Hasta septiembre la publicidad es la de la tarjeta; desde octubre, la automática."
-      />
-      <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${meses.length}, minmax(0, 1fr))` }}>
-        {meses.map((m) => {
-          const rr = rent(m);
-          const esActual = actual?.mes === m.mes;
-          return (
-            <div key={m.mes} className="min-w-0">
-              <div className="relative border-b border-white/15" style={{ height: ALTO }}>
-                <div className="absolute -inset-x-1.5 border-t border-dashed border-white/35" style={{ bottom: (objetivo / escala) * ALTO }} />
-                <div className="absolute inset-0 flex items-end justify-center">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
+        <div>
+          <h3 className="text-[15px] font-medium">Últimos meses</h3>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">
+            Ganancia sobre ventas, con el mismo cálculo. Hasta septiembre la publicidad es la de la tarjeta; desde octubre, la automática.
+          </p>
+        </div>
+        {promedio != null ? (
+          <div className="flex gap-8">
+            <Stat label={`Promedio ${cerrados.length} meses`} value={formatPct(promedio)} />
+            {mejor ? <Stat label="Mejor mes" value={formatPct(rent(mejor))} hint={mejor.label} /> : null}
+            <Stat label={`Llegaron al ${formatPct(objetivo)}`} value={`${alcanzaron} de ${cerrados.length}`} />
+          </div>
+        ) : null}
+      </div>
+
+      {/* Gráfico */}
+      <div className="grid" style={columnas}>
+        <div className="relative" style={{ height: ALTO }}>
+          <span className="absolute right-4 translate-y-1/2 text-xs text-muted-foreground" style={{ bottom: yObjetivo }}>
+            objetivo {formatPct(objetivo)}
+          </span>
+        </div>
+        <div className="relative border-b border-white/15" style={{ height: ALTO, gridColumn: `span ${meses.length}` }}>
+          <div className="absolute inset-x-0 border-t border-dashed border-white/30" style={{ bottom: yObjetivo }} />
+          <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${meses.length}, minmax(0, 1fr))` }}>
+            {meses.map((m) => {
+              const rr = rent(m);
+              const alto = Math.max(3, (Math.max(0, rr) / escala) * ALTO);
+              const proy = esActual(m);
+              return (
+                <div key={m.mes} className="flex flex-col items-center justify-end">
+                  <span className={cn('mb-2 text-sm font-semibold tabular-nums', rr < 0 && 'text-red-400', proy && 'text-muted-foreground')}>
+                    {formatPct(rr)}
+                  </span>
                   <div
                     className={cn(
-                      'w-full max-w-14 rounded-t-lg',
-                      rr < 0 ? 'bg-red-400/70' : rr >= objetivo ? 'bg-gradient-to-t from-[#8a4a1c] via-[#e0812f] to-[#f6c46b]' : 'bg-white/60',
-                      esActual && 'opacity-50',
+                      'w-1/2 max-w-[4.5rem] rounded-t-md',
+                      proy
+                        ? rr >= objetivo
+                          ? 'border border-b-0 border-dashed border-[#e0812f] bg-[#e0812f]/15'
+                          : 'border border-b-0 border-dashed border-white/50 bg-white/[0.06]'
+                        : rr < 0
+                          ? 'bg-red-400/70'
+                          : rr >= objetivo
+                            ? 'bg-gradient-to-t from-[#8a4a1c] via-[#e0812f] to-[#f6c46b]'
+                            : 'bg-white/55',
                     )}
-                    style={{ height: Math.max(3, (Math.max(0, rr) / escala) * ALTO) }}
+                    style={{ height: alto }}
                   />
                 </div>
-              </div>
-              <div className="mt-3 text-center">
-                <p className={cn('text-lg font-semibold tabular-nums', rr < 0 && 'text-red-400')}>{formatPct(rr)}</p>
-                <p className="text-[13px] text-muted-foreground">{esActual ? 'Este mes (proyección)' : m.label}</p>
-              </div>
-              <dl className="mt-3 space-y-1 border-t border-white/[0.06] pt-3 text-xs">
-                <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">Ventas</dt>
-                  <dd className="tabular-nums">{formatArsCorto(m.ventas)}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">Publicidad</dt>
-                  <dd className="tabular-nums">{m.ventas > 0 ? formatPct(m.publicidad / m.ventas) : '—'}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">Ganancia</dt>
-                  <dd className={cn('tabular-nums', m.ganancia < 0 && 'text-red-400')}>{formatArsCorto(m.ganancia)}</dd>
-                </div>
-              </dl>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
-      <p className="mt-4 text-[11px] text-muted-foreground">Línea punteada: objetivo {formatPct(objetivo)}. En bronce, los meses que lo alcanzaron.</p>
+
+      {/* Mes + tabla, misma grilla */}
+      <div className="grid text-sm" style={columnas}>
+        <div />
+        {meses.map((m) => (
+          <div key={m.mes} className="pb-3 pt-3 text-center">
+            <p className={cn(esActual(m) ? 'text-foreground' : 'capitalize text-muted-foreground')}>{esActual(m) ? 'Este mes' : m.label}</p>
+            {esActual(m) ? <p className="text-[11px] text-muted-foreground">proyección</p> : null}
+          </div>
+        ))}
+        {[
+          { label: 'Ventas', valor: (m: MesHistorial) => formatArsCorto(m.ventas) },
+          { label: 'Publicidad / ventas', valor: (m: MesHistorial) => (m.ventas > 0 ? formatPct(m.publicidad / m.ventas) : '—') },
+          { label: 'Ganancia', valor: (m: MesHistorial) => formatArsCorto(m.ganancia), fuerte: true },
+        ].map((fila) => (
+          <Fragment key={fila.label}>
+            <div className="border-t border-white/[0.06] py-2.5 text-muted-foreground">{fila.label}</div>
+            {meses.map((m) => (
+              <div
+                key={m.mes}
+                className={cn(
+                  'border-t border-white/[0.06] py-2.5 text-center tabular-nums',
+                  fila.fuerte && 'font-medium',
+                  fila.fuerte && m.ganancia < 0 && 'text-red-400',
+                  esActual(m) && 'text-muted-foreground',
+                )}
+              >
+                {fila.valor(m)}
+              </div>
+            ))}
+          </Fragment>
+        ))}
+      </div>
     </Panel>
   );
 }

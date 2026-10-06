@@ -54,6 +54,7 @@ export default function ControlGastosSandboxPage() {
     pagos: [],
     recurrentes: esc === 'sin-conectar' ? [] : RECURRENTES,
     feriados: FERIADOS,
+    cotizaciones: [{ fecha: HOY, oficial: 1540, blue: BLUE }],
     cotizacion: { fecha: HOY, blueVenta: BLUE, oficialVenta: 1540 },
     ultimosSync:
       esc === 'sin-conectar'
@@ -112,12 +113,12 @@ export default function ControlGastosSandboxPage() {
           { fecha: '2026-10-06', ventas: ventas * 0.12, pedidos: 3 },
         ]}
         historial={[
-          { mes: '2026-04', label: 'abr 26', ventas: 17_376_940, publicidad: 3_500_000, ganancia: 2_100_000, pedidos: 172 },
-          { mes: '2026-05', label: 'may 26', ventas: 15_371_393, publicidad: 2_615_000, ganancia: 1_200_000, pedidos: 149 },
-          { mes: '2026-06', label: 'jun 26', ventas: 18_198_575, publicidad: 3_569_000, ganancia: 2_900_000, pedidos: 219 },
-          { mes: '2026-07', label: 'jul 26', ventas: 22_381_935, publicidad: 3_200_000, ganancia: 4_920_000, pedidos: 249 },
-          { mes: '2026-08', label: 'ago 26', ventas: 19_936_761, publicidad: 3_347_000, ganancia: 780_000, pedidos: 233 },
-          { mes: '2026-09', label: 'sep 26', ventas: 19_642_916, publicidad: 5_221_000, ganancia: 50_000, pedidos: 204 },
+          { mes: '2026-04', label: 'abr 26', ventas: 18_400_000, publicidad: 3_496_000, ganancia: 1_240_000, pedidos: 172 },
+          { mes: '2026-05', label: 'may 26', ventas: 16_400_000, publicidad: 2_624_000, ganancia: 1_910_000, pedidos: 149 },
+          { mes: '2026-06', label: 'jun 26', ventas: 19_700_000, publicidad: 3_546_000, ganancia: 3_110_000, pedidos: 219 },
+          { mes: '2026-07', label: 'jul 26', ventas: 24_100_000, publicidad: 3_133_000, ganancia: 6_620_000, pedidos: 249 },
+          { mes: '2026-08', label: 'ago 26', ventas: 20_900_000, publicidad: 3_344_000, ganancia: 1_710_000, pedidos: 233 },
+          { mes: '2026-09', label: 'sept 26', ventas: 20_400_000, publicidad: 5_508_000, ganancia: 469_000, pedidos: 204 },
         ]}
         valuacion={oct}
         registros={registros}

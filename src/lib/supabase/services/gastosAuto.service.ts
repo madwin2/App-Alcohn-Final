@@ -1,10 +1,12 @@
 import { supabase } from '@/lib/supabase/client';
 import {
   DEFAULT_CONTROL_GASTOS_CONFIG,
+  publicidadArsAUsd,
   type ControlGastosConfig,
   type GastoAutoCategoria,
   type GastoMoneda,
   type GastoProveedor,
+  type CotizacionDia,
   type GastoRegistro,
   type PagoUsd,
 } from '@/lib/gastos/gastosAuto';
@@ -36,6 +38,8 @@ export type GastosAutoData = {
   recurrentes: GastoRecurrente[];
   /** Feriados y días no laborables de la empresa (tabla `feriados`, calendario del equipo). */
   feriados: string[];
+  /** Historial de cotizaciones (oficial y blue) para pasar a USD lo que las plataformas informan en pesos. */
+  cotizaciones: CotizacionDia[];
 };
 
 async function fetchConfig(): Promise<ControlGastosConfig> {
@@ -140,18 +144,35 @@ export async function fetchFeriados(desde: string, hasta: string): Promise<strin
   return (data || []).map((r) => r.fecha as string);
 }
 
+async function fetchCotizaciones(desde: string): Promise<CotizacionDia[]> {
+  const { data, error } = await supabase
+    .from('cotizaciones_usd')
+    .select('fecha, blue_venta, oficial_venta')
+    .gte('fecha', desde)
+    .order('fecha', { ascending: true });
+  if (error) throw error;
+  return (data || []).map((r) => ({
+    fecha: r.fecha,
+    blue: Number(r.blue_venta) || 0,
+    oficial: r.oficial_venta != null ? Number(r.oficial_venta) : null,
+  }));
+}
+
 export async function fetchGastosAutoData(): Promise<GastosAutoData> {
   const config = await fetchConfig();
   const anio = new Date().getFullYear();
-  const [registros, pagos, cotizacion, ultimosSync, recurrentes, feriados] = await Promise.all([
+  const [registros, pagos, cotizacion, ultimosSync, recurrentes, feriados, cotizaciones] = await Promise.all([
     fetchRegistros(config.fechaInicio),
     fetchPagosUsd(),
     fetchUltimaCotizacion(),
     fetchUltimosSync(),
     fetchGastosRecurrentes(),
     fetchFeriados(`${anio - 1}-01-01`, `${anio + 1}-12-31`),
+    fetchCotizaciones(config.fechaInicio),
   ]);
-  return { config, registros, pagos, cotizacion, ultimosSync, recurrentes, feriados };
+  // Meta/Google en pesos → USD (llegan a la tarjeta en dólares).
+  const registrosUsd = publicidadArsAUsd(registros, cotizaciones, cotizacion?.blueVenta ?? null);
+  return { config, registros: registrosUsd, pagos, cotizacion, ultimosSync, recurrentes, feriados, cotizaciones };
 }
 
 export async function createPagoUsd(input: { mes: string; fecha: string; usd: number; cotizacion: number; nota?: string }): Promise<void> {

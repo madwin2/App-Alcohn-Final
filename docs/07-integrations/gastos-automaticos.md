@@ -10,6 +10,7 @@
 | OpenAI | Edge `gastos-sync` → `GET /v1/organization/costs` agrupado por `project_id` (nombres de `/v1/organization/projects` o `control_gastos_config.openai_proyectos`) | `OPENAI_ADMIN_KEY` (clave **admin**) |
 | Google Ads | Script dentro de la cuenta de Google Ads ([`scripts/google-ads/enviar-gastos.js`](../../scripts/google-ads/enviar-gastos.js)) → `POST` edge `gastos-ingest-google` (sin JWT, header `x-ingest-secret`) | `GOOGLE_ADS_INGEST_SECRET` |
 
+- La cuenta de Meta factura en **ARS** pero a la tarjeta llega en **USD**: al leer, `publicidadArsAUsd` pasa Meta/Google en pesos a USD con el **oficial** del día (tabla `cotizaciones_usd`; sin dato de ese día, el anterior más cercano). Desde ahí siguen el circuito de dólares.
 - Cada sync re-trae los **últimos 7 días** (la primera vez, desde `fecha_inicio`) y **reemplaza** los registros de ese proveedor en el rango (upsert + borrado de lo que ya no viene). Idempotente.
 - Cada paso deja una fila en `gastos_sync_log`; si falta un secreto el paso queda «sin configurar».
 - Disparadores: cron `gastos-sync-diario` (07:00 AR) y botón «Actualizar ahora» en Gastos. El script de Google se programa dentro de Google Ads (diario, ~06:00).
