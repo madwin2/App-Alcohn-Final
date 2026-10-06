@@ -665,9 +665,16 @@ function VentasPanel({
  * Ganancia de los últimos meses contra el objetivo, más el mes en curso proyectado.
  * Gráfico y tabla comparten la misma grilla: etiquetas una sola vez a la izquierda, un mes por columna.
  */
-function HistorialPanel({ historial, actual, objetivo }: { historial: MesHistorial[]; actual: MesHistorial | null; objetivo: number }) {
+type RangoHistorial = '6' | '12' | '24' | 'todo';
+
+function HistorialPanel({ historial: todos, actual, objetivo }: { historial: MesHistorial[]; actual: MesHistorial | null; objetivo: number }) {
+  const [rango, setRango] = useState<RangoHistorial>('6');
+  const historial = rango === 'todo' ? todos : todos.slice(-Number(rango));
   const meses = actual ? [...historial, actual] : historial;
   if (!meses.length) return null;
+  // Con muchos meses la tabla no entra: se muestra solo el gráfico (el detalle está en «Resultados por mes»).
+  const conTabla = meses.length <= 13;
+  const paso = meses.length <= 13 ? 1 : meses.length <= 26 ? 3 : 6;
   const rent = (m: MesHistorial) => (m.ventas > 0 ? m.ganancia / m.ventas : 0);
   const escala = Math.max(objetivo * 1.4, ...meses.map((m) => rent(m))) * 1.12; // aire arriba para el número
   const ALTO = 200; // px del área de barras
@@ -685,14 +692,26 @@ function HistorialPanel({ historial, actual, objetivo }: { historial: MesHistori
     <Panel>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
         <div>
-          <h3 className="text-[15px] font-medium">Últimos meses</h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="text-[15px] font-medium">Últimos meses</h3>
+            <Segmentado<RangoHistorial>
+              valor={rango}
+              onChange={setRango}
+              opciones={[
+                { valor: '6', label: '6 meses' },
+                { valor: '12', label: '12 meses' },
+                { valor: '24', label: '24 meses' },
+                { valor: 'todo', label: `Todo (${todos.length})` },
+              ]}
+            />
+          </div>
           <p className="mt-0.5 text-[13px] text-muted-foreground">
             Ganancia sobre ventas, con el mismo cálculo. Hasta septiembre la publicidad es la de la tarjeta; desde octubre, la automática.
           </p>
         </div>
         {promedio != null ? (
           <div className="flex gap-8">
-            <Stat label={`Promedio ${cerrados.length} meses`} value={formatPct(promedio)} />
+            <Stat label={`Promedio de ${cerrados.length} meses`} value={formatPct(promedio)} />
             {mejor ? <Stat label="Mejor mes" value={formatPct(rent(mejor))} hint={mejor.label} /> : null}
             <Stat label={`Llegaron al ${formatPct(objetivo)}`} value={`${alcanzaron} de ${cerrados.length}`} />
           </div>
@@ -714,13 +733,19 @@ function HistorialPanel({ historial, actual, objetivo }: { historial: MesHistori
               const alto = Math.max(3, (Math.max(0, rr) / escala) * ALTO);
               const proy = esActual(m);
               return (
-                <div key={m.mes} className="flex flex-col items-center justify-end">
-                  <span className={cn('mb-2 text-sm font-semibold tabular-nums', rr < 0 && 'text-red-400', proy && 'text-muted-foreground')}>
-                    {formatPct(rr)}
-                  </span>
+                <div
+                  key={m.mes}
+                  className="flex flex-col items-center justify-end"
+                  title={`${proy ? 'Este mes (proyección)' : m.label}: ${formatPct(rr)} · ventas ${formatArsCorto(m.ventas)} · publicidad ${m.ventas > 0 ? formatPct(m.publicidad / m.ventas) : '—'} · ganancia ${formatArsCorto(m.ganancia)}`}
+                >
+                  {conTabla ? (
+                    <span className={cn('mb-2 text-sm font-semibold tabular-nums', rr < 0 && 'text-red-400', proy && 'text-muted-foreground')}>
+                      {formatPct(rr)}
+                    </span>
+                  ) : null}
                   <div
                     className={cn(
-                      'w-1/2 max-w-[4.5rem] rounded-t-md',
+                      conTabla ? 'w-1/2 max-w-[4.5rem] rounded-t-md' : 'w-[70%] max-w-[2.5rem] rounded-t-[4px]',
                       proy
                         ? rr >= objetivo
                           ? 'border border-b-0 border-dashed border-[#e0812f] bg-[#e0812f]/15'
@@ -743,13 +768,17 @@ function HistorialPanel({ historial, actual, objetivo }: { historial: MesHistori
       {/* Mes + tabla, misma grilla */}
       <div className="grid text-sm" style={columnas}>
         <div />
-        {meses.map((m) => (
-          <div key={m.mes} className="pb-3 pt-3 text-center">
-            <p className={cn(esActual(m) ? 'text-foreground' : 'capitalize text-muted-foreground')}>{esActual(m) ? 'Este mes' : m.label}</p>
-            {esActual(m) ? <p className="text-[11px] text-muted-foreground">proyección</p> : null}
+        {meses.map((m, i) => (
+          <div key={m.mes} className={cn('pb-3 pt-3 text-center', !conTabla && 'text-xs')}>
+            {conTabla || esActual(m) || i % paso === 0 ? (
+              <p className={cn('truncate', esActual(m) ? 'text-foreground' : 'capitalize text-muted-foreground')}>
+                {esActual(m) ? (conTabla ? 'Este mes' : 'Hoy') : m.label}
+              </p>
+            ) : null}
+            {esActual(m) && conTabla ? <p className="text-[11px] text-muted-foreground">proyección</p> : null}
           </div>
         ))}
-        {[
+        {!conTabla ? null : [
           { label: 'Ventas', valor: (m: MesHistorial) => formatArsCorto(m.ventas) },
           { label: 'Publicidad / ventas', valor: (m: MesHistorial) => (m.ventas > 0 ? formatPct(m.publicidad / m.ventas) : '—') },
           { label: 'Ganancia', valor: (m: MesHistorial) => formatArsCorto(m.ganancia), fuerte: true },
@@ -772,6 +801,11 @@ function HistorialPanel({ historial, actual, objetivo }: { historial: MesHistori
           </Fragment>
         ))}
       </div>
+      {!conTabla ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Pasá el mouse por una barra para ver ventas, publicidad y ganancia de ese mes. El detalle completo está en «Resultados por mes».
+        </p>
+      ) : null}
     </Panel>
   );
 }

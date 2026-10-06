@@ -6,44 +6,25 @@ Son las pantallas de números del negocio. En el menú **solo le aparecen a Juli
 
 ## Economía
 
-**Panel ejecutivo**: ventas, costos, márgenes y tendencias. Se calcula con todos los pedidos. Fechas y meses en hora Argentina.
+Arriba hay tres herramientas (tocá cada una para abrirla):
 
-### Tarjetas de arriba
+- **Pendiente de cobro**: lo vendido que todavía no está en Transferido, separado en deudores, foto enviada y señado.
+- **Caja**: saldos de efectivo, Mercado Pago y bancos. Se cargan a mano.
+- **Ahorro e inversiones**: compras de dólares e inversiones (empresa y Cyprea). No son gastos: muestran cuánto de la ganancia se separó.
 
-| Tarjeta | Qué muestra |
-|---|---|
-| Mes actual | Sellos vendidos, **Ventas brutas**, **Rentabilidad** en pesos y en USD |
-| **Pendiente de cobro** | Lo que falta cobrar. Clic para el **Desglose pendiente de cobro** por estado de venta (Deudor, Foto enviada, Señado) |
-| **Flujo / caja** | Saldos por caja (efectivo, Mercado Pago, cuentas bancarias). Clic para cargar los montos. ⚠️ Se cargan a mano: si no se actualizan, quedan viejos |
-| **Dólar referencia** | Cotización para pasar a USD |
-
-### Cómo se calcula
-
-- **Ventas brutas**: total del pedido; el envío se suma solo cuando el pedido ya está **Despachado** o **Seguimiento enviado**. Si el envío es **Andreani con link** (el cliente paga en la página de Andreani), ese monto **no** se suma.
-- **Transferido**: lo cobrado por ítem en estado Transferido, más ese envío (misma regla de Andreani con link).
-- **Costos ventas**: el costo de fabricación de cada ítem (bronce, piezas, amortización), que la app calcula sola con los parámetros de Gastos. Solo entra en el total de gastos si el mes está cargado en **detalle**.
-- **Rentabilidad** (mes en detalle) = ventas − fijos − costos ventas − gastos extras − publicidad − envíos.
-- **Rentabilidad** (mes en **resumen histórico**, p. ej. cierre Excel): ventas − **gastos reales** del mes (ese total ya incluye publicidad; no se resta otra vez la fabricación).
-
-### Movimientos reales
-
-Para ver la **Rentabilidad tras ajustes** (la **Rentabilidad teórica** menos los **Ajustes acumulados** da la **Rentabilidad real**), cargá:
-
-- **Compra de USD (ahorro)**: **Fecha**, **USD comprados**, **Precio por USD (ARS)**.
-- **Inversiones**: **Inversión empresa (ARS)** e **Inversión Cyprea (ARS)** (Cyprea es la marca paralela de sellos de lacre).
-
-Aparecen en **Movimientos cargados**; **Quitar** para borrar uno.
+Arriba a la derecha está el **dólar de referencia** (para ver montos en USD) y **Cómo se calcula**.
 
 ### Pestañas
 
 | Pestaña | Qué muestra |
 |---|---|
-| **Mes en curso** (se abre por defecto) | Ganancia a hoy, proyección a fin de mes y **publicidad por día** que permite llegar al 25 % (en pesos y USD aprox.), con la publicidad por plataforma |
-| **Volumen** | Cards con **teórica** y **ganancia real** por año (desglose USD / inversiones), gráficos y tabla mes a mes |
-| **Por producto** | Ventas por producto: sellos chicos, medianos, grandes y XL (misma clasificación que Precios), 3 mm, lacre, alimento, abecedarios, soldadores y accesorios. Tabla **mes × producto** |
-| **P&L mensual** | **Registro por mes**: ventas, gastos y transferido. Tocá **Gastos** o **Ganancias** en el encabezado de la tabla para ver el desglose (y otra vez para contraer) |
-| **Mix** | Qué proporción de cada tipo de ítem se vende |
-| **Por año** | Análisis anual: sellos, ticket, margen, teórica, dólares/inversiones, ganancia real, ritmo mensual, % sobre ventas, mix dólares vs inversiones y tendencias |
+| **Mes en curso** (se abre por defecto) | Cómo viene el mes: ganancia proyectada, ventas por día hábil, publicidad, de dónde sale la ganancia y los **últimos meses** (elegí 6, 12, 24 meses o todo) |
+| **Ventas** | Ventas por mes en pesos, sellos o pedidos, con el promedio, el mejor mes, el ticket y las unidades por pedido; abajo, la tabla mes a mes con ganancia y margen |
+| **Productos** | Qué productos se venden mes a mes (unidades, ventas o margen), cómo viene este mes contra el anterior, el total del período y la tabla mes por producto |
+| **Resultados por mes** | El resultado de cada mes: ventas, gastos (tocá «Gastos» para ver el detalle), ganancia, margen, cobrado y pendiente, y ahorro e inversiones |
+| **Por año** | Una tarjeta por año (ventas, ganancia, margen, ahorro e inversiones), la tendencia mes a mes y la tabla año por año |
+
+En **Ventas**, **Productos** y **Resultados por mes** se elige el período arriba a la derecha: **12 meses**, **24 meses** o **todo**. Los totales de las tablas son los del período elegido. El mes en curso se marca con un punto naranja (y punteado en los gráficos) porque todavía no terminó.
 
 ## Gastos
 

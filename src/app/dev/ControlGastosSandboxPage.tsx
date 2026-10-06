@@ -4,7 +4,8 @@
  */
 import { useMemo, useState } from 'react';
 import { MesEnCursoPanel } from '@/components/economia/MesEnCursoPanel';
-import { Segmentado } from '@/components/economia/controlGastosUi';
+import { Panel, PanelTitle, Segmentado } from '@/components/economia/controlGastosUi';
+import { BarrasApiladasMes, BarrasMes, CeldaMes, Sparkline, Variacion, filaCls, tablaCls, tdCls, theadCls, thCls } from '@/components/economia/EconomiaGraficos';
 import { GastosAutoCard } from '@/components/gastos/GastosAutoCard';
 import { GastosRecurrentesCard } from '@/components/gastos/GastosRecurrentesCard';
 import { Toaster } from '@/components/ui/toaster';
@@ -14,6 +15,21 @@ import type { GastosAutoData } from '@/lib/supabase/services/gastosAuto.service'
 type Escenario = 'excedido' | 'bien' | 'sin-conectar';
 
 const HOY = '2026-10-06';
+const MESES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+const HISTORIAL = Array.from({ length: 27 }, (_, i) => {
+  const d = new Date(2024, 6 + i, 1);
+  const ventas = 9_000_000 + i * 480_000 + (i % 4) * 1_300_000;
+  const pub = ventas * (0.12 + (i % 5) * 0.03);
+  const ganancia = ventas * (0.05 + ((i * 7) % 11) * 0.022) - (i === 26 ? 2_000_000 : 0);
+  return {
+    mes: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+    label: `${MESES_ES[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`,
+    ventas,
+    publicidad: pub,
+    ganancia,
+    pedidos: Math.round(ventas / 95_000),
+  };
+});
 const FERIADOS = ['2026-10-12'];
 const RECURRENTES = [
   { id: 'h', nombre: 'Hetzner', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 38, ivaAplica: true, diaDelMes: 1, activo: true },
@@ -112,14 +128,7 @@ export default function ControlGastosSandboxPage() {
           { fecha: '2026-10-05', ventas: ventas * 0.28, pedidos: 9 },
           { fecha: '2026-10-06', ventas: ventas * 0.12, pedidos: 3 },
         ]}
-        historial={[
-          { mes: '2026-04', label: 'abr 26', ventas: 18_400_000, publicidad: 3_496_000, ganancia: 1_240_000, pedidos: 172 },
-          { mes: '2026-05', label: 'may 26', ventas: 16_400_000, publicidad: 2_624_000, ganancia: 1_910_000, pedidos: 149 },
-          { mes: '2026-06', label: 'jun 26', ventas: 19_700_000, publicidad: 3_546_000, ganancia: 3_110_000, pedidos: 219 },
-          { mes: '2026-07', label: 'jul 26', ventas: 24_100_000, publicidad: 3_133_000, ganancia: 6_620_000, pedidos: 249 },
-          { mes: '2026-08', label: 'ago 26', ventas: 20_900_000, publicidad: 3_344_000, ganancia: 1_710_000, pedidos: 233 },
-          { mes: '2026-09', label: 'sept 26', ventas: 20_400_000, publicidad: 5_508_000, ganancia: 469_000, pedidos: 204 },
-        ]}
+        historial={HISTORIAL}
         valuacion={oct}
         registros={registros}
         recurrentes={data.recurrentes}
@@ -128,6 +137,68 @@ export default function ControlGastosSandboxPage() {
         blueHoy={BLUE}
         loading={false}
       />
+
+      <p className="mb-3 mt-12 text-[13px] text-muted-foreground">Economía → Ventas / Productos / Por año (componentes)</p>
+      <div className="flex flex-col gap-4">
+        <Panel>
+          <PanelTitle title="Ventas por mes" sub="Últimos 12 meses" />
+          <BarrasMes
+            datos={HISTORIAL.slice(-12).map((m, i, a) => ({ key: m.mes, label: m.label, valor: m.ventas, actual: i === a.length - 1 }))}
+            formato={(n) => `$ ${(n / 1_000_000).toFixed(1).replace('.', ',')} M`}
+            referencia={{ valor: 17_000_000, label: 'promedio' }}
+          />
+        </Panel>
+        <Panel>
+          <PanelTitle title="Productos por mes" sub="24 meses" />
+          <BarrasApiladasMes
+            filas={HISTORIAL.slice(-24).map((m) => ({ key: m.mes, label: m.label, valores: { s: m.pedidos * 0.7, a: m.pedidos * 0.2, o: m.pedidos * 0.1 } }))}
+            series={[
+              { key: 's', label: 'Sellos medianos', color: '#e0812f' },
+              { key: 'a', label: 'Abecedarios', color: '#9ca3af' },
+              { key: 'o', label: 'Accesorios', color: '#4b5563' },
+            ]}
+            formato={(n) => String(Math.round(n))}
+            actualKey={HISTORIAL[HISTORIAL.length - 1].mes}
+          />
+        </Panel>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {['Ventas', 'Ganancia', 'Ahorro e inversiones'].map((t, k) => (
+            <Panel key={t}>
+              <h3 className="text-[15px] font-medium">{t}</h3>
+              <Sparkline valores={HISTORIAL.map((m) => (k === 0 ? m.ventas : k === 1 ? m.ganancia : m.publicidad))} className="mt-4" alto={72} />
+            </Panel>
+          ))}
+        </div>
+        <Panel>
+          <PanelTitle title="Mes a mes" sub="Tabla" />
+          <table className={tablaCls}>
+            <thead className={theadCls}>
+              <tr>
+                <th className={thCls}>Mes</th>
+                <th className={thCls}>Pedidos</th>
+                <th className={thCls}>Ventas</th>
+                <th className={thCls}>Ganancia</th>
+                <th className={thCls}>Ventas vs mes ant.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {HISTORIAL.slice(-5).reverse().map((m, i) => (
+                <tr key={m.mes} className={filaCls(i === 0)}>
+                  <td className={tdCls}>
+                    <CeldaMes label={m.label} actual={i === 0} />
+                  </td>
+                  <td className={tdCls}>{m.pedidos}</td>
+                  <td className={tdCls}>{Math.round(m.ventas).toLocaleString('es-AR')}</td>
+                  <td className={tdCls}>{Math.round(m.ganancia).toLocaleString('es-AR')}</td>
+                  <td className={tdCls}>
+                    <Variacion pct={i === 0 ? null : (i % 2 ? 8 : -5)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+      </div>
 
       <p className="mb-3 mt-12 text-[13px] text-muted-foreground">Gastos</p>
       <div className="grid gap-4 lg:grid-cols-5 lg:items-start">
