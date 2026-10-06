@@ -20,7 +20,14 @@ export type NotificacionTipo =
   | 'v2_rehacer'
   | 'v3_sellos_hechos'
   | 'v4_deudor'
-  | 't1_tarea_asignada';
+  | 't1_tarea_asignada'
+  | 'e1_vacaciones_cargadas'
+  | 'e2_tarea_recurrente_asignada'
+  | 'e3_necesidad_nueva'
+  | 'e3_necesidad_resuelta'
+  | 'e4_feedback_nuevo'
+  | 'e5_idea_nueva'
+  | 'e5_idea_estado';
 
 export type NotificacionTab = 'todas' | AppArea;
 

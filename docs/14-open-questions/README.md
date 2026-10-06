@@ -11,9 +11,9 @@ Información que **el código no contiene**. Cada pregunta tiene ID, módulo, co
 
 Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los módulos/workflows/reglas afectados (o las [políticas confirmadas](../04-business-rules/politicas-confirmadas.md)).
 
-## Estado general (2026-09-28)
+## Estado general (2026-10-02)
 
-110 preguntas: **97 documentadas**, 2 parciales, **11 pendientes**.
+116 preguntas: **103 documentadas**, 2 parciales, **11 pendientes**.
 
 ## Pendientes
 
@@ -35,4 +35,4 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 
 ## Archivos por área
 
-[general](general.md) · [empresa](empresa.md) · [usuarios-permisos](usuarios-permisos.md) · [pedidos](pedidos.md) · [ventas-cobros](ventas-cobros.md) · [produccion-fabricacion](produccion-fabricacion.md) · [programas](programas.md) · [vectorizacion](vectorizacion.md) · [envios](envios.md) · [stock](stock.md) · [comercial-web](comercial-web.md) · [whatsapp-bot](whatsapp-bot.md) · [economia](economia.md) · [arquitectura](arquitectura.md) · [datos](datos.md)
+[general](general.md) · [empresa](empresa.md) · [usuarios-permisos](usuarios-permisos.md) · [equipo](equipo.md) · [pedidos](pedidos.md) · [ventas-cobros](ventas-cobros.md) · [produccion-fabricacion](produccion-fabricacion.md) · [programas](programas.md) · [vectorizacion](vectorizacion.md) · [envios](envios.md) · [stock](stock.md) · [comercial-web](comercial-web.md) · [whatsapp-bot](whatsapp-bot.md) · [economia](economia.md) · [arquitectura](arquitectura.md) · [datos](datos.md)

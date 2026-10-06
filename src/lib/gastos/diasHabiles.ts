@@ -1,6 +1,6 @@
 /**
  * Días hábiles de Alcohn: lunes a viernes que no son feriado ni día no laborable de la empresa
- * (tabla `feriados`, la misma del calendario del equipo — POL-045).
+ * (tabla `feriados`, la misma del calendario del equipo — POL-046).
  * Lo que cae en un día no hábil se cuenta en el próximo hábil (mismo criterio que POL-070).
  */
 

@@ -2,6 +2,8 @@ import {
   clearNotificacionDedup,
   emitNotificacionSafe,
 } from '@/lib/supabase/services/notificaciones.service';
+import { fraseTipoFeedbackNotificacion } from '@/lib/equipo/feedback';
+import { fraseEstadoIdeaNotificacion } from '@/lib/equipo/corcho';
 import { clienteNombreFromParts, formatMoneyArs, joinCampos, shortPedidoId } from './format';
 
 export function notifySelloModificado(params: {
@@ -340,6 +342,158 @@ export function notifyTareaAsignada(params: {
     linkPath: '/',
     userIds: [params.asignadoAUserId],
     metadata: { itemNombre: params.texto },
+  });
+}
+
+/** Vacaciones cargadas: avisa a todo el equipo menos el autor (S6). */
+export function notifyVacacionesCargadas(params: {
+  nombre: string;
+  fechaDesde: string;
+  fechaHasta: string;
+  destinatarioUserIds: string[];
+  ausenciaId: string;
+}): void {
+  if (!params.destinatarioUserIds.length) return;
+  const fmt = (iso: string) => {
+    const [, m, d] = iso.split('-');
+    return `${d}/${m}`;
+  };
+  const rango =
+    params.fechaDesde === params.fechaHasta
+      ? fmt(params.fechaDesde)
+      : `${fmt(params.fechaDesde)} al ${fmt(params.fechaHasta)}`;
+  emitNotificacionSafe({
+    tipo: 'e1_vacaciones_cargadas',
+    area: null,
+    titulo: `${params.nombre} se toma vacaciones del ${rango}`,
+    entidadTipo: 'ausencia',
+    entidadId: params.ausenciaId,
+    linkPath: '/perfil?tab=calendario',
+    userIds: params.destinatarioUserIds,
+    metadata: {
+      itemNombre: params.nombre,
+      fechaDesde: params.fechaDesde,
+      fechaHasta: params.fechaHasta,
+    },
+  });
+}
+
+/** Nueva necesidad: avisa al admin (S8). */
+export function notifyNecesidadNueva(params: {
+  nombre: string;
+  texto: string;
+  adminUserIds: string[];
+  necesidadId: string;
+}): void {
+  if (!params.adminUserIds.length) return;
+  const preview =
+    params.texto.length > 80 ? `${params.texto.slice(0, 77).trim()}…` : params.texto;
+  emitNotificacionSafe({
+    tipo: 'e3_necesidad_nueva',
+    area: null,
+    titulo: `${params.nombre} necesita: ${preview}`,
+    entidadTipo: 'necesidad_equipo',
+    entidadId: params.necesidadId,
+    linkPath: '/perfil?tab=equipo',
+    userIds: params.adminUserIds,
+    metadata: { itemNombre: params.nombre, texto: params.texto },
+  });
+}
+
+/** Admin marcó resuelta una necesidad (S8). */
+export function notifyNecesidadResuelta(params: {
+  adminNombre: string;
+  destinatarioUserId: string;
+  necesidadId: string;
+}): void {
+  emitNotificacionSafe({
+    tipo: 'e3_necesidad_resuelta',
+    area: null,
+    titulo: `${params.adminNombre} resolvió tu pedido`,
+    entidadTipo: 'necesidad_equipo',
+    entidadId: params.necesidadId,
+    linkPath: '/perfil?tab=necesidades',
+    userIds: [params.destinatarioUserId],
+    metadata: { itemNombre: params.adminNombre },
+  });
+}
+
+/** Admin dejó feedback a alguien (S10). El título dice el tipo, no el contenido. */
+export function notifyFeedbackNuevo(params: {
+  autorNombre: string;
+  tipo: 'felicitacion' | 'mejora' | 'correccion';
+  destinatarioUserId: string;
+  feedbackId: string;
+}): void {
+  emitNotificacionSafe({
+    tipo: 'e4_feedback_nuevo',
+    area: null,
+    titulo: `${params.autorNombre} te dejó ${fraseTipoFeedbackNotificacion(params.tipo)}`,
+    entidadTipo: 'feedback_equipo',
+    entidadId: params.feedbackId,
+    linkPath: '/perfil?tab=feedback',
+    userIds: [params.destinatarioUserId],
+    metadata: { itemNombre: params.autorNombre, tipoFeedback: params.tipo },
+  });
+}
+
+/** Alguien pinchó una idea en el corcho: avisa al resto del equipo. */
+export function notifyIdeaNueva(params: {
+  autorNombre: string;
+  ideaId: string;
+  destinatarioUserIds: string[];
+}): void {
+  if (!params.destinatarioUserIds.length) return;
+  emitNotificacionSafe({
+    tipo: 'e5_idea_nueva',
+    area: null,
+    titulo: `${params.autorNombre} pinchó una idea en el corcho`,
+    entidadTipo: 'idea_corcho',
+    entidadId: params.ideaId,
+    linkPath: '/corcho',
+    userIds: params.destinatarioUserIds,
+    metadata: { itemNombre: params.autorNombre },
+  });
+}
+
+/** Admin aprobó o descartó una idea: avisa al autor. */
+export function notifyIdeaEstado(params: {
+  estado: 'aprobada' | 'descartada';
+  ideaId: string;
+  autorUserId: string;
+}): void {
+  emitNotificacionSafe({
+    tipo: 'e5_idea_estado',
+    area: null,
+    titulo: `Tu idea fue ${fraseEstadoIdeaNotificacion(params.estado)}`,
+    entidadTipo: 'idea_corcho',
+    entidadId: params.ideaId,
+    linkPath: '/corcho',
+    userIds: [params.autorUserId],
+    metadata: { estadoIdea: params.estado },
+  });
+}
+
+/** Admin sumó una tarea recurrente a alguien (S7). */
+export function notifyTareaRecurrenteAsignada(params: {
+  autorNombre: string;
+  titulo: string;
+  frecuenciaTexto: string;
+  destinatarioUserId: string;
+  tareaId: string;
+}): void {
+  emitNotificacionSafe({
+    tipo: 'e2_tarea_recurrente_asignada',
+    area: null,
+    titulo: `${params.autorNombre} te sumó una tarea semanal: ${params.titulo} (${params.frecuenciaTexto})`,
+    entidadTipo: 'tarea_recurrente',
+    entidadId: params.tareaId,
+    linkPath: '/perfil?tab=tareas',
+    userIds: [params.destinatarioUserId],
+    metadata: {
+      itemNombre: params.titulo,
+      frecuencia: params.frecuenciaTexto,
+    },
   });
 }
 

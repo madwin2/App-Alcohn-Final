@@ -27,6 +27,8 @@ import ProgramasTourSandboxPage from './app/dev/ProgramasTourSandboxPage'
 import ControlGastosSandboxPage from './app/dev/ControlGastosSandboxPage'
 import StockPendienteSandboxPage from './app/stock-pendiente/index'
 import CentroPage from './app/centro/index'
+import PerfilPage from './app/perfil/index'
+import CorchoPage from './app/corcho/index'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { AppUpdatesHost } from './components/global/AppUpdatesHost'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -66,6 +68,8 @@ function App() {
             <Route path="/whatsapp" element={<WhatsAppPage />} />
             <Route path="/centro" element={<CentroPage />} />
             <Route path="/centro/articulos/:slug" element={<CentroPage />} />
+            <Route path="/perfil" element={<PerfilPage />} />
+            <Route path="/corcho" element={<CorchoPage />} />
           </Route>
           <Route path="/admin/registros" element={<Navigate to="/pedidos" replace />} />
           {import.meta.env.DEV ? (

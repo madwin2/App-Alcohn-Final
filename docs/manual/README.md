@@ -25,6 +25,7 @@ Manual para el equipo de Alcohn: qué hay en cada pantalla, para qué sirve cada
 | 15 | [Problemas frecuentes](15-problemas-frecuentes.md) | Qué hacer cuando algo no sale | Todos |
 | 16 | [Centro Alcohn](16-centro-alcohn.md) | Manual, búsqueda y asistente dentro de la app | Todos |
 | 17 | [Errores](17-errores.md) | Rehaceres: métricas y archivos congelados del error | Producción, Ventas |
+| 18 | [Mi perfil](18-mi-perfil.md) | Tu espacio personal: calendario, tareas, corcho, números, crecimiento, feedback y equipo | Todos |
 
 ## Lo básico que hay que entender
 

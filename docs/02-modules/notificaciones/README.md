@@ -31,6 +31,13 @@
 | `l1_direccion_post_etiqueta` | logística | warning | Se cambiaron datos de envío con la etiqueta ya generada/pagada | TS (Envíos) |
 | `l2_despacho_proximo` / `l2_despacho_vencido` | logística | warning / urgent | La fecha límite de la orden está a ≤3 días / vencida y no se despachó | **cron** 09:10 UTC |
 | `t1_tarea_asignada` | (usuario) | info | Un compañero te asignó una tarea | TS |
+| `e1_vacaciones_cargadas` | (lista explícita: equipo menos el autor) | info | Alguien cargó vacaciones | TS (`notifyVacacionesCargadas`) → `/perfil?tab=calendario` |
+| `e2_tarea_recurrente_asignada` | (usuario destinatario) | info | El admin sumó una tarea recurrente | TS (`notifyTareaRecurrenteAsignada`) → `/perfil?tab=tareas` |
+| `e3_necesidad_nueva` | (admins activos) | info | Alguien cargó un pedido en Lo que necesito | TS (`notifyNecesidadNueva`) → `/perfil?tab=equipo` |
+| `e3_necesidad_resuelta` | (autor del pedido) | info | El admin marcó resuelta una necesidad | TS (`notifyNecesidadResuelta`) → `/perfil?tab=necesidades` |
+| `e4_feedback_nuevo` | (destinatario) | info | El admin dejó feedback (el título dice el **tipo**, no el contenido) | TS (`notifyFeedbackNuevo`) → `/perfil?tab=feedback` |
+| `e5_idea_nueva` | (equipo menos el autor) | info | Alguien pinchó una idea en el corcho | TS (`notifyIdeaNueva`) → `/corcho` |
+| `e5_idea_estado` | (autor de la idea) | info | El admin aprobó o descartó su idea | TS (`notifyIdeaEstado`) → `/corcho` |
 
 ## Abrir una notificación
 

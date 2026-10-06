@@ -21,6 +21,7 @@ import {
   Settings,
   BookOpen,
   AlertTriangle,
+  Pin,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SidebarItem } from './SidebarItem';
@@ -55,7 +56,7 @@ function SidebarInner() {
   const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
-  const { pedidosBadge, comercialBadge, programasBadge } = useSidebarNotifications();
+  const { pedidosBadge, comercialBadge, programasBadge, corchoBadge } = useSidebarNotifications();
 
   const isExpanded = sidebarExpanded || sidebarHovered;
 
@@ -158,6 +159,31 @@ function SidebarInner() {
           </div>
           );
         })}
+        {!isRestrictedUser && (
+          <div className="flex justify-start">
+            <SidebarItem
+              icon={User}
+              label="Mi perfil"
+              isActive={location.pathname === '/perfil'}
+              isExpanded={isExpanded}
+              disabled={false}
+              onClick={() => navigate('/perfil')}
+            />
+          </div>
+        )}
+        {!isRestrictedUser && (
+          <div className="flex justify-start">
+            <SidebarItem
+              icon={Pin}
+              label="Corcho"
+              isActive={location.pathname === '/corcho'}
+              isExpanded={isExpanded}
+              disabled={false}
+              badgeCount={corchoBadge}
+              onClick={() => navigate('/corcho')}
+            />
+          </div>
+        )}
         {!isRestrictedUser && (
           <div className="flex justify-start">
             <SidebarItem

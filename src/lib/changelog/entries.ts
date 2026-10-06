@@ -10,6 +10,7 @@ import {
   Link2,
   Lock,
   MessageCircle,
+  HeartHandshake,
   MousePointerClick,
   Package,
   Ruler,
@@ -21,6 +22,13 @@ import {
   Upload,
   BookOpen,
   WalletCards,
+  UserCircle,
+  CalendarDays,
+  ListTodo,
+  ShoppingBag,
+  Target,
+  Pin,
+  BarChart3,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -639,6 +647,107 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Economía ya no suma envíos Andreani con link',
         body: 'Si el cliente pagó el envío en Andreani (pedido con link), ese monto no entra a las ventas del mes. Se recalcula también en meses anteriores.',
         icon: WalletCards,
+      },
+    ],
+  },
+  {
+    id: 36,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.54',
+    slides: [
+      {
+        heading: 'Nueva página Mi perfil',
+        body: 'Entrá desde el menú o tocando tu foto en el Inicio. Ahí vas a ver quién sos en el equipo; más adelante se suman calendario, tareas y el resto.',
+        icon: UserCircle,
+      },
+    ],
+  },
+  {
+    id: 37,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.55',
+    slides: [
+      {
+        heading: 'Calendario del equipo',
+        body: 'En Mi perfil cargá tus vacaciones y cambios de día. Ves feriados, cumpleaños y quién falta cada día. Si te pasás del saldo, la app avisa pero no bloquea.',
+        icon: CalendarDays,
+      },
+    ],
+  },
+  {
+    id: 38,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.56',
+    slides: [
+      {
+        heading: 'Anotá tus tareas de cada semana',
+        body: 'En Mi perfil → Mis tareas definís lo que tenés que hacer cada día, semana o mes. Julián también puede sumarte tareas; las tuyas las editás vos.',
+        icon: ListTodo,
+      },
+    ],
+  },
+  {
+    id: 39,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.57',
+    slides: [
+      {
+        heading: 'Anotaciones privadas en Mi perfil',
+        body: 'Notas largas con Markdown, solo para vos. Se guardan solas mientras escribís; podés fijar las importantes arriba.',
+        icon: Lock,
+      },
+      {
+        heading: 'Lo que necesito',
+        body: 'Pedí herramientas o insumos puntuales. Julián recibe un aviso y, cuando lo resuelve, te queda la respuesta en la pestaña.',
+        icon: ShoppingBag,
+      },
+    ],
+  },
+  {
+    id: 40,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.58',
+    slides: [
+      {
+        heading: 'Crecimiento en Mi perfil',
+        body: 'Anotá tus objetivos y lo que querés aprender. Lo ven vos y Julián, para que pueda ayudarte.',
+        icon: Target,
+      },
+      {
+        heading: 'Feedback de Julián',
+        body: 'Felicitaciones, mejoras y correcciones llegan a Mi perfil → Feedback, con un aviso. Abrís cada uno para marcarlos leídos.',
+        icon: HeartHandshake,
+      },
+    ],
+  },
+  {
+    id: 41,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.59',
+    slides: [
+      {
+        heading: 'Corcho de ideas',
+        body: 'En el menú está Corcho: pinchá ideas para mejorar la empresa, votá con 👍 o 👎 y filtrá por persona. Julián puede aprobar o descartar. En Mi perfil → Mis ideas ves las tuyas.',
+        icon: Pin,
+      },
+    ],
+  },
+  {
+    id: 42,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.60',
+    slides: [
+      {
+        heading: 'Mis números en Mi perfil',
+        body: 'En la pestaña Mis números ves lo que fuiste haciendo (semana, mes o año) y una galería de sellos. Solo lo ves vos.',
+        icon: BarChart3,
       },
     ],
   },
