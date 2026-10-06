@@ -61,6 +61,9 @@ Margen = valor − costo (por ítem y por orden).
 - **Economía**: `sumarGastosAutoAMeses` **suma** lo automático a lo cargado a mano en `economia_gastos_mensuales` (no lo persiste). Desde `fecha_inicio` no hay que cargar a mano la publicidad de la tarjeta (se duplicaría). Meses anteriores no cambian.
 - **Gastos**: tarjeta «Gastos automáticos» (desglose por plataforma/campaña, estado de sync, «Actualizar ahora», «Marcar pago») y «Gastos recurrentes».
 - **Economía → Mes en curso** (pestaña por defecto): ventas y ganancia a hoy (fijos prorrateados), proyección a fin de mes (ventas al ritmo del mes; publicidad al ritmo de los últimos 7 días) y **publicidad por día** que permite llegar al objetivo (también en USD aprox.). Si el mes no tiene fijos cargados, usa los del mes anterior.
+- **Días hábiles** (`src/lib/gastos/diasHabiles.ts`): lunes a viernes menos la tabla `feriados` (calendario del equipo, POL-045). En Mes en curso las **ventas** se proyectan por día hábil (ritmo = ventas de hábiles terminados ÷ hábiles terminados) y lo vendido un día no hábil se imputa al **hábil siguiente** (criterio POL-070); la **publicidad** se proyecta por **día corrido**. Los fijos «a hoy» se prorratean por hábiles.
+- **Fijos estimados línea por línea** (`estimarFijos`): lo que en el mes en curso está en 0 y el mes anterior tenía monto (cada sueldo, alquiler, luz…) se toma del mes anterior y se avisa qué falta cargar. Los **recurrentes** que se cobran después de hoy se suman a la proyección (`recurrentesPendientesArs`).
+- **Gastos → resumen**: «Gasto del mes» = criterio de Economía (sin compra de dólares ni inversiones, que van en «Inversiones y ahorro»). En el mes en curso, «Cierre estimado» = cargado + fijos que faltan + publicidad al ritmo de 7 días × días corridos restantes + recurrentes por cobrar.
 - Pendiente (Etapa 2): alertas automáticas, atribución de ventas por campaña.
 
 ❓ Preguntas: [economia.md](../../14-open-questions/economia.md).

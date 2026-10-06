@@ -34,7 +34,7 @@ import {
 } from '@/lib/supabase/services/economiaSettings.service';
 import { loadGastosMensualesIntoCache } from '@/lib/supabase/services/gastosMensuales.service';
 import { MesEnCursoPanel } from '@/components/economia/MesEnCursoPanel';
-import { sumarGastosAutoAMeses } from '@/lib/gastos/gastosAuto';
+import { estimarFijos, sumarGastosAutoAMeses } from '@/lib/gastos/gastosAuto';
 import { useGastosAuto } from '@/lib/hooks/useGastosAuto';
 import { getShippingCost } from '@/lib/supabase/services/orders.service';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -77,7 +77,6 @@ import {
   inversionesExtrasArs,
   isResumenMensual,
   loadAllMonthlyCosts,
-  monthHasDetailedFixedCosts,
   monthHasEconomiaSignal,
   readLegacyFixedScalar,
 } from '@/lib/gastos/monthlyEconomiaCosts';
@@ -961,12 +960,14 @@ export default function EconomiaPage() {
     const mes = hoy.slice(0, 7);
     const [y, m] = mes.split('-').map(Number);
     const anterior = `${m === 1 ? y - 1 : y}-${String(m === 1 ? 12 : m - 1).padStart(2, '0')}`;
+    const gastos = loadAllMonthlyCosts();
     return {
       hoy,
       mes,
+      anterior,
       row: monthly.find((r) => r.key === mes),
-      fijosMesAnterior: monthly.find((r) => r.key === anterior)?.costosFijos ?? 0,
-      fijosCargados: monthHasDetailedFixedCosts(loadAllMonthlyCosts()[mes]),
+      // Lo que este mes todavía está en 0 se estima con el mes anterior, línea por línea.
+      fijos: estimarFijos(getBundleForMonth(gastos, mes).fixed, gastos[anterior]?.fixed),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthly, gastosStorageTick]);
@@ -1772,12 +1773,14 @@ export default function EconomiaPage() {
                 etiquetaMes={monthKeyLabelLong(mesEnCurso.mes)}
                 hoy={mesEnCurso.hoy}
                 row={mesEnCurso.row}
-                fijosMesAnterior={mesEnCurso.fijosMesAnterior}
-                fijosCargados={mesEnCurso.fijosCargados}
+                fijos={mesEnCurso.fijos}
+                etiquetaMesAnterior={monthKeyLabelLong(mesEnCurso.anterior).split(' ')[0].toLowerCase()}
                 ventasPorDia={ventasPorDiaMes}
                 historial={historialMeses}
                 valuacion={gastosAuto.porMes[mesEnCurso.mes]}
                 registros={gastosAuto.data?.registros ?? []}
+                recurrentes={gastosAuto.data?.recurrentes ?? []}
+                feriados={gastosAuto.data?.feriados ?? []}
                 config={gastosAuto.data?.config ?? null}
                 blueHoy={gastosAuto.blueHoy}
                 loading={gastosAuto.loading}

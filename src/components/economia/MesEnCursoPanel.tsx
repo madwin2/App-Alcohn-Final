@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
+import { diasHabilesDelMes, resumenHabiles, ventasPorDiaHabil, type VentaDiaHabil } from '@/lib/gastos/diasHabiles';
 import {
   PROVEEDOR_LABEL,
   calcularMesEnCurso,
   calcularVentasNecesarias,
-  diasDelMes,
   publicidadDiariaReciente,
-  type MesEnCursoInput,
+  recurrentesPendientesArs,
   type ControlGastosConfig,
+  type FijosEstimados,
   type GastoProveedor,
   type GastoRegistro,
+  type MesEnCursoInput,
   type ValuacionMes,
 } from '@/lib/gastos/gastosAuto';
+import type { GastoRecurrente } from '@/lib/supabase/services/gastosAuto.service';
 import { cn } from '@/lib/utils/cn';
 import {
   BarraBronce,
@@ -55,15 +58,17 @@ type Props = {
   etiquetaMes: string;
   hoy: string;
   row: MesEnCursoRow | undefined;
-  /** Fijos del mes anterior, para estimar si el mes en curso todavía no tiene fijos cargados. */
-  fijosMesAnterior: number;
-  fijosCargados: boolean;
-  /** Ventas por día del mes en curso. */
+  /** Fijos del mes con lo que falta cargar estimado con el mes anterior (línea por línea). */
+  fijos: FijosEstimados;
+  etiquetaMesAnterior: string;
+  /** Ventas por día calendario del mes en curso. */
   ventasPorDia: VentaDia[];
   /** Últimos meses cerrados (mismo criterio que P&L mensual). */
   historial: MesHistorial[];
   valuacion: ValuacionMes | undefined;
   registros: GastoRegistro[];
+  recurrentes: GastoRecurrente[];
+  feriados: string[];
   config: ControlGastosConfig | null;
   blueHoy: number | null;
   loading: boolean;
@@ -74,136 +79,144 @@ type Vista = 'fin' | 'hoy';
 /** Escala de la barra principal: el objetivo queda a 2/3 del ancho. */
 const ESCALA_RENTABILIDAD = 1.5;
 
+const fechaCorta = (f: string) =>
+  new Date(`${f}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric' }).replace('.', '');
+
 /**
- * Responde, en este orden: ¿llegamos al objetivo este mes? ¿cuánto puedo gastar en publicidad
- * por día? ¿de qué se compone la ganancia? ¿cuánto va a cada plataforma?
+ * Responde, en orden: ¿llegamos al objetivo? ¿vendemos lo suficiente? ¿cuánta publicidad puedo
+ * pagar y en qué se fue? ¿de dónde sale la ganancia? ¿cómo venimos contra los meses anteriores?
+ *
+ * Dos relojes: las ventas se miden por **día hábil** (lun–vie sin feriados; lo que entra un día no
+ * hábil cuenta el hábil siguiente) y la publicidad por **día corrido** (las campañas no paran).
  */
 export function MesEnCursoPanel({
   etiquetaMes,
   mes,
   hoy,
   row,
-  fijosMesAnterior,
-  fijosCargados,
+  fijos,
+  etiquetaMesAnterior,
   ventasPorDia,
   historial,
   valuacion,
   registros,
+  recurrentes,
+  feriados,
   config,
   blueHoy,
   loading,
 }: Props) {
   const [vista, setVista] = useState<Vista>('fin');
   const objetivo = config?.objetivoRentabilidad ?? 0.25;
-  const fijos = fijosCargados ? row?.costosFijos ?? 0 : fijosMesAnterior;
   const variablesHoy = (row?.costosVentas ?? 0) + (row?.costoRegalos ?? 0) + (row?.costoPruebas ?? 0);
   const otrosHoy = (row?.gastosExtras ?? 0) + (row?.enviosManual ?? 0);
   const publicidadHoy = row?.publicidad ?? 0;
+  const ventasHoy = row?.ventasBrutas ?? 0;
+
+  // ---- Días hábiles y ventas por día hábil ----
+  const habilesMes = useMemo(() => diasHabilesDelMes(mes, new Set(feriados)), [mes, feriados]);
+  const habiles = useMemo(() => resumenHabiles(habilesMes, hoy), [habilesMes, hoy]);
+  const serieHabil = useMemo(() => ventasPorDiaHabil(ventasPorDia, habilesMes), [ventasPorDia, habilesMes]);
+  const ventasDiasCompletos = serieHabil.filter((d) => d.fecha < hoy).reduce((s, d) => s + d.ventas, 0);
 
   const diaria = useMemo(() => {
     if (!config || !registros.some((r) => r.categoria === 'publicidad')) return null;
     return publicidadDiariaReciente(registros, hoy, blueHoy, config);
   }, [registros, hoy, blueHoy, config]);
 
+  const recurrentesPendientes = useMemo(
+    () => (config ? recurrentesPendientesArs(recurrentes, mes, hoy, blueHoy, config) : 0),
+    [recurrentes, mes, hoy, blueHoy, config],
+  );
+
   const entrada = useMemo<MesEnCursoInput>(
     () => ({
       mes,
       hoy,
-      ventas: row?.ventasBrutas ?? 0,
+      ventas: ventasHoy,
+      ventasDiasCompletos,
+      habiles,
       costosVariables: variablesHoy,
-      fijos,
-      fijosEstimados: !fijosCargados,
+      fijos: fijos.total,
       publicidad: publicidadHoy,
       otros: otrosHoy,
+      otrosPendientes: recurrentesPendientes,
       publicidadDiaria: diaria,
       objetivo,
     }),
-    [mes, hoy, row, variablesHoy, fijos, fijosCargados, publicidadHoy, otrosHoy, diaria, objetivo],
+    [mes, hoy, ventasHoy, ventasDiasCompletos, habiles, variablesHoy, fijos.total, publicidadHoy, otrosHoy, recurrentesPendientes, diaria, objetivo],
   );
   const r = useMemo(() => calcularMesEnCurso(entrada), [entrada]);
-  const necesarias = useMemo(() => calcularVentasNecesarias(entrada, r), [entrada, r]);
+  const nec = useMemo(() => calcularVentasNecesarias(entrada, r), [entrada, r]);
   const pedidosHoy = row?.pedidos ?? ventasPorDia.reduce((s, d) => s + d.pedidos, 0);
-  const ticket = pedidosHoy > 0 ? (row?.ventasBrutas ?? 0) / pedidosHoy : 0;
-
-  // USD con IVA + recargos, para traducir el presupuesto diario a lo que se configura en Meta/Google.
-  const pesosPorUsd = config && blueHoy ? blueHoy * (1 + config.ivaPct + config.otrosImpuestosUsdPct) : 0;
-  const enUsd = (ars: number) => (pesosPorUsd > 0 ? ars / pesosPorUsd : null);
-
+  const ticket = pedidosHoy > 0 ? ventasHoy / pedidosHoy : 0;
+  const sinVentas = ventasHoy <= 0;
   const llega = r.proyeccion.rentabilidad >= objetivo;
   const faltante = r.proyeccion.ventas * objetivo - r.proyeccion.ganancia;
-  const sinVentas = (row?.ventasBrutas ?? 0) <= 0;
 
-  // ---- Desglose de la ganancia ----
-  const desglose = useMemo(() => {
-    const finDeMes = vista === 'fin';
-    const ventas = finDeMes ? r.proyeccion.ventas : r.aHoy.ventas;
-    const filas = [
-      { label: 'Fabricación, regalos y pruebas', monto: finDeMes ? r.proyeccion.costosVariables : variablesHoy },
-      { label: 'Publicidad (con IVA)', monto: finDeMes ? r.proyeccion.publicidad : publicidadHoy, destacar: true },
-      {
-        label: fijosCargados ? 'Sueldos y fijos' : 'Sueldos y fijos (estimados)',
-        monto: finDeMes ? fijos : r.aHoy.fijosProrrateados,
-      },
-      { label: 'Otros gastos', monto: otrosHoy },
-    ];
-    const ganancia = finDeMes ? r.proyeccion.ganancia : r.aHoy.ganancia;
-    return { ventas, filas, ganancia };
-  }, [vista, r, variablesHoy, publicidadHoy, fijos, fijosCargados, otrosHoy]);
+  // ---- Publicidad ----
+  // USD con IVA + recargos: traduce el presupuesto diario a lo que se configura en Meta/Google.
+  const pesosPorUsd = config && blueHoy ? blueHoy * (1 + config.ivaPct + config.otrosImpuestosUsdPct) : 0;
+  const enUsd = (ars: number) => (pesosPorUsd > 0 ? ars / pesosPorUsd : null);
+  const montoDia = (ars: number) => {
+    const usd = enUsd(ars);
+    return usd != null ? formatUsd(Math.round(usd)) : formatArsCorto(ars);
+  };
+  const sinMargen = r.publicidadRestante <= 0;
+  const excedido = !sinMargen && diaria != null && diaria > r.publicidadPorDia;
 
-  // ---- Publicidad por plataforma ----
   const plataformas = useMemo(() => {
     const m = new Map<GastoProveedor, number>();
     for (const c of valuacion?.conceptos ?? []) {
       if (c.categoria !== 'publicidad') continue;
       m.set(c.proveedor, (m.get(c.proveedor) ?? 0) + c.ars);
     }
-    const auto = valuacion?.porCategoria.publicidad ?? 0;
-    const manual = Math.max(0, publicidadHoy - auto);
-    const filas: Array<{ label: string; ars: number }> = [...m.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([prov, ars]) => ({ label: PROVEEDOR_LABEL[prov], ars }));
+    const manual = Math.max(0, publicidadHoy - (valuacion?.porCategoria.publicidad ?? 0));
+    const filas = [...m.entries()].sort((a, b) => b[1] - a[1]).map(([prov, ars]) => ({ label: PROVEEDOR_LABEL[prov], ars }));
     if (manual > 0.5) filas.push({ label: 'Cargada a mano', ars: manual });
     return filas;
   }, [valuacion, publicidadHoy]);
-  const totalPlataformas = plataformas.reduce((s, p) => s + p.ars, 0);
-  const usdPublicidad = (valuacion?.conceptos ?? [])
-    .filter((c) => c.categoria === 'publicidad' && c.moneda === 'USD')
-    .reduce((s, c) => s + c.montoOriginal, 0);
+  const totalPub = plataformas.reduce((s, p) => s + p.ars, 0);
 
-  // ---- Veredicto de publicidad ----
-  const porDiaUsd = enUsd(r.publicidadPorDia);
-  const diariaUsd = diaria != null ? enUsd(diaria) : null;
-  const montoDia = (ars: number, usd: number | null) => (usd != null ? formatUsd(Math.round(usd)) : formatArsCorto(ars));
-  const sinMargen = r.publicidadRestante <= 0;
-  const excedido = !sinMargen && diaria != null && diaria > r.publicidadPorDia;
+  // ---- Desglose ----
+  const desglose = useMemo(() => {
+    const fin = vista === 'fin';
+    const ventas = fin ? r.proyeccion.ventas : r.aHoy.ventas;
+    const filas = [
+      { label: 'Fabricación, regalos y pruebas', monto: fin ? r.proyeccion.costosVariables : variablesHoy },
+      { label: 'Publicidad', monto: fin ? r.proyeccion.publicidad : publicidadHoy, destacar: true },
+      { label: 'Sueldos y fijos', monto: fin ? fijos.total : r.aHoy.fijosProrrateados },
+      { label: 'Otros gastos', monto: fin ? r.proyeccion.otros : otrosHoy },
+    ];
+    return { ventas, filas, ganancia: fin ? r.proyeccion.ganancia : r.aHoy.ganancia };
+  }, [vista, r, variablesHoy, publicidadHoy, fijos.total, otrosHoy]);
 
+  // ---- Notas (supuestos que conviene ver) ----
   const notas: string[] = [];
-  if (r.pocosDatos) notas.push('Van pocos días del mes: la proyección todavía se mueve mucho.');
-  if (!fijosCargados) notas.push(`Los fijos de este mes todavía no están cargados en Gastos; se usan los del mes anterior (${formatArsCorto(fijosMesAnterior)}).`);
+  if (fijos.faltan.length)
+    notas.push(
+      `Todavía no están cargados en Gastos: ${fijos.faltan.join(', ')}. Se estiman con ${etiquetaMesAnterior} (${formatArsCorto(fijos.estimado)}).`,
+    );
+  if (recurrentesPendientes > 0) notas.push(`Incluye ${formatArsCorto(recurrentesPendientes)} de recurrentes que se cobran más adelante este mes.`);
   if (valuacion && valuacion.usdBase > 0 && valuacion.estado !== 'pagado')
     notas.push(`Los dólares sin pagar se valúan al blue de hoy (${formatArs(valuacion.cotizacionEfectiva)}).`);
 
   return (
     <div className="flex w-full flex-col gap-4">
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-12">
-        {/* ---------- Héroe: ¿llegamos al objetivo? ---------- */}
-        <Panel className="lg:col-span-2 xl:col-span-5">
+      <div className="grid gap-4 xl:grid-cols-12">
+        {/* ---------- 1. ¿Llegamos al objetivo? ---------- */}
+        <Panel className="flex flex-col xl:col-span-7">
           <p className="text-[13px] text-muted-foreground">
-            {etiquetaMes} · día {r.diasTranscurridos} de {r.diasMes}
+            {etiquetaMes} · día hábil {Math.min(habiles.total, habiles.completos + (habiles.hoyEsHabil ? 1 : 0))} de {habiles.total}
           </p>
 
           {sinVentas ? (
             <p className="mt-6 text-2xl font-semibold tracking-tight">Todavía no hay ventas este mes.</p>
           ) : (
             <>
-              <p className="mt-4 text-[15px] text-muted-foreground">Al ritmo actual, el mes cierra con</p>
+              <p className="mt-5 text-[15px] text-muted-foreground">Al ritmo actual, el mes cierra con</p>
               <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                <span
-                  className={cn(
-                    'text-5xl font-semibold tabular-nums tracking-tight sm:text-6xl',
-                    r.proyeccion.ganancia < 0 && 'text-red-400',
-                  )}
-                >
+                <span className={cn('text-6xl font-semibold tabular-nums tracking-tight', r.proyeccion.ganancia < 0 && 'text-red-400')}>
                   {formatArsCorto(r.proyeccion.ganancia)}
                 </span>
                 <span className="text-xl font-medium tabular-nums text-muted-foreground">
@@ -211,11 +224,8 @@ export function MesEnCursoPanel({
                 </span>
               </div>
 
-              <div className="mt-7">
-                <BarraBronce
-                  valor={r.proyeccion.rentabilidad / (objetivo * ESCALA_RENTABILIDAD)}
-                  marca={1 / ESCALA_RENTABILIDAD}
-                />
+              <div className="mt-8">
+                <BarraBronce valor={r.proyeccion.rentabilidad / (objetivo * ESCALA_RENTABILIDAD)} marca={1 / ESCALA_RENTABILIDAD} />
                 <div className="relative mt-2 h-4 text-xs text-muted-foreground">
                   <span className="absolute left-0">0 %</span>
                   <span className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: `${(1 / ESCALA_RENTABILIDAD) * 100}%` }}>
@@ -226,9 +236,7 @@ export function MesEnCursoPanel({
 
               <div className="mt-5">
                 {publicidadHoy <= 0 ? (
-                  <Estado tono="aviso">
-                    Todavía no hay publicidad registrada este mes: la ganancia real va a ser menor.
-                  </Estado>
+                  <Estado tono="aviso">Todavía no hay publicidad registrada este mes: la ganancia real va a ser menor.</Estado>
                 ) : llega ? (
                   <Estado tono="ok">Por encima del objetivo.</Estado>
                 ) : (
@@ -238,129 +246,142 @@ export function MesEnCursoPanel({
                 )}
               </div>
 
-              <div className="mt-6 grid grid-cols-3 gap-4 border-t border-white/[0.06] pt-5">
-                <Stat label="Vendido a hoy" value={formatArsCorto(r.aHoy.ventas)} />
-                <Stat label="Ventas proyectadas" value={formatArsCorto(r.proyeccion.ventas)} />
+              <div className="mt-auto grid grid-cols-3 gap-4 border-t border-white/[0.06] pt-5">
+                <Stat label="Vendido a hoy" value={formatArsCorto(r.aHoy.ventas)} hint={`${pedidosHoy} pedidos`} />
                 <Stat
                   label="Ganancia a hoy"
                   value={formatArsCorto(r.aHoy.ganancia)}
-                  hint={r.aHoy.ventas > 0 ? formatPct(r.aHoy.rentabilidad) : undefined}
+                  hint={r.aHoy.ventas > 0 ? `${formatPct(r.aHoy.rentabilidad)} · fijos proporcionales` : undefined}
+                />
+                <Stat
+                  label="Quedan"
+                  value={`${habiles.restantes} días hábiles`}
+                  hint={`${r.diasCorridosRestantes} días corridos de publicidad`}
                 />
               </div>
             </>
           )}
         </Panel>
 
-        {/* ---------- Publicidad: cuánto por día ---------- */}
-        <Panel className="flex flex-col xl:col-span-4">
-          <PanelTitle title="Publicidad" sub={`Para cerrar el mes en ${formatPct(objetivo)}`} />
+        {/* ---------- 2. ¿Vendemos lo suficiente? ---------- */}
+        <VentasPanel
+          className="xl:col-span-5"
+          serie={serieHabil}
+          hoy={hoy}
+          ritmo={nec.ritmoActual}
+          necesario={nec.porDia}
+          ventasMes={nec.ventasMes}
+          faltan={nec.faltan}
+          ticket={ticket}
+          objetivo={objetivo}
+          sinVentas={sinVentas}
+          restantes={habiles.restantes}
+        />
+      </div>
 
-          {sinVentas ? (
-            <p className="text-sm text-muted-foreground">Se calcula cuando haya ventas en el mes.</p>
-          ) : sinMargen ? (
-            <>
-              <p className="text-3xl font-semibold tracking-tight text-red-400">Sin margen</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Aunque no se gaste más en publicidad, este mes no llega al {formatPct(objetivo)}.
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-[13px] text-muted-foreground">Podés gastar hasta</p>
-              <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight">
-                {montoDia(r.publicidadPorDia, porDiaUsd)}
-                <span className="ml-1.5 text-lg font-medium text-muted-foreground">por día</span>
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {porDiaUsd != null ? `${formatArs(r.publicidadPorDia)} con IVA · ` : ''}
-                entre todas las plataformas, de acá a fin de mes
-              </p>
-            </>
-          )}
+      <div className="grid gap-4 xl:grid-cols-12">
+        {/* ---------- 3. Publicidad ---------- */}
+        <Panel className="xl:col-span-7">
+          <PanelTitle title="Publicidad" sub="Las campañas corren todos los días, por eso se mide por día corrido" />
+          <div className="grid gap-8 md:grid-cols-2 md:gap-0 md:divide-x md:divide-white/[0.06]">
+            {/* Presupuesto */}
+            <div className="flex flex-col md:pr-8">
+              {sinVentas ? (
+                <p className="text-sm text-muted-foreground">El presupuesto se calcula cuando haya ventas en el mes.</p>
+              ) : sinMargen ? (
+                <>
+                  <p className="text-[13px] text-muted-foreground">Para el {formatPct(objetivo)}</p>
+                  <p className="mt-1 text-3xl font-semibold tracking-tight text-red-400">Sin margen</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Aunque no se gaste más, este mes no llega al objetivo.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[13px] text-muted-foreground">Para cerrar en {formatPct(objetivo)} podés gastar hasta</p>
+                  <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight">
+                    {montoDia(r.publicidadPorDia)}
+                    <span className="ml-1.5 text-lg font-medium text-muted-foreground">por día</span>
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Sumando todas las plataformas{enUsd(1) != null ? ` · ${formatArs(r.publicidadPorDia)} con IVA` : ''}
+                  </p>
+                </>
+              )}
 
-          {!sinVentas && diaria != null ? (
-            <div className="mt-6 space-y-3">
-              <ComparaDia
-                label="Gasto diario actual"
-                valor={montoDia(diaria, diariaUsd)}
-                proporcion={sinMargen ? 1 : diaria / Math.max(diaria, r.publicidadPorDia)}
-                tono={excedido || sinMargen ? 'mal' : 'fuerte'}
-              />
-              {!sinMargen ? (
-                <ComparaDia
-                  label="Máximo para el objetivo"
-                  valor={montoDia(r.publicidadPorDia, porDiaUsd)}
-                  proporcion={r.publicidadPorDia / Math.max(diaria, r.publicidadPorDia)}
-                  tono="neutro"
-                />
+              {!sinVentas && diaria != null ? (
+                <div className="mt-6 space-y-3">
+                  <ComparaDia
+                    label="Gasto actual (prom. 7 días)"
+                    valor={montoDia(diaria)}
+                    proporcion={sinMargen ? 1 : diaria / Math.max(diaria, r.publicidadPorDia)}
+                    tono={excedido || sinMargen ? 'mal' : 'fuerte'}
+                  />
+                  {!sinMargen ? (
+                    <ComparaDia
+                      label="Máximo para el objetivo"
+                      valor={montoDia(r.publicidadPorDia)}
+                      proporcion={r.publicidadPorDia / Math.max(diaria, r.publicidadPorDia)}
+                      tono="neutro"
+                    />
+                  ) : null}
+                </div>
               ) : null}
-              <p className="text-[11px] text-muted-foreground">Gasto diario: promedio de los últimos 7 días.</p>
-            </div>
-          ) : null}
 
-          <div className="mt-auto pt-6">
-            {sinVentas ? null : diaria == null ? (
-              <Estado tono="neutro">Conectá Meta y Google para comparar con el gasto real.</Estado>
-            ) : sinMargen ? (
-              <Estado tono="mal">Conviene pausar o bajar campañas.</Estado>
-            ) : excedido ? (
-              <Estado tono="mal">
-                Bajá unos {montoDia(diaria - r.publicidadPorDia, diariaUsd != null && porDiaUsd != null ? diariaUsd - porDiaUsd : null)} por día.
-              </Estado>
-            ) : (
-              <Estado tono="ok">El gasto actual entra en el presupuesto.</Estado>
-            )}
+              <div className="mt-auto pt-6">
+                {sinVentas ? null : diaria == null ? (
+                  <Estado tono="neutro">Conectá Meta y Google para comparar con el gasto real.</Estado>
+                ) : sinMargen ? (
+                  <Estado tono="mal">Conviene pausar o bajar campañas.</Estado>
+                ) : excedido ? (
+                  <Estado tono="mal">Bajá unos {montoDia(diaria - r.publicidadPorDia)} por día.</Estado>
+                ) : (
+                  <Estado tono="ok">El gasto actual entra en el presupuesto.</Estado>
+                )}
+              </div>
+            </div>
+
+            {/* En qué se fue */}
+            <div className="flex flex-col md:pl-8">
+              <p className="text-[13px] text-muted-foreground">Gastado en el mes, con IVA</p>
+              {plataformas.length ? (
+                <>
+                  <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight">
+                    {formatArsCorto(totalPub)}
+                    {ventasHoy > 0 ? (
+                      <span className="ml-2 text-lg font-medium text-muted-foreground">{formatPct(totalPub / ventasHoy)} de lo vendido</span>
+                    ) : null}
+                  </p>
+                  <ul className="mt-6 space-y-3">
+                    {plataformas.map((p) => (
+                      <li key={p.label}>
+                        <div className="flex items-baseline justify-between gap-3 text-sm">
+                          <span className="text-muted-foreground">{p.label}</span>
+                          <span className="tabular-nums">{formatArsCorto(p.ars)}</span>
+                        </div>
+                        <BarraNeutra className="mt-1.5" valor={totalPub > 0 ? p.ars / totalPub : 0} />
+                      </li>
+                    ))}
+                  </ul>
+                  {pedidosHoy > 0 ? (
+                    <p className="mt-auto pt-6 text-sm text-muted-foreground">
+                      Cada pedido costó <span className="text-foreground">{formatArsCorto(totalPub / pedidosHoy)}</span> de publicidad
+                      {ticket > 0 ? (
+                        <>
+                          {' '}sobre un ticket de <span className="text-foreground">{formatArsCorto(ticket)}</span> ({formatPct(totalPub / pedidosHoy / ticket)})
+                        </>
+                      ) : null}
+                      .
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">{loading ? 'Cargando…' : 'Todavía no hay publicidad registrada este mes.'}</p>
+              )}
+            </div>
           </div>
         </Panel>
 
-        {/* ---------- Ventas: lo que hace falta ---------- */}
-        <Panel className="flex flex-col xl:col-span-3">
-          <PanelTitle title="Ventas" sub={`Lo que hace falta para el ${formatPct(objetivo)}`} />
-          {sinVentas ? (
-            <p className="text-sm text-muted-foreground">Se calcula cuando haya ventas en el mes.</p>
-          ) : necesarias.porDia == null || necesarias.ventasMes == null ? (
-            <p className="text-sm text-muted-foreground">Con el costo de fabricación actual no se puede llegar al objetivo.</p>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <Stat label="Vendés por día" value={formatArsCorto(necesarias.ritmoActual)} />
-                <Stat label="Necesitás por día" value={formatArsCorto(necesarias.porDia)} />
-              </div>
-              <div className="mt-5">
-                <BarraNeutra
-                  valor={necesarias.ritmoActual / Math.max(necesarias.ritmoActual, necesarias.porDia, 1)}
-                  tono={necesarias.ritmoActual >= necesarias.porDia ? 'fuerte' : 'mal'}
-                />
-                <BarraNeutra className="mt-2" valor={necesarias.porDia / Math.max(necesarias.ritmoActual, necesarias.porDia, 1)} />
-              </div>
-              <p className="mt-5 text-sm text-muted-foreground">
-                El mes tiene que cerrar en <span className="text-foreground">{formatArsCorto(necesarias.ventasMes)}</span>
-                {necesarias.faltan != null && necesarias.faltan > 0 ? (
-                  <>
-                    {' '}· faltan <span className="text-foreground">{formatArsCorto(necesarias.faltan)}</span>
-                  </>
-                ) : null}
-                .
-              </p>
-              <div className="mt-auto pt-6">
-                {necesarias.ritmoActual >= necesarias.porDia ? (
-                  <Estado tono="ok">El ritmo de ventas alcanza.</Estado>
-                ) : (
-                  <Estado tono="mal">
-                    {ticket > 0
-                      ? `Faltan unos ${Math.ceil((necesarias.porDia - necesarias.ritmoActual) / ticket)} pedidos más por día.`
-                      : `Hace falta vender ${formatPct(necesarias.porDia / Math.max(1, necesarias.ritmoActual) - 1)} más por día.`}
-                  </Estado>
-                )}
-              </div>
-            </>
-          )}
-        </Panel>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-12">
-        {/* ---------- Cómo se forma la ganancia ---------- */}
-        <Panel className="lg:col-span-2 xl:col-span-5">
+        {/* ---------- 4. De dónde sale la ganancia ---------- */}
+        <Panel className="xl:col-span-5">
           <PanelTitle
             title="De dónde sale la ganancia"
             sub="Cada gasto como parte de lo vendido"
@@ -395,81 +416,19 @@ export function MesEnCursoPanel({
               total
             />
           </div>
-        </Panel>
-
-        {/* ---------- Ventas por día ---------- */}
-        <VentasPorDiaPanel
-          className="xl:col-span-4"
-          mes={mes}
-          hoy={hoy}
-          dias={ventasPorDia}
-          necesarioPorDia={necesarias.porDia}
-          objetivo={objetivo}
-        />
-
-        {/* ---------- Publicidad por plataforma ---------- */}
-        <Panel className="flex flex-col xl:col-span-3">
-          <PanelTitle title="Publicidad del mes" sub="Lo gastado hasta hoy, con IVA" />
-          {plataformas.length ? (
-            <>
-              <div className="mb-6 flex flex-wrap items-baseline gap-x-3">
-                <span className="text-3xl font-semibold tabular-nums tracking-tight">{formatArsCorto(totalPlataformas)}</span>
-                {r.aHoy.ventas > 0 ? (
-                  <span className="text-sm text-muted-foreground">{formatPct(totalPlataformas / r.aHoy.ventas)} de lo vendido</span>
-                ) : null}
-              </div>
-              <ul className="space-y-4">
-                {plataformas.map((p) => (
-                  <li key={p.label}>
-                    <div className="flex items-baseline justify-between gap-3 text-sm">
-                      <span>{p.label}</span>
-                      <span className="tabular-nums">
-                        {formatArsCorto(p.ars)}
-                        <span className="ml-2 inline-block w-10 text-right text-xs text-muted-foreground">
-                          {totalPlataformas > 0 ? formatPct(p.ars / totalPlataformas) : ''}
-                        </span>
-                      </span>
-                    </div>
-                    <BarraNeutra className="mt-2" valor={totalPlataformas > 0 ? p.ars / totalPlataformas : 0} />
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {loading ? 'Cargando…' : 'Todavía no hay publicidad registrada este mes.'}
-            </p>
-          )}
-          {pedidosHoy > 0 && totalPlataformas > 0 ? (
-            <div className="mt-6 grid grid-cols-2 gap-4 border-t border-white/[0.06] pt-5">
-              <Stat label="Publicidad por pedido" value={formatArsCorto(totalPlataformas / pedidosHoy)} hint={`${pedidosHoy} pedidos`} />
-              <Stat label="Ticket promedio" value={formatArsCorto(ticket)} hint={ticket > 0 ? `${formatPct(totalPlataformas / pedidosHoy / ticket)} se va en publicidad` : undefined} />
-            </div>
-          ) : null}
-          {valuacion && usdPublicidad > 0 ? (
-            <p className="mt-auto pt-6 text-xs text-muted-foreground">
-              {formatUsd(usdPublicidad)} + IVA ·{' '}
-              {valuacion.estado === 'pagado'
-                ? `pagados a ${formatArs(valuacion.cotizacionEfectiva)} por dólar`
-                : `al blue de hoy (${formatArs(valuacion.cotizacionEfectiva)})`}
-            </p>
+          {vista === 'hoy' ? (
+            <p className="mt-3 text-xs text-muted-foreground">A hoy, los fijos cuentan en proporción a los días hábiles que pasaron.</p>
           ) : null}
         </Panel>
       </div>
 
+      {/* ---------- 5. Últimos meses ---------- */}
       <HistorialPanel
         historial={historial}
         actual={
           sinVentas
             ? null
-            : {
-                mes,
-                label: 'Este mes',
-                ventas: r.proyeccion.ventas,
-                publicidad: r.proyeccion.publicidad,
-                ganancia: r.proyeccion.ganancia,
-                pedidos: pedidosHoy,
-              }
+            : { mes, label: 'Este mes', ventas: r.proyeccion.ventas, publicidad: r.proyeccion.publicidad, ganancia: r.proyeccion.ganancia, pedidos: pedidosHoy }
         }
         objetivo={objetivo}
       />
@@ -485,17 +444,7 @@ export function MesEnCursoPanel({
   );
 }
 
-function ComparaDia({
-  label,
-  valor,
-  proporcion,
-  tono,
-}: {
-  label: string;
-  valor: string;
-  proporcion: number;
-  tono: 'neutro' | 'fuerte' | 'mal';
-}) {
+function ComparaDia({ label, valor, proporcion, tono }: { label: string; valor: string; proporcion: number; tono: 'neutro' | 'fuerte' | 'mal' }) {
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 text-sm">
@@ -525,94 +474,127 @@ function FilaDesglose({
   total?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(0,11rem)_1fr_5.5rem_3.5rem] items-center gap-3 py-2 text-sm sm:grid-cols-[minmax(0,14rem)_1fr_6rem_3.5rem]">
+    <div className="grid grid-cols-[minmax(0,12rem)_1fr_5.5rem_3rem] items-center gap-3 py-2 text-sm">
       <span className={cn('truncate', total ? 'font-medium' : 'text-foreground/85')}>{label}</span>
       <BarraNeutra valor={proporcion} tono={fuerte || total ? 'fuerte' : 'neutro'} className={cn(destacar && '[&>div]:bg-[#e0812f]/80')} />
-      <span className={cn('text-right tabular-nums', total && 'font-semibold', monto < 0 && !total && 'text-foreground/80', total && monto < 0 && 'text-red-400')}>
-        {formatArsCorto(monto)}
-      </span>
+      <span className={cn('text-right tabular-nums', total && 'font-semibold', total && monto < 0 && 'text-red-400')}>{formatArsCorto(monto)}</span>
       <span className="text-right text-xs tabular-nums text-muted-foreground">{pct != null ? formatPct(pct) : '—'}</span>
     </div>
   );
 }
 
-/** Barras por día del mes; los días que faltan quedan como huecos. Línea = lo necesario por día. */
-function VentasPorDiaPanel({
+/**
+ * Ritmo de ventas por día hábil contra lo necesario, con una barra por día hábil del mes.
+ * Lo que entró en fin de semana o feriado está sumado al hábil siguiente (se aclara en el tooltip).
+ */
+function VentasPanel({
   className,
-  mes,
+  serie,
   hoy,
-  dias,
-  necesarioPorDia,
+  ritmo,
+  necesario,
+  ventasMes,
+  faltan,
+  ticket,
   objetivo,
+  sinVentas,
+  restantes,
 }: {
   className?: string;
-  mes: string;
+  restantes: number;
+  serie: VentaDiaHabil[];
   hoy: string;
-  dias: VentaDia[];
-  necesarioPorDia: number | null;
+  ritmo: number;
+  necesario: number | null;
+  ventasMes: number | null;
+  faltan: number | null;
+  ticket: number;
   objetivo: number;
+  sinVentas: boolean;
 }) {
-  const total = diasDelMes(mes);
-  const porFecha = new Map(dias.map((d) => [d.fecha, d]));
-  const serie = Array.from({ length: total }, (_, i) => {
-    const fecha = `${mes}-${String(i + 1).padStart(2, '0')}`;
-    return { dia: i + 1, fecha, futuro: fecha > hoy, ventas: porFecha.get(fecha)?.ventas ?? 0, pedidos: porFecha.get(fecha)?.pedidos ?? 0 };
-  });
-  const max = Math.max(1, necesarioPorDia ?? 0, ...serie.map((d) => d.ventas));
-  const conVentas = serie.filter((d) => !d.futuro);
-  const mejor = conVentas.reduce<(typeof serie)[number] | null>((a, d) => (!a || d.ventas > a.ventas ? d : a), null);
-  const pedidos = conVentas.reduce((s, d) => s + d.pedidos, 0);
-  const lineaPct = necesarioPorDia != null ? Math.min(1, necesarioPorDia / max) : null;
+  const max = Math.max(1, necesario ?? 0, ...serie.map((d) => d.ventas));
+  const lineaPct = necesario != null ? Math.min(1, necesario / max) : null;
+  const alcanza = necesario != null && ritmo >= necesario;
+  const etiquetas = serie.length ? [serie[0], serie[Math.floor((serie.length - 1) / 2)], serie[serie.length - 1]] : [];
 
   return (
     <Panel className={cn('flex flex-col', className)}>
-      <PanelTitle title="Ventas por día" sub={`${pedidos} pedidos en el mes`} />
-      <div className="relative flex h-40 items-end gap-[3px]">
-        {serie.map((d) => (
-          <div
-            key={d.dia}
-            title={d.futuro ? `${d.dia}` : `${d.dia}: ${formatArs(d.ventas)} · ${d.pedidos} pedidos`}
-            className="flex h-full flex-1 items-end"
-          >
-            <div
-              className={cn(
-                'w-full rounded-[3px]',
-                d.futuro ? 'h-1 bg-white/[0.05]' : d.fecha === hoy ? 'bg-white/40' : 'bg-white/70',
-              )}
-              style={d.futuro ? undefined : { height: `${Math.max(2, (d.ventas / max) * 100)}%` }}
-            />
-          </div>
-        ))}
-        {lineaPct != null ? (
-          <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-[#e0812f]/70" style={{ bottom: `${lineaPct * 100}%` }}>
-            <span className="absolute -top-5 right-0 text-[11px] text-[#f0a35a]">necesario para {formatPct(objetivo)}</span>
-          </div>
-        ) : null}
+      <PanelTitle title="Ventas" sub="Por día hábil · lo de fines de semana y feriados suma al día hábil siguiente" />
+
+      {sinVentas ? (
+        <p className="text-sm text-muted-foreground">Todavía no hay ventas este mes.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          <Stat label="Ritmo actual" value={formatArsCorto(ritmo)} hint="por día hábil" />
+          <Stat
+            label={`Necesario para ${formatPct(objetivo)}`}
+            value={necesario != null ? formatArsCorto(necesario) : '—'}
+            hint={ventasMes != null ? `para cerrar en ${formatArsCorto(ventasMes)}` : 'no alcanzable con este costo'}
+          />
+        </div>
+      )}
+
+      <div className="mt-7">
+        <div className="relative flex h-36 items-end gap-1">
+          {serie.map((d) => {
+            const futuro = d.fecha > hoy;
+            const esHoy = d.fecha === hoy;
+            const tip = futuro
+              ? fechaCorta(d.fecha)
+              : `${fechaCorta(d.fecha)}: ${formatArs(d.ventas)} · ${d.pedidos} pedidos${
+                  d.trasladadasDe.length ? ` (incluye ${d.trasladadasDe.map(fechaCorta).join(', ')})` : ''
+                }${d.fecha === hoy ? ' · hoy, parcial' : ''}`;
+            return (
+              <div key={d.fecha} title={tip} className="group flex h-full flex-1 flex-col items-center justify-end">
+                <div
+                  className={cn(
+                    'w-full rounded-t-[4px] transition-colors',
+                    futuro
+                      ? 'h-1 rounded-[2px] bg-white/[0.06]'
+                      : esHoy
+                        ? 'bg-white/35'
+                        : alcanza || necesario == null || d.ventas >= necesario
+                          ? 'bg-white/75 group-hover:bg-white'
+                          : 'bg-white/45 group-hover:bg-white/70',
+                  )}
+                  style={futuro ? undefined : { height: `${Math.max(2, (d.ventas / max) * 100)}%` }}
+                />
+              </div>
+            );
+          })}
+          {lineaPct != null && !sinVentas ? (
+            <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-[#e0812f]/80" style={{ bottom: `${lineaPct * 100}%` }}>
+              <span className="absolute -top-5 right-0 rounded bg-[#0b0b0b]/80 px-1 text-[11px] text-[#f0a35a]">necesario</span>
+            </div>
+          ) : null}
+        </div>
+        <div className="mt-2 flex justify-between text-[11px] capitalize text-muted-foreground">
+          {etiquetas.map((d, i) => (
+            <span key={`${d.fecha}-${i}`}>{fechaCorta(d.fecha)}</span>
+          ))}
+        </div>
       </div>
-      <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-        <span>1</span>
-        <span>{Math.ceil(total / 2)}</span>
-        <span>{total}</span>
-      </div>
-      {mejor && mejor.ventas > 0 ? (
-        <p className="mt-auto pt-5 text-xs text-muted-foreground">
-          Mejor día: el {mejor.dia}, con {formatArsCorto(mejor.ventas)} ({mejor.pedidos} pedidos). Hoy va parcial.
-        </p>
+
+      {!sinVentas && necesario != null ? (
+        <div className="mt-auto pt-6">
+          {alcanza ? (
+            <Estado tono="ok">El ritmo de ventas alcanza para el objetivo.</Estado>
+          ) : (
+            <Estado tono="mal">
+              {faltan != null && faltan > 0 ? `Hay que vender ${formatArsCorto(faltan)} en ${restantes} días hábiles: ` : ''}
+              {ticket > 0
+                ? `unos ${Math.ceil((necesario - ritmo) / ticket)} pedidos más por día que ahora.`
+                : `${formatPct(necesario / Math.max(1, ritmo) - 1)} más por día que ahora.`}
+            </Estado>
+          )}
+        </div>
       ) : null}
     </Panel>
   );
 }
 
 /** Rentabilidad de los últimos meses contra el objetivo, más el mes en curso proyectado. */
-function HistorialPanel({
-  historial,
-  actual,
-  objetivo,
-}: {
-  historial: MesHistorial[];
-  actual: MesHistorial | null;
-  objetivo: number;
-}) {
+function HistorialPanel({ historial, actual, objetivo }: { historial: MesHistorial[]; actual: MesHistorial | null; objetivo: number }) {
   const meses = actual ? [...historial, actual] : historial;
   if (!meses.length) return null;
   const rent = (m: MesHistorial) => (m.ventas > 0 ? m.ganancia / m.ventas : 0);
@@ -638,7 +620,7 @@ function HistorialPanel({
                     className={cn(
                       'w-full max-w-14 rounded-t-lg',
                       rr < 0 ? 'bg-red-400/70' : rr >= objetivo ? 'bg-gradient-to-t from-[#8a4a1c] via-[#e0812f] to-[#f6c46b]' : 'bg-white/60',
-                      esActual && 'opacity-60',
+                      esActual && 'opacity-50',
                     )}
                     style={{ height: Math.max(3, (Math.max(0, rr) / escala) * ALTO) }}
                   />
@@ -646,7 +628,7 @@ function HistorialPanel({
               </div>
               <div className="mt-3 text-center">
                 <p className={cn('text-lg font-semibold tabular-nums', rr < 0 && 'text-red-400')}>{formatPct(rr)}</p>
-                <p className="text-[13px] text-muted-foreground">{esActual ? 'Este mes (proy.)' : m.label}</p>
+                <p className="text-[13px] text-muted-foreground">{esActual ? 'Este mes (proyección)' : m.label}</p>
               </div>
               <dl className="mt-3 space-y-1 border-t border-white/[0.06] pt-3 text-xs">
                 <div className="flex justify-between gap-2">
@@ -666,9 +648,7 @@ function HistorialPanel({
           );
         })}
       </div>
-      <p className="mt-4 text-[11px] text-muted-foreground">
-        Línea punteada: objetivo {formatPct(objetivo)}. En bronce, los meses que lo alcanzaron.
-      </p>
+      <p className="mt-4 text-[11px] text-muted-foreground">Línea punteada: objetivo {formatPct(objetivo)}. En bronce, los meses que lo alcanzaron.</p>
     </Panel>
   );
 }

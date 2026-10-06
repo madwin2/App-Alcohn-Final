@@ -10,3 +10,5 @@ Contexto: la ganancia real se conocía recién con los resúmenes de tarjeta; la
 | Impuestos USD | Solo IVA + manual · 23 % junto · IVA en la categoría + 2 % en impuestos | **IVA + 2 % separado** | Publicidad queda «gasto + IVA»; recargos visibles y ajustables |
 | Objetivo | — | **25 % de rentabilidad** | 10 % no deja margen para un mes malo ni para reinvertir |
 | Transición | — | Automático desde **29/09/2026** (el resumen de septiembre cerró el 28/09) | Evita huecos y duplicados |
+| Días del mes (2026-10-06) | Corridos · Hábiles | **Ventas por día hábil** (lun–vie sin `feriados`; lo no hábil al hábil siguiente) y **publicidad por día corrido** | El equipo no trabaja fines de semana ni feriados, pero las campañas sí corren; pedido del dueño |
+| Fijos sin cargar en el mes en curso | Todo o nada · Línea por línea | **Línea por línea** con el mes anterior | Con «todo o nada», cargar un solo fijo hacía que la proyección ignorara los sueldos |

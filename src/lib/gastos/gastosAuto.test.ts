@@ -4,6 +4,8 @@ import {
   DEFAULT_CONTROL_GASTOS_CONFIG as CFG,
   calcularMesEnCurso,
   calcularVentasNecesarias,
+  estimarFijos,
+  recurrentesPendientesArs,
   publicidadDiariaReciente,
   sumarGastosAutoAMeses,
   valuarGastosPorMes,
@@ -157,77 +159,129 @@ describe('publicidadDiariaReciente', () => {
   });
 });
 
-describe('calcularMesEnCurso', () => {
-  it('proyecta y calcula el presupuesto de publicidad para el objetivo', () => {
-    const r = calcularMesEnCurso({
-      mes: '2026-10',
-      hoy: '2026-10-10',
-      ventas: 6_000_000,
-      costosVariables: 1_000_000,
-      fijos: 9_000_000,
-      fijosEstimados: false,
-      publicidad: 1_000_000,
-      otros: 500_000,
-      publicidadDiaria: 100_000,
-      objetivo: 0.25,
-    });
-    expect(r.diasMes).toBe(31);
-    expect(r.diasRestantes).toBe(21);
-    expect(r.proyeccion.ventas).toBeCloseTo(18_600_000, 0);
-    expect(r.proyeccion.publicidad).toBe(1_000_000 + 100_000 * 21);
-    // tope = 18,6M × 0,75 − 3,1M − 0,5M − 9M = 1,35M
-    expect(r.topePublicidad).toBeCloseTo(1_350_000, 0);
-    expect(r.publicidadRestante).toBeCloseTo(350_000, 0);
-    expect(r.publicidadPorDia).toBeCloseTo(350_000 / 21, 2);
+describe('calcularMesEnCurso (días hábiles)', () => {
+  // Octubre 2026: 21 hábiles. Hoy martes 13 (después del finde largo con feriado el 12).
+  const base = {
+    mes: '2026-10',
+    hoy: '2026-10-13',
+    ventas: 8_000_000,
+    ventasDiasCompletos: 7_500_000, // 8 hábiles terminados (1–9 oct)
+    habiles: { total: 21, completos: 8, restantes: 13, hoyEsHabil: true },
+    costosVariables: 1_200_000, // 15 %
+    fijos: 9_000_000,
+    publicidad: 1_300_000,
+    otros: 400_000,
+    otrosPendientes: 100_000,
+    publicidadDiaria: 100_000,
+    objetivo: 0.25,
+  };
+
+  it('ventas por día hábil y publicidad por día corrido', () => {
+    const r = calcularMesEnCurso(base);
+    expect(r.ritmoDiario).toBeCloseTo(937_500, 6);
+    // 7,5M + 937.500 × 13 = 19.687.500
+    expect(r.proyeccion.ventas).toBeCloseTo(19_687_500, 0);
+    expect(r.proyeccion.costosVariables).toBeCloseTo(1_200_000 * (19_687_500 / 8_000_000), 0);
+    // 31 − 13 = 18 días corridos después de hoy
+    expect(r.diasCorridosRestantes).toBe(18);
+    expect(r.proyeccion.publicidad).toBe(1_300_000 + 100_000 * 18);
+    expect(r.proyeccion.otros).toBe(500_000);
+    // fijos prorrateados por hábiles: (8 + hoy) / 21
+    expect(r.aHoy.fijosProrrateados).toBeCloseTo((9_000_000 * 9) / 21, 4);
     expect(r.pocosDatos).toBe(false);
   });
 
-  it('sin publicidad diaria proyecta lineal', () => {
+  it('el presupuesto de publicidad se reparte en días corridos', () => {
+    const r = calcularMesEnCurso(base);
+    const tope = r.proyeccion.ventas * 0.75 - r.proyeccion.costosVariables - 500_000 - 9_000_000;
+    expect(r.topePublicidad).toBeCloseTo(tope, 4);
+    expect(r.publicidadPorDia).toBeCloseTo((tope - 1_300_000) / 18, 4);
+  });
+
+  it('un fin de semana no cambia la ganancia a hoy (fijos por hábiles)', () => {
+    const viernes = calcularMesEnCurso({ ...base, hoy: '2026-10-09', habiles: { total: 21, completos: 6, restantes: 15, hoyEsHabil: true } });
+    const sabado = calcularMesEnCurso({ ...base, hoy: '2026-10-10', habiles: { total: 21, completos: 7, restantes: 14, hoyEsHabil: false } });
+    expect(sabado.aHoy.fijosProrrateados).toBeCloseTo(viernes.aHoy.fijosProrrateados, 4);
+  });
+
+  it('nunca proyecta menos de lo ya vendido; sin hábiles terminados usa lo de hoy', () => {
     const r = calcularMesEnCurso({
-      mes: '2026-10',
-      hoy: '2026-10-02',
-      ventas: 1_000_000,
-      costosVariables: 0,
-      fijos: 0,
-      fijosEstimados: true,
-      publicidad: 100_000,
-      otros: 0,
+      ...base,
+      hoy: '2026-10-01',
+      ventas: 600_000,
+      ventasDiasCompletos: 0,
+      habiles: { total: 21, completos: 0, restantes: 21, hoyEsHabil: true },
       publicidadDiaria: null,
-      objetivo: 0.25,
+      publicidad: 50_000,
     });
-    expect(r.proyeccion.publicidad).toBeCloseTo(1_550_000, 0);
+    expect(r.ritmoDiario).toBe(600_000);
+    expect(r.proyeccion.ventas).toBe(600_000 * 21);
+    expect(r.proyeccion.publicidad).toBe(50_000 * 31);
     expect(r.pocosDatos).toBe(true);
   });
 });
 
 describe('calcularVentasNecesarias', () => {
-  it('despeja las ventas que dan el objetivo', () => {
+  it('despeja las ventas que dan el objetivo y las reparte en hábiles restantes', () => {
     const input = {
       mes: '2026-10',
-      hoy: '2026-10-10',
+      hoy: '2026-10-13',
       ventas: 5_000_000,
+      ventasDiasCompletos: 5_000_000,
+      habiles: { total: 21, completos: 8, restantes: 13, hoyEsHabil: true },
       costosVariables: 750_000, // 15 %
       fijos: 9_000_000,
-      fijosEstimados: false,
-      publicidad: 1_000_000,
-      otros: 500_000,
+      publicidad: 1_200_000,
+      otros: 400_000,
+      otrosPendientes: 100_000,
       publicidadDiaria: 100_000,
       objetivo: 0.25,
     };
     const r = calcularMesEnCurso(input);
     const n = calcularVentasNecesarias(input, r);
-    // pub proy = 1M + 100k × 21 = 3,1M → V = (3,1M + 0,5M + 9M) / 0,6 = 21M
-    expect(n.ventasMes).toBeCloseTo(21_000_000, 0);
-    expect(n.faltan).toBeCloseTo(16_000_000, 0);
-    expect(n.porDia).toBeCloseTo(16_000_000 / 21, 2);
-    expect(n.ritmoActual).toBe(500_000);
+    // pub proy = 1,2M + 100k × 18 = 3M; otros proy = 0,5M → V = (3M + 0,5M + 9M) / 0,6
+    expect(n.ventasMes).toBeCloseTo(12_500_000 / 0.6, 0);
+    expect(n.faltan).toBeCloseTo(12_500_000 / 0.6 - 5_000_000, 0);
+    expect(n.porDia).toBeCloseTo((12_500_000 / 0.6 - 5_000_000) / 13, 2);
+    expect(n.ritmoActual).toBe(625_000);
   });
 
   it('null si el costo variable no deja margen', () => {
     const input = {
-      mes: '2026-10', hoy: '2026-10-10', ventas: 100, costosVariables: 80, fijos: 0, fijosEstimados: false,
-      publicidad: 0, otros: 0, publicidadDiaria: null, objetivo: 0.25,
+      mes: '2026-10', hoy: '2026-10-13', ventas: 100, ventasDiasCompletos: 100,
+      habiles: { total: 21, completos: 8, restantes: 13, hoyEsHabil: true },
+      costosVariables: 80, fijos: 0, publicidad: 0, otros: 0, otrosPendientes: 0, publicidadDiaria: null, objetivo: 0.25,
     };
     expect(calcularVentasNecesarias(input, calcularMesEnCurso(input)).ventasMes).toBeNull();
+  });
+});
+
+describe('recurrentesPendientesArs', () => {
+  const r = (diaDelMes: number, extra: Partial<{ moneda: 'USD' | 'ARS'; monto: number; ivaAplica: boolean; activo: boolean }> = {}) => ({
+    moneda: 'USD' as const, monto: 10, ivaAplica: true, diaDelMes, activo: true, ...extra,
+  });
+  it('suma solo los que se cobran después de hoy, en el mes en curso', () => {
+    const lista = [r(1), r(20), r(31, { moneda: 'ARS', monto: 5000, ivaAplica: false }), r(25, { activo: false })];
+    expect(recurrentesPendientesArs(lista, '2026-10', '2026-10-13', 1000, CFG)).toBeCloseTo(10 * 1000 * 1.23 + 5000, 6);
+    expect(recurrentesPendientesArs(lista, '2026-09', '2026-10-13', 1000, CFG)).toBe(0);
+  });
+});
+
+describe('estimarFijos', () => {
+  const fijos = (p: Partial<import('@/lib/gastos/monthlyEconomiaCosts').FixedCostsMonth>) => ({
+    monotributos: 0, contador: 0, electricidad: 0, agua: 0, internet: 0, alquiler: 0, seguro: 0, credito: 0, sueldos: [], ...p,
+  });
+  it('completa línea por línea con el mes anterior', () => {
+    const anterior = fijos({ alquiler: 600_000, internet: 30_000, sueldos: [{ id: 'a', nombre: 'A', monto: 1_200_000 }, { id: 'b', nombre: 'B', monto: 1_200_000 }] });
+    const actual = fijos({ internet: 32_000, sueldos: [{ id: 'a', nombre: 'A', monto: 1_300_000 }, { id: 'b', nombre: 'B', monto: 0 }] });
+    const e = estimarFijos(actual, anterior);
+    const sueldos = 1_300_000 + 1_200_000;
+    expect(e.total).toBeCloseTo(600_000 + 32_000 + sueldos + sueldos / 12, 4);
+    expect(e.estimado).toBeCloseTo(600_000 + 1_200_000 + 1_200_000 / 12, 4);
+    expect(e.faltan).toEqual(['Sueldos', 'Alquiler']);
+  });
+  it('sin mes anterior usa lo cargado', () => {
+    const e = estimarFijos(fijos({ alquiler: 100 }), undefined);
+    expect(e).toEqual({ total: 100, estimado: 0, faltan: [] });
   });
 });

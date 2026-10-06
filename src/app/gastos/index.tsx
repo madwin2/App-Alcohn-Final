@@ -6,9 +6,16 @@ import { Toaster } from '@/components/ui/toaster';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, Plus } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-import { BarraBronce, Panel, PanelTitle, formatArsCorto, formatPct } from '@/components/economia/controlGastosUi';
+import { BarraBronce, Estado, Panel, PanelTitle, formatArsCorto, formatPct } from '@/components/economia/controlGastosUi';
 import { BotonQuitar, FilaMonto, Grupo, MesSelector, MontoInput } from '@/components/gastos/GastosUi';
-import type { ValuacionMes } from '@/lib/gastos/gastosAuto';
+import {
+  diasDelMes,
+  estimarFijos,
+  publicidadDiariaReciente,
+  recurrentesPendientesArs,
+  type ValuacionMes,
+} from '@/lib/gastos/gastosAuto';
+import { todayArgentinaDateKey } from '@/lib/utils/argentinaDate';
 import { cn } from '@/lib/utils/cn';
 import {
   DEFAULT_VARIABLE_COSTS,
@@ -468,6 +475,9 @@ export default function GastosPage() {
   const totalFijos = totalFixedCosts(bundle.fixed);
   const aguinaldo = aguinaldoFromSueldos(bundle.fixed.sueldos);
   const sueldosSum = sumSueldos(bundle.fixed.sueldos);
+  const mesActualKey = currentMonthKey();
+  const esMesActual = selectedMonth === mesActualKey;
+  const etiquetaMesSeleccionado = formatMonthKeyLong(selectedMonth);
   const esResumen = isResumenMensual(bundle);
   const inicioAuto = gastosAuto.data?.config.fechaInicio;
   const mesConGastosAuto = !!inicioAuto && selectedMonth >= inicioAuto.slice(0, 7);
@@ -479,6 +489,32 @@ export default function GastosPage() {
     ...resumenGastoMes(getBundleForMonth(monthlyByMonth, keyAnterior), gastosAuto.porMes[keyAnterior]),
     etiqueta: formatMonthKeyLong(keyAnterior).split(' de ')[0],
   };
+
+  /**
+   * Cierre estimado (solo mes en curso): lo cargado + fijos que faltan (con el mes anterior, línea por
+   * línea) + publicidad al ritmo de los últimos 7 días por los días corridos que quedan + recurrentes
+   * que todavía no se cobraron.
+   */
+  const cierreEstimado = useMemo(() => {
+    if (!esMesActual || esResumen) return null;
+    const hoy = todayArgentinaDateKey();
+    const d = gastosAuto.data;
+    const fijosEst = estimarFijos(bundle.fixed, monthlyByMonth[keyAnterior]?.fixed);
+    const diasRestantes = Math.max(0, diasDelMes(selectedMonth) - Number(hoy.slice(8, 10)));
+    const pubDiaria = d && d.registros.some((r) => r.categoria === 'publicidad')
+      ? publicidadDiariaReciente(d.registros, hoy, gastosAuto.blueHoy, d.config)
+      : 0;
+    const publicidadQueViene = pubDiaria * diasRestantes;
+    const recurrentesQueVienen = d ? recurrentesPendientesArs(d.recurrentes, selectedMonth, hoy, gastosAuto.blueHoy, d.config) : 0;
+    const fijosQueFaltan = fijosEst.total - totalFijos;
+    return {
+      total: resumenMes.total + Math.max(0, fijosQueFaltan) + publicidadQueViene + recurrentesQueVienen,
+      faltanCargar: fijosEst.faltan,
+      fijosQueFaltan: Math.max(0, fijosQueFaltan),
+      publicidadQueViene,
+      recurrentesQueVienen,
+    };
+  }, [esMesActual, esResumen, gastosAuto.data, gastosAuto.blueHoy, bundle.fixed, monthlyByMonth, keyAnterior, selectedMonth, totalFijos, resumenMes.total]);
 
   const pagosResumen = useMemo(() => {
     const pg = bundle.pagos;
@@ -500,9 +536,6 @@ export default function GastosPage() {
     return { totalAPagarArs, totalPagadoArs, pctMonto };
   }, [bundle, aguinaldo]);
 
-  const mesActualKey = currentMonthKey();
-  const esMesActual = selectedMonth === mesActualKey;
-  const etiquetaMesSeleccionado = formatMonthKeyLong(selectedMonth);
 
   const updateVariable = (patch: Partial<VariableCostsState>) => {
     setVariable((v) => ({ ...v, ...patch }));
@@ -646,8 +679,54 @@ export default function GastosPage() {
                 </ul>
               </>
             ) : null}
+            {cierreEstimado && cierreEstimado.faltanCargar.length ? (
+              <div className="mt-5 border-t border-white/[0.06] pt-4">
+                <Estado tono="aviso">
+                  Todavía sin cargar (en {resumenMesAnterior.etiqueta} tenían monto): {cierreEstimado.faltanCargar.join(', ')}.
+                </Estado>
+              </div>
+            ) : null}
           </Panel>
 
+          {cierreEstimado ? (
+            <Panel className="flex flex-col xl:col-span-3">
+              <p className="text-[13px] text-muted-foreground">Cierre estimado del mes</p>
+              <p className="mt-2 text-4xl font-semibold tabular-nums tracking-tight">{formatArsCorto(cierreEstimado.total)}</p>
+              {resumenMesAnterior.total > 0 ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  <span className={cierreEstimado.total > resumenMesAnterior.total ? 'text-red-300' : 'text-emerald-300'}>
+                    {cierreEstimado.total >= resumenMesAnterior.total ? '+' : '−'}
+                    {formatPct(Math.abs(cierreEstimado.total / resumenMesAnterior.total - 1))}
+                  </span>{' '}
+                  contra los {formatArsCorto(resumenMesAnterior.total)} de {resumenMesAnterior.etiqueta}
+                </p>
+              ) : null}
+              <dl className="mt-auto space-y-1.5 pt-5 text-xs">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">Cargado hasta hoy</dt>
+                  <dd className="tabular-nums">{formatArsCorto(resumenMes.total)}</dd>
+                </div>
+                {cierreEstimado.fijosQueFaltan > 0 ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted-foreground">Fijos sin cargar (estimados)</dt>
+                    <dd className="tabular-nums">{formatArsCorto(cierreEstimado.fijosQueFaltan)}</dd>
+                  </div>
+                ) : null}
+                {cierreEstimado.publicidadQueViene > 0 ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted-foreground">Publicidad que falta (ritmo actual)</dt>
+                    <dd className="tabular-nums">{formatArsCorto(cierreEstimado.publicidadQueViene)}</dd>
+                  </div>
+                ) : null}
+                {cierreEstimado.recurrentesQueVienen > 0 ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted-foreground">Recurrentes por cobrar</dt>
+                    <dd className="tabular-nums">{formatArsCorto(cierreEstimado.recurrentesQueVienen)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </Panel>
+          ) : (
           <Panel className="flex flex-col xl:col-span-3">
             <p className="text-[13px] text-muted-foreground">Contra {resumenMesAnterior.etiqueta}</p>
             {resumenMesAnterior.total > 0 && resumenMes.total > 0 ? (
@@ -665,14 +744,12 @@ export default function GastosPage() {
                   {formatArsCorto(Math.abs(resumenMes.total - resumenMesAnterior.total))}{' '}
                   {resumenMes.total >= resumenMesAnterior.total ? 'más' : 'menos'} que los {formatArsCorto(resumenMesAnterior.total)} del mes anterior
                 </p>
-                {esMesActual ? (
-                  <p className="mt-auto pt-4 text-xs text-muted-foreground">El mes en curso todavía puede sumar gastos.</p>
-                ) : null}
               </>
             ) : (
               <p className="mt-2 text-sm text-muted-foreground">Sin datos para comparar.</p>
             )}
           </Panel>
+          )}
 
           <Panel className="flex flex-col xl:col-span-3">
             <p className="text-[13px] text-muted-foreground">Pagos marcados</p>

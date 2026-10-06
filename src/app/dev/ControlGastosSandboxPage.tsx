@@ -13,13 +13,20 @@ import type { GastosAutoData } from '@/lib/supabase/services/gastosAuto.service'
 
 type Escenario = 'excedido' | 'bien' | 'sin-conectar';
 
-const HOY = '2026-10-05';
+const HOY = '2026-10-06';
+const FERIADOS = ['2026-10-12'];
+const RECURRENTES = [
+  { id: 'h', nombre: 'Hetzner', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 38, ivaAplica: true, diaDelMes: 1, activo: true },
+  { id: 'c', nombre: 'Canva', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 15, ivaAplica: true, diaDelMes: 3, activo: true },
+  { id: 'w', nombre: 'Dominio y hosting web', categoria: 'automatizaciones' as const, moneda: 'ARS' as const, monto: 25_000, ivaAplica: false, diaDelMes: 10, activo: true },
+  { id: 'f', nombre: 'Bot Francisco (servidor)', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 20, ivaAplica: true, diaDelMes: 5, activo: false },
+];
 const BLUE = 1545;
 
 function registrosDemo(escala: number): GastoRegistro[] {
   const out: GastoRegistro[] = [];
   let id = 0;
-  const dias = ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05'];
+  const dias = ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06'];
   for (const fecha of dias) {
     const r = (p: Partial<GastoRegistro>) => out.push({ id: String(++id), fecha, externalRef: '', ivaAplica: true, moneda: 'USD', ...p } as GastoRegistro);
     r({ proveedor: 'meta_ads', categoria: 'publicidad', concepto: 'Sellos para cuero — conversiones', monto: 52 * escala });
@@ -45,6 +52,8 @@ export default function ControlGastosSandboxPage() {
     config,
     registros,
     pagos: [],
+    recurrentes: esc === 'sin-conectar' ? [] : RECURRENTES,
+    feriados: FERIADOS,
     cotizacion: { fecha: HOY, blueVenta: BLUE, oficialVenta: 1540 },
     ultimosSync:
       esc === 'sin-conectar'
@@ -92,14 +101,15 @@ export default function ControlGastosSandboxPage() {
         etiquetaMes="Octubre 2026"
         hoy={HOY}
         row={row}
-        fijosMesAnterior={8_700_000}
-        fijosCargados={false}
+        fijos={{ total: 8_900_000, estimado: 8_550_000, faltan: ['Sueldos', 'Alquiler', 'Electricidad'] }}
+        etiquetaMesAnterior="septiembre"
         ventasPorDia={[
-          { fecha: '2026-10-01', ventas: ventas * 0.24, pedidos: 8 },
-          { fecha: '2026-10-02', ventas: ventas * 0.3, pedidos: 10 },
-          { fecha: '2026-10-03', ventas: ventas * 0.18, pedidos: 6 },
-          { fecha: '2026-10-04', ventas: ventas * 0.08, pedidos: 3 },
-          { fecha: '2026-10-05', ventas: ventas * 0.2, pedidos: 6 },
+          { fecha: '2026-10-01', ventas: ventas * 0.22, pedidos: 8 },
+          { fecha: '2026-10-02', ventas: ventas * 0.26, pedidos: 9 },
+          { fecha: '2026-10-03', ventas: ventas * 0.07, pedidos: 2 },
+          { fecha: '2026-10-04', ventas: ventas * 0.05, pedidos: 2 },
+          { fecha: '2026-10-05', ventas: ventas * 0.28, pedidos: 9 },
+          { fecha: '2026-10-06', ventas: ventas * 0.12, pedidos: 3 },
         ]}
         historial={[
           { mes: '2026-04', label: 'abr 26', ventas: 17_376_940, publicidad: 3_500_000, ganancia: 2_100_000, pedidos: 172 },
@@ -111,6 +121,8 @@ export default function ControlGastosSandboxPage() {
         ]}
         valuacion={oct}
         registros={registros}
+        recurrentes={data.recurrentes}
+        feriados={FERIADOS}
         config={config}
         blueHoy={BLUE}
         loading={false}

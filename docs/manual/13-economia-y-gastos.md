@@ -50,7 +50,7 @@ Aparecen en **Movimientos cargados**; **Quitar** para borrar uno.
 Se lee de arriba hacia abajo:
 
 1. **Elegir el mes** con las flechas ‹ › de arriba a la derecha (tocá el nombre del mes para saltar a otro; «Ir al mes actual» vuelve).
-2. **Resumen**: el gasto total del mes con una barra de colores (sueldos y fijos, publicidad, automatizaciones, otros), la comparación con el mes anterior y qué parte ya está marcada como pagada.
+2. **Resumen**: el gasto total del mes con una barra de colores (sueldos y fijos, publicidad, automatizaciones, otros) y qué parte ya está marcada como pagada. En el **mes en curso** se ve el **cierre estimado** (lo cargado + fijos que faltan cargar + publicidad al ritmo actual + recurrentes por cobrar) contra el mes anterior, y un aviso con lo que todavía no cargaste. En meses cerrados, la comparación es directa contra el mes anterior.
 3. **Gastos automáticos** y **Gastos recurrentes** (ver abajo).
 4. **Sueldos y gastos fijos**: sueldos (uno por persona del equipo; «Agregar otro sueldo» para alguien que no usa la app), aguinaldo (se calcula solo: sueldos ÷ 12), fijos (monotributos, contador, alquiler, seguro, crédito) y servicios (luz, agua, internet).
 5. **Otros gastos del mes**: publicidad que no sea Meta/Google, automatizaciones, envíos, impuestos, varios, remodelaciones.
@@ -71,13 +71,13 @@ La publicidad de **Meta** y **Google**, el gasto de **OpenAI** y los **gastos re
 - Arriba de la página está el bloque **Gastos automáticos**: total del mes con IVA y cada plataforma (tocá una para ver sus campañas). Si dice «Sin conectar», falta cargar el acceso de esa plataforma.
 
 En **Economía → Mes en curso** se lee de arriba hacia abajo:
-1. **Al ritmo actual, el mes cierra con…**: la ganancia proyectada y la barra contra el objetivo del 25 %.
-2. **Publicidad**: cuánto podés gastar **por día** (en USD, para comparar con los presupuestos de Meta y Google) contra lo que se gasta hoy.
-3. **Ventas**: cuánto vendés por día contra cuánto haría falta para el 25 % (y cuántos pedidos más por día).
+1. **Al ritmo actual, el mes cierra con…**: la ganancia proyectada contra el objetivo del 25 %, lo vendido y la ganancia a hoy, y cuántos días hábiles quedan.
+2. **Ventas**: el ritmo por día hábil contra lo necesario para el 25 %, con una barra por cada día hábil del mes. Sábados, domingos y feriados no aparecen: lo que entra esos días (por ejemplo, por la web) suma al día hábil siguiente (pasá el mouse por la barra para verlo).
+3. **Publicidad**: cuánto podés gastar **por día corrido** (las campañas no paran el fin de semana) contra lo que se gasta hoy, en USD para comparar con Meta y Google; y en qué plataforma se fue y cuánto costó cada pedido.
 4. **De dónde sale la ganancia**: cada gasto como % de lo vendido (fin de mes o a hoy).
-5. **Ventas por día**: barras de cada día del mes con la línea de lo necesario.
-6. **Publicidad del mes**: cuánto fue a cada plataforma, cuánta publicidad costó cada pedido y el ticket promedio.
-7. **Últimos meses**: la ganancia de los últimos 6 meses contra el 25 %, con ventas y % de publicidad, y el mes en curso proyectado.
+5. **Últimos meses**: la ganancia de los últimos 6 meses contra el 25 % y el mes en curso proyectado.
+
+Abajo aparecen los supuestos del cálculo: qué fijos todavía no se cargaron (se estiman con el mes anterior, uno por uno) y los recurrentes que faltan cobrar.
 
 ### Costos variables de fabricación
 

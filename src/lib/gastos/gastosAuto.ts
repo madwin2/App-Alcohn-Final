@@ -8,7 +8,8 @@
  * - En su categoría va gasto + IVA; el resto de recargos (IIBB, sellos…) va a `impuestos`
  *   como `otrosImpuestosUsdPct` sobre la base en pesos de los USD.
  */
-import { emptyBundle, getBundleForMonth, type MonthCostsBundle } from '@/lib/gastos/monthlyEconomiaCosts';
+import { emptyBundle, getBundleForMonth, type FixedCostsMonth, type MonthCostsBundle } from '@/lib/gastos/monthlyEconomiaCosts';
+import type { ResumenHabiles } from '@/lib/gastos/diasHabiles';
 
 export type GastoAutoCategoria = 'publicidad' | 'automatizaciones' | 'gastos_varios';
 export type GastoMoneda = 'USD' | 'ARS';
@@ -293,65 +294,90 @@ export function publicidadDiariaReciente(
 export type MesEnCursoInput = {
   mes: string;
   hoy: string; // YYYY-MM-DD (AR)
+  /** Ventas del mes a hoy. */
   ventas: number;
-  /** Fabricación + regalos + pruebas (escala con las ventas). */
+  /** Ventas imputadas a días hábiles ya terminados (lo de fines de semana/feriados, al hábil siguiente). */
+  ventasDiasCompletos: number;
+  /** Días hábiles del mes (lunes a viernes sin feriados). */
+  habiles: ResumenHabiles;
+  /** Fabricación + regalos + pruebas a hoy (escala con las ventas). */
   costosVariables: number;
-  /** Fijos del mes (sueldos + aguinaldo + servicios…). */
+  /** Fijos del mes (sueldos + aguinaldo + servicios…), con estimación de lo que falte cargar. */
   fijos: number;
-  fijosEstimados: boolean;
   /** Publicidad del mes a hoy (manual + automática). */
   publicidad: number;
-  /** Resto de extras (automatizaciones, impuestos, varios, envíos manuales…). No se proyectan. */
+  /** Resto de gastos ya registrados (automatizaciones, impuestos, varios, envíos manuales…). */
   otros: number;
-  /** Publicidad diaria reciente; si es null se proyecta lineal. */
+  /** Recurrentes que todavía se van a cobrar este mes (en pesos). */
+  otrosPendientes: number;
+  /** Publicidad por día corrido reciente; si es null se proyecta lineal por días corridos. */
   publicidadDiaria: number | null;
   objetivo: number;
 };
 
 export type MesEnCurso = {
-  diasTranscurridos: number;
+  habiles: ResumenHabiles;
+  /** Días corridos del mes y los que quedan después de hoy (la publicidad corre todos los días). */
   diasMes: number;
-  diasRestantes: number;
+  diasCorridosRestantes: number;
   pocosDatos: boolean;
+  /** Ventas por día hábil al ritmo actual. */
+  ritmoDiario: number;
   aHoy: { ventas: number; ganancia: number; rentabilidad: number; fijosProrrateados: number };
   proyeccion: {
     ventas: number;
     costosVariables: number;
     publicidad: number;
+    otros: number;
     ganancia: number;
     rentabilidad: number;
   };
   /** Publicidad máxima del mes para llegar al objetivo. */
   topePublicidad: number;
   publicidadRestante: number;
-  /** Lo que se puede gastar por día en publicidad de acá a fin de mes para llegar al objetivo. */
+  /** Publicidad por día corrido de acá a fin de mes para llegar al objetivo. */
   publicidadPorDia: number;
 };
 
+/**
+ * Proyección del mes con dos relojes:
+ * - **Ventas** (y fabricación, que escala con ellas) por **día hábil**: ritmo = ventas de hábiles
+ *   terminados ÷ hábiles terminados; lo que falta del mes = ritmo × hábiles restantes (incluye hoy).
+ * - **Publicidad** por **día corrido**: Meta y Google gastan también fines de semana y feriados.
+ * Los fijos se prorratean por días hábiles (igual que las ventas), así un fin de semana no "baja" la ganancia.
+ */
 export function calcularMesEnCurso(i: MesEnCursoInput): MesEnCurso {
   const diasMes = diasDelMes(i.mes);
-  const dia = Number(i.hoy.slice(8, 10)) || 1;
-  const diasTranscurridos = Math.min(diasMes, Math.max(1, dia));
-  const diasRestantes = diasMes - diasTranscurridos;
-  const factor = diasMes / diasTranscurridos;
+  const dia = Math.min(diasMes, Math.max(1, Number(i.hoy.slice(8, 10)) || 1));
+  const diasCorridosRestantes = diasMes - dia;
+  const { total, completos, restantes, hoyEsHabil } = i.habiles;
 
-  const fijosProrrateados = (i.fijos * diasTranscurridos) / diasMes;
+  // Sin hábiles terminados (arranque de mes) se usa lo vendido hasta ahora como ritmo de un día.
+  const ritmoDiario = completos > 0 ? i.ventasDiasCompletos / completos : i.ventas;
+  const ventasProy = Math.max(i.ventas, (completos > 0 ? i.ventasDiasCompletos : 0) + ritmoDiario * restantes);
+  const factor = i.ventas > 0 ? ventasProy / i.ventas : 1;
+  const varProy = i.costosVariables * factor;
+
+  const transcurrido = total > 0 ? Math.min(1, (completos + (hoyEsHabil ? 1 : 0)) / total) : 1;
+  const fijosProrrateados = i.fijos * transcurrido;
   const gananciaHoy = i.ventas - i.costosVariables - i.publicidad - i.otros - fijosProrrateados;
 
-  const ventasProy = i.ventas * factor;
-  const varProy = i.costosVariables * factor;
   const pubProy =
-    i.publicidadDiaria != null ? i.publicidad + i.publicidadDiaria * diasRestantes : i.publicidad * factor;
-  const gananciaProy = ventasProy - varProy - pubProy - i.otros - i.fijos;
+    i.publicidadDiaria != null
+      ? i.publicidad + i.publicidadDiaria * diasCorridosRestantes
+      : (i.publicidad * diasMes) / dia;
+  const otrosProy = i.otros + i.otrosPendientes;
+  const gananciaProy = ventasProy - varProy - pubProy - otrosProy - i.fijos;
 
-  const tope = ventasProy * (1 - i.objetivo) - varProy - i.otros - i.fijos;
+  const tope = ventasProy * (1 - i.objetivo) - varProy - otrosProy - i.fijos;
   const restante = tope - i.publicidad;
 
   return {
-    diasTranscurridos,
+    habiles: i.habiles,
     diasMes,
-    diasRestantes,
-    pocosDatos: diasTranscurridos < 5,
+    diasCorridosRestantes,
+    pocosDatos: completos < 3,
+    ritmoDiario,
     aHoy: {
       ventas: i.ventas,
       ganancia: gananciaHoy,
@@ -362,12 +388,13 @@ export function calcularMesEnCurso(i: MesEnCursoInput): MesEnCurso {
       ventas: ventasProy,
       costosVariables: varProy,
       publicidad: pubProy,
+      otros: otrosProy,
       ganancia: gananciaProy,
       rentabilidad: ventasProy > 0 ? gananciaProy / ventasProy : 0,
     },
     topePublicidad: tope,
     publicidadRestante: restante,
-    publicidadPorDia: diasRestantes > 0 ? restante / diasRestantes : restante,
+    publicidadPorDia: diasCorridosRestantes > 0 ? restante / diasCorridosRestantes : restante,
   };
 }
 
@@ -376,23 +403,105 @@ export type VentasNecesarias = {
   ventasMes: number | null;
   /** Lo que falta vender de acá a fin de mes. */
   faltan: number | null;
-  /** Por día, en los días que quedan (incluye hoy si no hay días restantes). */
+  /** Por día hábil que queda (incluye hoy si es hábil). */
   porDia: number | null;
-  /** Ritmo actual de ventas por día. */
+  /** Ritmo actual por día hábil. */
   ritmoActual: number;
 };
 
 /**
  * Ventas que harían falta para cerrar el mes en el objetivo, con la publicidad proyectada,
- * los fijos y los otros gastos dados. El costo variable se toma como % de las ventas de hoy:
+ * los fijos y los otros gastos. El costo variable se toma como % de las ventas de hoy:
  * `V = (publicidad + otros + fijos) / (1 − objetivo − variable%)`.
  */
 export function calcularVentasNecesarias(i: MesEnCursoInput, r: MesEnCurso): VentasNecesarias {
-  const ritmoActual = i.ventas / r.diasTranscurridos;
+  const ritmoActual = r.ritmoDiario;
   const pctVariable = i.ventas > 0 ? i.costosVariables / i.ventas : 0;
   const margen = 1 - i.objetivo - pctVariable;
   if (margen <= 0) return { ventasMes: null, faltan: null, porDia: null, ritmoActual };
-  const ventasMes = (r.proyeccion.publicidad + i.otros + i.fijos) / margen;
+  const ventasMes = (r.proyeccion.publicidad + r.proyeccion.otros + i.fijos) / margen;
   const faltan = Math.max(0, ventasMes - i.ventas);
-  return { ventasMes, faltan, porDia: faltan / Math.max(1, r.diasRestantes), ritmoActual };
+  return { ventasMes, faltan, porDia: faltan / Math.max(1, i.habiles.restantes), ritmoActual };
+}
+
+/** Recurrentes activos que todavía no se cobraron este mes (su día es posterior a hoy), en pesos con IVA. */
+export function recurrentesPendientesArs(
+  recurrentes: ReadonlyArray<{ moneda: GastoMoneda; monto: number; ivaAplica: boolean; diaDelMes: number; activo: boolean }>,
+  mes: string,
+  hoy: string,
+  blueHoy: number | null,
+  config: ControlGastosConfig,
+): number {
+  if (hoy.slice(0, 7) !== mes) return 0;
+  const diaHoy = Number(hoy.slice(8, 10));
+  const ultimo = diasDelMes(mes);
+  let total = 0;
+  for (const r of recurrentes) {
+    if (!r.activo || Math.min(r.diaDelMes, ultimo) <= diaHoy) continue;
+    const base = r.moneda === 'USD' ? r.monto * (blueHoy ?? 0) : r.monto;
+    total += (r.ivaAplica ? base * (1 + config.ivaPct) : base) + (r.moneda === 'USD' ? base * config.otrosImpuestosUsdPct : 0);
+  }
+  return total;
+}
+
+export type FijosEstimados = {
+  total: number;
+  /** Parte del total que sale del mes anterior porque este mes todavía está en 0. */
+  estimado: number;
+  /** Nombres de lo que falta cargar (con monto el mes anterior). */
+  faltan: string[];
+};
+
+const FIJOS_LABEL: Array<[keyof Omit<FixedCostsMonth, 'sueldos'>, string]> = [
+  ['monotributos', 'Monotributos'],
+  ['contador', 'Contador'],
+  ['alquiler', 'Alquiler'],
+  ['seguro', 'Seguro'],
+  ['credito', 'Crédito'],
+  ['electricidad', 'Electricidad'],
+  ['agua', 'Agua'],
+  ['internet', 'Internet'],
+];
+
+/**
+ * Fijos del mes estimando **línea por línea**: lo que este mes está en 0 y el anterior tenía monto
+ * se toma del mes anterior (sueldos por persona; el aguinaldo se recalcula sobre los sueldos estimados).
+ */
+export function estimarFijos(actual: FixedCostsMonth, anterior: FixedCostsMonth | undefined): FijosEstimados {
+  const faltan: string[] = [];
+  let estimado = 0;
+  let total = 0;
+  for (const [k, label] of FIJOS_LABEL) {
+    const v = Number(actual[k]) || 0;
+    const prev = Number(anterior?.[k]) || 0;
+    if (v === 0 && prev > 0) {
+      total += prev;
+      estimado += prev;
+      faltan.push(label);
+    } else total += v;
+  }
+  const prevSueldo = new Map((anterior?.sueldos ?? []).map((s) => [s.id, Number(s.monto) || 0]));
+  let sueldos = 0;
+  let sueldosEstimados = 0;
+  const vistos = new Set<string>();
+  for (const s of actual.sueldos) {
+    vistos.add(s.id);
+    const v = Number(s.monto) || 0;
+    const prev = prevSueldo.get(s.id) ?? 0;
+    if (v === 0 && prev > 0) {
+      sueldos += prev;
+      sueldosEstimados += prev;
+    } else sueldos += v;
+  }
+  // Personas que el mes anterior cobraban y este mes todavía no tienen fila.
+  for (const [id, prev] of prevSueldo) {
+    if (!vistos.has(id) && prev > 0) {
+      sueldos += prev;
+      sueldosEstimados += prev;
+    }
+  }
+  if (sueldosEstimados > 0) faltan.unshift('Sueldos');
+  total += sueldos + sueldos / 12;
+  estimado += sueldosEstimados + sueldosEstimados / 12;
+  return { total, estimado, faltan };
 }

@@ -32,6 +32,10 @@ export type GastosAutoData = {
   pagos: PagoUsd[];
   cotizacion: CotizacionUsd | null;
   ultimosSync: SyncLogRow[];
+  /** Recurrentes (activos e inactivos), para proyectar los que faltan cobrar en el mes. */
+  recurrentes: GastoRecurrente[];
+  /** Feriados y días no laborables de la empresa (tabla `feriados`, calendario del equipo). */
+  feriados: string[];
 };
 
 async function fetchConfig(): Promise<ControlGastosConfig> {
@@ -126,15 +130,28 @@ async function fetchUltimosSync(): Promise<SyncLogRow[]> {
   return out;
 }
 
+/** Feriados entre dos fechas (inclusive). Si la tabla no responde, se sigue sin feriados (solo fines de semana). */
+export async function fetchFeriados(desde: string, hasta: string): Promise<string[]> {
+  const { data, error } = await supabase.from('feriados').select('fecha').gte('fecha', desde).lte('fecha', hasta);
+  if (error) {
+    console.warn('No se pudieron leer los feriados:', error.message);
+    return [];
+  }
+  return (data || []).map((r) => r.fecha as string);
+}
+
 export async function fetchGastosAutoData(): Promise<GastosAutoData> {
   const config = await fetchConfig();
-  const [registros, pagos, cotizacion, ultimosSync] = await Promise.all([
+  const anio = new Date().getFullYear();
+  const [registros, pagos, cotizacion, ultimosSync, recurrentes, feriados] = await Promise.all([
     fetchRegistros(config.fechaInicio),
     fetchPagosUsd(),
     fetchUltimaCotizacion(),
     fetchUltimosSync(),
+    fetchGastosRecurrentes(),
+    fetchFeriados(`${anio - 1}-01-01`, `${anio + 1}-12-31`),
   ]);
-  return { config, registros, pagos, cotizacion, ultimosSync };
+  return { config, registros, pagos, cotizacion, ultimosSync, recurrentes, feriados };
 }
 
 export async function createPagoUsd(input: { mes: string; fecha: string; usd: number; cotizacion: number; nota?: string }): Promise<void> {
