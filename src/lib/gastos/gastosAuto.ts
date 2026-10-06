@@ -310,10 +310,18 @@ export type MesEnCursoInput = {
   otros: number;
   /** Recurrentes que todavía se van a cobrar este mes (en pesos). */
   otrosPendientes: number;
-  /** Publicidad por día corrido reciente; si es null se proyecta lineal por días corridos. */
+  /** Publicidad por día corrido reciente (promedio 7 días); si es null se proyecta lineal por días corridos. */
   publicidadDiaria: number | null;
+  /**
+   * Publicidad de un mes de referencia (el anterior) para cuando este mes todavía no tiene ningún dato
+   * de publicidad: se usa como estimación del mes en vez de suponer $0.
+   */
+  publicidadReferenciaMes?: number | null;
   objetivo: number;
 };
+
+/** De dónde sale la publicidad proyectada. */
+export type OrigenPublicidad = 'ritmo' | 'lineal' | 'referencia' | 'sin_datos';
 
 export type MesEnCurso = {
   habiles: ResumenHabiles;
@@ -321,6 +329,7 @@ export type MesEnCurso = {
   diasMes: number;
   diasCorridosRestantes: number;
   pocosDatos: boolean;
+  origenPublicidad: OrigenPublicidad;
   /** Ventas por día hábil al ritmo actual. */
   ritmoDiario: number;
   aHoy: { ventas: number; ganancia: number; rentabilidad: number; fijosProrrateados: number };
@@ -362,10 +371,19 @@ export function calcularMesEnCurso(i: MesEnCursoInput): MesEnCurso {
   const fijosProrrateados = i.fijos * transcurrido;
   const gananciaHoy = i.ventas - i.costosVariables - i.publicidad - i.otros - fijosProrrateados;
 
+  // Publicidad: ritmo de 7 días si hay datos automáticos; si solo hay carga manual, lineal por días
+  // corridos; si no hay nada, el mes de referencia (no suponer $0).
+  const ref = Math.max(0, Number(i.publicidadReferenciaMes) || 0);
+  const origenPublicidad: OrigenPublicidad =
+    i.publicidadDiaria != null ? 'ritmo' : i.publicidad > 0 ? 'lineal' : ref > 0 ? 'referencia' : 'sin_datos';
   const pubProy =
-    i.publicidadDiaria != null
-      ? i.publicidad + i.publicidadDiaria * diasCorridosRestantes
-      : (i.publicidad * diasMes) / dia;
+    origenPublicidad === 'ritmo'
+      ? i.publicidad + (i.publicidadDiaria ?? 0) * diasCorridosRestantes
+      : origenPublicidad === 'lineal'
+        ? (i.publicidad * diasMes) / dia
+        : origenPublicidad === 'referencia'
+          ? ref
+          : 0;
   const otrosProy = i.otros + i.otrosPendientes;
   const gananciaProy = ventasProy - varProy - pubProy - otrosProy - i.fijos;
 
@@ -377,6 +395,7 @@ export function calcularMesEnCurso(i: MesEnCursoInput): MesEnCurso {
     diasMes,
     diasCorridosRestantes,
     pocosDatos: completos < 3,
+    origenPublicidad,
     ritmoDiario,
     aHoy: {
       ventas: i.ventas,

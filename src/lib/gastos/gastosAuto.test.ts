@@ -204,6 +204,17 @@ describe('calcularMesEnCurso (días hábiles)', () => {
     expect(sabado.aHoy.fijosProrrateados).toBeCloseTo(viernes.aHoy.fijosProrrateados, 4);
   });
 
+  it('sin ningún dato de publicidad usa el mes de referencia en vez de $0', () => {
+    const sinPub = { ...base, publicidad: 0, publicidadDiaria: null };
+    expect(calcularMesEnCurso(sinPub).proyeccion.publicidad).toBe(0);
+    expect(calcularMesEnCurso(sinPub).origenPublicidad).toBe('sin_datos');
+    const conRef = calcularMesEnCurso({ ...sinPub, publicidadReferenciaMes: 5_200_000 });
+    expect(conRef.proyeccion.publicidad).toBe(5_200_000);
+    expect(conRef.origenPublicidad).toBe('referencia');
+    // Con datos reales del mes, la referencia no se usa.
+    expect(calcularMesEnCurso({ ...base, publicidadReferenciaMes: 5_200_000 }).origenPublicidad).toBe('ritmo');
+  });
+
   it('nunca proyecta menos de lo ya vendido; sin hábiles terminados usa lo de hoy', () => {
     const r = calcularMesEnCurso({
       ...base,

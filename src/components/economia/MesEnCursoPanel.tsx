@@ -79,6 +79,11 @@ type Vista = 'fin' | 'hoy';
 /** Escala de la barra principal: el objetivo queda a 2/3 del ancho. */
 const ESCALA_RENTABILIDAD = 1.5;
 
+function mesAnteriorDe(mes: string): string {
+  const [y, m] = mes.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
 const fechaCorta = (f: string) =>
   new Date(`${f}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric' }).replace('.', '');
 
@@ -124,6 +129,14 @@ export function MesEnCursoPanel({
     return publicidadDiariaReciente(registros, hoy, blueHoy, config);
   }, [registros, hoy, blueHoy, config]);
 
+  // Gasto de ayer (para ver rápido un cambio de presupuesto) y publicidad del mes anterior como referencia.
+  const ayer = useMemo(() => {
+    if (!config || !registros.some((r) => r.categoria === 'publicidad')) return null;
+    return publicidadDiariaReciente(registros, hoy, blueHoy, config, 1);
+  }, [registros, hoy, blueHoy, config]);
+  const mesAnterior = historial.length ? historial[historial.length - 1] : null;
+  const publicidadReferencia = mesAnterior && mesAnterior.mes === mesAnteriorDe(mes) ? mesAnterior.publicidad : null;
+
   const recurrentesPendientes = useMemo(
     () => (config ? recurrentesPendientesArs(recurrentes, mes, hoy, blueHoy, config) : 0),
     [recurrentes, mes, hoy, blueHoy, config],
@@ -142,9 +155,10 @@ export function MesEnCursoPanel({
       otros: otrosHoy,
       otrosPendientes: recurrentesPendientes,
       publicidadDiaria: diaria,
+      publicidadReferenciaMes: publicidadReferencia,
       objetivo,
     }),
-    [mes, hoy, ventasHoy, ventasDiasCompletos, habiles, variablesHoy, fijos.total, publicidadHoy, otrosHoy, recurrentesPendientes, diaria, objetivo],
+    [mes, hoy, ventasHoy, ventasDiasCompletos, habiles, variablesHoy, fijos.total, publicidadHoy, otrosHoy, recurrentesPendientes, diaria, publicidadReferencia, objetivo],
   );
   const r = useMemo(() => calcularMesEnCurso(entrada), [entrada]);
   const nec = useMemo(() => calcularVentasNecesarias(entrada, r), [entrada, r]);
@@ -153,6 +167,15 @@ export function MesEnCursoPanel({
   const sinVentas = ventasHoy <= 0;
   const llega = r.proyeccion.rentabilidad >= objetivo;
   const faltante = r.proyeccion.ventas * objetivo - r.proyeccion.ganancia;
+  const gastoProyectado = r.proyeccion.costosVariables + r.proyeccion.publicidad + r.proyeccion.otros + fijos.total;
+  const avisoPublicidad =
+    r.origenPublicidad === 'referencia'
+      ? `Todavía no hay publicidad de este mes: se estima con la de ${etiquetaMesAnterior} (${formatArsCorto(r.proyeccion.publicidad)}).`
+      : r.origenPublicidad === 'sin_datos'
+        ? 'No hay datos de publicidad: el cálculo la toma como $0 y la ganancia real va a ser menor.'
+        : r.origenPublicidad === 'lineal'
+          ? 'La publicidad se proyecta con lo cargado a mano; con Meta y Google conectados se usa el ritmo real.'
+          : null;
 
   // ---- Publicidad ----
   // USD con IVA + recargos: traduce el presupuesto diario a lo que se configura en Meta/Google.
@@ -197,6 +220,7 @@ export function MesEnCursoPanel({
     notas.push(
       `Todavía no están cargados en Gastos: ${fijos.faltan.join(', ')}. Se estiman con ${etiquetaMesAnterior} (${formatArsCorto(fijos.estimado)}).`,
     );
+  if (r.origenPublicidad === 'lineal' && avisoPublicidad) notas.push(avisoPublicidad);
   if (recurrentesPendientes > 0) notas.push(`Incluye ${formatArsCorto(recurrentesPendientes)} de recurrentes que se cobran más adelante este mes.`);
   if (valuacion && valuacion.usdBase > 0 && valuacion.estado !== 'pagado')
     notas.push(`Los dólares sin pagar se valúan al blue de hoy (${formatArs(valuacion.cotizacionEfectiva)}).`);
@@ -235,8 +259,8 @@ export function MesEnCursoPanel({
               </div>
 
               <div className="mt-5">
-                {publicidadHoy <= 0 ? (
-                  <Estado tono="aviso">Todavía no hay publicidad registrada este mes: la ganancia real va a ser menor.</Estado>
+                {r.origenPublicidad === 'sin_datos' ? (
+                  <Estado tono="aviso">{avisoPublicidad}</Estado>
                 ) : llega ? (
                   <Estado tono="ok">Por encima del objetivo.</Estado>
                 ) : (
@@ -246,8 +270,13 @@ export function MesEnCursoPanel({
                 )}
               </div>
 
-              <div className="mt-auto grid grid-cols-3 gap-4 border-t border-white/[0.06] pt-5">
+              <div className="mt-auto grid grid-cols-2 gap-4 border-t border-white/[0.06] pt-5 sm:grid-cols-4">
                 <Stat label="Vendido a hoy" value={formatArsCorto(r.aHoy.ventas)} hint={`${pedidosHoy} pedidos`} />
+                <Stat
+                  label="Gasto proyectado del mes"
+                  value={formatArsCorto(gastoProyectado)}
+                  hint={r.proyeccion.ventas > 0 ? `${formatPct(gastoProyectado / r.proyeccion.ventas)} de las ventas` : undefined}
+                />
                 <Stat
                   label="Ganancia a hoy"
                   value={formatArsCorto(r.aHoy.ganancia)}
@@ -276,6 +305,7 @@ export function MesEnCursoPanel({
           objetivo={objetivo}
           sinVentas={sinVentas}
           restantes={habiles.restantes}
+          aviso={avisoPublicidad && r.origenPublicidad !== 'lineal' ? avisoPublicidad : null}
         />
       </div>
 
@@ -323,6 +353,14 @@ export function MesEnCursoPanel({
                       tono="neutro"
                     />
                   ) : null}
+                  {ayer != null ? (
+                    <p className="text-xs text-muted-foreground">
+                      Ayer se gastaron <span className="text-foreground">{montoDia(ayer)}</span>
+                      {diaria > 0 && Math.abs(ayer / diaria - 1) >= 0.2
+                        ? ` (${ayer > diaria ? 'más' : 'menos'} que el promedio: ¿cambió algún presupuesto?)`
+                        : '.'}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -350,7 +388,19 @@ export function MesEnCursoPanel({
                       <span className="ml-2 text-lg font-medium text-muted-foreground">{formatPct(totalPub / ventasHoy)} de lo vendido</span>
                     ) : null}
                   </p>
-                  <ul className="mt-6 space-y-3">
+                  <div className="mt-4 rounded-2xl bg-white/[0.03] px-4 py-3">
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">Al ritmo actual, el mes cierra en</span>
+                      <span className={cn('tabular-nums font-medium', r.proyeccion.publicidad > Math.max(0, r.topePublicidad) && 'text-red-300')}>
+                        {formatArsCorto(r.proyeccion.publicidad)}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-baseline justify-between gap-3 text-xs text-muted-foreground">
+                      <span>Máximo para el {formatPct(objetivo)}</span>
+                      <span className="tabular-nums">{r.topePublicidad > 0 ? formatArsCorto(r.topePublicidad) : 'sin margen'}</span>
+                    </div>
+                  </div>
+                  <ul className="mt-5 space-y-3">
                     {plataformas.map((p) => (
                       <li key={p.label}>
                         <div className="flex items-baseline justify-between gap-3 text-sm">
@@ -374,7 +424,15 @@ export function MesEnCursoPanel({
                   ) : null}
                 </>
               ) : (
-                <p className="mt-2 text-sm text-muted-foreground">{loading ? 'Cargando…' : 'Todavía no hay publicidad registrada este mes.'}</p>
+                <>
+                  <p className="mt-2 text-sm text-muted-foreground">{loading ? 'Cargando…' : 'Todavía no hay publicidad registrada este mes.'}</p>
+                  {r.origenPublicidad === 'referencia' ? (
+                    <p className="mt-4 text-sm text-muted-foreground">
+                      Para los cálculos se estima con la de {etiquetaMesAnterior}:{' '}
+                      <span className="text-foreground">{formatArsCorto(r.proyeccion.publicidad)}</span>.
+                    </p>
+                  ) : null}
+                </>
               )}
             </div>
           </div>
@@ -499,9 +557,12 @@ function VentasPanel({
   objetivo,
   sinVentas,
   restantes,
+  aviso,
 }: {
   className?: string;
   restantes: number;
+  /** Supuesto de publicidad que afecta a «Necesario». */
+  aviso: string | null;
   serie: VentaDiaHabil[];
   hoy: string;
   ritmo: number;
@@ -576,7 +637,8 @@ function VentasPanel({
       </div>
 
       {!sinVentas && necesario != null ? (
-        <div className="mt-auto pt-6">
+        <div className="mt-auto space-y-2 pt-6">
+          {aviso ? <Estado tono="aviso">{aviso}</Estado> : null}
           {alcanza ? (
             <Estado tono="ok">El ritmo de ventas alcanza para el objetivo.</Estado>
           ) : (
