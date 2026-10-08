@@ -21,6 +21,8 @@ import {
   Upload,
   BookOpen,
   WalletCards,
+  Scaling,
+  ZoomIn,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -639,6 +641,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Economía ya no suma envíos Andreani con link',
         body: 'Si el cliente pagó el envío en Andreani (pedido con link), ese monto no entra a las ventas del mes. Se recalcula también en meses anteriores.',
         icon: WalletCards,
+      },
+    ],
+  },
+  {
+    id: 36,
+    date: '2026-10-08',
+    title: 'Novedades',
+    version: '1.54',
+    slides: [
+      {
+        heading: 'Achicá diseños en la hoja',
+        body: 'En Vectorización, arrastrá las esquinas de un diseño para escalarlo y dejar lugar a más logos en el mismo crédito. Doble clic vuelve al 100%.',
+        icon: Scaling,
+      },
+      {
+        heading: 'Zoom al revisar el vector',
+        body: 'En Revisión, tocá la comparación o Zoom: se abre base y vector juntos, con la misma lupa y arrastre para mirar detalles.',
+        icon: ZoomIn,
       },
     ],
   },

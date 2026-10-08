@@ -4,6 +4,14 @@ export const SHEET_MAX_PIXELS = 3_145_828;
 export const SHEET_GUTTER_PX = 24;
 export const SHEET_MAX_ITEMS = 12;
 export const UPSCALE_CAP = 2;
+/** Escala manual en la hoja: solo achicar (1 = tamaño preparado). */
+export const SHEET_SCALE_MIN = 0.25;
+export const SHEET_SCALE_MAX = 1;
+
+export function clampSheetScale(scale: number): number {
+  if (!Number.isFinite(scale)) return 1;
+  return Math.min(SHEET_SCALE_MAX, Math.max(SHEET_SCALE_MIN, scale));
+}
 
 export interface PackItem {
   id: string;

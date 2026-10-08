@@ -91,7 +91,7 @@ export function usePendientesRun() {
   const selectedPrepared = selectedSellos
     .map((sello) => store.prepared[sello.id])
     .filter((img): img is NonNullable<typeof img> => Boolean(img));
-  const sheets = packPrepared(selectedPrepared);
+  const sheets = packPrepared(selectedPrepared, store.sheetScales);
 
   const toggle = (id: string, shift: boolean) => {
     if (shift && lastClick.current) {
@@ -155,6 +155,7 @@ export function usePendientesRun() {
         images,
         mode: store.mode,
         upscale: store.maximizeResolution,
+        scales: state.sheetScales,
         onProgress: store.setProgress,
       });
       store.setResults(outcome.results.filter((r) => r.error || r.empty));

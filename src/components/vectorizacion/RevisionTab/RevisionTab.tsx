@@ -5,8 +5,9 @@ import { useVectorizacionStore } from '@/lib/state/vectorizacion.store';
 import { saveSelloVector } from '@/lib/vectorizacion/saveVector';
 import { downloadSvg, downloadBlob, zipDownloadName, zipVectorResults } from '@/lib/vectorizacion/zipResults';
 import type { ReviewItem } from '@/lib/vectorizacion/types';
-import { Check, Download, Replace, X } from 'lucide-react';
+import { Check, Download, Replace, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { ReviewCompareDialog } from './ReviewCompareDialog';
 
 function ReviewCard({
   item,
@@ -22,6 +23,7 @@ function ReviewCard({
   onChangeSvg: (svg: string) => void;
 }) {
   const [checker, setChecker] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const svgUrl = `data:image/svg+xml;utf8,${encodeURIComponent(item.svg)}`;
@@ -47,7 +49,12 @@ function ReviewCard({
 
   return (
     <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="grid grid-cols-2 gap-px bg-border">
+      <button
+        type="button"
+        className="grid w-full grid-cols-2 gap-px bg-border text-left transition-opacity hover:opacity-95"
+        onClick={() => setCompareOpen(true)}
+        title="Ampliar para comparar con zoom"
+      >
         <div className="flex aspect-square items-center justify-center bg-white p-2">
           <img src={item.beforeDataUrl} alt="" className="max-h-full max-w-full object-contain" />
         </div>
@@ -61,7 +68,7 @@ function ReviewCard({
         >
           <img src={svgUrl} alt="" className="max-h-full max-w-full object-contain" />
         </div>
-      </div>
+      </button>
       <div className="space-y-2 p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -105,6 +112,10 @@ function ReviewCard({
             <X className="mr-1 size-3.5" />
             Rechazar
           </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setCompareOpen(true)}>
+            <Search className="mr-1 size-3.5" />
+            Zoom
+          </Button>
           <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
             <Replace className="mr-1 size-3.5" />
             Cambiar
@@ -120,6 +131,14 @@ function ReviewCard({
           </Button>
         </div>
       </div>
+      <ReviewCompareDialog
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        title={`${item.designName} — ${item.clienteNombre}`}
+        beforeUrl={item.beforeDataUrl}
+        afterUrl={svgUrl}
+        checker={checker}
+      />
     </div>
   );
 }

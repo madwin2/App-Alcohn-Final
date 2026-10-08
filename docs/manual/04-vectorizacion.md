@@ -27,24 +27,26 @@ Muestra los sellos que tienen archivo base pero **todavía no tienen vector**. L
 ### Cómo se trabaja
 
 1. **Armá la hoja**. Tocá los diseños de la lista de la derecha: se van sumando a la **Hoja a vectorizar**. Varios diseños en una misma hoja cuestan **un solo crédito**, así que conviene llenar la hoja. La barra **Carga de la hoja** muestra cuánto lugar queda; si se llena, se arma otra hoja (se navega con las flechas).
-2. **Prepará cada imagen** (opcional). Clic derecho sobre un diseño:
+2. **Achicá si hace falta**. En la hoja, cada diseño tiene manijas en las esquinas: arrastrá para escalarlo (mínimo 25%). Sirve cuando un logo simple ocupa de más y querés meter más diseños en el mismo crédito. Doble clic en el diseño vuelve al 100%. El porcentaje aparece arriba a la izquierda si está achicado.
+3. **Prepará cada imagen** (opcional). Clic derecho sobre un diseño:
    - **Recortar…**: abre el editor de recorte (**Auto**, **Todo**, **Cuadrado**; **Aceptar** para confirmar). Sirve para sacar fondo o bordes que no van en el sello.
    - **Copiar imagen** → retocarla afuera (por ejemplo con IA) → **Reemplazar por Portapapeles**: guarda la versión mejorada **sin borrar la original** del cliente.
    - **Volver a la original**: descarta la versión mejorada.
    - **Abrir imagen en pestaña nueva**, **Guardar imagen**.
-3. Tocá **Vectorizar (N créditos)**. Se abre una confirmación con el costo y cómo queda el saldo. Confirmá.
-4. Mientras trabaja muestra **Vectorizando… %**. Cuando termina, los resultados pasan a **Revisión**.
+4. Tocá **Vectorizar (N créditos)**. Se abre una confirmación con el costo y cómo queda el saldo. Confirmá.
+5. Mientras trabaja muestra **Vectorizando… %**. Cuando termina, los resultados pasan a **Revisión**.
 
 ## Pestaña Revisión: controlar antes de guardar
 
 ⚠️ Nada se guarda en el pedido hasta que lo confirmás acá. Si cerrás o recargás la pestaña, **la revisión se recupera** en este mismo navegador (no en otra PC).
 
-Por cada diseño se ve el antes y el después (**Damero** muestra el fondo a cuadros para ver qué es transparente). Criterio de revisión: fiel al diseño, líneas rectas bien hechas, sin deformaciones.
+Por cada diseño se ve el antes y el después (**Damero** muestra el fondo a cuadros para ver qué es transparente). Criterio de revisión: fiel al diseño, líneas rectas bien hechas, sin deformaciones. Tocá la comparación o **Zoom** para ampliar base y vector juntos (misma lupa y arrastre).
 
 | Botón | Qué hace |
 |---|---|
 | **Confirmar** | Guarda el vector en el sello, con la medida pedida |
 | **Rechazar** | Lo descarta (el sello vuelve a pendientes) |
+| **Zoom** | Abre base y vector lado a lado con zoom sincronizado |
 | **Cambiar** (SVG) | Reemplaza el resultado por un SVG propio (por ejemplo, uno corregido en Illustrator) |
 | **Confirmar todos** / **Descargar todos** | Para toda la tanda |
 

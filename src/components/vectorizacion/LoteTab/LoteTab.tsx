@@ -22,7 +22,7 @@ export function LoteTab() {
     () => Object.values(store.prepared).filter((img) => !img.selloId),
     [store.prepared],
   );
-  const sheets = packPrepared(images);
+  const sheets = packPrepared(images, store.sheetScales);
   const byId = new Map(images.map((img) => [img.id, img]));
 
   const addFiles = useCallback(
@@ -67,6 +67,7 @@ export function LoteTab() {
         images,
         mode: store.mode,
         upscale: store.maximizeResolution,
+        scales: store.sheetScales,
         onProgress: store.setProgress,
       });
       store.setResults(outcome.results);
@@ -97,7 +98,14 @@ export function LoteTab() {
           />
         ))}
       </div>
-      {sheets.length ? <SheetPreview sheets={sheets} images={byId} /> : null}
+      {sheets.length ? (
+        <SheetPreview
+          sheets={sheets}
+          images={byId}
+          scales={store.sheetScales}
+          onScaleChange={store.setSheetScale}
+        />
+      ) : null}
       {store.running ? <ProgresoHojas sheets={store.progress} /> : null}
       <Button type="button" disabled={!images.length || store.running} onClick={() => void run()}>
         {store.mode === 'test' ? 'Probar lote (gratis)' : `Vectorizar lote (${sheets.length} créditos)`}

@@ -15,6 +15,7 @@
 ### Pedidos (pendientes)
 - ✅ Lista ítems `SELLO` con archivo base, **sin vector**, estado de vectorización ≠ `VECTORIZADO`, en `Sin Hacer` (o también `Rehacer`/`Prioridad` si se activa el toggle). Orden: prioritarios primero, después por fecha límite.
 - Al seleccionar, se **prepara** la imagen: se baja el base (o la **base mejorada**, o la imagen del mockup si viene de la web), se recorta (editor de recorte), se agrega margen y se limpia (niveles). Vista de la "hoja" que se va a mandar.
+- ✅ En la hoja se puede **achicar proporcionalmente** cada diseño desde las esquinas (25%–100%). Eso reduce el slot en el empaquetado (más diseños por crédito); al componer, se dibuja más chico en el PNG. Doble clic restaura 100%. Escala en `sheetScales` del store (sesión).
 - **Vectorizar**: diálogo de confirmación con el costo en créditos (1 por hoja) y el saldo. Modos: `production` (cobra), `test` (gratis, con marca de agua), `preview`.
 - Resultado → cola de **Revisión**.
 
@@ -25,14 +26,14 @@
 - ✅ Subir SVGs ya hechos (por otra vía) y emparejarlos automáticamente con pendientes por **nombre de archivo** (`matchByName`: normaliza, ignora palabras como "logo", "vector", "final", puntúa por bigramas). Confirmar → guarda cada SVG en su ítem (mismo `saveSelloVector`).
 
 ### Revisión
-- ✅ Cola **persistida en este navegador** (IndexedDB): si cerrás o recargás la pestaña, los SVG de revisión se recuperan al volver a Vectorización. No se sincroniza entre PCs. Por cada resultado: antes/después, **Confirmar** (guarda), **Rechazar**, **Reemplazar con un SVG propio**, descargar todo.
+- ✅ Cola **persistida en este navegador** (IndexedDB): si cerrás o recargás la pestaña, los SVG de revisión se recuperan al volver a Vectorización. No se sincroniza entre PCs. Por cada resultado: antes/después, **Confirmar** (guarda), **Rechazar**, **Reemplazar con un SVG propio**, descargar todo. **Zoom**: clic en la comparación o botón Zoom abre un diálogo base|vector con zoom y pan sincronizados.
 
 ## Pipeline (✅)
 
 ```mermaid
 flowchart LR
   A["Base / base mejorada / mockup"] --> B["Preparar<br/>recorte · margen · niveles"]
-  B --> C["Empaquetar en hojas<br/>≤12 imágenes · ≤3,1 MP · gutter 24 px"]
+  B --> C["Empaquetar en hojas<br/>≤12 imágenes · ≤3,1 MP · gutter 24 px<br/>(escala manual 25–100%)"]
   C --> D["POST /api/vectorize<br/>(Vercel → Vectorizer.AI)<br/>4 en paralelo, reintentos 429/5xx"]
   D --> E["Partir el SVG de la hoja<br/>en un SVG por imagen"]
   E --> F["Revisión humana"]

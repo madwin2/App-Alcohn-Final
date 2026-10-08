@@ -1,6 +1,6 @@
 import { composeSheet } from './sheetCompose';
 import { mapPool } from './helpers';
-import { packSheets } from './sheetPacking';
+import { clampSheetScale, packSheets } from './sheetPacking';
 import { splitSheetSvg } from './svgSplit';
 import { vectorizeSheet } from './vectorizerApi';
 import type { PackedSheet, PreparedImage, SheetProgress, VectorResult } from './types';
@@ -12,6 +12,8 @@ export interface RunOptions {
   images: PreparedImage[];
   mode: VectorizeMode;
   upscale: boolean;
+  /** Escala por imagen (1 = tamaño preparado). Solo achica el slot en la hoja. */
+  scales?: Record<string, number>;
   onProgress?: (sheets: SheetProgress[]) => void;
 }
 
@@ -20,9 +22,21 @@ export interface RunOutcome {
   sheets: SheetProgress[];
 }
 
-export function packPrepared(images: PreparedImage[]): PackedSheet[] {
+export function packPrepared(
+  images: PreparedImage[],
+  scales?: Record<string, number>,
+): PackedSheet[] {
   const usable = images.filter((img) => !img.empty);
-  return packSheets(usable.map((img) => ({ id: img.id, w: img.width, h: img.height })));
+  return packSheets(
+    usable.map((img) => {
+      const scale = clampSheetScale(scales?.[img.id] ?? 1);
+      return {
+        id: img.id,
+        w: Math.max(1, Math.round(img.width * scale)),
+        h: Math.max(1, Math.round(img.height * scale)),
+      };
+    }),
+  );
 }
 
 /** Pipeline puro: bitmaps → SVGs. No escribe en la base ni en Storage. */
@@ -40,7 +54,7 @@ export async function runVectorizacion(opts: RunOptions): Promise<RunOutcome> {
       error: 'sin contenido detectado',
     }));
 
-  const sheets = packPrepared(opts.images);
+  const sheets = packPrepared(opts.images, opts.scales);
   const progress: SheetProgress[] = sheets.map((sheet, index) => ({
     index,
     total: sheets.length,
