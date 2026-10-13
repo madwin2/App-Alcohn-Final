@@ -1,16 +1,13 @@
 import { memo, useEffect } from 'react';
-import { 
-  Home, 
-  ShoppingCart, 
-  Layers, 
-  Factory, 
+import {
+  Home,
+  ShoppingCart,
+  Layers,
+  Factory,
   Truck,
-  Calendar, 
-  CheckCircle, 
-  MessageCircle, 
+  Calendar,
   User,
   ChevronLeft,
-  ChevronRight,
   LogOut,
   Wallet,
   Package,
@@ -18,8 +15,6 @@ import {
   Tag,
   Sparkles,
   TrendingUp,
-  Settings,
-  BookOpen,
   AlertTriangle,
   Pin,
 } from 'lucide-react';
@@ -47,8 +42,6 @@ const sidebarItems = [
   { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },
   { icon: Calendar, label: 'Programas', path: '/programas' },
   { icon: AlertTriangle, label: 'Errores', path: '/errores', disabled: false },
-  { icon: CheckCircle, label: 'Verificación', path: '/verificacion', disabled: true },
-  { icon: MessageCircle, label: 'WhatsApp Bot', path: '/whatsapp', disabled: false },
 ];
 
 function SidebarInner() {
@@ -81,7 +74,7 @@ function SidebarInner() {
         description: 'Has cerrado sesión correctamente',
       });
       navigate('/login');
-    } catch (error: any) {
+    } catch {
       toast({
         title: 'Error',
         description: 'No se pudo cerrar sesión',
@@ -93,86 +86,84 @@ function SidebarInner() {
   const userEmail = user?.email || 'usuario@empresa.com';
   const isRestrictedUser = isFbTestUser(user);
   const isEconomiaUser = !isRestrictedUser && user?.email?.toLowerCase() === 'julian.475@hotmail.com';
-  const userName = user?.user_metadata?.nombre 
+  const userName = user?.user_metadata?.nombre
     ? `${user.user_metadata.nombre} ${user.user_metadata.apellido || ''}`.trim()
     : 'Usuario Actual';
   const profileImage = getUserProfileImage(userName);
 
   return (
-    <div 
+    <div
       className={cn(
-        "fixed left-4 top-4 bottom-4 flex flex-col bg-card/95 backdrop-blur-sm border rounded-2xl shadow-2xl transition-[width,box-shadow,background-color] duration-200 ease-out",
-        "hover:shadow-3xl hover:bg-card/98",
-        isExpanded ? "w-64 z-40" : "w-16 z-30"
+        'fixed left-4 top-4 bottom-4 flex flex-col bg-card/95 backdrop-blur-sm border rounded-2xl shadow-2xl transition-[width,box-shadow,background-color] duration-200 ease-out',
+        'hover:shadow-3xl hover:bg-card/98',
+        isExpanded ? 'w-64 z-40' : 'w-16 z-30',
       )}
       onMouseEnter={() => setSidebarHovered(true)}
       onMouseLeave={() => setSidebarHovered(false)}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border/50">
-        <div className={cn(
-          "transition-all duration-200 ease-out overflow-hidden",
-          isExpanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"
-        )}>
-          <h2 className="text-lg font-semibold whitespace-nowrap">App Interna</h2>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setSidebarExpanded(!sidebarExpanded)}
-          className="h-8 w-8 rounded-full transition-all duration-300 hover:scale-110 hover:bg-accent/50"
+      <div
+        className={cn(
+          'flex items-center border-b border-border/50 p-4',
+          isExpanded ? 'justify-between' : 'justify-center',
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (!sidebarExpanded) setSidebarExpanded(true);
+          }}
+          className="flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={sidebarExpanded ? 'Alcohn' : 'Abrir menú'}
+          title={sidebarExpanded ? undefined : 'Abrir menú'}
         >
-          <div className="transition-transform duration-300 ease-in-out">
-            {sidebarExpanded ? (
-              <ChevronLeft className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </div>
-        </Button>
+          {/* PNG negro sin fondo; invert = blanco sobre la barra oscura */}
+          <img
+            src="/logo-alcohn.png"
+            alt="Alcohn"
+            className="h-8 w-8 shrink-0 object-contain invert"
+            draggable={false}
+          />
+        </button>
+        {isExpanded && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarExpanded(false)}
+            className="h-8 w-8 rounded-full transition-all duration-300 hover:scale-110 hover:bg-accent/50"
+            aria-label="Cerrar menú"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       {/* Navigation Items */}
       <nav className="flex-1 flex flex-col p-3 space-y-1 items-stretch">
         {sidebarItems.map((item) => {
-          const disabled = Boolean(item.disabled) || (isRestrictedUser && item.path !== '/whatsapp');
+          const disabled = Boolean(item.disabled) || isRestrictedUser;
           return (
-          <div
-            key={item.path}
-            className="flex justify-start"
-          >
-            <SidebarItem
-              icon={item.icon}
-              label={item.label}
-              isActive={
-                item.path === '/'
-                  ? location.pathname === '/'
-                  : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
-              }
-              isExpanded={isExpanded}
-              disabled={disabled}
-              badgeCount={disabled ? 0 : badgeForPath(item.path)}
-              onClick={() => {
-                if (!disabled) {
-                  navigate(item.path);
+            <div key={item.path} className="flex justify-start">
+              <SidebarItem
+                icon={item.icon}
+                label={item.label}
+                isActive={
+                  item.path === '/'
+                    ? location.pathname === '/'
+                    : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
                 }
-              }}
-            />
-          </div>
+                isExpanded={isExpanded}
+                disabled={disabled}
+                badgeCount={disabled ? 0 : badgeForPath(item.path)}
+                onClick={() => {
+                  if (!disabled) {
+                    navigate(item.path);
+                  }
+                }}
+              />
+            </div>
           );
         })}
-        {!isRestrictedUser && (
-          <div className="flex justify-start">
-            <SidebarItem
-              icon={User}
-              label="Mi perfil"
-              isActive={location.pathname === '/perfil'}
-              isExpanded={isExpanded}
-              disabled={false}
-              onClick={() => navigate('/perfil')}
-            />
-          </div>
-        )}
         {!isRestrictedUser && esMiembroActivo && (
           <div className="flex justify-start">
             <SidebarItem
@@ -183,20 +174,6 @@ function SidebarInner() {
               disabled={false}
               badgeCount={corchoBadge}
               onClick={() => navigate('/corcho')}
-            />
-          </div>
-        )}
-        {!isRestrictedUser && (
-          <div className="flex justify-start">
-            <SidebarItem
-              icon={BookOpen}
-              label="Centro Alcohn"
-              isActive={
-                location.pathname === '/centro' || location.pathname.startsWith('/centro/')
-              }
-              isExpanded={isExpanded}
-              disabled={false}
-              onClick={() => navigate('/centro')}
             />
           </div>
         )}
@@ -236,24 +213,26 @@ function SidebarInner() {
             }}
           />
         </div>
-        <div className="flex justify-start">
-          <SidebarItem
-            icon={Settings}
-            label="Áreas"
-            isActive={location.pathname === '/configuracion'}
-            isExpanded={isExpanded}
-            disabled={isRestrictedUser}
-            onClick={() => {
-              if (!isRestrictedUser) navigate('/configuracion');
-            }}
-          />
-        </div>
       </nav>
 
-      {/* User Profile */}
+      {/* User Profile → Mi perfil */}
       <div className="border-t border-border/50 p-4 space-y-2">
-        <div className="flex items-center gap-3 justify-start">
-          <div className="rounded-full overflow-hidden flex items-center justify-center shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl h-10 w-10 shrink-0 bg-gradient-to-br from-blue-500 to-purple-600">
+        <button
+          type="button"
+          onClick={() => {
+            if (!isRestrictedUser) navigate('/perfil');
+          }}
+          disabled={isRestrictedUser}
+          className={cn(
+            'flex w-full items-center gap-3 justify-start rounded-xl p-1 -m-1 text-left transition-colors',
+            !isRestrictedUser && 'hover:bg-accent/40 active:scale-[0.99]',
+            location.pathname === '/perfil' && !isRestrictedUser && 'bg-accent/30',
+            isRestrictedUser && 'cursor-default',
+          )}
+          title={!isExpanded ? 'Mi perfil' : undefined}
+          aria-label="Mi perfil"
+        >
+          <div className="rounded-full overflow-hidden flex items-center justify-center shadow-lg transition-all duration-300 h-10 w-10 shrink-0 bg-gradient-to-br from-blue-500 to-purple-600">
             {profileImage ? (
               <img
                 src={profileImage}
@@ -265,14 +244,16 @@ function SidebarInner() {
               <User className="h-5 w-5 text-white" />
             )}
           </div>
-          <div className={cn(
-            "transition-all duration-700 ease-in-out overflow-hidden",
-            isExpanded ? "opacity-100 max-w-[200px] ml-2" : "opacity-0 max-w-0 ml-0"
-          )}>
+          <div
+            className={cn(
+              'transition-all duration-700 ease-in-out overflow-hidden',
+              isExpanded ? 'opacity-100 max-w-[200px] ml-2' : 'opacity-0 max-w-0 ml-0',
+            )}
+          >
             <p className="text-sm font-medium truncate">{userName}</p>
             <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
           </div>
-        </div>
+        </button>
         {isExpanded && (
           <Button
             variant="ghost"

@@ -154,7 +154,7 @@ export function NotificationBell() {
           type="button"
           aria-label="Notificaciones"
           className={cn(
-            'fixed bottom-6 right-6 z-50 flex h-[52px] w-[52px] items-center justify-center md:bottom-8 md:right-8',
+            'relative flex h-[52px] w-[52px] items-center justify-center',
             'rounded-full border border-white/10',
             'bg-gradient-to-br from-zinc-900/95 via-black/70 to-black/95',
             'shadow-[0_12px_30px_-8px_rgba(0,0,0,0.85)] backdrop-blur-sm',

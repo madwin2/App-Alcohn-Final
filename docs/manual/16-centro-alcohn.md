@@ -4,7 +4,7 @@
 
 El **Centro Alcohn** es la guía dentro de la app: manual por pantallas, problemas frecuentes, un recorrido si estás empezando, y un asistente que responde con fuentes. Más adelante se suma Sobre Alcohn y las actividades del taller.
 
-Entrá desde el menú lateral (**Centro Alcohn**) o andá a `/centro`.
+Entrá con el botón del **libro** abajo a la derecha (arriba de la campanita de notificaciones), o andá a `/centro`.
 
 ## Qué hay en la portada
 

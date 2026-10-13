@@ -27,7 +27,6 @@ A la izquierda está el menú. Está achicado (solo íconos): pasá el mouse por
 | Opción | Qué es |
 |---|---|
 | **Inicio** | Tu pantalla personal ([capítulo 2](02-inicio.md)) |
-| **Mi perfil** | Tu espacio personal: calendario, tareas y equipo ([capítulo 18](18-mi-perfil.md)) |
 | **Pedidos** | La tabla de todos los pedidos ([capítulo 3](03-pedidos.md)) |
 | **Envíos** | Datos de envío, etiquetas y despachos ([capítulo 7](07-envios.md)) |
 | **Stock** | Insumos ([capítulo 8](08-stock.md)) |
@@ -38,12 +37,11 @@ A la izquierda está el menú. Está achicado (solo íconos): pasá el mouse por
 | **Producción** | Tabla de sellos para fabricar ([capítulo 6](06-produccion.md)) |
 | **Programas** | Programas de la CNC ([capítulo 5](05-programas.md)) |
 | **Errores** | Rehaceres: métricas y archivos del error ([capítulo 17](17-errores.md)) |
-| **Centro Alcohn** | Manual, búsqueda y asistente ([capítulo 16](16-centro-alcohn.md)) |
-| **Verificación** | Aparece en gris: todavía no existe |
-| **WhatsApp Bot** | Conexión con Meta ([capítulo 14](14-configuracion-y-whatsapp.md)) |
-| **Economía**, **Gastos**, **Precios**, **Áreas** | Administración ([capítulos 12 a 14](13-economia-y-gastos.md)). Economía y Gastos solo los ve Julián |
+| **Economía**, **Gastos**, **Precios** | Administración ([capítulos 12 y 13](13-economia-y-gastos.md)). Economía y Gastos solo los ve Julián |
 
-Abajo del menú está tu nombre y el botón **Cerrar Sesión**.
+Abajo del menú está tu foto y nombre: tocá esa zona para ir a **Mi perfil** ([capítulo 18](18-mi-perfil.md)). Ahí mismo está **Cerrar Sesión**.
+
+El **Centro Alcohn** (manual y asistente) no está en el menú: se abre con el botón del libro, abajo a la derecha, arriba de la campanita de notificaciones ([capítulo 16](16-centro-alcohn.md)).
 
 ### Los numeritos del menú
 
@@ -57,7 +55,7 @@ Algunas opciones muestran un número rojo:
 
 ## La campanita (notificaciones)
 
-Arriba a la derecha, en todas las pantallas, está la campanita de **Notificaciones**. Te avisa de cosas que hizo **otra persona o la app** y que tocan tu trabajo. No son los mensajes al cliente (esos van por WhatsApp).
+Abajo a la derecha, en todas las pantallas, está la campanita de **Notificaciones** (debajo del botón del Centro Alcohn). Te avisa de cosas que hizo **otra persona o la app** y que tocan tu trabajo. No son los mensajes al cliente (esos van por WhatsApp).
 
 - El número indica cuántas tenés sin leer.
 - Tocá una notificación para ir directo al pedido: la app abre la pantalla y lo busca por el teléfono del cliente.

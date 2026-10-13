@@ -4,7 +4,7 @@
 
 ## Áreas (Configuración)
 
-Se llega desde **Áreas** en el menú. Define **qué avisos de la campanita recibe cada persona**. No da ni quita permisos: todos ven todas las pantallas.
+La pantalla ya no está en el menú lateral; se abre en `/configuracion`. Define **qué avisos de la campanita recibe cada persona**. No da ni quita permisos: todos ven todas las pantallas.
 
 La tabla **Áreas de usuarios** tiene una fila por **Usuario** y tres áreas: **Producción**, **Ventas** y **Logística**. Marcá las que correspondan; una persona puede estar en más de una.
 
@@ -20,7 +20,7 @@ La tabla **Áreas de usuarios** tiene una fila por **Usuario** y tres áreas: **
 
 ## WhatsApp Bot
 
-Se llega desde **WhatsApp Bot** en el menú. Es la pantalla para **conectar la cuenta de WhatsApp Business de Alcohn con Meta**.
+La pantalla ya no está en el menú lateral; se abre en `/whatsapp`. Es para **conectar la cuenta de WhatsApp Business de Alcohn con Meta**.
 
 - **Estado**: si la cuenta está conectada.
 - **Diagnóstico**: **Cuenta de WhatsApp**, **Número** y **Negocio**.

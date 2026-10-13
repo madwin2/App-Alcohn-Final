@@ -63,7 +63,7 @@ Ver [04-business-rules/fabricacion.md](../../04-business-rules/fabricacion.md).
 
 ## Verificación
 
-✅ En la barra lateral hay un ítem **"Verificación"** deshabilitado (`/verificacion`), sin ruta ni código. Existe el estado de fabricación `Verificar` (1 sello en la base) y el flag `programa.verificado`. ✅ Por ahora no hay proceso ni módulo de Verificación (Q-PROD-006). `Verificar` = Producción duda y lo chequea Ventas; `Retocar` = detalle corregible.
+✅ No hay ítem de Verificación en la barra lateral ni ruta `/verificacion`. Existe el estado de fabricación `Verificar` (1 sello en la base) y el flag `programa.verificado`. ✅ Por ahora no hay proceso ni módulo de Verificación (Q-PROD-006). `Verificar` = Producción duda y lo chequea Ventas; `Retocar` = detalle corregible.
 
 ## Rendimiento (observación)
 

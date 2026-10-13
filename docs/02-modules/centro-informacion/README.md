@@ -26,7 +26,7 @@ Leer el Centro o consultar al chat **no cambia pedidos**, no dispara WhatsApp ni
 | `/centro?seccion=actividades` | Estado vacío de actividades |
 | `/centro?seccion=manual` | Índice del manual |
 
-Menú: **Centro Alcohn** (ícono libro). Visible para todo el equipo autenticado (excepto FBTEST). Fuera de `OrdersScopeLayout`. Economía/Gastos siguen solo para el dueño.
+Acceso: botón flotante (ícono libro) arriba de la campanita de notificaciones, abajo a la derecha. Visible para todo el equipo autenticado (excepto FBTEST). Fuera de `OrdersScopeLayout`. Economía/Gastos siguen solo para el dueño.
 
 ## Fuentes publicadas
 

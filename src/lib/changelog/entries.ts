@@ -917,6 +917,47 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 51,
+    date: '2026-10-13',
+    title: 'Mi perfil y Corcho',
+    version: '1.69',
+    slides: [
+      {
+        heading: 'Mi perfil',
+        body: 'Tu espacio en la app: vacaciones, tareas del día, anotaciones, pedidos al equipo, crecimiento, feedback y tus números. Entrá desde el menú o tu foto.',
+        icon: UserCircle,
+      },
+      {
+        heading: 'Corcho de ideas',
+        body: 'En el menú Corcho pinchás ideas para mejorar la empresa, votás y comentás. Julián puede aprobar o descartar.',
+        icon: Pin,
+      },
+      {
+        heading: 'La guía está al entrar',
+        body: 'La primera vez que abras Mi perfil te mostramos cada sección y dónde están los botones importantes.',
+        icon: BookOpen,
+      },
+    ],
+  },
+  {
+    id: 52,
+    date: '2026-10-13',
+    title: 'Menú más limpio',
+    version: '1.70',
+    slides: [
+      {
+        heading: 'Centro Alcohn al lado de la campanita',
+        body: 'El manual y el asistente se abren con el botón del libro, abajo a la derecha, arriba de las notificaciones. Ya no está en el menú.',
+        icon: BookOpen,
+      },
+      {
+        heading: 'Menú más corto',
+        body: 'Sacamos del menú Verificación, Áreas y WhatsApp Bot. Mi perfil se abre tocando tu foto y nombre abajo del menú.',
+        icon: Filter,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

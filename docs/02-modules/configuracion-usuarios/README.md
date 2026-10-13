@@ -18,4 +18,4 @@
 
 ## Configuración
 
-✅ Única función: asignar a cada usuario aprobado sus **áreas de notificación** (`produccion`, `logistica`, `ventas`) en `usuario_area`. No da permisos: solo define quién recibe qué notificaciones.
+✅ Ruta `/configuracion` (ya no está en el menú lateral). Única función: asignar a cada usuario aprobado sus **áreas de notificación** (`produccion`, `logistica`, `ventas`) en `usuario_area`. No da permisos: solo define quién recibe qué notificaciones.
