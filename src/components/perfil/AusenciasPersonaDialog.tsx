@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils/cn'
+import { DIALOGO } from '@/components/perfil/perfilUi'
 import {
   Dialog,
   DialogContent,
@@ -214,7 +216,7 @@ export function AusenciasPersonaDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className={cn(DIALOGO, 'max-h-[90vh] overflow-y-auto sm:max-w-lg')}>
           <DialogHeader>
             <DialogTitle>Ausencias de {perfil.nombre}</DialogTitle>
             <DialogDescription>

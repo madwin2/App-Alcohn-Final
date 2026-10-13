@@ -78,3 +78,7 @@ Reglas que el equipo **confirmó** (respuestas a `14-open-questions`, 2026-09-28
 | POL-072 | Varias atrasadas de la misma tarea → **una sola tarjeta** "atrasada (N veces)" (S14). | Q-EQ-024 · REVISION_USABILIDAD | Sí (`agruparAtrasadas`) |
 | POL-073 | El arrastre **no es retroactivo**: cuenta desde la publicación de la función (S15). | Q-EQ-024 · REVISION_USABILIDAD | Sí (`FECHA_INICIO_ARRASTRE_TAREAS`) |
 | POL-074 | Reposición de stock (`tareas_dashboard`) **no** va al calendario de tareas (S17). | Q-EQ-024 · REVISION_USABILIDAD | Sí (sin cambios) |
+| POL-075 | Corcho: el admin **no** edita ideas de otros (solo cambia el estado). | Q-EQ-025 · revisión corcho 2026-10-09 | Sí (UI) |
+| POL-076 | Corcho: una idea **con votos no se edita** (ni por el autor). | Q-EQ-026 · revisión corcho 2026-10-09 | Sí (UI + servicio); RLS en `migration_equipo_corcho_v2.sql` pendiente de OK |
+| POL-077 | Corcho: se puede **comentar** una idea o **solo votar**, como cada uno quiera. Aviso al autor (`e5_idea_comentario`). | Q-EQ-027 · revisión corcho 2026-10-09 | Parcial (código; tabla en `migration_equipo_corcho_v2.sql` pendiente de OK) |
+| POL-078 | Corcho: las **descartadas se esconden** por defecto (filtro **Activas**); se ven en **Descartadas** o **Todas**. | Q-EQ-028 · revisión corcho 2026-10-09 | Sí |

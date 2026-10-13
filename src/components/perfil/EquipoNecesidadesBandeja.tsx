@@ -10,6 +10,7 @@ import {
 } from '@/lib/supabase/services/equipoNecesidades.service';
 import { notifyNecesidadResuelta } from '@/lib/notificaciones/events';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { Panel, PanelTitle } from '@/components/perfil/perfilUi';
 
 function fmtFecha(iso: string): string {
   try {
@@ -84,34 +85,43 @@ export function EquipoNecesidadesBandeja({ nombresPorUserId }: EquipoNecesidades
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Necesidades pendientes…
-      </div>
+      <Panel>
+        <PanelTitle title="Pedidos del equipo" />
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Cargando…
+        </p>
+      </Panel>
     );
   }
 
   if (items.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-white/10 px-4 py-4 text-xs text-muted-foreground">
-        No hay necesidades pendientes del equipo.
-      </div>
+      <Panel>
+        <PanelTitle title="Pedidos del equipo" sub="Lo que piden desde «Lo que necesito»" />
+        <p className="text-sm text-muted-foreground">No hay pedidos pendientes.</p>
+      </Panel>
     );
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <h3 className="text-sm font-semibold text-white">Necesidades pendientes</h3>
-      <ul className="space-y-3">
+    <Panel>
+      <PanelTitle
+        title="Pedidos del equipo"
+        sub={`${items.length} ${items.length === 1 ? 'pendiente' : 'pendientes'} · al resolver, la persona recibe un aviso`}
+      />
+      <ul className="space-y-2">
         {items.map((n) => {
           const nombre = nombresPorUserId[n.userId] || 'Integrante';
           return (
-            <li key={n.id} className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
-              <p className="font-medium text-white">{nombre}</p>
-              <p className="mt-1 text-muted-foreground">{n.texto}</p>
-              <p className="mt-1 text-[10px] text-muted-foreground">{fmtFecha(n.createdAt)}</p>
+            <li key={n.id} className="rounded-2xl bg-white/[0.03] p-4 text-sm">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="font-medium">{nombre}</p>
+                <p className="shrink-0 text-xs text-muted-foreground">{fmtFecha(n.createdAt)}</p>
+              </div>
+              <p className="mt-1 text-foreground/85">{n.texto}</p>
               <Textarea
-                className="mt-2 min-h-[60px] text-xs"
+                className="mt-3 min-h-[60px] resize-none rounded-xl border-0 bg-black/20 text-sm focus-visible:ring-1 focus-visible:ring-white/15 focus-visible:ring-offset-0"
                 placeholder="Respuesta opcional para la persona…"
                 value={respuestas[n.id] ?? ''}
                 onChange={(e) =>
@@ -121,7 +131,8 @@ export function EquipoNecesidadesBandeja({ nombresPorUserId }: EquipoNecesidades
               <Button
                 type="button"
                 size="sm"
-                className="mt-2 gap-1.5"
+                variant="ghost"
+                className="mt-2 h-8 gap-1.5 rounded-full bg-white/[0.08] px-3.5 text-xs hover:bg-white/[0.14]"
                 disabled={resolviendoId === n.id}
                 onClick={() => void handleResolver(n)}
               >
@@ -136,6 +147,6 @@ export function EquipoNecesidadesBandeja({ nombresPorUserId }: EquipoNecesidades
           );
         })}
       </ul>
-    </div>
+    </Panel>
   );
 }

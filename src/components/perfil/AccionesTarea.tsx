@@ -129,8 +129,8 @@ export function AccionesTarea({
       <Button
         type="button"
         size="sm"
-        variant="secondary"
-        className="h-7 gap-1 px-2 text-xs"
+        variant="ghost"
+        className="h-8 gap-1.5 rounded-full bg-white/[0.08] px-3.5 text-xs hover:bg-white/[0.14]"
         disabled={busy || disabled}
         onClick={() => void handleHecha()}
       >
@@ -148,7 +148,7 @@ export function AccionesTarea({
             type="button"
             size="sm"
             variant="ghost"
-            className="h-7 gap-0.5 px-2 text-xs"
+            className="h-8 gap-0.5 rounded-full px-3 text-xs text-muted-foreground hover:bg-white/[0.08] hover:text-foreground"
             disabled={busy || disabled}
           >
             Más
@@ -221,13 +221,13 @@ export function AccionesTarea({
             type="date"
             value={fechaMover}
             onChange={e => setFechaMover(e.target.value)}
-            className="h-7 rounded-md border border-input bg-transparent px-2 text-xs"
+            className="h-8 rounded-full bg-white/[0.06] px-3 text-xs [color-scheme:dark]"
             disabled={busy || disabled}
           />
           <Button
             type="button"
             size="sm"
-            className="h-7 px-2 text-xs"
+            className="h-8 rounded-full px-3 text-xs"
             disabled={busy || disabled || !fechaMover}
             onClick={() => void handleMover()}
           >
@@ -237,7 +237,7 @@ export function AccionesTarea({
             type="button"
             size="sm"
             variant="ghost"
-            className="h-7 px-2 text-xs"
+            className="h-8 rounded-full px-3 text-xs"
             disabled={busy}
             onClick={() => setMoverAbierto(false)}
           >

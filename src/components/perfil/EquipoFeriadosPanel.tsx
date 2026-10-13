@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/components/ui/use-toast';
 import { argentinaDateParts } from '@/lib/utils/argentinaDate';
+import { Aviso, BotonIcono, CAMPO, Panel, PanelTitle } from '@/components/perfil/perfilUi';
 import {
   borrarFeriado,
   crearFeriadoEmpresa,
@@ -139,60 +140,61 @@ export function EquipoFeriadosPanel({ onImported }: EquipoFeriadosPanelProps = {
   const nacionalesCount = feriados.filter((f) => f.origen === 'nacional').length;
 
   return (
-    <div className="space-y-4 rounded-xl border border-white/10 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-white">Feriados</h3>
-          <p className="text-xs text-muted-foreground">
-            Nacionales importados y días propios de la empresa. No cuentan como días hábiles de
-            vacaciones.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={importing}
-            onClick={() => void handleImport(year)}
-          >
-            {importing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-            Importar feriados {year}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={importing}
-            onClick={() => void handleImport(year + 1)}
-          >
-            Importar {year + 1}
-          </Button>
-        </div>
-      </div>
+    <Panel className="space-y-5">
+      <PanelTitle
+        title="Feriados"
+        sub="Nacionales importados y días propios de la empresa. No cuentan como días hábiles (vacaciones, metas y Economía)."
+        right={
+          <div className="flex flex-wrap justify-end gap-1.5">
+            {[year, year + 1].map((y) => (
+              <Button
+                key={y}
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-full bg-white/[0.06] px-3 text-xs hover:bg-white/[0.1]"
+                disabled={importing}
+                onClick={() => void handleImport(y)}
+              >
+                {importing && y === year ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                Importar {y}
+              </Button>
+            ))}
+          </div>
+        }
+      />
 
       {sugerirActual || sugerirSiguiente ? (
-        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+        <Aviso>
           Faltan feriados nacionales de{' '}
           {[sugerirActual ? String(year) : null, sugerirSiguiente ? String(year + 1) : null]
             .filter(Boolean)
             .join(' y ')}
           . Importalos con los botones de arriba.
-        </p>
+        </Aviso>
       ) : null}
 
       {loading ? (
-        <p className="text-xs text-muted-foreground">Cargando…</p>
+        <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : (
-        <p className="text-xs text-muted-foreground">
-          {nacionalesCount} nacionales · {empresa.length} de la empresa (en {year}–{year + 1})
-        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-[13px] text-muted-foreground">Nacionales</p>
+            <p className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight">{nacionalesCount}</p>
+            <p className="text-xs text-muted-foreground">{year}–{year + 1}</p>
+          </div>
+          <div>
+            <p className="text-[13px] text-muted-foreground">De la empresa</p>
+            <p className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight">{empresa.length}</p>
+            <p className="text-xs text-muted-foreground">{year}–{year + 1}</p>
+          </div>
+        </div>
       )}
 
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <div className="space-y-1.5">
           <Label>Día de la empresa</Label>
-          <div className="rounded-md border border-input px-3 py-2">
+          <div className={CAMPO}>
             <DatePicker
               date={fechaEmpresa}
               onDateChange={setFechaEmpresa}
@@ -212,7 +214,8 @@ export function EquipoFeriadosPanel({ onImported }: EquipoFeriadosPanelProps = {
         <Button
           type="button"
           size="sm"
-          className="gap-1"
+          variant="ghost"
+          className="h-10 gap-1 rounded-full bg-white/[0.08] px-4 hover:bg-white/[0.14]"
           disabled={savingEmpresa}
           onClick={() => void handleEmpresa()}
         >
@@ -222,26 +225,20 @@ export function EquipoFeriadosPanel({ onImported }: EquipoFeriadosPanelProps = {
       </div>
 
       {empresa.length > 0 ? (
-        <ul className="divide-y divide-white/[0.06] rounded-lg border border-white/10">
+        <ul className="space-y-1.5">
           {empresa.map((f) => (
-            <li key={f.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
-              <span className="text-muted-foreground">
-                <span className="text-white">{f.fecha}</span> · {f.nombre}
+            <li key={f.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white/[0.03] px-4 py-2 text-sm">
+              <span>
+                {f.nombre}
+                <span className="text-muted-foreground"> · {f.fecha.split('-').reverse().join('/')}</span>
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => void handleBorrar(f)}
-                aria-label="Borrar feriado"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
+              <BotonIcono label="Borrar feriado" peligro onClick={() => void handleBorrar(f)}>
+                <Trash2 />
+              </BotonIcono>
             </li>
           ))}
         </ul>
       ) : null}
-    </div>
+    </Panel>
   );
 }

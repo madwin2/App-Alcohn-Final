@@ -1,0 +1,153 @@
+/*
+ * Tema claro de la Home nueva: el bloque abierto del acordeón (modo escritorio) va con fondo
+ * blanco. El contenido de los paneles está pensado sobre negro (texto y rellenos en blanco con
+ * opacidad), así que acá se dan vuelta esas utilidades a tinta oscura dentro de `.tema-claro`.
+ * Lo que tenga `.tema-fijo` (tooltips negros) queda como está.
+ */
+.tema-claro {
+  --tinta: 28 22 18;
+  color: rgb(var(--tinta));
+}
+.tema-claro .text-white:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta));
+}
+.tema-claro .text-white\/20:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.33);
+}
+.tema-claro .text-white\/25:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.38);
+}
+.tema-claro .text-white\/30:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.43);
+}
+.tema-claro .text-white\/35:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.49);
+}
+.tema-claro .text-white\/40:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.54);
+}
+.tema-claro .text-white\/45:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.59);
+}
+.tema-claro .text-white\/50:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.65);
+}
+.tema-claro .text-white\/55:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.7);
+}
+.tema-claro .text-white\/60:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.75);
+}
+.tema-claro .text-white\/65:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.8);
+}
+.tema-claro .text-white\/70:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.85);
+}
+.tema-claro .text-white\/75:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.91);
+}
+.tema-claro .text-white\/80:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.96);
+}
+.tema-claro .text-white\/85:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 1);
+}
+.tema-claro .text-white\/90:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 1);
+}
+.tema-claro .hover\:text-white\/80:hover:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 0.96);
+}
+.tema-claro .group:hover .group-hover\:text-white\/80 {
+  color: rgb(var(--tinta) / 0.96);
+}
+.tema-claro .hover\:text-white\/85:hover:not(.tema-fijo, .tema-fijo *) {
+  color: rgb(var(--tinta) / 1);
+}
+.tema-claro .group:hover .group-hover\:text-white\/85 {
+  color: rgb(var(--tinta) / 1);
+}
+.tema-claro .bg-white\/\[0\.03\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.039);
+}
+.tema-claro .hover\:bg-white\/\[0\.03\]:hover:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.039);
+}
+.tema-claro .bg-white\/\[0\.035\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.046);
+}
+.tema-claro .hover\:bg-white\/\[0\.035\]:hover:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.046);
+}
+.tema-claro .bg-white\/\[0\.04\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.052);
+}
+.tema-claro .hover\:bg-white\/\[0\.04\]:hover:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.052);
+}
+.tema-claro .bg-white\/\[0\.05\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.065);
+}
+.tema-claro .hover\:bg-white\/\[0\.05\]:hover:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.065);
+}
+.tema-claro .bg-white\/\[0\.06\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.078);
+}
+.tema-claro .hover\:bg-white\/\[0\.06\]:hover:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.078);
+}
+.tema-claro .bg-white\/\[0\.08\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.104);
+}
+.tema-claro .hover\:bg-white\/\[0\.08\]:hover:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.104);
+}
+.tema-claro .bg-white\/\[0\.18\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.234);
+}
+.tema-claro .hover\:bg-white\/\[0\.18\]:hover:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.234);
+}
+.tema-claro .bg-white\/\[0\.22\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.286);
+}
+.tema-claro .hover\:bg-white\/\[0\.22\]:hover:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.286);
+}
+.tema-claro .bg-white\/\[0\.35\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.455);
+}
+.tema-claro .hover\:bg-white\/\[0\.35\]:hover:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.455);
+}
+.tema-claro .bg-white\/10:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.1);
+}
+.tema-claro .bg-white\/40:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.35);
+}
+.tema-claro .bg-white\/50:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.4);
+}
+.tema-claro .border-white\/\[0\.05\]:not(.tema-fijo, .tema-fijo *) {
+  border-color: rgb(var(--tinta) / 0.1);
+}
+.tema-claro .border-white\/\[0\.06\]:not(.tema-fijo, .tema-fijo *) {
+  border-color: rgb(var(--tinta) / 0.1);
+}
+.tema-claro .bg-black\/40:not(.tema-fijo, .tema-fijo *) {
+  background-color: rgb(var(--tinta) / 0.07);
+  color: rgb(var(--tinta));
+}
+.tema-claro .text-\[\#f6a33d\]:not(.tema-fijo, .tema-fijo *) {
+  color: #b5440f;
+}
+.tema-claro .bg-\[\#f6a33d\]:not(.tema-fijo, .tema-fijo *) {
+  background-color: #e06b17;
+}
+/* Tono neutro de las barras de urgencia (va en style, en blanco). */
+.tema-claro [style*='255,255,255,0.28'] {
+  background-color: rgb(var(--tinta) / 0.22) !important;
+}

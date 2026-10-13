@@ -3,11 +3,14 @@ import {
   conteoVotos,
   contarIdeasNuevas,
   esIdeaNuevaParaMi,
+  fechaRelativaCorcho,
   filtrarIdeasCorcho,
   fraseEstadoIdeaNotificacion,
   labelEstadoIdea,
   mergeNuevasSesion,
   ordenarIdeasCorcho,
+  puedeBorrarIdea,
+  puedeEditarIdea,
   puedeVotarIdea,
   puntajeIdea,
   siguienteVoto,
@@ -127,6 +130,56 @@ describe('corcho', () => {
       'nueva-alta',
       'vieja-alta',
     ]);
+  });
+
+  it('activas (default) esconde las descartadas', () => {
+    const items = [
+      idea({ id: '1', autorUserId: 'a', estado: 'propuesta' }),
+      idea({ id: '2', autorUserId: 'b', estado: 'aprobada' }),
+      idea({ id: '3', autorUserId: 'a', estado: 'descartada' }),
+    ];
+    expect(
+      filtrarIdeasCorcho(items, { viewerUserId: 'yo', estado: 'activas' }).map((x) => x.id),
+    ).toEqual(['1', '2']);
+    expect(filtrarIdeasCorcho(items, { viewerUserId: 'yo', estado: 'todas' })).toHaveLength(3);
+  });
+
+  it('filtro y orden usan las Nueva de la sesión si se pasan', () => {
+    // Ya marcada vista en la base, pero sigue siendo "Nueva" en esta sesión.
+    const items = [
+      idea({ id: 'vieja', autorUserId: 'a', vistaPorMi: true, votos: [{ userId: 'x', valor: 1 }] }),
+      idea({ id: 'sesion', autorUserId: 'b', vistaPorMi: true }),
+    ];
+    const sesion = new Set(['sesion']);
+    const esNueva = (i: IdeaCorchoBase) => sesion.has(i.id);
+    expect(
+      filtrarIdeasCorcho(items, { viewerUserId: 'yo', soloNuevas: true, esNueva }).map((x) => x.id),
+    ).toEqual(['sesion']);
+    expect(ordenarIdeasCorcho(items, 'yo', 'nuevas_puntaje', esNueva).map((x) => x.id)).toEqual([
+      'sesion',
+      'vieja',
+    ]);
+  });
+
+  it('editar: solo el autor, en propuesta y sin votos (POL-076)', () => {
+    const base = { autorUserId: 'yo', estado: 'propuesta' as const, votos: [] };
+    expect(puedeEditarIdea(base, 'yo')).toBe(true);
+    expect(puedeEditarIdea(base, 'otro')).toBe(false);
+    expect(puedeEditarIdea({ ...base, votos: [{ userId: 'x', valor: -1 }] }, 'yo')).toBe(false);
+    expect(puedeEditarIdea({ ...base, estado: 'aprobada' }, 'yo')).toBe(false);
+    expect(puedeBorrarIdea({ autorUserId: 'yo', estado: 'propuesta' }, 'yo')).toBe(true);
+    expect(puedeBorrarIdea({ autorUserId: 'yo', estado: 'aprobada' }, 'yo')).toBe(false);
+  });
+
+  it('fecha relativa', () => {
+    const ahora = new Date('2026-10-09T15:00:00Z');
+    expect(fechaRelativaCorcho('2026-10-09T14:59:40Z', ahora)).toBe('recién');
+    expect(fechaRelativaCorcho('2026-10-09T14:55:00Z', ahora)).toBe('hace 5 min');
+    expect(fechaRelativaCorcho('2026-10-09T12:00:00Z', ahora)).toBe('hace 3 h');
+    expect(fechaRelativaCorcho('2026-10-08T12:00:00Z', ahora)).toBe('ayer');
+    expect(fechaRelativaCorcho('2026-10-05T12:00:00Z', ahora)).toBe('hace 4 días');
+    expect(fechaRelativaCorcho('2026-09-20T15:00:00Z', ahora)).toMatch(/^20 sep/);
+    expect(fechaRelativaCorcho('2025-09-20T15:00:00Z', ahora)).toMatch(/2025/);
   });
 
   it('cuenta ideas nuevas', () => {

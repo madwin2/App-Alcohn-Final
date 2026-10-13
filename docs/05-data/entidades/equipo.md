@@ -14,6 +14,7 @@ Tablas del plan [Mi perfil](../../02-modules/perfil/README.md) / [`PLAN_PAGINA_P
 | `feedback_equipo` | Feedback del admin (`felicitacion` \| `mejora` \| `correccion`, Markdown, `leido_at`, **`editado_at`** al editar tipo/título/texto — columna en migración pendiente). | SELECT destinatario o admin (S10); ALL escritura solo admin (`autor_user_id = auth.uid()`). Tras editar, app limpia `leido_at` (POL-059). |
 | `ideas_corcho` | Ideas del corcho compartido (`propuesta` \| `aprobada` \| `descartada`). | SELECT authenticated; INSERT propia en propuesta; UPDATE/DELETE autor si propuesta o admin. Migración: `migration_equipo_corcho.sql`. Realtime. |
 | `ideas_corcho_votos` | Votos 👍/👎 (`valor` 1 \| −1). PK `(idea_id, user_id)`. | SELECT authenticated; ALL solo propio y **no** sobre idea propia (S11). Realtime. |
+| `ideas_corcho_comentarios` | Comentarios en ideas (POL-077). No se editan. `texto` 1–2000 caracteres. | SELECT/INSERT miembros activos (propio); DELETE propio o admin. Migración: `migration_equipo_corcho_v2.sql` (**pendiente de OK**; sin ella el corcho anda sin comentarios). Realtime. |
 | `ideas_corcho_vistas` | Ideas ya vistas por cada persona (cartel “Nueva”, D14). | ALL solo `user_id = auth.uid()`. |
 
 Funciones auxiliares: `es_admin_equipo()` (`SECURITY DEFINER`); **`es_miembro_equipo()`** (perfil activo — **pendiente de aplicar**, `migration_equipo_fix_rls.sql`, POL-057).
@@ -26,7 +27,7 @@ RPC: `pausar_tarea_recurrente(p_id, p_activa)`; `marcar_feedback_leido(p_id)` (s
 
 **Tareas recurrentes**: lógica de ocurrencias en `src/lib/equipo/tareasRecurrentes.ts` (mensual D21: fin de semana/feriado → día hábil siguiente; **unica**: solo la fecha en `semana_inicio`). No reutilizar `tareas_dashboard` (completar ahí borra la fila).
 
-**Corcho**: lógica de orden/filtro/votos en `src/lib/equipo/corcho.ts`. Separado de Innovación (D22). Ruta `/corcho` + pestaña “Mis ideas” en el perfil.
+**Corcho**: lógica de orden/filtro/votos/permisos de edición en `src/lib/equipo/corcho.ts`. `migration_equipo_corcho_v2.sql` (pendiente de OK) restringe las tablas del corcho a **miembros activos** (`es_miembro_equipo()`, POL-057), impide editar con votos (POL-076), bloquea votar descartadas en la base (EQ-R34), limita el título a 120 y crea los comentarios; reemplaza la parte de corcho de `migration_equipo_fix_rls.sql`. Hoy en producción rige la RLS original: SELECT/INSERT para **cualquier** usuario autenticado. Separado de Innovación (D22). Ruta `/corcho` + pestaña “Mis ideas” en el perfil.
 
 **Mis números** (Etapa 7): sin tablas nuevas. Lectura filtrada por fecha de `estado_historial` (producción: `campo` + `estado_nuevo` Hecho / VECTORIZADO; D11 atribuye todo Hecho al área producción), `ordenes.envio_datos_cargado_por` / `envio_datos_cargado_at`, `envio_eventos.created_by` (etiquetas: **envíos distintos** por orden y período, POL-062). Lógica de períodos en `src/lib/equipo/misNumeros.ts`; consultas en `equipoNumeros.service.ts`. Galería desde `sellos` (`foto_sello` / `archivo_vector_preview`) + cliente de la orden.
 

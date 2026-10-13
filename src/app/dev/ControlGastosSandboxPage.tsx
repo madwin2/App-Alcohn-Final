@@ -32,10 +32,10 @@ const HISTORIAL = Array.from({ length: 27 }, (_, i) => {
 });
 const FERIADOS = ['2026-10-12'];
 const RECURRENTES = [
-  { id: 'h', nombre: 'Hetzner', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 38, ivaAplica: true, diaDelMes: 1, activo: true },
-  { id: 'c', nombre: 'Canva', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 15, ivaAplica: true, diaDelMes: 3, activo: true },
-  { id: 'w', nombre: 'Dominio y hosting web', categoria: 'automatizaciones' as const, moneda: 'ARS' as const, monto: 25_000, ivaAplica: false, diaDelMes: 10, activo: true },
-  { id: 'f', nombre: 'Bot Francisco (servidor)', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 20, ivaAplica: true, diaDelMes: 5, activo: false },
+  { id: 'h', nombre: 'Hetzner', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 38, ivaAplica: true, diaDelMes: 1, activo: true, mesesExcluidos: [] },
+  { id: 'c', nombre: 'Canva', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 15, ivaAplica: true, diaDelMes: 3, activo: true, mesesExcluidos: [] },
+  { id: 'w', nombre: 'Dominio y hosting web', categoria: 'automatizaciones' as const, moneda: 'ARS' as const, monto: 25_000, ivaAplica: false, diaDelMes: 10, activo: true, mesesExcluidos: [] },
+  { id: 'f', nombre: 'Bot Francisco (servidor)', categoria: 'automatizaciones' as const, moneda: 'USD' as const, monto: 20, ivaAplica: true, diaDelMes: 5, activo: false, mesesExcluidos: [] },
 ];
 const BLUE = 1545;
 
@@ -224,10 +224,10 @@ export default function ControlGastosSandboxPage() {
               esc === 'sin-conectar'
                 ? []
                 : [
-                    { id: 'h', nombre: 'Hetzner', categoria: 'automatizaciones', moneda: 'USD', monto: 38, ivaAplica: true, diaDelMes: 1, activo: true },
-                    { id: 'c', nombre: 'Canva', categoria: 'automatizaciones', moneda: 'USD', monto: 15, ivaAplica: true, diaDelMes: 3, activo: true },
-                    { id: 'w', nombre: 'Dominio y hosting web', categoria: 'automatizaciones', moneda: 'ARS', monto: 25_000, ivaAplica: false, diaDelMes: 10, activo: true },
-                    { id: 'f', nombre: 'Bot Francisco (servidor)', categoria: 'automatizaciones', moneda: 'USD', monto: 20, ivaAplica: true, diaDelMes: 5, activo: false },
+                    { id: 'h', nombre: 'Hetzner', categoria: 'automatizaciones', moneda: 'USD', monto: 38, ivaAplica: true, diaDelMes: 1, activo: true, mesesExcluidos: [] },
+                    { id: 'c', nombre: 'Canva', categoria: 'automatizaciones', moneda: 'USD', monto: 15, ivaAplica: true, diaDelMes: 3, activo: true, mesesExcluidos: [] },
+                    { id: 'w', nombre: 'Dominio y hosting web', categoria: 'automatizaciones', moneda: 'ARS', monto: 25_000, ivaAplica: false, diaDelMes: 10, activo: true, mesesExcluidos: [] },
+                    { id: 'f', nombre: 'Bot Francisco (servidor)', categoria: 'automatizaciones', moneda: 'USD', monto: 20, ivaAplica: true, diaDelMes: 5, activo: false, mesesExcluidos: [] },
                   ]
             }
           />

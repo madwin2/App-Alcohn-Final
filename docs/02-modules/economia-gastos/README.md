@@ -56,9 +56,9 @@ Margen = valor − costo (por ítem y por orden).
 
 ✅ Plan: [`PLAN_CONTROL_GASTOS.md`](../../../PLAN_CONTROL_GASTOS.md) · Decisión: [control-de-gastos](../../13-decisions/control-de-gastos.md) · Integraciones: [gastos-automaticos](../../07-integrations/gastos-automaticos.md).
 
-- **Tablas**: `gastos_registros` (un día × campaña/proyecto/recurrente, en su moneda original), `gastos_pagos_usd` (pagos de los USD de un mes), `gastos_recurrentes`, `cotizaciones_usd` (blue venta diario), `control_gastos_config` (objetivo 25 %, IVA 21 %, otros impuestos USD 2 %, `fecha_inicio` 2026-09-29), `gastos_sync_log`. RLS: solo la cuenta dueña (`precios_catalog_owner_user_id()`).
+- **Tablas**: `gastos_registros` (un día × campaña/proyecto/recurrente, en su moneda original), `gastos_pagos_usd` (pagos de los USD de un mes), `gastos_recurrentes`, `cotizaciones_usd` (blue venta diario), `control_gastos_config` (objetivo 25 %, IVA 21 %, otros impuestos USD 2 %, `fecha_inicio` **2025-09-01** desde 2026-10-07 — antes 2026-09-29), `gastos_sync_log`. RLS: solo la cuenta dueña (`precios_catalog_owner_user_id()`).
 - **Valuación** (`src/lib/gastos/gastosAuto.ts`, con tests): el gasto cuenta en el **mes en que ocurrió**; los USD se pasan a pesos con el **blue del día del pago** (pagos cargados en Gastos → «Marcar pago»); lo no pagado, al **blue de hoy** («estimado»). En la categoría va gasto + IVA; el 2 % de otros recargos va a `impuestos`. El valor en pesos no se guarda: se calcula al leer.
-- **Economía**: `sumarGastosAutoAMeses` **suma** lo automático a lo cargado a mano en `economia_gastos_mensuales` (no lo persiste). Desde `fecha_inicio` no hay que cargar a mano la publicidad de la tarjeta (se duplicaría). Meses anteriores no cambian.
+- **Economía**: `sumarGastosAutoAMeses` **suma** lo automático a lo cargado a mano en `economia_gastos_mensuales` (no lo persiste). Desde `fecha_inicio` no hay que cargar a mano la publicidad de la tarjeta (se duplicaría). Ver «Publicidad real retroactiva».
 - **Gastos**: tarjeta «Gastos automáticos» (desglose por plataforma/campaña, estado de sync, «Actualizar ahora», «Marcar pago») y «Gastos recurrentes».
 - **Economía → Mes en curso** (pestaña por defecto): ventas y ganancia a hoy (fijos prorrateados), proyección a fin de mes (ventas al ritmo del mes; publicidad al ritmo de los últimos 7 días) y **publicidad por día** que permite llegar al objetivo (también en USD aprox.). Si el mes no tiene fijos cargados, usa los del mes anterior.
 - **Días hábiles** (`src/lib/gastos/diasHabiles.ts`): lunes a viernes menos la tabla `feriados` (calendario del equipo, POL-046). En Mes en curso las **ventas** se proyectan por día hábil (ritmo = ventas de hábiles terminados ÷ hábiles terminados) y lo vendido un día no hábil se imputa al **hábil siguiente** (criterio POL-071); la **publicidad** se proyecta por **día corrido**. Los fijos «a hoy» se prorratean por hábiles.
@@ -68,3 +68,33 @@ Margen = valor − costo (por ítem y por orden).
 - Pendiente (Etapa 2): alertas automáticas, atribución de ventas por campaña.
 
 ❓ Preguntas: [economia.md](../../14-open-questions/economia.md).
+
+## Publicidad real retroactiva (2026-10-07)
+
+Decisión del dueño (2026-10-07): **desde septiembre 2025 la publicidad de cada mes es la real de Meta y Google** (por día y campaña, `gastos_registros`), no el total del resumen de la tarjeta cargado a mano.
+
+- `control_gastos_config.fecha_inicio` = **2025-09-01**. OpenAI **no** se trae para atrás (`OPENAI_DESDE` = 2026-09-29 en `gastos-sync`): antes de esa fecha, automatizaciones siguen siendo las cargadas a mano.
+- Carga histórica: Meta con `gastos-sync` `{ "meta_desde": "2025-09-01" }` (de a un mes); Google con `scripts/google-ads/enviar-gastos-historico.js` (se corre **una vez** desde Google Ads).
+- Dólar histórico (oficial y blue venta diarios) cargado en `cotizaciones_usd` desde ArgentinaDatos (`fuente = 'argentinadatos'`).
+- **Pago de cada mes** = blue venta del **día 10 del mes siguiente** (aprox. pago de la tarjeta). Desde 2026-10-07 lo aplica la app sola para **todo mes sin pago marcado** una vez pasado ese día (`completarPagosAutomaticos`, se ve como «automático» en Gastos); nadie tiene que marcar pagos. Un pago cargado a mano tiene prioridad. Los meses 2025-09 a 2026-08 además tienen el pago guardado en `gastos_pagos_usd` (nota «retroactivo», `scripts/sql/pagos-usd-retroactivos.sql`).
+- La publicidad manual de 2025-09 a 2026-09 se puso en **0** (no había otra publicidad aparte de Meta y Google, confirmado por el dueño). Valores originales (resumen de tarjeta, ARS) como respaldo:
+
+| Mes | Publicidad manual original |
+|---|---|
+| 2025-09 | 1.771.000 |
+| 2025-10 | 1.236.200 |
+| 2025-11 | 2.279.100 |
+| 2025-12 | 3.515.550 |
+| 2026-01 | 2.354.000 |
+| 2026-02 | 1.982.000 |
+| 2026-03 | 2.498.000 |
+| 2026-04 | 3.500.000 |
+| 2026-05 | 2.615.000 |
+| 2026-06 | 3.569.000 |
+| 2026-07 | 3.200.000 |
+| 2026-08 | 3.347.000 |
+| 2026-09 | 5.221.000 |
+
+- **Automatizaciones (2026-10-07, segunda parte):** OpenAI y Claude también se trajeron para atrás (`gastos-sync` `{ "automatizaciones_desde": "2025-09-01" }`, de a un mes): OpenAI solo guarda el último año (desde 2025-10-07); Claude tiene consumo desde 2026-04. Los 6 recurrentes de octubre se generaron para cada mes 2025-09 a 2026-09 (`generar_gastos_recurrentes` con el último día de cada mes). El dueño acomoda a mano lo que queda en «automatizaciones» de cada mes (no se tocó). Los pagos «retroactivo» se borraron: la regla automática del día 10 cubre todos los dólares del mes.
+- **Recurrentes por mes (2026-10-07):** en Gastos cada recurrente tiene la casilla «este mes»: la prende o apaga **solo en el mes que se mira** (borra o crea su registro de ese mes y guarda el mes en `gastos_recurrentes.meses_excluidos`, que `generar_gastos_recurrentes` respeta; migración `migration_gastos_recurrentes_meses_excluidos.sql`). «Se sigue cobrando» (antes «Activo») es la marca general: afecta desde el mes en curso y no toca meses pasados.
+- ❓ Pendiente de confirmar: los «impuestos» cargados a mano en esos meses (0 a 1,25 M) — si incluyen recargos de la tarjeta sobre los dólares, el 2 % automático los duplica (≈ 2 % de la publicidad del mes).

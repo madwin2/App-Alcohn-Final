@@ -39,8 +39,9 @@
 | `e3_necesidad_resuelta` | (autor del pedido) | info | El admin marcó resuelta una necesidad | TS (`notifyNecesidadResuelta`) → `/perfil?tab=necesidades` |
 | `e4_feedback_nuevo` | (destinatario) | info | El admin dejó feedback (el título dice el **tipo**, no el contenido) | TS (`notifyFeedbackNuevo`) → `/perfil?tab=feedback` |
 | `e4_feedback_editado` | (destinatario) | info | El admin editó un feedback que la persona ya había leído (POL-059) | TS (`notifyFeedbackEditado`) → `/perfil?tab=feedback` |
-| `e5_idea_nueva` | (equipo menos el autor) | info | Alguien pinchó una idea en el corcho | TS (`notifyIdeaNueva`) → `/corcho` |
-| `e5_idea_estado` | (autor de la idea) | info | El admin aprobó o descartó su idea | TS (`notifyIdeaEstado`) → `/corcho` |
+| `e5_idea_nueva` | (equipo menos el autor) | info | Alguien pinchó una idea en el corcho | TS (`notifyIdeaNueva`) → `/corcho?idea=<id>` |
+| `e5_idea_estado` | (autor de la idea) | info | El admin aprobó o descartó su idea | TS (`notifyIdeaEstado`) → `/corcho?idea=<id>` |
+| `e5_idea_comentario` | (autor de la idea, si no es quien comenta) | info | Alguien comentó su idea (POL-077) | TS (`notifyIdeaComentario`) → `/corcho?idea=<id>` |
 
 ## Abrir una notificación
 

@@ -23,6 +23,7 @@ import {
 import { useToast } from '@/components/ui/use-toast';
 import { useNombreAdmin } from '@/lib/hooks/useNombreAdmin';
 import { cn } from '@/lib/utils/cn';
+import { BotonIcono, CAMPO, DIALOGO, Estado, Etiqueta, Panel, PanelTitle, type Tono } from '@/components/perfil/perfilUi';
 import { parseOrderDateLocal } from '@/lib/utils/format';
 import {
   labelEstadoObjetivo,
@@ -72,11 +73,11 @@ function fmtFechaKey(key: string): string {
   }
 }
 
-const ESTADO_BADGE: Record<EstadoObjetivo, string> = {
-  pendiente: 'bg-white/10 text-muted-foreground',
-  en_curso: 'bg-sky-500/20 text-sky-200',
-  logrado: 'bg-emerald-500/20 text-emerald-200',
-  abandonado: 'bg-zinc-500/20 text-zinc-400',
+const ESTADO_TONO: Record<EstadoObjetivo, Tono> = {
+  pendiente: 'neutro',
+  en_curso: 'aviso',
+  logrado: 'ok',
+  abandonado: 'neutro',
 };
 
 type FormState = {
@@ -112,60 +113,37 @@ function ObjetivoCard({
 }) {
   const next = siguienteEstadoObjetivo(item.estado);
   return (
-    <li className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm">
+    <li className={cn('group rounded-2xl bg-white/[0.03] px-4 py-3 text-sm', item.estado === 'abandonado' && 'opacity-60')}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                'rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
-                ESTADO_BADGE[item.estado],
-              )}
-            >
-              {labelEstadoObjetivo(item.estado)}
-            </span>
-            {item.fechaObjetivo ? (
-              <span className="text-[10px] text-muted-foreground">
-                Meta: {fmtFechaKey(item.fechaObjetivo)}
-              </span>
+          <p className="text-foreground">{item.titulo}</p>
+          {item.descripcion ? (
+            <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{item.descripcion}</p>
+          ) : null}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <Estado tono={ESTADO_TONO[item.estado]} className="text-xs text-muted-foreground">
+              {item.estado === 'logrado' && item.logradoAt
+                ? `Logrado el ${fmtFecha(item.logradoAt)}`
+                : labelEstadoObjetivo(item.estado)}
+            </Estado>
+            {item.fechaObjetivo && item.estado !== 'logrado' ? (
+              <span>Meta: {fmtFechaKey(item.fechaObjetivo)}</span>
             ) : null}
           </div>
-          <p className="mt-1.5 font-medium text-white">{item.titulo}</p>
-          {item.descripcion ? (
-            <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap">{item.descripcion}</p>
-          ) : null}
-          {item.estado === 'logrado' && item.logradoAt ? (
-            <p className="mt-1.5 text-[10px] text-emerald-300/80">
-              Logrado el {fmtFecha(item.logradoAt)}
-            </p>
-          ) : null}
         </div>
         {!readOnly ? (
-          <div className="flex shrink-0 gap-1">
+          <div className="flex shrink-0 opacity-60 transition-opacity group-hover:opacity-100">
             {next ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                title={`Pasar a ${labelEstadoObjetivo(next)}`}
-                onClick={onAvanzar}
-              >
-                <Check className="h-3.5 w-3.5" />
-              </Button>
+              <BotonIcono label={`Pasar a ${labelEstadoObjetivo(next)}`} onClick={onAvanzar}>
+                <Check />
+              </BotonIcono>
             ) : null}
-            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              onClick={onBorrar}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+            <BotonIcono label="Editar" onClick={onEdit}>
+              <Pencil />
+            </BotonIcono>
+            <BotonIcono label="Borrar" peligro onClick={onBorrar}>
+              <Trash2 />
+            </BotonIcono>
           </div>
         ) : null}
       </div>
@@ -175,6 +153,7 @@ function ObjetivoCard({
 
 function Columna({
   titulo,
+  sub,
   tipo,
   activos,
   logrados,
@@ -185,6 +164,7 @@ function Columna({
   onBorrar,
 }: {
   titulo: string;
+  sub?: string;
   tipo: TipoObjetivo;
   activos: ObjetivoPersonal[];
   logrados: ObjetivoPersonal[];
@@ -195,20 +175,29 @@ function Columna({
   onBorrar?: (o: ObjetivoPersonal) => void;
 }) {
   return (
-    <section className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-white">{titulo}</h3>
-        {!readOnly && onNuevo ? (
-          <Button type="button" size="sm" variant="outline" className="gap-1.5 h-8" onClick={() => onNuevo(tipo)}>
-            <Plus className="h-3.5 w-3.5" />
-            Agregar
-          </Button>
-        ) : null}
-      </div>
+    <Panel>
+      <PanelTitle
+        title={titulo}
+        sub={sub}
+        right={
+          !readOnly && onNuevo ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 rounded-full bg-white/[0.06] px-3 hover:bg-white/[0.1]"
+              onClick={() => onNuevo(tipo)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Agregar
+            </Button>
+          ) : null
+        }
+      />
       {activos.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Todavía no hay nada acá.</p>
+        <p className="text-sm text-muted-foreground">Todavía no hay nada acá.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-1.5">
           {activos.map((o) => (
             <ObjetivoCard
               key={o.id}
@@ -222,9 +211,9 @@ function Columna({
         </ul>
       )}
       {logrados.length > 0 ? (
-        <div className="space-y-2 pt-2 border-t border-white/10">
-          <h4 className="text-xs font-medium text-emerald-300/90">Logrados</h4>
-          <ul className="space-y-2">
+        <div className="mt-6">
+          <Etiqueta>Logrados · {logrados.length}</Etiqueta>
+          <ul className="space-y-1.5">
             {logrados.map((o) => (
               <ObjetivoCard
                 key={o.id}
@@ -237,7 +226,7 @@ function Columna({
           </ul>
         </div>
       ) : null}
-    </section>
+    </Panel>
   );
 }
 
@@ -388,11 +377,14 @@ export function CrecimientoTab({ readOnly, items: itemsProp }: CrecimientoTabPro
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">Esto lo ven vos y {adminNombre}.</p>
+      {!readOnly ? (
+        <p className="text-sm text-muted-foreground">Esto lo ven vos y {adminNombre}.</p>
+      ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <Columna
           titulo="Mis objetivos"
+          sub="Lo que querés lograr en tu trabajo"
           tipo="objetivo"
           activos={parts.objetivosActivos as ObjetivoPersonal[]}
           logrados={parts.objetivosLogrados as ObjetivoPersonal[]}
@@ -404,6 +396,7 @@ export function CrecimientoTab({ readOnly, items: itemsProp }: CrecimientoTabPro
         />
         <Columna
           titulo="Quiero aprender"
+          sub="Temas, herramientas u oficios"
           tipo="aprender"
           activos={parts.aprenderActivos as ObjetivoPersonal[]}
           logrados={parts.aprenderLogrados as ObjetivoPersonal[]}
@@ -417,7 +410,7 @@ export function CrecimientoTab({ readOnly, items: itemsProp }: CrecimientoTabPro
 
       {!readOnly ? (
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className={cn(DIALOGO, 'sm:max-w-md')}>
             <DialogHeader>
               <DialogTitle>{form.id ? 'Editar' : 'Agregar'}</DialogTitle>
               <DialogDescription>
@@ -460,10 +453,12 @@ export function CrecimientoTab({ readOnly, items: itemsProp }: CrecimientoTabPro
               </div>
               <div className="space-y-1.5">
                 <Label>Fecha objetivo (opcional)</Label>
-                <DatePicker
-                  date={form.fechaObjetivo}
-                  onDateChange={(d) => setForm((f) => ({ ...f, fechaObjetivo: d }))}
-                />
+                <div className={CAMPO}>
+                  <DatePicker
+                    date={form.fechaObjetivo}
+                    onDateChange={(d) => setForm((f) => ({ ...f, fechaObjetivo: d }))}
+                  />
+                </div>
               </div>
             </div>
             <DialogFooter>

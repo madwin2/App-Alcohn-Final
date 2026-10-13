@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Pencil, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils/cn';
+import { BotonIcono, Estado, Panel, PanelTitle } from '@/components/perfil/perfilUi';
 import { getMiembrosEquipo } from '@/lib/supabase/services/equipo.service';
 import {
   actualizarNecesidadPendiente,
@@ -143,132 +144,133 @@ export function NecesidadesTab({
   }
 
   return (
-    <div className="space-y-6">
-      <p className="text-xs text-muted-foreground">
-        Pedí algo puntual (herramienta, insumo, lo que sea). Lo ves vos y {adminNombre}; cuando lo resuelva te
-        avisa acá.
-      </p>
-
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-white">Nuevo pedido</h3>
+    <div className="grid items-start gap-4 xl:grid-cols-12">
+      <Panel className="xl:col-span-4">
+        <PanelTitle
+          title="Pedir algo"
+          sub={`Herramienta, insumo o lo que haga falta. Lo ven vos y ${adminNombre}; cuando lo resuelva te avisa.`}
+        />
         <Textarea
           value={nuevoTexto}
           onChange={(e) => setNuevoTexto(e.target.value)}
           placeholder="Ej.: Repuesto para la CNC, guantes talla M…"
-          className="min-h-[80px] text-sm"
+          className="min-h-[120px] resize-none rounded-2xl border-0 bg-black/20 p-4 text-sm focus-visible:ring-1 focus-visible:ring-white/15 focus-visible:ring-offset-0"
         />
-        <Button
-          type="button"
-          size="sm"
-          className="gap-1.5"
-          disabled={saving || !nuevoTexto.trim()}
-          onClick={() => void handleCrear()}
-        >
-          <Plus className="h-4 w-4" />
-          Enviar pedido
-        </Button>
-      </div>
+        <div className="mt-3 flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-9 gap-1.5 rounded-full bg-white/[0.08] px-4 hover:bg-white/[0.14]"
+            disabled={saving || !nuevoTexto.trim()}
+            onClick={() => void handleCrear()}
+          >
+            <Send className="h-3.5 w-3.5" />
+            Enviar pedido
+          </Button>
+        </div>
+      </Panel>
 
-      <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-white">Pendientes</h3>
-        {pendientes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No tenés pedidos pendientes.</p>
-        ) : (
-          <ul className="space-y-2">
-            {pendientes.map((n) => (
-              <li
-                key={n.id}
-                className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3 text-sm"
-              >
-                {editId === n.id ? (
-                  <div className="space-y-2">
-                    <Textarea value={editTexto} onChange={(e) => setEditTexto(e.target.value)} />
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={saving}
-                        onClick={() => void handleGuardarEdicion(n.id)}
-                      >
-                        Guardar
-                      </Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setEditId(null)}>
-                        Cancelar
-                      </Button>
+      <div className="grid items-start gap-4 lg:grid-cols-2 xl:col-span-8">
+        <Panel>
+          <PanelTitle
+            title="Pendientes"
+            sub={pendientes.length ? `${pendientes.length} esperando respuesta` : undefined}
+          />
+          {pendientes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No tenés pedidos pendientes.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {pendientes.map((n) => (
+                <li key={n.id} className="group rounded-2xl bg-white/[0.03] px-4 py-3 text-sm">
+                  {editId === n.id ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={editTexto}
+                        onChange={(e) => setEditTexto(e.target.value)}
+                        className="resize-none rounded-xl border-0 bg-black/20 focus-visible:ring-1 focus-visible:ring-white/15 focus-visible:ring-offset-0"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="rounded-full"
+                          onClick={() => setEditId(null)}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="rounded-full"
+                          disabled={saving}
+                          onClick={() => void handleGuardarEdicion(n.id)}
+                        >
+                          Guardar
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-white">{n.texto}</p>
-                      <p className="mt-1 text-[10px] text-muted-foreground">{fmtFecha(n.createdAt)}</p>
+                  ) : (
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-foreground">{n.texto}</p>
+                        <Estado tono="aviso" className="mt-1 text-xs text-muted-foreground">
+                          Pendiente · {fmtFecha(n.createdAt)}
+                        </Estado>
+                      </div>
+                      <div className="flex shrink-0 opacity-60 transition-opacity group-hover:opacity-100">
+                        <BotonIcono
+                          label="Editar"
+                          onClick={() => {
+                            setEditId(n.id);
+                            setEditTexto(n.texto);
+                          }}
+                        >
+                          <Pencil />
+                        </BotonIcono>
+                        <BotonIcono label="Borrar" peligro onClick={() => void handleBorrar(n)}>
+                          <Trash2 />
+                        </BotonIcono>
+                      </div>
                     </div>
-                    <div className="flex shrink-0 gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => {
-                          setEditId(n.id);
-                          setEditTexto(n.texto);
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => void handleBorrar(n)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-white">Resueltos</h3>
-        {resueltas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Todavía no hay pedidos resueltos.</p>
-        ) : (
-          <ul className="space-y-2">
-            {resueltas.map((n) => (
-              <li
-                key={n.id}
-                className={cn(
-                  'rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm',
-                )}
-              >
-                {/* EQ-R16: con respuesta no se tacha (puede ser un "no se puede"). */}
-                <p
-                  className={cn(
-                    n.respuestaAdmin ? 'text-white' : 'text-muted-foreground line-through',
                   )}
-                >
-                  {n.texto}
-                </p>
-                {n.respuestaAdmin ? (
-                  <p className="mt-2 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] px-3 py-2 text-white">
-                    <span className="text-xs font-medium text-emerald-300">Respuesta: </span>
-                    {n.respuestaAdmin}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel>
+          <PanelTitle title="Resueltos" />
+          {resueltas.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Todavía no hay pedidos resueltos.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {resueltas.map((n) => (
+                <li key={n.id} className="rounded-2xl bg-white/[0.03] px-4 py-3 text-sm">
+                  {/* EQ-R16: con respuesta no se tacha (puede ser un "no se puede"). */}
+                  <p
+                    className={cn(
+                      n.respuestaAdmin ? 'text-foreground' : 'text-muted-foreground line-through',
+                    )}
+                  >
+                    {n.texto}
                   </p>
-                ) : null}
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  Resuelto {n.resueltaAt ? fmtFecha(n.resueltaAt) : fmtFecha(n.updatedAt)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                  {n.respuestaAdmin ? (
+                    <p className="mt-2 border-l-2 border-emerald-400/60 pl-3 text-sm text-foreground/90">
+                      {n.respuestaAdmin}
+                    </p>
+                  ) : null}
+                  <Estado tono="ok" className="mt-1.5 text-xs text-muted-foreground">
+                    Resuelto {n.resueltaAt ? fmtFecha(n.resueltaAt) : fmtFecha(n.updatedAt)}
+                  </Estado>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }

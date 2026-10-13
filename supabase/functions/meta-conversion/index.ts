@@ -13,7 +13,11 @@ const getMetaEnv = () => ({
     Deno.env.get("META_EVENT_SOURCE_URL") ?? "https://www.alcohncnc.com"
   ).trim(),
   currency: (Deno.env.get("META_CURRENCY") ?? "ARS").trim(),
+  attrSupabaseUrl: (Deno.env.get("META_ATTR_SUPABASE_URL") ?? "").trim(),
+  attrSupabaseKey: (Deno.env.get("META_ATTR_SUPABASE_KEY") ?? "").trim(),
 });
+
+const ATTR_LOOKUP_TIMEOUT_MS = 2000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,6 +49,38 @@ const normalizePhone = (phone: string | null | undefined): string | null => {
   if (digits.startsWith("9") && digits.length >= 10) return `54${digits}`;
   if (digits.length >= 8 && digits.length <= 11) return `54${digits}`;
   return digits;
+};
+
+/**
+ * Forma canónica WA / clientes AR: 549 + número local.
+ * Alineado a normalizePhoneDigitsCliente del frontend.
+ */
+const normalizePhoneWaId = (phone: string | null | undefined): string | null => {
+  const d = String(phone ?? "").replace(/\D/g, "");
+  if (d.length < 8) return null;
+
+  if (d.startsWith("549")) return d;
+  if (d.startsWith("54") && d.length >= 11) return `549${d.slice(2)}`;
+  if (d.startsWith("9") && d.length >= 10) return `54${d}`;
+  if (d.length === 10) return `549${d}`;
+  if (d.length === 11 && d.startsWith("0")) return `549${d.slice(1)}`;
+  if (d.startsWith("54")) return d;
+  return `54${d}`;
+};
+
+/** Variantes para match contra whatsapp_ad_referrals.wa_id (suele ser 549…). */
+const waIdCandidates = (phone: string | null | undefined): string[] => {
+  const canonical = normalizePhoneWaId(phone);
+  if (!canonical) return [];
+
+  const variants = new Set<string>([canonical]);
+  if (canonical.startsWith("549") && canonical.length > 3) {
+    variants.add(`54${canonical.slice(3)}`);
+  }
+  if (canonical.startsWith("54") && !canonical.startsWith("549") && canonical.length >= 12) {
+    variants.add(`549${canonical.slice(2)}`);
+  }
+  return [...variants];
 };
 
 const hashPhone = async (phone: string | null | undefined): Promise<string | null> => {
@@ -84,6 +120,116 @@ type OrdenRow = {
     telefono: string | null;
     mail: string | null;
   } | null;
+};
+
+type WaAdReferral = {
+  id: string;
+  wa_id: string;
+  ctwa_clid: string;
+  source_url: string | null;
+  source_id: string | null;
+  source_type: string | null;
+  phone_number_id: string | null;
+  waba_id: string | null;
+  message_timestamp: string | null;
+  created_at: string;
+};
+
+type AttrLookupResult = {
+  referral: WaAdReferral | null;
+  status: "matched" | "not_found" | "skipped_no_config" | "skipped_no_phone" | "error" | "timeout";
+  error?: string;
+  wa_id_tried?: string[];
+};
+
+const referralSortKey = (row: WaAdReferral): number => {
+  const raw = row.message_timestamp ?? row.created_at;
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("attr_lookup_timeout")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+
+/** Soft-fail: nunca bloquea el Purchase si el otro proyecto falla. */
+const lookupWhatsappAdReferral = async (
+  phone: string | null | undefined,
+  attrUrl: string,
+  attrKey: string,
+): Promise<AttrLookupResult> => {
+  if (!attrUrl || !attrKey) {
+    return { referral: null, status: "skipped_no_config" };
+  }
+
+  const candidates = waIdCandidates(phone);
+  if (!candidates.length) {
+    return { referral: null, status: "skipped_no_phone" };
+  }
+
+  try {
+    const attrClient = createClient(attrUrl, attrKey);
+    const query = attrClient
+      .from("whatsapp_ad_referrals")
+      .select(
+        "id, wa_id, ctwa_clid, source_url, source_id, source_type, phone_number_id, waba_id, message_timestamp, created_at",
+      )
+      .in("wa_id", candidates)
+      .not("ctwa_clid", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    const { data, error } = await withTimeout(
+      Promise.resolve(query),
+      ATTR_LOOKUP_TIMEOUT_MS,
+    );
+
+    if (error) {
+      console.error("meta-conversion attr lookup error", error.message);
+      return {
+        referral: null,
+        status: "error",
+        error: error.message,
+        wa_id_tried: candidates,
+      };
+    }
+
+    const rows = (data ?? []).filter(
+      (row): row is WaAdReferral =>
+        Boolean(row && typeof row.ctwa_clid === "string" && row.ctwa_clid.trim()),
+    );
+
+    if (!rows.length) {
+      return { referral: null, status: "not_found", wa_id_tried: candidates };
+    }
+
+    rows.sort((a, b) => referralSortKey(b) - referralSortKey(a));
+    return { referral: rows[0], status: "matched", wa_id_tried: candidates };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "unknown";
+    if (message === "attr_lookup_timeout") {
+      console.error("meta-conversion attr lookup timeout");
+      return { referral: null, status: "timeout", wa_id_tried: candidates };
+    }
+    console.error("meta-conversion attr lookup exception", message);
+    return {
+      referral: null,
+      status: "error",
+      error: message,
+      wa_id_tried: candidates,
+    };
+  }
 };
 
 Deno.serve(async (req: Request) => {
@@ -254,17 +400,41 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const userData: Record<string, string[]> = {};
+    const attrLookup = await lookupWhatsappAdReferral(
+      cliente?.telefono,
+      metaEnv.attrSupabaseUrl,
+      metaEnv.attrSupabaseKey,
+    );
+    const referral = attrLookup.referral;
+    const hasCtwa = Boolean(referral?.ctwa_clid);
+
+    const userData: Record<string, unknown> = {};
     if (emHash) userData.em = [emHash];
     if (phHash) userData.ph = [phHash];
     if (fnHash) userData.fn = [fnHash];
     if (lnHash) userData.ln = [lnHash];
+    if (hasCtwa && referral) {
+      userData.ctwa_clid = referral.ctwa_clid.trim();
+      const wabaId = (referral.waba_id ?? "").trim();
+      if (wabaId) {
+        userData.whatsapp_business_account_id = wabaId;
+      }
+    }
+
+    let actionSource: string;
+    if (hasCtwa) {
+      actionSource = "business_messaging";
+    } else if (esWeb) {
+      actionSource = "website";
+    } else {
+      actionSource = "physical_store";
+    }
 
     const eventPayload: Record<string, unknown> = {
       event_name: "Purchase",
       event_time: eventTime,
       event_id: ordenId,
-      action_source: esWeb ? "website" : "physical_store",
+      action_source: actionSource,
       user_data: userData,
       custom_data: {
         currency: metaEnv.currency,
@@ -272,7 +442,13 @@ Deno.serve(async (req: Request) => {
       },
     };
 
-    if (esWeb) {
+    if (hasCtwa) {
+      // Requerido por CAPI for Business Messaging (CTWA).
+      eventPayload.messaging_channel = "whatsapp";
+      if (referral?.source_url) {
+        eventPayload.event_source_url = referral.source_url;
+      }
+    } else if (esWeb) {
       eventPayload.event_source_url = metaEnv.eventSourceUrl;
     }
 
@@ -311,6 +487,19 @@ Deno.serve(async (req: Request) => {
         pixel_id: metaEnv.pixelId,
         test_event_code: metaEnv.testEventCode || null,
         action_source: eventPayload.action_source,
+        wa_attribution: {
+          status: attrLookup.status,
+          error: attrLookup.error ?? null,
+          wa_id_tried: attrLookup.wa_id_tried ?? null,
+          referral_id: referral?.id ?? null,
+          wa_id_matched: referral?.wa_id ?? null,
+          ctwa_clid: referral?.ctwa_clid ?? null,
+          source_url: referral?.source_url ?? null,
+          source_id: referral?.source_id ?? null,
+          source_type: referral?.source_type ?? null,
+          phone_number_id: referral?.phone_number_id ?? null,
+          waba_id: referral?.waba_id ?? null,
+        },
       },
     };
 
@@ -332,6 +521,7 @@ Deno.serve(async (req: Request) => {
         event_time: eventTime,
         purchase_at: purchaseAt,
         meta_status: metaResponse.status,
+        wa_attribution_status: attrLookup.status,
         meta_response: metaResponseWithDebug,
       }),
       {

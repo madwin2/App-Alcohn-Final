@@ -1,7 +1,9 @@
 // Sincronización diaria de gastos (PLAN_CONTROL_GASTOS.md, Etapa 1).
-// Pasos: cotización dólar blue → recurrentes del mes → Meta Ads → OpenAI.
+// Pasos: cotización dólar blue → recurrentes del mes → Meta Ads → OpenAI → Claude (Anthropic).
 // Cada paso es independiente: si falta un secreto se saltea; si falla se registra en `gastos_sync_log`.
 // Lo llama el cron `gastos-sync-diario` (07:00 AR) y el botón "Actualizar ahora" de Gastos.
+// Carga histórica de Meta (una vez): POST { "meta_desde": "YYYY-MM-DD" } → solo Meta, de a un mes.
+// Carga histórica de OpenAI y Claude: POST { "automatizaciones_desde": "YYYY-MM-DD" } → de a un mes.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
@@ -16,6 +18,12 @@ import {
 
 /** Días hacia atrás que se re-sincronizan (las plataformas ajustan el gasto de días recientes). */
 const DIAS_RESYNC = 7;
+
+/**
+ * La sincronización diaria de OpenAI y Claude no va más atrás de esta fecha la primera vez; lo anterior
+ * se trae solo a pedido con `automatizaciones_desde` (carga histórica, decisión del dueño 2026-10-07).
+ */
+const AUTOMATIZACIONES_DESDE = "2026-09-29";
 
 type Config = { fecha_inicio: string; openai_proyectos: Record<string, string> };
 
@@ -73,7 +81,7 @@ async function syncRecurrentes(db: SupabaseClient, hoy: string) {
 }
 
 // ---------------------------------------------------------------------------
-async function syncMeta(db: SupabaseClient, cfg: Config, hoy: string) {
+async function syncMeta(db: SupabaseClient, cfg: Config, hoy: string, rango?: { desde: string; hasta: string }) {
   const accountRaw = (Deno.env.get("META_ADS_ACCOUNT_ID") ?? "").trim();
   const token = (Deno.env.get("META_ADS_TOKEN") ?? "").trim();
   if (!accountRaw || !token) return null;
@@ -87,12 +95,13 @@ async function syncMeta(db: SupabaseClient, cfg: Config, hoy: string) {
   const currency = String(acc.currency ?? "").toUpperCase();
   if (currency !== "USD" && currency !== "ARS") throw new Error(`moneda de la cuenta no soportada: ${currency}`);
 
-  const desde = await calcularDesde(db, "meta_ads", cfg, hoy);
+  const desde = rango?.desde ?? (await calcularDesde(db, "meta_ads", cfg, hoy));
+  const hasta = rango?.hasta ?? hoy;
   const params = new URLSearchParams({
     level: "campaign",
     time_increment: "1",
     fields: "campaign_id,campaign_name,spend",
-    time_range: JSON.stringify({ since: desde, until: hoy }),
+    time_range: JSON.stringify({ since: desde, until: hasta }),
     limit: "500",
     access_token: token,
   });
@@ -115,12 +124,12 @@ async function syncMeta(db: SupabaseClient, cfg: Config, hoy: string) {
     }
     url = j.paging?.next ?? null;
   }
-  const n = await reemplazarRegistrosRango(db, "meta_ads", desde, hoy, rows);
-  return { n, detalle: `${desde} → ${hoy} (${currency})` };
+  const n = await reemplazarRegistrosRango(db, "meta_ads", desde, hasta, rows);
+  return { n, detalle: `${desde} → ${hasta} (${currency})` };
 }
 
 // ---------------------------------------------------------------------------
-async function syncOpenAI(db: SupabaseClient, cfg: Config, hoy: string) {
+async function syncOpenAI(db: SupabaseClient, cfg: Config, hoy: string, rango?: { desde: string; hasta: string }) {
   const key = (Deno.env.get("OPENAI_ADMIN_KEY") ?? "").trim();
   if (!key) return null;
   const headers = { Authorization: `Bearer ${key}` };
@@ -134,12 +143,15 @@ async function syncOpenAI(db: SupabaseClient, cfg: Config, hoy: string) {
   }
   Object.assign(nombres, cfg.openai_proyectos);
 
-  const desde = await calcularDesde(db, "openai", cfg, hoy);
+  const calculado = rango ? null : await calcularDesde(db, "openai", cfg, hoy);
+  const desde = rango?.desde ?? (calculado! < AUTOMATIZACIONES_DESDE ? AUTOMATIZACIONES_DESDE : calculado!);
+  const hasta = rango?.hasta ?? hoy;
   const startTime = Math.floor(Date.parse(`${desde}T00:00:00Z`) / 1000);
+  const endTime = Math.floor(Date.parse(`${hasta}T00:00:00Z`) / 1000) + 86_400;
   const rows: RegistroInput[] = [];
   let page: string | null = null;
   do {
-    const qs = new URLSearchParams({ start_time: String(startTime), bucket_width: "1d", limit: "31" });
+    const qs = new URLSearchParams({ start_time: String(startTime), end_time: String(endTime), bucket_width: "1d", limit: "31" });
     qs.append("group_by", "project_id");
     if (page) qs.set("page", page);
     const res = await fetch(`https://api.openai.com/v1/organization/costs?${qs}`, { headers });
@@ -163,8 +175,71 @@ async function syncOpenAI(db: SupabaseClient, cfg: Config, hoy: string) {
     page = j.has_more ? j.next_page : null;
   } while (page);
 
-  const n = await reemplazarRegistrosRango(db, "openai", desde, hoy, rows);
-  return { n, detalle: `${desde} → ${hoy}` };
+  const n = await reemplazarRegistrosRango(db, "openai", desde, hasta, rows);
+  return { n, detalle: `${desde} → ${hasta}` };
+}
+
+// ---------------------------------------------------------------------------
+// Claude (API de Anthropic): Cost Report de la Admin API. Montos en centavos de USD, por día (UTC).
+// Requiere una Admin API key (sk-ant-admin...) de la organización; las claves comunes no sirven.
+async function syncAnthropic(db: SupabaseClient, cfg: Config, hoy: string, rango?: { desde: string; hasta: string }) {
+  const key = (Deno.env.get("ANTHROPIC_ADMIN_KEY") ?? "").trim();
+  if (!key) return null;
+  const headers = { "x-api-key": key, "anthropic-version": "2023-06-01" };
+  const base = "https://api.anthropic.com/v1/organizations";
+
+  // Nombres de workspaces (opcional: si falla, se usa el id).
+  const workspaces: Record<string, string> = {};
+  const ws = await fetch(`${base}/workspaces?limit=100`, { headers });
+  if (ws.ok) {
+    const wj = await ws.json();
+    for (const w of wj.data ?? []) workspaces[w.id] = w.name;
+  }
+
+  const calculado = rango ? null : await calcularDesde(db, "anthropic", cfg, hoy);
+  const desde = rango?.desde ?? (calculado! < AUTOMATIZACIONES_DESDE ? AUTOMATIZACIONES_DESDE : calculado!);
+  const hasta = rango?.hasta ?? hoy;
+  // `ending_at` es exclusivo por bucket: dos días después para que entre el último (lo posterior se descarta).
+  const hastaApi = new Date(Date.parse(`${hasta}T00:00:00Z`) + 2 * 86_400_000).toISOString().slice(0, 10);
+
+  const rows: RegistroInput[] = [];
+  let page: string | null = null;
+  do {
+    const qs = new URLSearchParams({
+      starting_at: `${desde}T00:00:00Z`,
+      ending_at: `${hastaApi}T00:00:00Z`,
+      bucket_width: "1d",
+      limit: "31",
+    });
+    qs.append("group_by[]", "workspace_id");
+    qs.append("group_by[]", "description");
+    if (page) qs.set("page", page);
+    const res = await fetch(`${base}/cost_report?${qs}`, { headers });
+    const j = await res.json();
+    if (!res.ok) throw new Error(`cost_report: ${j?.error?.message ?? res.status}`);
+    for (const bucket of j.data ?? []) {
+      const fecha = String(bucket.starting_at ?? "").slice(0, 10);
+      for (const r of bucket.results ?? []) {
+        const wsId = r.workspace_id ?? "default";
+        const wsNombre = r.workspace_id ? workspaces[r.workspace_id] ?? r.workspace_id : "Default";
+        // Un concepto por workspace y modelo (los tipos de token se suman); lo que no es de tokens, por descripción.
+        const detalle = r.model ?? r.description ?? r.cost_type ?? "Claude";
+        rows.push({
+          fecha,
+          categoria: "automatizaciones",
+          concepto: `${wsNombre} · ${detalle}`,
+          external_ref: wsId,
+          moneda: "USD",
+          monto: (Number(r.amount) || 0) / 100,
+          iva_aplica: true,
+        });
+      }
+    }
+    page = j.has_more ? j.next_page : null;
+  } while (page);
+
+  const n = await reemplazarRegistrosRango(db, "anthropic", desde, hasta, rows);
+  return { n, detalle: `${desde} → ${hasta}` };
 }
 
 // ---------------------------------------------------------------------------
@@ -203,10 +278,57 @@ Deno.serve(async (req) => {
     }
   };
 
+  const body = await req.json().catch(() => ({}));
+
+  // Cargas históricas: de a un mes (el reemplazo por rango no escala a un año entero de una vez).
+  const fechaValida = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const mesesDesde = (inicio: string) => {
+    const meses: Array<{ desde: string; hasta: string }> = [];
+    let cursor = inicio < cfg.fecha_inicio ? cfg.fecha_inicio : inicio;
+    while (cursor <= hoy) {
+      const [y, m] = cursor.split("-").map(Number);
+      const finMes = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+      meses.push({ desde: cursor, hasta: finMes < hoy ? finMes : hoy });
+      cursor = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+    }
+    return meses;
+  };
+  const historico = async (
+    proveedor: string,
+    inicio: string,
+    fn: (rango: { desde: string; hasta: string }) => Promise<{ n: number; detalle: string } | null>,
+  ) => {
+    const detalle: unknown[] = [];
+    for (const rango of mesesDesde(inicio)) {
+      try {
+        const r = await fn(rango);
+        detalle.push(r ?? "sin configurar");
+        if (r) await logSync(db, proveedor, true, `histórico ${r.detalle}`, r.n);
+        if (!r) break;
+        // OpenAI limita a 30 consultas por minuto: pausa corta entre meses.
+        if (proveedor === "openai") await new Promise((ok) => setTimeout(ok, 2500));
+      } catch (e) {
+        detalle.push({ ...rango, error: String(e) });
+        await logSync(db, proveedor, false, `histórico ${rango.desde}: ${String(e)}`);
+      }
+    }
+    return detalle;
+  };
+
+  if (fechaValida(body?.meta_desde)) {
+    return json({ ok: true, hoy, meta_historico: await historico("meta_ads", body.meta_desde, (r) => syncMeta(db, cfg, hoy, r)) });
+  }
+  if (fechaValida(body?.automatizaciones_desde)) {
+    const openai = await historico("openai", body.automatizaciones_desde, (r) => syncOpenAI(db, cfg, hoy, r));
+    const anthropic = await historico("anthropic", body.automatizaciones_desde, (r) => syncAnthropic(db, cfg, hoy, r));
+    return json({ ok: true, hoy, openai_historico: openai, anthropic_historico: anthropic });
+  }
+
   await paso("cotizacion", () => syncCotizacion(db, hoy));
   await paso("recurrentes", () => syncRecurrentes(db, hoy));
   await paso("meta_ads", () => syncMeta(db, cfg, hoy));
   await paso("openai", () => syncOpenAI(db, cfg, hoy));
+  await paso("anthropic", () => syncAnthropic(db, cfg, hoy));
 
   return json({ ok: true, ...resultado });
 });

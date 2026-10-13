@@ -109,7 +109,15 @@ export function MisIdeasTab({ color }: { color: string }) {
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-medium text-white">{idea.titulo}</h3>
+                      <h3 className="text-sm font-medium text-white">
+                        <Link
+                          to={`/corcho?idea=${encodeURIComponent(idea.id)}`}
+                          className="hover:underline"
+                          title="Ver en el corcho"
+                        >
+                          {idea.titulo}
+                        </Link>
+                      </h3>
                       <span
                         className={cn(
                           'rounded px-1.5 py-0.5 text-[10px] font-semibold',
@@ -132,6 +140,9 @@ export function MisIdeasTab({ color }: { color: string }) {
                     <p className="mt-2 text-[11px] text-muted-foreground">
                       {fmtFecha(idea.createdAt)} · 👍 {up} · 👎 {down} · puntaje{' '}
                       {puntaje > 0 ? `+${puntaje}` : puntaje}
+                      {idea.comentarios.length
+                        ? ` · 💬 ${idea.comentarios.length}`
+                        : ''}
                     </p>
                     {idea.comentarioEstado ? (
                       <p className="mt-1 text-[11px] italic text-muted-foreground">

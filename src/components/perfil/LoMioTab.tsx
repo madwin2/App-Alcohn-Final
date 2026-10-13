@@ -1,4 +1,5 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent } from '@/components/ui/tabs'
+import { Insignia, PillTab, PillTabsList } from '@/components/perfil/perfilUi'
 import { AnotacionesTab } from '@/components/perfil/AnotacionesTab'
 import { NecesidadesTab } from '@/components/perfil/NecesidadesTab'
 import { CrecimientoTab } from '@/components/perfil/CrecimientoTab'
@@ -36,19 +37,15 @@ export function LoMioTab({
 }: LoMioTabProps) {
   return (
     <Tabs value={sub} onValueChange={v => onSubChange(sanitizeLoMioSub(v))}>
-      <TabsList className="h-auto flex-wrap">
-        <TabsTrigger value="anotaciones">Anotaciones</TabsTrigger>
-        <TabsTrigger value="necesidades">Lo que necesito</TabsTrigger>
-        <TabsTrigger value="crecimiento">Crecimiento</TabsTrigger>
-        <TabsTrigger value="feedback" className="gap-1.5">
+      <PillTabsList className="bg-transparent p-0">
+        <PillTab value="anotaciones" className="px-3.5 py-1 text-[13px]">Anotaciones</PillTab>
+        <PillTab value="necesidades" className="px-3.5 py-1 text-[13px]">Lo que necesito</PillTab>
+        <PillTab value="crecimiento" className="px-3.5 py-1 text-[13px]">Crecimiento</PillTab>
+        <PillTab value="feedback" className="px-3.5 py-1 text-[13px]">
           Feedback
-          {feedbackNoLeido > 0 ? (
-            <span className="rounded-full bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-950">
-              {feedbackNoLeido}
-            </span>
-          ) : null}
-        </TabsTrigger>
-      </TabsList>
+          <Insignia n={feedbackNoLeido} />
+        </PillTab>
+      </PillTabsList>
 
       <TabsContent value="anotaciones" className="mt-4">
         <AnotacionesTab />

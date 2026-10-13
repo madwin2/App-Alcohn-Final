@@ -8,7 +8,14 @@ import { AppMain } from '@/components/layout/AppMain'
 
 import { Toaster } from '@/components/ui/toaster'
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent } from '@/components/ui/tabs'
+
+import {
+  Aviso,
+  Insignia,
+  PillTab,
+  PillTabsList,
+} from '@/components/perfil/perfilUi'
 
 import { PerfilHeader } from '@/components/perfil/PerfilHeader'
 
@@ -427,15 +434,15 @@ export default function PerfilPage() {
     <AppMain>
       <Toaster />
 
-      <div className="mx-auto w-full max-w-5xl px-6 py-8 space-y-6">
+      <div className="w-full max-w-[1920px] space-y-6 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
         {busy ? (
           <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Cargando tu perfil…
           </div>
         ) : error ? (
-          <div className="rounded-[20px] border border-destructive/40 bg-destructive/10 px-5 py-8 text-center">
-            <p className="text-sm text-destructive">{error}</p>
+          <div className="rounded-3xl bg-white/[0.035] px-5 py-12 text-center">
+            <p className="text-sm text-red-400">{error}</p>
 
             <button
               type="button"
@@ -454,17 +461,17 @@ export default function PerfilPage() {
             <PerfilHeader perfil={perfil} saldoVacaciones={saldoHeader} />
 
             {esAdmin && aniosSinFeriados.length > 0 ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-100">
-                <span>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-white/[0.035] px-5 py-3">
+                <Aviso>
                   Faltan los feriados nacionales de{' '}
                   {aniosSinFeriados.join(' y ')}: el saldo de vacaciones puede
                   cambiar cuando se importen.
-                </span>
+                </Aviso>
 
                 <button
                   type="button"
 
-                  className="underline underline-offset-2 hover:text-white"
+                  className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
 
                   onClick={() => handleTabChange('equipo')}
                 >
@@ -474,21 +481,22 @@ export default function PerfilPage() {
             ) : null}
 
             <Tabs value={tab} onValueChange={v => handleTabChange(v)}>
-              <TabsList className="h-auto flex-wrap">
-                <TabsTrigger value="dia">Mi día</TabsTrigger>
+              <PillTabsList>
+                <PillTab value="dia">Mi día</PillTab>
 
-                <TabsTrigger value="tareas">Tareas</TabsTrigger>
+                <PillTab value="tareas">Tareas</PillTab>
 
-                <TabsTrigger value="lo-mio">Lo mío</TabsTrigger>
+                <PillTab value="lo-mio">
+                  Lo mío
+                  <Insignia n={feedbackNoLeido} />
+                </PillTab>
 
-                <TabsTrigger value="numeros">Mis números</TabsTrigger>
+                <PillTab value="numeros">Mis números</PillTab>
 
-                {esAdmin ? (
-                  <TabsTrigger value="equipo">Equipo</TabsTrigger>
-                ) : null}
-              </TabsList>
+                {esAdmin ? <PillTab value="equipo">Equipo</PillTab> : null}
+              </PillTabsList>
 
-              <TabsContent value="dia" className="mt-4 space-y-8">
+              <TabsContent value="dia" className="mt-5 space-y-4">
                 <InicioPerfilTab
                   perfil={perfil}
 
@@ -522,7 +530,7 @@ export default function PerfilPage() {
                 />
               </TabsContent>
 
-              <TabsContent value="tareas" className="mt-4">
+              <TabsContent value="tareas" className="mt-5">
                 {user?.id ? (
                   <TareasTab
                     userId={perfil.userId}
@@ -540,7 +548,7 @@ export default function PerfilPage() {
                 ) : null}
               </TabsContent>
 
-              <TabsContent value="lo-mio" className="mt-4">
+              <TabsContent value="lo-mio" className="mt-5">
                 <LoMioTab
                   sub={loMioSub}
 
@@ -556,7 +564,7 @@ export default function PerfilPage() {
                 />
               </TabsContent>
 
-              <TabsContent value="numeros" className="mt-4">
+              <TabsContent value="numeros" className="mt-5">
                 <MisNumerosTab
                   userId={perfil.userId}
                   areaPrincipal={perfil.areaPrincipal}
@@ -564,7 +572,7 @@ export default function PerfilPage() {
               </TabsContent>
 
               {esAdmin ? (
-                <TabsContent value="equipo" className="mt-4">
+                <TabsContent value="equipo" className="mt-5">
                   <EquipoTab
                     onFeriadosChanged={() => {
                       void loadFeriadosFaltantes()

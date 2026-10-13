@@ -13,7 +13,7 @@ import type { ResumenHabiles } from '@/lib/gastos/diasHabiles';
 
 export type GastoAutoCategoria = 'publicidad' | 'automatizaciones' | 'gastos_varios';
 export type GastoMoneda = 'USD' | 'ARS';
-export type GastoProveedor = 'meta_ads' | 'google_ads' | 'openai' | 'recurrente' | 'manual';
+export type GastoProveedor = 'meta_ads' | 'google_ads' | 'openai' | 'anthropic' | 'recurrente' | 'manual';
 
 export const GASTO_AUTO_CATEGORIAS: GastoAutoCategoria[] = ['publicidad', 'automatizaciones', 'gastos_varios'];
 
@@ -21,6 +21,7 @@ export const PROVEEDOR_LABEL: Record<GastoProveedor, string> = {
   meta_ads: 'Meta Ads',
   google_ads: 'Google Ads',
   openai: 'OpenAI',
+  anthropic: 'Claude',
   recurrente: 'Recurrente',
   manual: 'Manual',
 };
@@ -542,6 +543,66 @@ export function estimarFijos(actual: FixedCostsMonth, anterior: FixedCostsMonth 
 const PUBLICIDAD_COBRADA_EN_USD: ReadonlySet<GastoProveedor> = new Set(['meta_ads', 'google_ads']);
 
 export type CotizacionDia = { fecha: string; oficial: number | null; blue: number };
+
+/** Prefijo de id de los pagos que arma la app sola (no están en la base). */
+export const PAGO_AUTOMATICO_PREFIJO = 'auto-';
+
+/** Día del mes siguiente en que se considera pagado un mes sin pago marcado (decisión del dueño 2026-10-07). */
+export const DIA_PAGO_AUTOMATICO = 10;
+
+/** YYYY-MM → fecha de pago automática: día 10 del mes siguiente. */
+export function fechaPagoAutomatico(mes: string): string {
+  const [y, m] = mes.split('-').map(Number);
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  return `${ny}-${String(nm).padStart(2, '0')}-${String(DIA_PAGO_AUTOMATICO).padStart(2, '0')}`;
+}
+
+/**
+ * Meses con dólares y sin ningún pago marcado: si ya pasó el día 10 del mes siguiente, se los da por
+ * pagados ese día al blue venta de ese día (o del anterior más cercano). Así nadie tiene que marcar pagos;
+ * un pago cargado a mano en Gastos tiene prioridad. `registros` ya en USD (después de `publicidadArsAUsd`).
+ */
+export function completarPagosAutomaticos(
+  registros: readonly GastoRegistro[],
+  pagos: readonly PagoUsd[],
+  cotizaciones: readonly CotizacionDia[],
+  hoy: string,
+): PagoUsd[] {
+  const conPago = new Set(pagos.map((p) => p.mes));
+  const usdPorMes = new Map<string, number>();
+  for (const r of registros) {
+    if (r.moneda !== 'USD') continue;
+    const mes = r.fecha.slice(0, 7);
+    usdPorMes.set(mes, (usdPorMes.get(mes) ?? 0) + (Number(r.monto) || 0));
+  }
+  const tabla = [...cotizaciones].filter((c) => c.blue > 0).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const blueDe = (fecha: string): number | null => {
+    let elegido: number | null = null;
+    for (const c of tabla) {
+      if (c.fecha <= fecha) elegido = c.blue;
+      else break;
+    }
+    return elegido;
+  };
+  const extra: PagoUsd[] = [];
+  for (const [mes, usd] of usdPorMes) {
+    if (conPago.has(mes) || usd <= 0) continue;
+    const fecha = fechaPagoAutomatico(mes);
+    if (fecha > hoy) continue;
+    const cot = blueDe(fecha);
+    if (!cot) continue;
+    extra.push({
+      id: `${PAGO_AUTOMATICO_PREFIJO}${mes}`,
+      mes,
+      fecha,
+      usd: round2(usd),
+      cotizacion: cot,
+      nota: 'Automático: blue del día 10 del mes siguiente',
+    });
+  }
+  return [...pagos, ...extra].sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
 
 /**
  * Meta/Google pueden informar el gasto en pesos (moneda de la cuenta) aunque a la tarjeta llegue en

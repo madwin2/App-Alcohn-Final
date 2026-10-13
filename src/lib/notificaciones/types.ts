@@ -30,7 +30,8 @@ export type NotificacionTipo =
   | 'e4_feedback_nuevo'
   | 'e4_feedback_editado'
   | 'e5_idea_nueva'
-  | 'e5_idea_estado';
+  | 'e5_idea_estado'
+  | 'e5_idea_comentario';
 
 export type NotificacionTab = 'todas' | AppArea;
 

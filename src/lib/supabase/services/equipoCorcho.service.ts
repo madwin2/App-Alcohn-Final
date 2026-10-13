@@ -17,7 +17,20 @@ export interface IdeaCorcho {
   updatedAt: string;
   votos: VotoCorcho[];
   vistaPorMi: boolean;
+  /** Más viejo primero. Vacío si la tabla de comentarios todavía no existe. */
+  comentarios: ComentarioIdeaCorcho[];
 }
+
+export interface ComentarioIdeaCorcho {
+  id: string;
+  ideaId: string;
+  autorUserId: string;
+  texto: string;
+  createdAt: string;
+}
+
+/** Tope de largo de un comentario (CHECK en `ideas_corcho_comentarios`). */
+export const MAX_COMENTARIO_CORCHO = 2000;
 
 type IdeaRow = {
   id: string;
@@ -42,6 +55,22 @@ type VistaRow = {
   idea_id: string;
 };
 
+type ComentarioRow = {
+  id: string;
+  idea_id: string;
+  autor_user_id: string;
+  texto: string;
+  created_at: string;
+};
+
+/** Error de PostgREST/Postgres cuando la tabla no existe (migración sin aplicar). */
+function esTablaInexistente(error: { code?: string } | null): boolean {
+  return error?.code === 'PGRST205' || error?.code === '42P01';
+}
+
+const MSG_SIN_COMENTARIOS =
+  'Los comentarios todavía no están activos (falta aplicar migration_equipo_corcho_v2.sql).';
+
 const SELECT_IDEA =
   'id, autor_user_id, titulo, descripcion, estado, estado_cambiado_por, estado_cambiado_at, comentario_estado, created_at, updated_at';
 
@@ -49,6 +78,7 @@ function mapIdea(
   row: IdeaRow,
   votos: VotoCorcho[],
   vistaPorMi: boolean,
+  comentarios: ComentarioIdeaCorcho[] = [],
 ): IdeaCorcho {
   return {
     id: row.id,
@@ -63,7 +93,47 @@ function mapIdea(
     updatedAt: row.updated_at,
     votos,
     vistaPorMi,
+    comentarios,
   };
+}
+
+function mapComentario(row: ComentarioRow): ComentarioIdeaCorcho {
+  return {
+    id: row.id,
+    ideaId: row.idea_id,
+    autorUserId: row.autor_user_id,
+    texto: row.texto,
+    createdAt: row.created_at,
+  };
+}
+
+async function fetchComentariosPorIdea(
+  ideaIds: string[],
+): Promise<Map<string, ComentarioIdeaCorcho[]>> {
+  const map = new Map<string, ComentarioIdeaCorcho[]>();
+  if (ideaIds.length === 0) return map;
+  const { data, error } = await supabase
+    .from('ideas_corcho_comentarios')
+    .select('id, idea_id, autor_user_id, texto, created_at')
+    .in('idea_id', ideaIds)
+    .order('created_at', { ascending: true });
+  if (error) {
+    // Sin la migración v2 el corcho sigue andando, sin comentarios.
+    if (esTablaInexistente(error)) return map;
+    throw error;
+  }
+  for (const row of (data as ComentarioRow[] | null) ?? []) {
+    const list = map.get(row.idea_id) ?? [];
+    list.push(mapComentario(row));
+    map.set(row.idea_id, list);
+  }
+  return map;
+}
+
+/** Usuario de la sesión local (sin ir al servidor de auth como `getUser`). */
+async function userIdSesion(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id ?? '';
 }
 
 async function fetchVotosPorIdea(ideaIds: string[]): Promise<Map<string, VotoCorcho[]>> {
@@ -99,15 +169,20 @@ async function fetchMisVistas(ideaIds: string[], userId: string): Promise<Set<st
 }
 
 async function hydrateIdeas(rows: IdeaRow[]): Promise<IdeaCorcho[]> {
-  const { data: auth } = await supabase.auth.getUser();
-  const userId = auth.user?.id ?? '';
+  const userId = await userIdSesion();
   const ids = rows.map((r) => r.id);
-  const [votosMap, vistas] = await Promise.all([
+  const [votosMap, vistas, comentariosMap] = await Promise.all([
     fetchVotosPorIdea(ids),
     fetchMisVistas(ids, userId),
+    fetchComentariosPorIdea(ids),
   ]);
   return rows.map((row) =>
-    mapIdea(row, votosMap.get(row.id) ?? [], vistas.has(row.id)),
+    mapIdea(
+      row,
+      votosMap.get(row.id) ?? [],
+      vistas.has(row.id),
+      comentariosMap.get(row.id) ?? [],
+    ),
   );
 }
 
@@ -190,6 +265,16 @@ export async function actualizarIdeaCorcho(input: {
     patch.descripcion = input.descripcion?.trim() || null;
   }
 
+  // POL-076: con votos ya no se edita (la RLS también lo frena).
+  const { count, error: votosError } = await supabase
+    .from('ideas_corcho_votos')
+    .select('idea_id', { count: 'exact', head: true })
+    .eq('idea_id', input.id);
+  if (votosError) throw votosError;
+  if ((count ?? 0) > 0) {
+    throw new Error('Esta idea ya tiene votos: no se puede editar.');
+  }
+
   const { data, error } = await supabase
     .from('ideas_corcho')
     .update(patch)
@@ -265,20 +350,57 @@ export async function setVotoIdeaCorcho(
     { onConflict: 'idea_id,user_id' },
   );
   if (error) throw error;
+  window.dispatchEvent(new Event(EVENTO_CORCHO_VISTAS));
 }
+
+export async function crearComentarioIdeaCorcho(input: {
+  ideaId: string;
+  texto: string;
+}): Promise<ComentarioIdeaCorcho> {
+  const texto = input.texto.trim();
+  if (!texto) throw new Error('El comentario está vacío');
+  if (texto.length > MAX_COMENTARIO_CORCHO) {
+    throw new Error(`Máximo ${MAX_COMENTARIO_CORCHO} caracteres`);
+  }
+  const { data, error } = await supabase
+    .from('ideas_corcho_comentarios')
+    .insert({ idea_id: input.ideaId, texto })
+    .select('id, idea_id, autor_user_id, texto, created_at')
+    .single();
+  if (error) {
+    if (esTablaInexistente(error)) throw new Error(MSG_SIN_COMENTARIOS);
+    throw mapPostgrestError(error);
+  }
+  return mapComentario(data as ComentarioRow);
+}
+
+/** Borra un comentario propio (o cualquiera, si es admin). */
+export async function borrarComentarioIdeaCorcho(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('ideas_corcho_comentarios')
+    .delete()
+    .eq('id', id)
+    .select('id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data);
+}
+
+/** Evento de `window` cuando se marca una idea vista (refresca el badge del menú). */
+export const EVENTO_CORCHO_VISTAS = 'corcho:vistas';
 
 /** Marca idea como vista por el usuario logueado (cartel Nueva). Idempotente. */
 export async function marcarIdeaCorchoVista(ideaId: string): Promise<void> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error('no autenticado');
+  const userId = await userIdSesion();
+  if (!userId) throw new Error('no autenticado');
 
   const { error } = await supabase.from('ideas_corcho_vistas').upsert(
     {
       idea_id: ideaId,
-      user_id: auth.user.id,
+      user_id: userId,
       visto_at: new Date().toISOString(),
     },
     { onConflict: 'idea_id,user_id' },
   );
   if (error) throw error;
+  window.dispatchEvent(new Event(EVENTO_CORCHO_VISTAS));
 }

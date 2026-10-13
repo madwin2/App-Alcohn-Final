@@ -2,6 +2,7 @@ import { Loader2 } from 'lucide-react';
 import { AppMain } from '@/components/layout/AppMain';
 import { Toaster } from '@/components/ui/toaster';
 import { CorchoBoard } from '@/components/corcho/CorchoBoard';
+import { CorchoFondo } from '@/components/corcho/CorchoFondo';
 import { PerfilNoActivoMensaje } from '@/components/perfil/PerfilNoActivoMensaje';
 import { useEquipoRol } from '@/lib/hooks/useEquipoRol';
 
@@ -9,27 +10,19 @@ export default function CorchoPage() {
   const { perfil, esMiembroActivo, loading } = useEquipoRol();
 
   return (
-    <AppMain>
+    <AppMain className="relative isolate bg-[#c98f55]">
+      <CorchoFondo />
       <Toaster />
-      <div className="mx-auto w-full max-w-6xl px-6 py-8 space-y-4">
+      <div className="w-full max-w-[1920px] px-4 pb-6 pt-4 sm:px-6 lg:px-10 lg:pb-8">
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
+          <div className="flex items-center justify-center gap-2 py-24 text-sm text-zinc-800">
             <Loader2 className="h-4 w-4 animate-spin" />
             Cargando…
           </div>
         ) : !esMiembroActivo ? (
           <PerfilNoActivoMensaje perfil={perfil} contexto="corcho" />
         ) : (
-          <>
-            <div>
-              <h1 className="text-xl font-semibold text-white">Corcho de ideas</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Ideas para mejorar la empresa. Cada persona tiene su color; votá con 👍
-                o 👎. Separado de Innovación.
-              </p>
-            </div>
-            <CorchoBoard />
-          </>
+          <CorchoBoard />
         )}
       </div>
     </AppMain>

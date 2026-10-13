@@ -25,6 +25,9 @@ import ProgramasCardSandboxPage from './app/dev/ProgramasCardSandboxPage'
 import ProgramasBoardSandboxPage from './app/dev/ProgramasBoardSandboxPage'
 import ProgramasTourSandboxPage from './app/dev/ProgramasTourSandboxPage'
 import ControlGastosSandboxPage from './app/dev/ControlGastosSandboxPage'
+import HomeNuevaSandboxPage from './app/dev/HomeNuevaSandboxPage'
+import CorchoSandboxPage from './app/dev/CorchoSandboxPage'
+import PerfilTourSandboxPage from './app/dev/PerfilTourSandboxPage'
 import StockPendienteSandboxPage from './app/stock-pendiente/index'
 import CentroPage from './app/centro/index'
 import PerfilPage from './app/perfil/index'
@@ -45,6 +48,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/stock-pendiente" element={<StockPendienteSandboxPage />} />
+          {import.meta.env.DEV ? <Route path="/dev/corcho" element={<CorchoSandboxPage />} /> : null}
           <Route element={<AuthenticatedLayout />}>
             <Route element={<OrdersScopeLayout />}>
               <Route path="/" element={<HomePage />} />
@@ -53,6 +57,8 @@ function App() {
               <Route path="/envios/historial" element={<EnviosHistorialPage />} />
               <Route path="/envios/:carrier" element={<EnviosPage />} />
               <Route path="/economia" element={<EconomiaPage />} />
+              {import.meta.env.DEV ? <Route path="/dev/home" element={<HomeNuevaSandboxPage />} /> : null}
+              {import.meta.env.DEV ? <Route path="/dev/home/:persona" element={<HomeNuevaSandboxPage />} /> : null}
             </Route>
             <Route path="/produccion" element={<ProduccionPage />} />
             <Route path="/programas" element={<ProgramasPage />} />
@@ -81,6 +87,7 @@ function App() {
               <Route path="/dev/programas-card" element={<ProgramasCardSandboxPage />} />
               <Route path="/dev/programas" element={<ProgramasBoardSandboxPage />} />
               <Route path="/dev/programas-tour" element={<ProgramasTourSandboxPage />} />
+              <Route path="/dev/perfil-tour" element={<PerfilTourSandboxPage />} />
               <Route path="/dev/control-gastos" element={<ControlGastosSandboxPage />} />
             </>
           ) : null}

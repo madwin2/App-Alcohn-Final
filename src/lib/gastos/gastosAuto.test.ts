@@ -5,6 +5,8 @@ import {
   calcularMesEnCurso,
   calcularObjetivoSellos,
   calcularVentasNecesarias,
+  completarPagosAutomaticos,
+  fechaPagoAutomatico,
   estimarFijos,
   publicidadArsAUsd,
   recurrentesPendientesArs,
@@ -390,5 +392,39 @@ describe('coherencia ritmo / necesario / proyección', () => {
         expect(r.ritmoDiario >= n.porDia! - 1e-6).toBe(llegaObj);
       }
     }
+  });
+});
+
+describe('completarPagosAutomaticos', () => {
+  const cot = [
+    { fecha: '2026-09-09', oficial: 1530, blue: 1545 },
+    { fecha: '2026-09-10', oficial: 1535, blue: 1540 },
+    { fecha: '2026-10-07', oficial: 1540, blue: 1550 },
+  ];
+
+  it('fecha de pago: día 10 del mes siguiente (también en diciembre)', () => {
+    expect(fechaPagoAutomatico('2026-08')).toBe('2026-09-10');
+    expect(fechaPagoAutomatico('2025-12')).toBe('2026-01-10');
+  });
+
+  it('da por pagado un mes sin pago cuando ya pasó el día 10, al blue de ese día', () => {
+    const regs = [reg({ fecha: '2026-08-05', monto: 100 }), reg({ fecha: '2026-08-20', monto: 50 })];
+    const out = completarPagosAutomaticos(regs, [], cot, '2026-10-07');
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ mes: '2026-08', fecha: '2026-09-10', usd: 150, cotizacion: 1540 });
+    expect(out[0].id.startsWith('auto-')).toBe(true);
+  });
+
+  it('no toca meses con pago marcado ni los que todavía no llegaron al día 10', () => {
+    const regs = [reg({ fecha: '2026-08-05' }), reg({ fecha: '2026-09-15' })];
+    const pagos: PagoUsd[] = [{ id: 'p1', mes: '2026-08', fecha: '2026-09-02', usd: 100, cotizacion: 1500 }];
+    const out = completarPagosAutomaticos(regs, pagos, cot, '2026-10-07');
+    expect(out).toEqual(pagos);
+  });
+
+  it('ignora lo que está en pesos y usa el blue anterior más cercano si falta el del día', () => {
+    const regs = [reg({ fecha: '2026-08-05', monto: 10 }), reg({ fecha: '2026-08-06', moneda: 'ARS', monto: 99999 })];
+    const out = completarPagosAutomaticos(regs, [], cot.filter((c) => c.fecha !== '2026-09-10'), '2026-10-07');
+    expect(out[0]).toMatchObject({ usd: 10, cotizacion: 1545 });
   });
 });

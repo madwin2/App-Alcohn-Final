@@ -8,7 +8,7 @@ const PROCESS_SIZE = 180;
  * Quita verde chroma de forma agresiva + máscara circular.
  * Opera in-place sobre ImageData RGBA.
  */
-function keyGreenScreen(data: Uint8ClampedArray, size: number) {
+function keyGreenScreen(data: Uint8ClampedArray, size: number, circular: boolean) {
   const cx = (size - 1) / 2;
   const cy = (size - 1) / 2;
   const radius = size / 2;
@@ -23,15 +23,17 @@ function keyGreenScreen(data: Uint8ClampedArray, size: number) {
       if (a === 0) continue;
 
       // Máscara circular (evita el “cuadrado” del canvas)
-      const dx = x - cx;
-      const dy = y - cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > radius) {
-        data[i + 3] = 0;
-        continue;
+      if (circular) {
+        const dx = x - cx;
+        const dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > radius) {
+          data[i + 3] = 0;
+          continue;
+        }
+        const edgeSoft = Math.max(0, Math.min(1, (radius - dist) / 1.25));
+        a = Math.round(a * edgeSoft);
       }
-      const edgeSoft = Math.max(0, Math.min(1, (radius - dist) / 1.25));
-      a = Math.round(a * edgeSoft);
 
       const max = Math.max(r, g, b);
       const min = Math.min(r, g, b);
@@ -85,12 +87,14 @@ interface ChromaKeyVideoProps {
   src: string;
   active: boolean;
   className?: string;
+  /** Recorta en círculo (barra de la Home actual). En false, solo se quita el verde. */
+  circular?: boolean;
 }
 
 /**
  * Reproduce un video con fondo verde removido, recorte tipo perfil y máscara circular.
  */
-export function ChromaKeyVideo({ src, active, className }: ChromaKeyVideoProps) {
+export function ChromaKeyVideo({ src, active, className, circular = true }: ChromaKeyVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const workRef = useRef<HTMLCanvasElement | null>(null);
@@ -124,7 +128,7 @@ export function ChromaKeyVideo({ src, active, className }: ChromaKeyVideoProps) 
         workCtx.clearRect(0, 0, PROCESS_SIZE, PROCESS_SIZE);
         workCtx.drawImage(video, sx, sy, sw, sh, 0, 0, PROCESS_SIZE, PROCESS_SIZE);
         const image = workCtx.getImageData(0, 0, PROCESS_SIZE, PROCESS_SIZE);
-        keyGreenScreen(image.data, PROCESS_SIZE);
+        keyGreenScreen(image.data, PROCESS_SIZE, circular);
 
         outCtx.clearRect(0, 0, PROCESS_SIZE, PROCESS_SIZE);
         outCtx.putImageData(image, 0, 0);
@@ -159,7 +163,7 @@ export function ChromaKeyVideo({ src, active, className }: ChromaKeyVideoProps) 
       cancelAnimationFrame(rafRef.current);
       video.pause();
     };
-  }, [active, src]);
+  }, [active, src, circular]);
 
   return (
     <>

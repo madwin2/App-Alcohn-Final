@@ -150,3 +150,37 @@ Preguntas del plan [`PLAN_PAGINA_PERSONAL.md`](../../PLAN_PAGINA_PERSONAL.md) (Q
   - **S15**: el arrastre cuenta **desde que se publica la función**. → [POL-073](../04-business-rules/politicas-confirmadas.md)
   - **S16**: ya no aplica (los post-its no se tocan, Q-EQ-020).
   - **S17**: las tareas automáticas de **reposición de stock quedan aparte**, como hoy. → [POL-074](../04-business-rules/politicas-confirmadas.md)
+
+### Q-EQ-025
+- **Módulo**: perfil / corcho · **Estado**: documentada (2026-10-09)
+- **Pregunta**: ¿El admin necesita editar ideas de otros (moderar)?
+- **Respuesta**: No hace falta. → [POL-075](../04-business-rules/politicas-confirmadas.md)
+
+### Q-EQ-026
+- **Módulo**: perfil / corcho · **Estado**: documentada (2026-10-09)
+- **Pregunta**: ¿Se puede editar una idea que ya tiene votos?
+- **Por qué importa**: quien votó a favor de una cosa podía terminar votando otra.
+- **Respuesta**: **No.** Con votos no se edita. → [POL-076](../04-business-rules/politicas-confirmadas.md)
+
+### Q-EQ-027
+- **Módulo**: perfil / corcho · **Estado**: documentada (2026-10-09)
+- **Pregunta**: ¿Las ideas se comentan o solo se votan?
+- **Respuesta**: Se puede comentar o solo votar, como cada uno quiera. → [POL-077](../04-business-rules/politicas-confirmadas.md)
+
+### Q-EQ-028
+- **Módulo**: perfil / corcho · **Estado**: documentada (2026-10-09)
+- **Pregunta**: ¿Las ideas descartadas se siguen mostrando en el tablero?
+- **Respuesta**: Se esconden por defecto. → [POL-078](../04-business-rules/politicas-confirmadas.md)
+
+### Q-EQ-029
+- **Módulo**: perfil / corcho · **Estado**: abierta
+- **Pregunta**: ¿Los 👎 tienen que mostrar el nombre de quien votó?
+- **Por qué importa**: votar en contra con el nombre a la vista del autor puede frenar a la gente a opinar.
+- **Evidencia**: hoy se ven los nombres de quién votó a favor y en contra (tarjeta y vista en grande).
+- **Impacto**: bajo.
+
+### Q-EQ-030
+- **Módulo**: perfil / corcho · **Estado**: abierta
+- **Pregunta**: ¿Tiene sentido votar una idea que ya está aprobada?
+- **Evidencia**: hoy se puede (solo las descartadas no se votan).
+- **Impacto**: bajo.

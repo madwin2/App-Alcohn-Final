@@ -511,6 +511,11 @@ export function notifyFeedbackNuevo(params: {
   });
 }
 
+/** Abre el corcho con esa idea en grande. */
+function linkIdeaCorcho(ideaId: string): string {
+  return `/corcho?idea=${encodeURIComponent(ideaId)}`;
+}
+
 /** Alguien pinchó una idea en el corcho: avisa al resto del equipo. */
 export function notifyIdeaNueva(params: {
   autorNombre: string;
@@ -524,7 +529,7 @@ export function notifyIdeaNueva(params: {
     titulo: `${params.autorNombre} pinchó una idea en el corcho`,
     entidadTipo: 'idea_corcho',
     entidadId: params.ideaId,
-    linkPath: '/corcho',
+    linkPath: linkIdeaCorcho(params.ideaId),
     userIds: params.destinatarioUserIds,
     metadata: { itemNombre: params.autorNombre },
   });
@@ -542,9 +547,30 @@ export function notifyIdeaEstado(params: {
     titulo: `Tu idea fue ${fraseEstadoIdeaNotificacion(params.estado)}`,
     entidadTipo: 'idea_corcho',
     entidadId: params.ideaId,
-    linkPath: '/corcho',
+    linkPath: linkIdeaCorcho(params.ideaId),
     userIds: [params.autorUserId],
     metadata: { estadoIdea: params.estado },
+  });
+}
+
+/** Alguien comentó una idea: avisa al autor (si no es quien comentó). */
+export function notifyIdeaComentario(params: {
+  autorComentarioNombre: string;
+  autorComentarioUserId: string;
+  ideaId: string;
+  ideaTitulo: string;
+  autorIdeaUserId: string;
+}): void {
+  if (params.autorIdeaUserId === params.autorComentarioUserId) return;
+  emitNotificacionSafe({
+    tipo: 'e5_idea_comentario',
+    area: null,
+    titulo: `${params.autorComentarioNombre} comentó tu idea “${params.ideaTitulo}”`,
+    entidadTipo: 'idea_corcho',
+    entidadId: params.ideaId,
+    linkPath: linkIdeaCorcho(params.ideaId),
+    userIds: [params.autorIdeaUserId],
+    metadata: { itemNombre: params.autorComentarioNombre },
   });
 }
 

@@ -608,7 +608,7 @@ export default function GastosPage() {
   const pistaExtra = (key: keyof ExtrasMonth): string | undefined => {
     if (!mesConGastosAuto) return undefined;
     if (key === 'publicidad') return 'Meta y Google se suman solos; acá, solo otra publicidad';
-    if (key === 'automatizaciones') return 'OpenAI y recurrentes se suman solos';
+    if (key === 'automatizaciones') return 'OpenAI, Claude y recurrentes se suman solos; acá, solo el resto';
     if (key === 'impuestos') return 'Los de los dólares automáticos se suman solos';
     return undefined;
   };
@@ -787,7 +787,13 @@ export default function GastosPage() {
             />
           </div>
           <div className="xl:col-span-5">
-            <GastosRecurrentesCard onChanged={gastosAuto.reload} />
+            <GastosRecurrentesCard
+              onChanged={gastosAuto.reload}
+              mes={mesConGastosAuto ? selectedMonth : undefined}
+              etiquetaMes={etiquetaMesSeleccionado.split(' de ')[0]}
+              mesActual={mesActualKey}
+              registros={gastosAuto.data?.registros}
+            />
           </div>
         </div>
 

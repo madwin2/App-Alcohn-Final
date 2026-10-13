@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Check, Loader2, Pencil, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Loader2, MessageCircle, ThumbsDown, ThumbsUp } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -10,11 +9,12 @@ import {
 import { cn } from '@/lib/utils/cn';
 import {
   conteoVotos,
+  fechaRelativaCorcho,
   puedeVotarIdea,
-  puntajeIdea,
   type ValorVotoCorcho,
 } from '@/lib/equipo/corcho';
 import type { IdeaCorcho } from '@/lib/supabase/services/equipoCorcho.service';
+import { AvatarPersona, Chinche, SelloEstado, colorPapel } from '@/components/corcho/corchoUi';
 
 const VISTA_MS = 1000;
 
@@ -26,17 +26,14 @@ export interface IdeaCorchoCardProps {
   /** Mantener "Nueva" en esta sesión aunque ya se marcó vista en DB. */
   mostrarNueva: boolean;
   nombresPorUserId: Record<string, string>;
-  esAdmin: boolean;
   miVoto: ValorVotoCorcho | null;
   voting?: boolean;
   onVotar: (valor: ValorVotoCorcho) => void;
   onMarcarVista: () => void;
-  onEditar?: () => void;
-  onBorrar?: () => void;
-  onAprobar?: () => void;
-  onDescartar?: () => void;
-  onVolverPropuesta?: () => void;
-  onAbrir?: () => void;
+  /** Abre la idea en grande (texto completo, votantes, comentarios, acciones). */
+  onAbrir: () => void;
+  /** Posición en el tablero: escalona la animación de entrada. */
+  indice?: number;
 }
 
 export function IdeaCorchoCard({
@@ -46,29 +43,21 @@ export function IdeaCorchoCard({
   autorColor,
   mostrarNueva,
   nombresPorUserId,
-  esAdmin,
   miVoto,
   voting,
   onVotar,
   onMarcarVista,
-  onEditar,
-  onBorrar,
-  onAprobar,
-  onDescartar,
-  onVolverPropuesta,
   onAbrir,
+  indice = 0,
 }: IdeaCorchoCardProps) {
   const ref = useRef<HTMLElement | null>(null);
   const markedRef = useRef(false);
   const [visibleSince, setVisibleSince] = useState<number | null>(null);
 
   const descartada = idea.estado === 'descartada';
-  const aprobada = idea.estado === 'aprobada';
   const puedeVotar = puedeVotarIdea(idea, viewerUserId);
   const { up, down } = conteoVotos(idea.votos);
-  const puntaje = puntajeIdea(idea.votos);
-  const esPropia = idea.autorUserId === viewerUserId;
-  const puedeEditar = esPropia && idea.estado === 'propuesta';
+  const cantComentarios = idea.comentarios.length;
 
   useEffect(() => {
     const el = ref.current;
@@ -106,190 +95,196 @@ export function IdeaCorchoCard({
     .filter((v) => v.valor === -1)
     .map((v) => nombresPorUserId[v.userId] || 'Alguien');
 
+  const giro = giroPorId(idea.id);
+  const papel = colorPapel(autorColor, 20);
+  const papelSombra = colorPapel(autorColor, 30);
+
+  const abrir = () => {
+    onAbrir();
+    if (mostrarNueva && !markedRef.current) {
+      markedRef.current = true;
+      onMarcarVista();
+    }
+  };
+
   return (
     <article
       ref={ref}
       className={cn(
-        'relative flex flex-col gap-2 rounded-sm border-2 bg-[#fff8e7] p-4 pt-5 text-zinc-900 shadow-md transition',
-        descartada && 'opacity-50 grayscale',
-        aprobada && 'ring-2 ring-emerald-500/50',
+        'corcho-nota group relative flex flex-col gap-3 rounded-[6px] px-4 pb-3 pt-5 text-zinc-900',
+        // Papel apoyado: sombra corta de contacto + sombra larga suave.
+        'shadow-[0_1px_1px_rgba(40,20,5,0.18),0_8px_16px_-6px_rgba(40,20,5,0.4),0_22px_34px_-14px_rgba(40,20,5,0.4)]',
+        'hover:shadow-[0_1px_1px_rgba(40,20,5,0.14),0_16px_26px_-8px_rgba(40,20,5,0.45),0_34px_50px_-18px_rgba(40,20,5,0.45)]',
+        descartada && 'opacity-[0.85] saturate-[0.25]',
       )}
-      style={{ borderColor: autorColor }}
+      style={
+        {
+          '--giro': `${giro}deg`,
+          animationDelay: `${Math.min(indice, 16) * 45}ms`,
+          background: `linear-gradient(172deg, ${papel} 0%, ${papel} 65%, ${papelSombra} 100%)`,
+        } as CSSProperties
+      }
     >
-      {/* Chinche */}
-      <span
-        className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rounded-full shadow-md ring-2 ring-black/10"
-        style={{ backgroundColor: autorColor }}
-        title={autorNombre}
-        aria-hidden
-      />
+      <Chinche />
 
-      {mostrarNueva ? (
-        <span className="absolute -right-2 -top-2 rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-900 shadow">
-          Nueva
-        </span>
-      ) : null}
-
-      {aprobada ? (
-        <span className="inline-flex w-fit items-center gap-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-          <Check className="h-3 w-3" /> La vamos a hacer
-        </span>
-      ) : null}
-
-      {descartada ? (
-        <span className="inline-flex w-fit rounded bg-zinc-500/80 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-          Descartada
-        </span>
-      ) : null}
+      <div className="flex items-center gap-2.5">
+        <AvatarPersona nombre={autorNombre} color={autorColor} />
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-xs font-semibold text-zinc-800">{autorNombre}</p>
+          <p className="truncate text-[11px] text-zinc-500">{fechaRelativaCorcho(idea.createdAt)}</p>
+        </div>
+        {mostrarNueva ? (
+          <span
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-zinc-950 px-2.5 py-1 text-[11px] font-semibold leading-none text-white shadow-sm"
+            title="Todavía no la habías visto"
+          >
+            <span className="size-1.5 rounded-full bg-amber-400" />
+            Nueva
+          </span>
+        ) : null}
+      </div>
 
       <button
         type="button"
-        className="text-left"
-        onClick={() => {
-          onAbrir?.();
-          if (mostrarNueva && !markedRef.current) {
-            markedRef.current = true;
-            onMarcarVista();
-          }
-        }}
+        className="-mx-1 rounded-md px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900/30"
+        onClick={abrir}
+        aria-label={`Abrir la idea “${idea.titulo}”`}
       >
-        <h3 className="text-sm font-semibold leading-snug">{idea.titulo}</h3>
+        <h3 className="text-[15px] font-semibold leading-snug tracking-tight text-zinc-950">
+          {idea.titulo}
+        </h3>
         {idea.descripcion ? (
-          <p className="mt-1 line-clamp-4 text-xs text-zinc-700 whitespace-pre-wrap">
+          <p className="mt-1.5 line-clamp-4 whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-700">
             {idea.descripcion}
           </p>
         ) : null}
       </button>
 
-      <p className="text-[11px] text-zinc-500">{autorNombre}</p>
-
-      <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-zinc-900/10 pt-2">
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={!puedeVotar || voting || !!descartada}
-                className={cn(
-                  'h-7 gap-1 px-2 text-xs text-zinc-800',
-                  miVoto === 1 && 'bg-emerald-500/20 text-emerald-800',
-                )}
-                onClick={() => onVotar(1)}
-                aria-label="Me gusta"
-              >
-                {voting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <ThumbsUp className="h-3.5 w-3.5" />
-                )}
-                {up}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {upVoters.length
-                ? `👍 ${upVoters.join(', ')}`
-                : 'Todavía nadie votó a favor'}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={!puedeVotar || voting || !!descartada}
-                className={cn(
-                  'h-7 gap-1 px-2 text-xs text-zinc-800',
-                  miVoto === -1 && 'bg-rose-500/20 text-rose-800',
-                )}
-                onClick={() => onVotar(-1)}
-                aria-label="No me gusta"
-              >
-                <ThumbsDown className="h-3.5 w-3.5" />
-                {down}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {downVoters.length
-                ? `👎 ${downVoters.join(', ')}`
-                : 'Todavía nadie votó en contra'}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <span className="ml-auto text-[11px] tabular-nums text-zinc-500">
-          {puntaje > 0 ? `+${puntaje}` : puntaje}
-        </span>
-      </div>
-
-      {(puedeEditar || esAdmin) && (
-        <div className="flex flex-wrap gap-1">
-          {puedeEditar ? (
-            <>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs text-zinc-700"
-                onClick={onEditar}
-              >
-                <Pencil className="mr-1 h-3 w-3" /> Editar
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs text-rose-700"
-                onClick={onBorrar}
-              >
-                <Trash2 className="mr-1 h-3 w-3" /> Borrar
-              </Button>
-            </>
-          ) : null}
-          {esAdmin ? (
-            <>
-              {idea.estado !== 'aprobada' ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs text-emerald-800"
-                  onClick={onAprobar}
-                >
-                  Aprobar
-                </Button>
-              ) : null}
-              {idea.estado !== 'descartada' ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs text-zinc-600"
-                  onClick={onDescartar}
-                >
-                  Descartar
-                </Button>
-              ) : null}
-              {idea.estado !== 'propuesta' ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 px-2 text-xs text-zinc-600"
-                  onClick={onVolverPropuesta}
-                >
-                  Volver a propuesta
-                </Button>
-              ) : null}
-            </>
+      {idea.estado !== 'propuesta' ? (
+        <div className="space-y-2">
+          <SelloEstado estado={idea.estado} className="my-1 ml-1" />
+          {idea.comentarioEstado ? (
+            <p className="line-clamp-2 border-l-2 border-zinc-900/15 pl-2.5 text-xs italic leading-relaxed text-zinc-600">
+              {idea.comentarioEstado}
+            </p>
           ) : null}
         </div>
-      )}
-
-      {idea.comentarioEstado ? (
-        <p className="text-[11px] italic text-zinc-600">“{idea.comentarioEstado}”</p>
       ) : null}
+
+      <div className="-mx-1.5 mt-auto flex items-center gap-0.5 border-t border-zinc-900/[0.08] pt-2">
+        <TooltipProvider delayDuration={200}>
+          <BotonVoto
+            activo={miVoto === 1}
+            puedeVotar={puedeVotar}
+            voting={voting}
+            cantidad={up}
+            tono="up"
+            onClick={() => onVotar(1)}
+            tooltip={upVoters.length ? `👍 ${upVoters.join(', ')}` : 'Todavía nadie votó a favor'}
+          />
+          <BotonVoto
+            activo={miVoto === -1}
+            puedeVotar={puedeVotar}
+            voting={false}
+            cantidad={down}
+            tono="down"
+            onClick={() => onVotar(-1)}
+            tooltip={
+              downVoters.length ? `👎 ${downVoters.join(', ')}` : 'Todavía nadie votó en contra'
+            }
+          />
+        </TooltipProvider>
+
+        <button
+          type="button"
+          onClick={abrir}
+          className={cn(
+            'ml-auto inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium tabular-nums transition-colors hover:bg-zinc-900/[0.06]',
+            cantComentarios ? 'text-zinc-800' : 'text-zinc-500',
+          )}
+          aria-label={
+            cantComentarios
+              ? `${cantComentarios} ${cantComentarios === 1 ? 'comentario' : 'comentarios'}`
+              : 'Comentar'
+          }
+          title={cantComentarios ? 'Ver comentarios' : 'Comentar'}
+        >
+          <MessageCircle className="h-3.5 w-3.5" />
+          {cantComentarios || null}
+        </button>
+      </div>
     </article>
   );
+}
+
+/**
+ * Si no podés votar (idea propia o descartada) se muestra el conteo como texto,
+ * no como botón deshabilitado: así el tooltip con los nombres sigue funcionando.
+ */
+function BotonVoto({
+  activo,
+  puedeVotar,
+  voting,
+  cantidad,
+  tono,
+  onClick,
+  tooltip,
+}: {
+  activo: boolean;
+  puedeVotar: boolean;
+  voting?: boolean;
+  cantidad: number;
+  tono: 'up' | 'down';
+  onClick: () => void;
+  tooltip: string;
+}) {
+  const Icono = tono === 'up' ? ThumbsUp : ThumbsDown;
+  const icono = voting ? (
+    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+  ) : (
+    <Icono className="h-3.5 w-3.5" />
+  );
+  const colorActivo = tono === 'up' ? 'bg-emerald-700 text-white' : 'bg-rose-700 text-white';
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {puedeVotar ? (
+          <button
+            type="button"
+            disabled={voting}
+            className={cn(
+              BOTON_VOTO,
+              activo ? colorActivo : 'text-zinc-700 hover:bg-zinc-900/[0.06] hover:text-zinc-950',
+            )}
+            onClick={onClick}
+            aria-label={tono === 'up' ? 'Me gusta' : 'No me gusta'}
+            aria-pressed={activo}
+          >
+            {icono}
+            {cantidad}
+          </button>
+        ) : (
+          <span
+            tabIndex={0}
+            className={cn(BOTON_VOTO, 'cursor-default text-zinc-500')}
+            aria-label={`${cantidad} ${tono === 'up' ? 'a favor' : 'en contra'}`}
+          >
+            <Icono className="h-3.5 w-3.5" />
+            {cantidad}
+          </span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+const BOTON_VOTO =
+  'inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium tabular-nums transition-colors disabled:pointer-events-none disabled:opacity-50';
+
+/** Giro leve y estable por idea (entre -1.6° y 1.6°) para que parezca pegada a mano. */
+function giroPorId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return ((Math.abs(h) % 33) - 16) / 10;
 }

@@ -1,0 +1,101 @@
+/*
+ * Movimiento de la Home nueva (ver movimiento.ts).
+ *
+ * `.entrada`: al cargar la página cada bloque aparece subiendo apenas, en cascada según `--i`
+ * (0, 1, 2…). Solo se animan opacidad y transformación (las hace la placa de video sin recalcular
+ * nada); nada de desenfoques, que traban sobre el fondo animado. `.entrada-suave` es lo mismo, más corto, para
+ * contenido que cambia adentro de un bloque (pestañas, filtros).
+ */
+@keyframes home-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes home-entrada-lado {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--desde, 0) * 14px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.entrada {
+  animation: home-entrada 700ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 70ms + 60ms);
+}
+
+.entrada-suave {
+  animation: home-entrada 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Contenido de pestañas: entra desde el lado hacia donde se movió la pestaña (--desde: -1 | 1). */
+.entrada-lado {
+  animation: home-entrada-lado 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Listas: cada fila entra un poquito después de la anterior (tope de 10 para no demorar). */
+.entrada-lista > * {
+  animation: home-entrada 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.entrada-lista > *:nth-child(2) {
+  animation-delay: 25ms;
+}
+.entrada-lista > *:nth-child(3) {
+  animation-delay: 50ms;
+}
+.entrada-lista > *:nth-child(4) {
+  animation-delay: 75ms;
+}
+.entrada-lista > *:nth-child(5) {
+  animation-delay: 100ms;
+}
+.entrada-lista > *:nth-child(6) {
+  animation-delay: 125ms;
+}
+.entrada-lista > *:nth-child(7) {
+  animation-delay: 150ms;
+}
+.entrada-lista > *:nth-child(8) {
+  animation-delay: 175ms;
+}
+.entrada-lista > *:nth-child(9) {
+  animation-delay: 200ms;
+}
+.entrada-lista > *:nth-child(n + 10) {
+  animation-delay: 225ms;
+}
+
+/* Quien pidió menos movimiento en su sistema: todo instantáneo (el fondo sigue, es lento). */
+@media (prefers-reduced-motion: reduce) {
+  .home-nueva *,
+  .home-nueva *::before,
+  .home-nueva *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Ventanas del escritorio: nacen desde su ícono (transform-origin lo pone la ventana). */
+@keyframes home-ventana {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.ventana-abre {
+  animation: home-ventana 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}

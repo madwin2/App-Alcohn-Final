@@ -26,6 +26,7 @@ Procedimientos operativos donde Alcohn AI participa. Los pasos **dentro de Alcoh
 | `npm run import:clientes-viejos[:dry]` → `scripts/import-clientes-viejos-csv.mjs` | Importar "Clientes Viejos" (export de Google Sheets) | ídem; hay variante `insecure-win` para TLS en Windows |
 | `npm run update:clientes-contacto[:dry]` | Actualizar teléfono/mail de clientes desde CSV | ídem |
 | `scripts/delete-import-historica.sql` | Borrar una importación histórica | Destructivo |
+| `npm run merge:clientes-historicos[:dry]` → `scripts/merge-clientes-duplicados-historicos.mjs` | Unificar clientes duplicados de la carga histórica (mismo teléfono) | Escribe en producción; siempre `--dry-run` primero; `--apply` pide `--i-know-this-is-production` |
 | `scripts/import_correo_sucursales_xlsx.py` | Cargar el padrón `correo_sucursales` desde el Excel de MiCorreo | — |
 | `scripts/crv3d_inspect.py` | Inspeccionar un `.crv3d` (capas, parámetros) | Solo lectura |
 | `scripts/diagnostico-comercial-web.mjs/.sql`, `sql/diagnostic_wizard_funnel.sql` | Diagnóstico del embudo web | Solo lectura |

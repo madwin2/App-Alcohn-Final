@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, Loader2, Plus } from 'lucide-react'
+import { CAMPO, DIALOGO, HOJA, Etiqueta, FILA, Panel, PanelTitle } from '@/components/perfil/perfilUi'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -40,8 +41,6 @@ import { CambioDiaDialog } from '@/components/perfil/CambioDiaDialog'
 import { AusenciasPersonaDialog } from '@/components/perfil/AusenciasPersonaDialog'
 import {
   armarMesCalendario,
-  mensajeHoyNoTrabaja,
-  quienesFaltanHoy,
   rangoGrillaMes,
   tareaEventoDesdeOcurrencia,
   type DiaCalendario,
@@ -224,7 +223,6 @@ export function CalendarioTab({
   const [miembros, setMiembros] = useState<PerfilEquipo[]>([])
   const [feriados, setFeriados] = useState<Feriado[]>([])
   const [ausenciasRango, setAusenciasRango] = useState<AusenciaEquipo[]>([])
-  const [ausenciasHoy, setAusenciasHoy] = useState<AusenciaEquipo[]>([])
   const [misAusencias, setMisAusencias] = useState<AusenciaEquipo[]>([])
   const [ausenciasTareas, setAusenciasTareas] = useState<AusenciaEquipo[]>([])
   const [tareas, setTareas] = useState<TareaRecurrente[]>([])
@@ -306,14 +304,13 @@ export function CalendarioTab({
   const load = useCallback(async () => {
     setLoadingSuave(true)
     try {
-      const [m, f, aRango, aHoy, aMias, aTareas, tareasDb] = await Promise.all([
+      const [m, f, aRango, aMias, aTareas, tareasDb] = await Promise.all([
         getMiembrosEquipo(),
         getFeriados({
           desde: `${year - 1}-12-01`,
           hasta: `${year + 1}-01-31`,
         }),
         getAusencias({ desde: rangoCarga.desde, hasta: rangoCarga.hasta }),
-        getAusencias({ desde: hoy, hasta: hoy }),
         getAusenciasDeUsuario(perfil.userId),
         getAusenciasDeUsuario(tareasUserId),
         getTareasRecurrentes(tareasUserId),
@@ -322,7 +319,6 @@ export function CalendarioTab({
       setMiembros(m)
       setFeriados(f)
       setAusenciasRango(aRango.filter(a => activos.has(a.userId)))
-      setAusenciasHoy(aHoy.filter(a => activos.has(a.userId)))
       setMisAusencias(aMias)
       setAusenciasTareas(aTareas)
       setTareas(tareasDb)
@@ -487,33 +483,6 @@ export function CalendarioTab({
     }
     return diasEnRango(hoy, addDaysToKey(hoy, 13), porFecha, month)
   }, [vista, mesesArmados, year, month, semanaAnchor, hoy, porFecha])
-
-  const mensajeNoTrabaja = useMemo(
-    () => mensajeHoyNoTrabaja(hoy, feriadosCal),
-    [hoy, feriadosCal]
-  )
-
-  const faltanHoy = useMemo(
-    () =>
-      quienesFaltanHoy({
-        hoy,
-        personas: miembros.map(m => ({
-          userId: m.userId,
-          nombre: m.nombre,
-          color: m.color,
-          fechaNacimiento: m.fechaNacimiento,
-        })),
-        ausencias: ausenciasHoy.map(a => ({
-          id: a.id,
-          userId: a.userId,
-          tipo: a.tipo,
-          fechaDesde: a.fechaDesde,
-          fechaHasta: a.fechaHasta,
-          fechaRecupero: a.fechaRecupero,
-        })),
-      }),
-    [hoy, miembros, ausenciasHoy]
-  )
 
   const goPrev = () => {
     if (vista === 'agenda') return
@@ -920,25 +889,34 @@ export function CalendarioTab({
     )
   }
 
+  const filtroBtn = (activo: boolean) =>
+    cn(
+      'inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-xs transition-colors',
+      activo
+        ? 'bg-white/[0.12] text-foreground'
+        : 'text-muted-foreground hover:bg-white/[0.06] hover:text-foreground'
+    )
+
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-white">Calendario</h2>
-          <p className="text-xs text-muted-foreground">
-            Equipo y tus tareas en la misma grilla.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {!vacacionesSinLimite && saldoDias != null ? (
-            <span className="text-xs text-muted-foreground">
-              Te quedan{' '}
-              <span className="font-medium text-white">{saldoDias}</span> días
-            </span>
-          ) : null}
+    <div className="space-y-4">
+      <Panel className="min-w-0">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[15px] font-medium text-foreground">
+              Calendario del equipo
+            </h3>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              Vacaciones, cambios de día, feriados, cumpleaños y tus tareas. Arrastrá sobre varios días para cargar vacaciones.
+            </p>
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" size="sm" className="gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-9 gap-1.5 rounded-full bg-white/[0.06] px-4 hover:bg-white/[0.1]"
+              >
                 <Plus className="h-4 w-4" />
                 Agregar
                 <ChevronDown className="h-3.5 w-3.5 opacity-70" />
@@ -972,141 +950,145 @@ export function CalendarioTab({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            className="rounded border-white/20"
-            checked={mostrarTareas}
-            onChange={e => {
-              setMostrarTareas(e.target.checked)
-              writeMostrarTareas(e.target.checked)
-            }}
-          />
-          Mostrar mis tareas
-        </label>
-        {esAdmin ? (
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            Ver tareas de
-            <select
-              className="rounded-md border border-white/15 bg-transparent px-2 py-1 text-xs text-white"
-              value={tareasUserId}
-              onChange={e => setTareasUserId(e.target.value)}
-            >
-              {miembros
-                .filter(m => m.activo)
-                .map(m => (
-                  <option
-                    key={m.userId}
-                    value={m.userId}
-                    className="bg-zinc-900"
-                  >
-                    {m.nombre.split(' ')[0]}
-                  </option>
-                ))}
-            </select>
-          </label>
-        ) : null}
-      </div>
-
-      <p className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-muted-foreground">
-        {mensajeNoTrabaja ? (
-          <span className="text-white/90">{mensajeNoTrabaja}</span>
-        ) : faltanHoy.length === 0 ? (
-          <>Hoy no están: nadie</>
-        ) : (
-          <>
-            Hoy no están:{' '}
-            <span className="text-white">
-              {faltanHoy.map(f => f.nombre.split(' ')[0]).join(', ')}
-            </span>
-          </>
-        )}
-      </p>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={filtroUserIds === null ? 'secondary' : 'outline'}
-          className="h-7 text-[11px]"
-          onClick={() => setFiltroUserIds(null)}
-        >
-          Todos
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={
-            filtroUserIds?.length === 1 && filtroUserIds[0] === perfil.userId
-              ? 'secondary'
-              : 'outline'
-          }
-          className="h-7 text-[11px]"
-          onClick={() => setFiltroUserIds([perfil.userId])}
-        >
-          Solo yo
-        </Button>
-        <span className="text-[10px] text-muted-foreground">|</span>
-        {miembros.map(m => {
-          const activo = !filtroUserIds || filtroUserIds.includes(m.userId)
-          return (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <div className="flex flex-wrap items-center gap-1">
             <button
-              key={m.userId}
               type="button"
-              onClick={() => {
-                setFiltroUserIds(prev => {
-                  if (!prev) return [m.userId]
-                  if (prev.includes(m.userId)) {
-                    const next = prev.filter(id => id !== m.userId)
-                    return next.length === 0 ? null : next
-                  }
-                  return [...prev, m.userId]
-                })
-              }}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-opacity',
-                activo
-                  ? 'border-white/20 text-white'
-                  : 'border-white/10 text-muted-foreground opacity-45'
-              )}
+              className={filtroBtn(filtroUserIds === null)}
+              onClick={() => setFiltroUserIds(null)}
             >
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: m.color }}
-              />
-              {m.nombre.split(' ')[0]}
+              Todos
             </button>
-          )
-        })}
-      </div>
+            <button
+              type="button"
+              className={filtroBtn(
+                filtroUserIds?.length === 1 && filtroUserIds[0] === perfil.userId
+              )}
+              onClick={() => setFiltroUserIds([perfil.userId])}
+            >
+              Solo yo
+            </button>
+            <span className="mx-1 h-4 w-px bg-white/[0.08]" aria-hidden />
+            {miembros.map(m => {
+              const activo = !!filtroUserIds && filtroUserIds.includes(m.userId)
+              return (
+                <button
+                  key={m.userId}
+                  type="button"
+                  onClick={() => {
+                    setFiltroUserIds(prev => {
+                      if (!prev) return [m.userId]
+                      if (prev.includes(m.userId)) {
+                        const next = prev.filter(id => id !== m.userId)
+                        return next.length === 0 ? null : next
+                      }
+                      return [...prev, m.userId]
+                    })
+                  }}
+                  className={filtroBtn(activo)}
+                >
+                  <span
+                    className="size-2 rounded-full"
+                    style={{ backgroundColor: m.color }}
+                  />
+                  {m.nombre.split(' ')[0]}
+                </button>
+              )
+            })}
+          </div>
 
-      <CalendarioEquipo
-        year={year}
-        month={month}
-        dias={diasVista}
-        agendaDias={vista === 'agenda' ? diasVista : undefined}
-        hoy={hoy}
-        vista={vista}
-        onVistaChange={handleVistaChange}
-        loadingSuave={loadingSuave}
-        mostrarTareas={mostrarTareas}
-        esAdmin={esAdmin}
-        semanaDesde={
-          vista === 'semana' ? lunesDeSemana(semanaAnchor) : undefined
-        }
-        onDiaClick={fecha => setDiaSheet(fecha)}
-        onChipClick={(ev, fecha) => setChipPopover({ ev, fecha })}
-        onAgregarMenu={(fecha, accion) => abrirAgregar(accion, fecha)}
-        onRangoSeleccionado={(desde, hasta) =>
-          abrirAgregar('vacaciones', desde, { desde, hasta })
-        }
-        onPrev={goPrev}
-        onNext={goNext}
-        onHoy={goHoy}
-      />
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                className="size-3.5 rounded accent-[#e0812f]"
+                checked={mostrarTareas}
+                onChange={e => {
+                  setMostrarTareas(e.target.checked)
+                  writeMostrarTareas(e.target.checked)
+                }}
+              />
+              Mostrar mis tareas
+            </label>
+            {esAdmin ? (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Tareas de
+                <select
+                  className="h-7 rounded-full bg-white/[0.06] px-3 text-xs text-foreground outline-none"
+                  value={tareasUserId}
+                  onChange={e => setTareasUserId(e.target.value)}
+                >
+                  {miembros
+                    .filter(m => m.activo)
+                    .map(m => (
+                      <option
+                        key={m.userId}
+                        value={m.userId}
+                        className="bg-zinc-900"
+                      >
+                        {m.nombre.split(' ')[0]}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+        </div>
+
+        <CalendarioEquipo
+          year={year}
+          month={month}
+          dias={diasVista}
+          agendaDias={vista === 'agenda' ? diasVista : undefined}
+          hoy={hoy}
+          vista={vista}
+          onVistaChange={handleVistaChange}
+          loadingSuave={loadingSuave}
+          mostrarTareas={mostrarTareas}
+          esAdmin={esAdmin}
+          semanaDesde={
+            vista === 'semana' ? lunesDeSemana(semanaAnchor) : undefined
+          }
+          onDiaClick={fecha => setDiaSheet(fecha)}
+          onChipClick={(ev, fecha) => setChipPopover({ ev, fecha })}
+          onAgregarMenu={(fecha, accion) => abrirAgregar(accion, fecha)}
+          onRangoSeleccionado={(desde, hasta) =>
+            abrirAgregar('vacaciones', desde, { desde, hasta })
+          }
+          onPrev={goPrev}
+          onNext={goNext}
+          onHoy={goHoy}
+        />
+      </Panel>
+
+      <Panel>
+        <PanelTitle
+          title="Mis vacaciones y cambios"
+          sub={
+            <>
+              {vacacionesSinLimite
+                ? 'Sin límite de días. '
+                : saldoDias != null
+                  ? `Te quedan ${saldoDias} ${saldoDias === 1 ? 'día' : 'días'}. `
+                  : ''}
+              {esAdmin
+                ? 'Como admin podés corregir cualquier ausencia (también desde Equipo).'
+                : `Podés editar o borrar lo que todavía no empezó; para corregir algo que ya empezó, pedíselo a ${adminNombre}.`}
+            </>
+          }
+        />
+        <ListaAusencias
+          ausencias={misAusencias}
+          viewerUserId={perfil.userId}
+          esAdmin={esAdmin}
+          hoy={hoy}
+          horizontal
+          vacioTexto="Todavía no cargaste nada. Usá Agregar o arrastrá sobre los días del calendario."
+          onEditar={openEditAusencia}
+          onBorrar={solicitarBorrarAusencia}
+        />
+      </Panel>
 
       <Dialog
         open={chipPopover !== null}
@@ -1114,7 +1096,7 @@ export function CalendarioTab({
           if (!o) setChipPopover(null)
         }}
       >
-        <DialogContent className="max-w-sm border-white/10 bg-zinc-950">
+        <DialogContent className={cn(DIALOGO, 'max-w-sm')}>
           {renderPopoverContenido()}
         </DialogContent>
       </Dialog>
@@ -1123,9 +1105,9 @@ export function CalendarioTab({
         open={diaSheet !== null}
         onOpenChange={o => !o && setDiaSheet(null)}
       >
-        <SheetContent className="overflow-y-auto border-white/10 bg-zinc-950 sm:max-w-md">
+        <SheetContent className={cn(HOJA, 'overflow-y-auto sm:max-w-md')}>
           <SheetHeader>
-            <SheetTitle className="capitalize text-white">
+            <SheetTitle className="first-letter:uppercase">
               {diaSheet ? tituloDia(diaSheet) : ''}
             </SheetTitle>
             <SheetDescription>
@@ -1135,21 +1117,19 @@ export function CalendarioTab({
           {diaSheet && diaSheetData ? (
             <div className="mt-4 space-y-5">
               {mostrarTareas ? (
-                <section className="space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Tareas
-                  </h3>
+                <section>
+                  <Etiqueta>Tareas</Etiqueta>
                   {tareasDiaSheet.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       Sin tareas este día.
                     </p>
                   ) : (
                     tareasDiaSheet.map(oc => (
                       <div
                         key={`${oc.tareaId}-${oc.fechaProgramada}`}
-                        className="rounded-lg border border-white/10 bg-white/[0.02] p-3"
+                        className={cn(FILA, 'mb-2 space-y-2')}
                       >
-                        <p className="text-sm font-medium text-white">
+                        <p className="text-sm text-foreground">
                           {oc.titulo}
                         </p>
                         <AccionesTarea
@@ -1168,11 +1148,9 @@ export function CalendarioTab({
                 </section>
               ) : null}
 
-              <section className="space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Equipo
-                </h3>
-                <ul className="space-y-1 text-xs text-muted-foreground">
+              <section>
+                <Etiqueta>Equipo</Etiqueta>
+                <ul className="space-y-1.5 text-sm">
                   {diaSheetData.eventos
                     .filter(e => e.kind !== 'tarea')
                     .map((ev, i) => (
@@ -1195,7 +1173,8 @@ export function CalendarioTab({
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
+                  className="rounded-full bg-white/[0.06] hover:bg-white/[0.1]"
                   onClick={() => abrirAgregar('tarea', diaSheet)}
                 >
                   + Tarea
@@ -1203,7 +1182,8 @@ export function CalendarioTab({
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
+                  className="rounded-full bg-white/[0.06] hover:bg-white/[0.1]"
                   onClick={() => abrirAgregar('cambio_dia', diaSheet)}
                 >
                   Tomarme este día
@@ -1211,7 +1191,8 @@ export function CalendarioTab({
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
+                  className="rounded-full bg-white/[0.06] hover:bg-white/[0.1]"
                   onClick={() => abrirAgregar('vacaciones', diaSheet)}
                 >
                   Vacaciones desde acá
@@ -1221,26 +1202,6 @@ export function CalendarioTab({
           ) : null}
         </SheetContent>
       </Sheet>
-
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold text-white">
-          Mis vacaciones y cambios
-        </h3>
-        <ListaAusencias
-          ausencias={misAusencias}
-          viewerUserId={perfil.userId}
-          esAdmin={esAdmin}
-          hoy={hoy}
-          vacioTexto="Todavía no cargaste nada."
-          onEditar={openEditAusencia}
-          onBorrar={solicitarBorrarAusencia}
-        />
-        <p className="text-[11px] text-muted-foreground">
-          {esAdmin
-            ? 'Como admin podés corregir cualquier ausencia (también desde Equipo).'
-            : `Podés editar o borrar lo que todavía no empezó. Para corregir algo que ya empezó, pedíselo a ${adminNombre}.`}
-        </p>
-      </section>
 
       <CargarVacacionesDialog
         open={vacOpen}
@@ -1331,14 +1292,16 @@ export function CalendarioTab({
       />
 
       <Dialog open={feriadoEmpresaOpen} onOpenChange={setFeriadoEmpresaOpen}>
-        <DialogContent className="border-white/10 bg-zinc-950">
+        <DialogContent className={cn(DIALOGO, 'sm:max-w-md')}>
           <DialogHeader>
             <DialogTitle>Día de la empresa</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1">
               <Label>Fecha</Label>
-              <DatePicker date={fechaEmpresa} onDateChange={setFechaEmpresa} />
+              <div className={CAMPO}>
+                <DatePicker date={fechaEmpresa} onDateChange={setFechaEmpresa} />
+              </div>
             </div>
             <div className="space-y-1">
               <Label>Nombre</Label>

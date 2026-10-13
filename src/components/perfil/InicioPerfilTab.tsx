@@ -2,11 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Link } from 'react-router-dom'
 
-import { Cake, Loader2, Plus } from 'lucide-react'
+import {
+  ArrowUpRight,
+  Cake,
+  PackagePlus,
+  Loader2,
+  Palmtree,
+  Pin,
+  Plus,
+  Repeat,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 
 import { AccionesTarea } from '@/components/perfil/AccionesTarea'
+
+import { AccionRapida, Estado, Panel } from '@/components/perfil/perfilUi'
 
 import { CargarVacacionesDialog } from '@/components/perfil/CargarVacacionesDialog'
 
@@ -41,6 +52,7 @@ import { cn } from '@/lib/utils/cn'
 
 import {
   getMiembrosEquipo,
+  getUsuariosSinPerfil,
   type PerfilEquipo,
 } from '@/lib/supabase/services/equipo.service'
 
@@ -106,17 +118,23 @@ function tareaToAgenda(
   }
 }
 
-function etiquetaOcurrencia(oc: OcurrenciaAgenda): string {
-  if (oc.estado === 'atrasada' && oc.atrasadaDesde) {
-    const veces =
-      oc.vecesAtrasada && oc.vecesAtrasada > 1
-        ? ` (${oc.vecesAtrasada} veces)`
-        : ''
+function etiquetaAtraso(oc: OcurrenciaAgenda): string {
+  const veces =
+    oc.vecesAtrasada && oc.vecesAtrasada > 1 ? ` (${oc.vecesAtrasada} veces)` : ''
 
-    return `${oc.titulo} · atrasada${veces}`
-  }
+  return `Atrasada${veces}`
+}
 
-  return oc.titulo
+function fechaLargaHoy(hoy: string): string {
+  const d = new Date(`${hoy}T12:00:00`)
+
+  if (Number.isNaN(d.getTime())) return hoy
+
+  return d.toLocaleDateString('es-AR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
 }
 
 export function InicioPerfilTab({
@@ -175,6 +193,8 @@ export function InicioPerfilTab({
 
   const [ideasNuevas, setIdeasNuevas] = useState(0)
 
+  const [sinPerfil, setSinPerfil] = useState(0)
+
   const [vacOpen, setVacOpen] = useState(false)
 
   const [cambioOpen, setCambioOpen] = useState(false)
@@ -187,8 +207,8 @@ export function InicioPerfilTab({
 
   const adminNombre = useNombreAdmin()
 
+  // El spinner solo en la primera carga; las recargas (volver a la pestaña) son silenciosas.
   const load = useCallback(async () => {
-    setLoading(true)
 
     try {
       const anio = Number(hoy.slice(0, 4))
@@ -343,6 +363,15 @@ export function InicioPerfilTab({
   }, [load, refreshKey])
 
   useEffect(() => {
+    if (!esAdmin) return
+
+    void getUsuariosSinPerfil()
+      .then(u => setSinPerfil(u.length))
+
+      .catch(() => setSinPerfil(0))
+  }, [esAdmin, refreshKey])
+
+  useEffect(() => {
     const onVis = () => {
       if (document.visibilityState === 'visible') void load()
     }
@@ -449,242 +478,231 @@ export function InicioPerfilTab({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+      <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Cargando tu día…
       </div>
     )
   }
 
+  const primerNombre = (n: string) => n.split(/\s+/)[0] || n
+
   return (
-    <div className="space-y-5">
-      <section className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-white">Mi día</h2>
+    <div className="grid gap-4 xl:grid-cols-12">
+      {/* ---------- Hoy: tareas + acciones ---------- */}
+      <Panel className="flex flex-col xl:col-span-8">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[13px] first-letter:uppercase text-muted-foreground">
+              {fechaLargaHoy(hoy)}
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+              {!diaLaboral.esLaborable
+                ? diaLaboral.mensaje
+                : ocurrenciasHoy.length === 0
+                  ? 'Nada pendiente para hoy'
+                  : ocurrenciasHoy.length === 1
+                    ? '1 tarea para hoy'
+                    : `${ocurrenciasHoy.length} tareas para hoy`}
+            </h2>
+          </div>
 
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="ghost"
+            className="h-9 gap-1.5 rounded-full bg-white/[0.06] px-4 hover:bg-white/[0.1]"
             onClick={() => setTareaOpen(true)}
           >
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            <Plus className="h-3.5 w-3.5" />
             Tarea para hoy
           </Button>
         </div>
 
-        {ocurrenciasHoy.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No tenés tareas pendientes para hoy.
-          </p>
-        ) : (
-          <ul className="space-y-3">
+        {ocurrenciasHoy.length > 0 ? (
+          <ul className="mt-5 space-y-2">
             {ocurrenciasHoy.map(oc => (
               <li
                 key={`${oc.tareaId}-${oc.fechaProgramada}`}
-
-                className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5"
+                className="flex flex-col gap-3 rounded-2xl bg-white/[0.03] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                <p
-                  className={cn(
-                    'text-sm text-white',
-
-                    oc.estado === 'atrasada' && 'text-amber-100'
-                  )}
-                >
-                  {etiquetaOcurrencia(oc)}
-                </p>
-
-                <div className="mt-2">
-                  <AccionesTarea
-                    ocurrencia={oc}
-
-                    feriados={feriados.map(x => x.fecha)}
-
-                    misAusencias={misAusenciasAgenda}
-
-                    onChanged={load}
-                  />
+                <div className="min-w-0">
+                  <p className="text-sm text-foreground">{oc.titulo}</p>
+                  {oc.estado === 'atrasada' ? (
+                    <Estado tono="aviso" className="mt-1 text-xs text-muted-foreground">
+                      {etiquetaAtraso(oc)}
+                    </Estado>
+                  ) : null}
                 </div>
+
+                <AccionesTarea
+                  ocurrencia={oc}
+                  feriados={feriados.map(x => x.fecha)}
+                  misAusencias={misAusenciasAgenda}
+                  onChanged={load}
+                />
               </li>
             ))}
           </ul>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {diaLaboral.esLaborable
+              ? 'Lo que agendes para hoy (o lo que quedó atrasado) aparece acá.'
+              : 'Si igual querés anotar algo, sumá una tarea.'}
+          </p>
         )}
 
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => setVacOpen(true)}
-          >
+        <div className="mt-auto flex flex-wrap gap-2 pt-8">
+          <AccionRapida icon={<Palmtree />} onClick={() => setVacOpen(true)}>
             Vacaciones
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => setCambioOpen(true)}
-          >
+          </AccionRapida>
+          <AccionRapida icon={<Repeat />} onClick={() => setCambioOpen(true)}>
             Cambio de día
-          </Button>
-
-          <Button
-            type="button"
-
-            size="sm"
-
-            variant="secondary"
-
-            onClick={() => onGoTab('lo-mio', 'necesidades')}
-          >
+          </AccionRapida>
+          <AccionRapida icon={<PackagePlus />} onClick={() => onGoTab('lo-mio', 'necesidades')}>
             Pedir algo
-          </Button>
-
-          <Button type="button" size="sm" variant="secondary" asChild>
-            <Link to="/corcho?pinchar=1">Pinchar una idea</Link>
-          </Button>
+          </AccionRapida>
+          <Link
+            to="/corcho?pinchar=1"
+            className="inline-flex h-9 items-center gap-2 rounded-full bg-white/[0.06] px-4 text-sm text-foreground/90 transition-colors hover:bg-white/[0.1] hover:text-foreground"
+          >
+            <Pin className="size-4 text-muted-foreground" />
+            Pinchar una idea
+          </Link>
         </div>
-      </section>
+      </Panel>
 
-      <section className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Hoy no están
-          </p>
+      {/* ---------- Resumen del equipo y lo mío ---------- */}
+      <Panel className="flex flex-col divide-y divide-white/[0.06] py-1 sm:py-1 xl:col-span-4">
+        <div className="grid grid-cols-2 gap-6 py-5">
+          <div className="min-w-0">
+            <p className="text-[13px] text-muted-foreground">Hoy no están</p>
+            {!diaLaboral.esLaborable ? (
+              <p className="mt-1 text-sm text-muted-foreground">No es día laboral</p>
+            ) : faltanHoy.length === 0 ? (
+              <>
+                <p className="mt-1 text-lg font-semibold tracking-tight">Todos</p>
+                <p className="text-xs text-muted-foreground">están en la oficina</p>
+              </>
+            ) : (
+              <ul className="mt-1.5 space-y-1">
+                {faltanHoy.map(f => (
+                  <li key={f.userId} className="text-sm">
+                    {primerNombre(f.nombre)}
+                    <span className="text-muted-foreground">
+                      {f.motivo === 'cambio_dia' ? ' · cambio de día' : ' · vacaciones'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
-          {!diaLaboral.esLaborable ? (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {diaLaboral.mensaje}
-            </p>
-          ) : faltanHoy.length === 0 ? (
-            <p className="mt-1 text-sm text-white">Todos en la oficina</p>
-          ) : (
-            <p className="mt-1 text-sm text-white">
-              {faltanHoy
-
-                .map(f => {
-                  const corto = f.nombre.split(/\s+/)[0]
-
-                  return f.motivo === 'cambio_dia'
-                    ? `${corto} (cambio de día)`
-                    : corto
-                })
-
-                .join(', ')}
-            </p>
-          )}
+          <div className="min-w-0">
+            <p className="text-[13px] text-muted-foreground">Tus vacaciones</p>
+            {saldo ? (
+              <>
+                <p className="mt-1 text-lg font-semibold tabular-nums tracking-tight">
+                  {saldo.disponiblesHoy} {saldo.disponiblesHoy === 1 ? 'día' : 'días'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {saldo.planificados > 0
+                    ? `${saldo.planificados} ya planificados`
+                    : 'disponibles'}
+                </p>
+              </>
+            ) : (
+              <p className="mt-1 text-lg font-semibold tracking-tight">
+                {perfil.vacacionesSinLimite ? 'Sin límite' : '—'}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Vacaciones
-          </p>
-
-          <p className="mt-1 text-sm text-white">
-            {saldo
-              ? `${saldo.disponiblesHoy} días · ${saldo.planificados} planificados`
-              : perfil.vacacionesSinLimite
-                ? 'Sin límite'
-                : '—'}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 sm:col-span-2">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-            <Cake className="h-3 w-3" />
+        <div className="py-5">
+          <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+            <Cake className="size-3.5" />
             Cumpleaños
           </p>
-
           {cumples.length === 0 ? (
             <p className="mt-1 text-sm text-muted-foreground">
-              Nada en los próximos 14 días.
+              Ninguno en los próximos 14 días.
             </p>
           ) : (
-            <ul className="mt-2 space-y-1 text-sm">
+            <ul className="mt-2 space-y-1.5">
               {cumples.map(c => (
                 <li
                   key={`${c.nombre}-${c.fecha}`}
-
-                  className={cn(c.esHoy && 'font-medium text-amber-200')}
+                  className="flex items-baseline justify-between gap-3 text-sm"
                 >
-                  {c.esHoy ? '🎂 ' : ''}
-
-                  {c.nombre.split(/\s+/)[0]}
-
-                  {c.esHoy ? ' · ¡Hoy!' : c.etiqueta ? ` · ${c.etiqueta}` : ''}
+                  <span className={cn(c.esHoy && 'font-medium text-[#f6c46b]')}>
+                    {primerNombre(c.nombre)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {c.esHoy ? '¡Hoy!' : c.etiqueta}
+                  </span>
                 </li>
               ))}
             </ul>
           )}
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Corcho
-          </p>
-
-          <p className="mt-1 text-sm text-white">
-            {ideasNuevas > 0 ? `${ideasNuevas} ideas nuevas` : 'Al día'}
-          </p>
-
-          <Button
-            type="button"
-            variant="link"
-            className="mt-1 h-auto px-0 text-xs"
-            asChild
+        <div className="py-3">
+          <div className="-mx-2 grid grid-cols-2 gap-2">
+          <Link
+            to={ideasNuevas > 0 ? '/corcho?soloNuevas=1' : '/corcho'}
+            className="group rounded-2xl px-2 py-2 transition-colors hover:bg-white/[0.04]"
           >
-            <Link to="/corcho?soloNuevas=1">Ver corcho</Link>
-          </Button>
-        </div>
+            <p className="flex items-center justify-between text-[13px] text-muted-foreground">
+              Corcho
+              <ArrowUpRight className="size-3.5 opacity-40 transition-opacity group-hover:opacity-80" />
+            </p>
+            <p className="mt-0.5 text-sm font-medium">
+              {ideasNuevas > 0 ? `${ideasNuevas} ideas nuevas` : 'Al día'}
+            </p>
+          </Link>
 
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            Feedback
-          </p>
-
-          <p className="mt-1 text-sm text-white">
-            {feedbackNoLeido > 0
-              ? `${feedbackNoLeido} sin leer`
-              : 'Nada pendiente'}
-          </p>
-
-          {feedbackNoLeido > 0 ? (
-            <Button
-              type="button"
-
-              variant="link"
-
-              className="mt-1 h-auto px-0 text-xs"
-
-              onClick={() => onGoTab('lo-mio', 'feedback')}
-            >
-              Abrir
-            </Button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => onGoTab('lo-mio', 'feedback')}
+            className="group rounded-2xl px-2 py-2 text-left transition-colors hover:bg-white/[0.04]"
+          >
+            <p className="flex items-center justify-between text-[13px] text-muted-foreground">
+              Feedback
+              <ArrowUpRight className="size-3.5 opacity-40 transition-opacity group-hover:opacity-80" />
+            </p>
+            <p className="mt-0.5 text-sm font-medium">
+              {feedbackNoLeido > 0 ? `${feedbackNoLeido} sin leer` : 'Al día'}
+            </p>
+          </button>
+          </div>
         </div>
 
         {esAdmin ? (
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          <div className="py-3">
+          <button
+            type="button"
+            onClick={() => onGoTab('equipo')}
+            className="group -mx-2 block w-[calc(100%+1rem)] rounded-2xl px-2 py-2 text-left transition-colors hover:bg-white/[0.04]"
+          >
+            <p className="flex items-center justify-between text-[13px] text-muted-foreground">
               Equipo
+              <ArrowUpRight className="size-3.5 opacity-40 transition-opacity group-hover:opacity-80" />
             </p>
-
-            <Button
-              type="button"
-
-              variant="link"
-
-              className="mt-1 h-auto px-0 text-xs"
-
-              onClick={() => onGoTab('equipo')}
-            >
-              Gestionar equipo
-            </Button>
+            <p className="mt-0.5 text-sm font-medium">
+              {miembros.length} {miembros.length === 1 ? 'integrante' : 'integrantes'}
+            </p>
+            {sinPerfil > 0 ? (
+              <Estado tono="aviso" className="mt-1 text-xs text-muted-foreground">
+                {sinPerfil === 1
+                  ? '1 usuario de la app todavía no está en el equipo'
+                  : `${sinPerfil} usuarios de la app todavía no están en el equipo`}
+              </Estado>
+            ) : null}
+          </button>
           </div>
         ) : null}
-      </section>
+      </Panel>
 
       <CargarVacacionesDialog
         open={vacOpen}

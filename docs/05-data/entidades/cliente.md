@@ -16,4 +16,4 @@
 **Relaciones**: `ordenes`, `direcciones` (cascada), `mockup_solicitudes`, `comercial_cliente_seguimientos`, `comercial_exclusiones`.
 **Perfil**: `ClienteProfileDialog` (Pedidos), `ClienteDetailDialog` (Comercial).
 
-❓ Duplicados de cliente (mismo teléfono con formatos distintos, o distinta persona con mismo teléfono) → [Q-DAT-002](../../14-open-questions/datos.md#q-dat-002).
+✅ Duplicados de la carga histórica: mismo teléfono = misma persona. Script `scripts/merge-clientes-duplicados-historicos.mjs` (canónico = más viejo; nombre del canónico; mail más nuevo). Detalle → [Q-DAT-002](../../14-open-questions/datos.md#q-dat-002).

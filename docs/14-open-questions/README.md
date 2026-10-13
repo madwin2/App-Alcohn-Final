@@ -19,6 +19,7 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 
 | ID | Pregunta (resumen) | Cómo se resuelve |
 |---|---|---|
+| [Q-INI-001](inicio.md#q-ini-001) | Qué cuenta como "Pedido especial" en la Home nueva | Respuesta del equipo |
 | [Q-CNC-007](produccion-fabricacion.md#q-cnc-007) | 2 CNC físicas vs 3 máquinas en el sistema (C, G, XL) | Respuesta del equipo |
 | [Q-PROD-007](produccion-fabricacion.md#q-prod-007) | ¿Se usa la máquina `ABC` en la app para abecedarios? | Respuesta del equipo |
 | [Q-WEB-006](comercial-web.md#q-web-006) | Seña web $30.000 vs valor por defecto $20.000 en el código | Revisar el repo de la web |
@@ -32,6 +33,8 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 | [Q-VEN-009](ventas-cobros.md#q-ven-009) | Quién verifica los pagos y en qué cuenta | Respuesta del equipo |
 | [Q-ENV-009](envios.md#q-env-009) | Texto del mensaje estándar para pedir datos de envío | Respuesta del equipo |
 | [Q-PED-005](pedidos.md#q-ped-005) | Uso real de tareas y post-its (parcial) | Revisar uso |
+| [Q-EQ-029](equipo.md#q-eq-029) | Corcho: ¿los 👎 muestran el nombre de quien votó? | Decisión del dueño |
+| [Q-EQ-030](equipo.md#q-eq-030) | Corcho: ¿se votan las ideas ya aprobadas? | Decisión del dueño |
 
 ## Archivos por área
 

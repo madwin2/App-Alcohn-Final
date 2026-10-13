@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { Aviso, CAMPO, DIALOGO } from '@/components/perfil/perfilUi';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -165,7 +166,7 @@ export function TareaRecurrenteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={cn(DIALOGO, 'sm:max-w-md')}>
         <DialogHeader>
           <DialogTitle>{initial ? 'Editar tarea' : 'Nueva tarea'}</DialogTitle>
           <DialogDescription>
@@ -220,14 +221,14 @@ export function TareaRecurrenteDialog({
           {frecuencia === 'unica' ? (
             <div className="space-y-1.5">
               <Label>Día</Label>
-              <div className="rounded-md border border-input px-3 py-2">
+              <div className={CAMPO}>
                 <DatePicker
                   date={fechaUnica}
                   onDateChange={setFechaUnica}
                   placeholder="Elegir día"
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Solo aparece ese día (hoy, esta semana o una futura). No se repite.
               </p>
             </div>
@@ -245,10 +246,10 @@ export function TareaRecurrenteDialog({
                       type="button"
                       onClick={() => toggleDia(d.value)}
                       className={cn(
-                        'h-9 w-9 rounded-md border text-xs font-medium transition-colors',
+                        'size-10 rounded-full text-xs font-medium transition-colors',
                         on
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-white/15 bg-white/[0.03] text-muted-foreground hover:bg-white/[0.06]',
+                          ? 'bg-foreground text-background'
+                          : 'bg-white/[0.05] text-muted-foreground hover:bg-white/[0.09] hover:text-foreground',
                       )}
                       aria-pressed={on}
                     >
@@ -263,14 +264,14 @@ export function TareaRecurrenteDialog({
           {frecuencia === 'quincenal' ? (
             <div className="space-y-1.5">
               <Label>Semana de inicio (lunes de referencia)</Label>
-              <div className="rounded-md border border-input px-3 py-2">
+              <div className={CAMPO}>
                 <DatePicker
                   date={semanaInicio}
                   onDateChange={setSemanaInicio}
                   placeholder="Elegir lunes"
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Si elegís otro día, se usa el lunes de esa semana.
               </p>
             </div>
@@ -287,13 +288,13 @@ export function TareaRecurrenteDialog({
                 value={diaMes}
                 onChange={(e) => setDiaMes(Number(e.target.value) || 1)}
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Si cae en fin de semana o feriado, pasa al día hábil siguiente.
               </p>
             </div>
           ) : null}
 
-          {error ? <p className="text-[11px] text-amber-400">{error}</p> : null}
+          {error ? <Aviso>{error}</Aviso> : null}
         </div>
 
         <DialogFooter>

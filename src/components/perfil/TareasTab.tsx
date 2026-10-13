@@ -30,6 +30,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { toastConDeshacer } from '@/components/ui/toastDeshacer'
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog'
 import { cn } from '@/lib/utils/cn'
+import { BotonIcono, Panel, PanelTitle, Vacio } from '@/components/perfil/perfilUi'
 import { describirFrecuencia } from '@/lib/equipo/tareasRecurrentes'
 import { addDaysToKey } from '@/lib/equipo/fechas'
 import { ocurrenciasPendientes } from '@/lib/equipo/tareasAgenda'
@@ -110,15 +111,15 @@ function SortableTareaRow({
       ref={setNodeRef}
       style={style}
       className={cn(
-        'flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5',
-        !tarea.activa && 'opacity-50',
-        isDragging && 'opacity-60 shadow-lg border-primary/40'
+        'group flex items-start gap-2 rounded-2xl bg-white/[0.03] py-2.5 pl-2 pr-2.5',
+        !tarea.activa && 'opacity-55',
+        isDragging && 'relative z-10 bg-white/[0.08] shadow-xl'
       )}
     >
       {canEdit && tarea.activa ? (
         <button
           type="button"
-          className="mt-0.5 cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-white/5 active:cursor-grabbing"
+          className="mt-0.5 cursor-grab touch-none rounded-full p-1 text-muted-foreground/50 transition-colors hover:bg-white/[0.06] hover:text-muted-foreground active:cursor-grabbing"
           {...attributes}
           {...listeners}
           aria-label="Reordenar"
@@ -126,30 +127,13 @@ function SortableTareaRow({
           <GripVertical className="h-4 w-4" />
         </button>
       ) : (
-        <span className="mt-0.5 w-6" />
+        <span className="mt-0.5 w-6 shrink-0" />
       )}
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p
-            className={cn(
-              'text-sm font-medium text-white',
-              !tarea.activa && 'line-through'
-            )}
-          >
-            {tarea.titulo}
-          </p>
-          {creadoPorLabel ? (
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-200">
-              Sumada por {creadoPorLabel}
-            </span>
-          ) : null}
-          {!tarea.activa ? (
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Pausada
-            </span>
-          ) : null}
-        </div>
+      <div className="min-w-0 flex-1 py-0.5">
+        <p className={cn('text-sm text-foreground', !tarea.activa && 'line-through')}>
+          {tarea.titulo}
+        </p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {describirFrecuencia({
             frecuencia: tarea.frecuencia,
@@ -158,52 +142,29 @@ function SortableTareaRow({
             semanaInicio: tarea.semanaInicio,
             fecha: tarea.fecha,
           })}
+          {creadoPorLabel ? (
+            <span className="text-[#f6c46b]/90"> · sumada por {creadoPorLabel}</span>
+          ) : null}
         </p>
         {tarea.descripcion ? (
-          <p className="mt-1 text-xs text-muted-foreground/80 line-clamp-2">
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground/80">
             {tarea.descripcion}
           </p>
         ) : null}
       </div>
 
-      <div className="flex shrink-0 gap-0.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          title={tarea.activa ? 'Pausar' : 'Reactivar'}
-          onClick={onPause}
-          aria-label={tarea.activa ? 'Pausar' : 'Reactivar'}
-        >
-          {tarea.activa ? (
-            <Pause className="h-3.5 w-3.5" />
-          ) : (
-            <Play className="h-3.5 w-3.5" />
-          )}
-        </Button>
+      <div className="flex shrink-0 opacity-60 transition-opacity group-hover:opacity-100">
+        <BotonIcono label={tarea.activa ? 'Pausar' : 'Reactivar'} onClick={onPause}>
+          {tarea.activa ? <Pause /> : <Play />}
+        </BotonIcono>
         {canEdit ? (
           <>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={onEdit}
-              aria-label="Editar"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-              onClick={onDelete}
-              aria-label="Borrar"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+            <BotonIcono label="Editar" onClick={onEdit}>
+              <Pencil />
+            </BotonIcono>
+            <BotonIcono label="Borrar" peligro onClick={onDelete}>
+              <Trash2 />
+            </BotonIcono>
           </>
         ) : null}
       </div>
@@ -564,128 +525,126 @@ export function TareasTab({
     )
   }
 
+  const fila = (t: TareaRecurrente) => (
+    <SortableTareaRow
+      key={t.id}
+      tarea={t}
+      canEdit={canEditTarea(t)}
+      creadoPorLabel={creadorLabel(t)}
+      onEdit={() => openEdit(t)}
+      onPause={() => void handlePause(t)}
+      onDelete={() => solicitarBorrarTarea(t)}
+    />
+  )
+
+  const vacio = activas.length === 0 && pausadas.length === 0
+
+  // En el diálogo del admin (ancho acotado) va todo en una columna.
+  const grilla = modoAdmin
+    ? 'grid gap-4'
+    : 'grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3'
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
-          Creá, editá, ordená y pausá tus tareas. Para marcarlas usá Mi día.
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {modoAdmin
+            ? `Lo que tiene que hacer ${personaNombre.split(/\s+/)[0]}. Lo que sumes le llega como aviso.`
+            : 'Lo que tenés que hacer y cada cuánto. Se marcan como hechas desde Mi día.'}
         </p>
-        <Button type="button" size="sm" onClick={openCreate}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-9 gap-1.5 rounded-full bg-white/[0.06] px-4 hover:bg-white/[0.1]"
+          onClick={openCreate}
+        >
+          <Plus className="h-3.5 w-3.5" />
           {modoAdmin ? 'Sumar tarea' : 'Nueva tarea'}
         </Button>
       </div>
 
-      <div className="space-y-3">
-        {activas.length === 0 && pausadas.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/10 px-5 py-10 text-center text-sm text-muted-foreground">
-            Todavía no hay tareas. Creá la primera para anotar lo que hay que
-            hacer cada semana.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {unicasProximas.length > 0 ? (
-              <div className="space-y-2">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  Un solo día · Próximas
-                </p>
-                <div className="space-y-2">
-                  {unicasProximas.map(t => (
-                    <SortableTareaRow
-                      key={t.id}
-                      tarea={t}
-                      canEdit={canEditTarea(t)}
-                      creadoPorLabel={creadorLabel(t)}
-                      onEdit={() => openEdit(t)}
-                      onPause={() => void handlePause(t)}
-                      onDelete={() => solicitarBorrarTarea(t)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {gruposActivas.map(g => (
-              <div key={g.frecuencia} className="space-y-2">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                  {g.label}
-                </p>
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={e => void handleDragEnd(e)}
-                >
-                  <SortableContext
-                    items={g.items.map(t => t.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="space-y-2">
-                      {g.items.map(t => (
-                        <SortableTareaRow
-                          key={t.id}
-                          tarea={t}
-                          canEdit={canEditTarea(t)}
-                          creadoPorLabel={creadorLabel(t)}
-                          onEdit={() => openEdit(t)}
-                          onPause={() => void handlePause(t)}
-                          onDelete={() => solicitarBorrarTarea(t)}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {unicasHechas.length > 0 ? (
-          <div className="space-y-2 pt-2">
-            <button
+      {vacio ? (
+        <Vacio
+          accion={
+            <Button
               type="button"
-              className="flex w-full items-center justify-between text-left text-[11px] uppercase tracking-wide text-muted-foreground hover:text-white"
-              onClick={() => setHechasAbiertas(v => !v)}
+              size="sm"
+              variant="ghost"
+              className="rounded-full bg-white/[0.06] hover:bg-white/[0.1]"
+              onClick={openCreate}
             >
-              Un solo día · Hechas (últimos 30 días)
-              <span>{hechasAbiertas ? '▾' : '▸'}</span>
-            </button>
-            {hechasAbiertas ? (
-              <div className="space-y-2">
-                {unicasHechas.map(t => (
-                  <SortableTareaRow
-                    key={t.id}
-                    tarea={t}
-                    canEdit={canEditTarea(t)}
-                    creadoPorLabel={creadorLabel(t)}
-                    onEdit={() => openEdit(t)}
-                    onPause={() => void handlePause(t)}
-                    onDelete={() => solicitarBorrarTarea(t)}
-                  />
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {pausadas.length > 0 ? (
-          <div className="space-y-2 pt-2">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Pausadas
-            </p>
-            {pausadas.map(t => (
-              <SortableTareaRow
-                key={t.id}
-                tarea={t}
-                canEdit={canEditTarea(t)}
-                creadoPorLabel={creadorLabel(t)}
-                onEdit={() => openEdit(t)}
-                onPause={() => void handlePause(t)}
-                onDelete={() => solicitarBorrarTarea(t)}
+              Crear la primera
+            </Button>
+          }
+        >
+          Todavía no hay tareas. Anotá lo que hay que hacer cada día, semana o mes.
+        </Vacio>
+      ) : (
+        <div className={grilla}>
+          {unicasProximas.length > 0 ? (
+            <Panel>
+              <PanelTitle
+                title="Un solo día"
+                sub={`${unicasProximas.length} ${unicasProximas.length === 1 ? 'próxima' : 'próximas'}`}
               />
-            ))}
-          </div>
-        ) : null}
-      </div>
+              <div className="space-y-1.5">{unicasProximas.map(fila)}</div>
+            </Panel>
+          ) : null}
+
+          {gruposActivas.map(g => (
+            <Panel key={g.frecuencia}>
+              <PanelTitle
+                title={g.label}
+                sub={`${g.items.length} ${g.items.length === 1 ? 'tarea' : 'tareas'} · arrastrá para ordenar`}
+              />
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={e => void handleDragEnd(e)}
+              >
+                <SortableContext
+                  items={g.items.map(t => t.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-1.5">{g.items.map(fila)}</div>
+                </SortableContext>
+              </DndContext>
+            </Panel>
+          ))}
+
+          {unicasHechas.length > 0 ? (
+            <Panel>
+              <PanelTitle
+                title="Hechas"
+                sub="De un solo día, últimos 30 días"
+                right={
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setHechasAbiertas(v => !v)}
+                  >
+                    {hechasAbiertas ? 'Ocultar' : `Ver (${unicasHechas.length})`}
+                  </button>
+                }
+              />
+              {hechasAbiertas ? (
+                <div className="space-y-1.5">{unicasHechas.map(fila)}</div>
+              ) : null}
+            </Panel>
+          ) : null}
+
+          {pausadas.length > 0 ? (
+            <Panel>
+              <PanelTitle
+                title="Pausadas"
+                sub="No aparecen en Mi día hasta que las reactives"
+              />
+              <div className="space-y-1.5">{pausadas.map(fila)}</div>
+            </Panel>
+          ) : null}
+        </div>
+      )}
 
       <TareaRecurrenteDialog
         open={dialogOpen}

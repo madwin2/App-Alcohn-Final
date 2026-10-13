@@ -12,7 +12,7 @@ import { changelogToTourContent } from '@/lib/changelog/toTourContent';
 /**
  * Preview del cartel de novedades (CHANGELOG_ENTRIES).
  * Abrí /dev/whats-new — no marca visto en Supabase.
- * `?slide=1` abre en una novedad (0 = intro). `?id=14` elige entrada.
+ * `?slide=1` abre en una novedad (0 = intro). `?id=51` elige entrada.
  */
 export default function WhatsNewSandboxPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -37,6 +37,11 @@ export default function WhatsNewSandboxPage() {
   const content = entry ? changelogToTourContent(entry) : null;
   const latest = getLatestChangelogEntry();
 
+  const recientes = useMemo(
+    () => [...CHANGELOG_ENTRIES].sort((a, b) => b.id - a.id).slice(0, 12),
+    [],
+  );
+
   return (
     <div className="min-h-screen bg-zinc-950 px-6 py-10 text-zinc-100">
       <div className="mx-auto flex max-w-5xl flex-col gap-8">
@@ -44,7 +49,8 @@ export default function WhatsNewSandboxPage() {
           <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Sandbox · /dev/whats-new</p>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">
-              Novedades {entry ? `· v${entry.version}` : ''}
+              {entry?.title ?? 'Novedades'}
+              {entry ? ` · v${entry.version}` : ''}
             </h1>
             {latest && entry?.id === latest.id ? (
               <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-200">
@@ -64,17 +70,33 @@ export default function WhatsNewSandboxPage() {
             >
               {open ? 'Modal abierto' : 'Abrir modal'}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchParams({ id: '51' });
+                setOpen(true);
+              }}
+              className="rounded-full border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-100 hover:bg-amber-500/20"
+            >
+              Cartel corto v1.69
+            </button>
             <Link
-              to="/dev/programas-tour"
+              to="/dev/perfil-tour"
               className="rounded-full border border-white/15 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-white"
             >
-              Guía Programas
+              Guía profunda Mi perfil
+            </Link>
+            <Link
+              to="/dev/corcho"
+              className="rounded-full border border-white/15 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-white"
+            >
+              Sandbox Corcho
             </Link>
           </div>
         </header>
 
         <div className="flex flex-wrap gap-2">
-          {[...CHANGELOG_ENTRIES].reverse().slice(0, 8).map((e) => {
+          {recientes.map((e) => {
             const active = entry?.id === e.id;
             return (
               <button
@@ -91,43 +113,51 @@ export default function WhatsNewSandboxPage() {
                 }
               >
                 v{e.version}
-                <span className="ml-1.5 text-[10px] opacity-60">{e.date}</span>
+                <span className="ml-1.5 text-[10px] opacity-60">{e.title}</span>
               </button>
             );
           })}
         </div>
 
         {entry ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {entry.slides.map((slide) => {
-              const Icon = slide.icon ?? Sparkles;
-              return (
-                <article
-                  key={slide.heading}
-                  className="overflow-hidden rounded-[22px] border border-white/10 bg-zinc-900/80 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.8)]"
-                >
-                  <div className="relative flex aspect-[16/9] items-center justify-center overflow-hidden bg-zinc-950">
-                    {entry.coverImage ? (
-                      <img
-                        src={entry.coverImage}
-                        alt=""
-                        className="absolute inset-0 h-full w-full scale-105 object-cover blur-[2px] brightness-75"
-                      />
-                    ) : null}
-                    <div className="absolute inset-0 bg-zinc-950/35" />
-                    <div className="relative flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[1.25rem] border border-white/30 bg-white/15 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.5)] backdrop-blur-md">
-                      <Icon className="h-8 w-8 text-white" strokeWidth={1.5} />
+          <div className="space-y-3">
+            <p className="text-xs text-zinc-500">
+              {entry.slides.length} slides · {entry.date} · id {entry.id}
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {entry.slides.map((slide, i) => {
+                const Icon = slide.icon ?? Sparkles;
+                return (
+                  <article
+                    key={`${slide.heading}-${i}`}
+                    className="overflow-hidden rounded-[22px] border border-white/10 bg-zinc-900/80 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.8)]"
+                  >
+                    <div className="relative flex aspect-[16/9] items-center justify-center overflow-hidden bg-zinc-950">
+                      {entry.coverImage ? (
+                        <img
+                          src={entry.coverImage}
+                          alt=""
+                          className="absolute inset-0 h-full w-full scale-105 object-cover blur-[2px] brightness-75"
+                        />
+                      ) : null}
+                      <div className="absolute inset-0 bg-zinc-950/35" />
+                      <div className="absolute left-3 top-3 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-zinc-300">
+                        {i + 1}/{entry.slides.length}
+                      </div>
+                      <div className="relative flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-[1.25rem] border border-white/30 bg-white/15 shadow-[0_12px_40px_-8px_rgba(0,0,0,0.5)] backdrop-blur-md">
+                        <Icon className="h-8 w-8 text-white" strokeWidth={1.5} />
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-1.5 px-5 pb-5 pt-4">
-                    <h2 className="text-[1.35rem] font-semibold leading-tight tracking-tight text-white text-balance">
-                      {slide.heading}
-                    </h2>
-                    <p className="text-[0.8125rem] leading-relaxed text-zinc-400">{slide.body}</p>
-                  </div>
-                </article>
-              );
-            })}
+                    <div className="space-y-1.5 px-5 pb-5 pt-4">
+                      <h2 className="text-[1.35rem] font-semibold leading-tight tracking-tight text-white text-balance">
+                        {slide.heading}
+                      </h2>
+                      <p className="text-[0.8125rem] leading-relaxed text-zinc-400">{slide.body}</p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <p className="text-sm text-zinc-500">No hay entradas en CHANGELOG_ENTRIES.</p>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils/cn';
+import { Aviso, CAMPO, DIALOGO } from '@/components/perfil/perfilUi';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -275,7 +277,7 @@ export function CambioDiaDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={cn(DIALOGO, 'sm:max-w-md')}>
         <DialogHeader>
           <DialogTitle>{initial ? 'Editar cambio de día' : 'Cambiar un día'}</DialogTitle>
           <DialogDescription>
@@ -287,7 +289,7 @@ export function CambioDiaDialog({
         <div className="grid gap-4 py-2">
           <div className="space-y-1.5">
             <Label>Día que falta</Label>
-            <div className="rounded-md border border-input px-3 py-2">
+            <div className={CAMPO}>
               <DatePicker
                 date={fecha}
                 onDateChange={setFecha}
@@ -301,21 +303,21 @@ export function CambioDiaDialog({
                 Revisando el día…
               </p>
             ) : null}
-            {avisoFecha ? <p className="text-[11px] text-amber-400">{avisoFecha}</p> : null}
+            {avisoFecha ? <Aviso>{avisoFecha}</Aviso> : null}
             {errorBloqueante ? (
-              <p className="text-[11px] text-destructive">{errorBloqueante}</p>
+              <Aviso tono="mal">{errorBloqueante}</Aviso>
             ) : null}
             {datosVigentes?.anioSinFeriados ? (
-              <p className="text-[11px] text-amber-400">
+              <Aviso>
                 Todavía no están cargados los feriados de {fechaKey?.slice(0, 4)}; el número puede
                 cambiar.
-              </p>
+              </Aviso>
             ) : null}
           </div>
 
           <div className="space-y-1.5">
             <Label>Día de recupero (opcional)</Label>
-            <div className="rounded-md border border-input px-3 py-2">
+            <div className={CAMPO}>
               <DatePicker
                 date={recupero}
                 onDateChange={setRecupero}
@@ -323,11 +325,9 @@ export function CambioDiaDialog({
               />
             </div>
             {avisosDelRecupero.map((aviso) => (
-              <p key={aviso} className="text-[11px] text-amber-400">
-                {aviso} Podés cargarlo igual.
-              </p>
+              <Aviso key={aviso}>{aviso} Podés cargarlo igual.</Aviso>
             ))}
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Si no lo recuperás, queda registrado y no descuenta vacaciones.
             </p>
           </div>

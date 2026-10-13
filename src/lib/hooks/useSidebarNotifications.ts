@@ -5,7 +5,10 @@ import {
   fetchProgramasUrgentesSinProgramarBadgeCount,
   markComercialPagosAsSeen,
 } from '@/lib/supabase/services/sidebarNotifications.service';
-import { contarIdeasCorchoNuevas } from '@/lib/supabase/services/equipoCorcho.service';
+import {
+  contarIdeasCorchoNuevas,
+  EVENTO_CORCHO_VISTAS,
+} from '@/lib/supabase/services/equipoCorcho.service';
 import { useLocation } from 'react-router-dom';
 import { useEquipoRol } from '@/lib/hooks/useEquipoRol';
 
@@ -95,6 +98,20 @@ export function useSidebarNotifications() {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [refreshPedidos, refreshComercial, refreshProgramas, refreshCorcho]);
+
+  // Mientras se lee el corcho, el tablero avisa cada idea marcada vista (agrupado).
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const onVistas = () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => void refreshCorcho(), 1500);
+    };
+    window.addEventListener(EVENTO_CORCHO_VISTAS, onVistas);
+    return () => {
+      if (t) clearTimeout(t);
+      window.removeEventListener(EVENTO_CORCHO_VISTAS, onVistas);
+    };
+  }, [refreshCorcho]);
 
   // Al salir del corcho, refrescar el badge (las vistas se marcaron en la sesión).
   useEffect(() => {

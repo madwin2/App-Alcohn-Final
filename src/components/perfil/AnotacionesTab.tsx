@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Eye, EyeOff, Loader2, Pin, PinOff, Plus, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, Pin, PinOff, Plus, Search, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
@@ -305,26 +304,39 @@ export function AnotacionesTab() {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">🔒 Solo vos ves tus anotaciones.</p>
+      <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Lock className="size-3.5" />
+        Solo vos ves tus anotaciones, ni siquiera el admin.
+      </p>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:min-h-[420px]">
-        <div className="flex w-full flex-col gap-2 lg:w-[280px] lg:shrink-0">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Buscar…"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              className="h-9 text-sm"
-            />
-            <Button type="button" size="icon" className="h-9 w-9 shrink-0" onClick={() => void handleNueva()}>
+      <div className="grid gap-4 lg:h-[calc(100vh-330px)] lg:min-h-[520px] lg:grid-cols-[320px_1fr] 2xl:grid-cols-[380px_1fr]">
+        <div className="flex min-h-0 flex-col rounded-3xl bg-white/[0.035] p-3">
+          <div className="flex gap-2 p-1">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                placeholder="Buscar…"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="h-9 w-full rounded-full bg-white/[0.05] pl-8 pr-3 text-sm outline-none placeholder:text-muted-foreground focus:bg-white/[0.08]"
+              />
+            </div>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-9 w-9 shrink-0 rounded-full bg-white/[0.06] hover:bg-white/[0.1]"
+              onClick={() => void handleNueva()}
+              title="Nueva anotación"
+            >
               <Plus className="h-4 w-4" />
               <span className="sr-only">Nueva anotación</span>
             </Button>
           </div>
 
-          <ul className="max-h-[360px] flex-1 overflow-y-auto rounded-xl border border-white/10">
+          <ul className="mt-2 max-h-[360px] flex-1 space-y-0.5 overflow-y-auto lg:max-h-none">
             {lista.length === 0 ? (
-              <li className="px-3 py-6 text-center text-xs text-muted-foreground">
+              <li className="px-3 py-8 text-center text-sm text-muted-foreground">
                 {notas.length === 0 ? 'Todavía no hay anotaciones.' : 'Nada coincide con la búsqueda.'}
               </li>
             ) : (
@@ -337,16 +349,18 @@ export function AnotacionesTab() {
                       type="button"
                       onClick={() => void selectNota(n.id)}
                       className={cn(
-                        'flex w-full items-start gap-2 border-b border-white/[0.06] px-3 py-2.5 text-left text-xs transition-colors last:border-0',
-                        selectedId === n.id ? 'bg-white/10 text-white' : 'text-muted-foreground hover:bg-white/[0.04]',
+                        'flex w-full items-start gap-2 rounded-2xl px-3 py-2.5 text-left text-sm transition-colors',
+                        selectedId === n.id
+                          ? 'bg-white/[0.09] text-foreground'
+                          : 'text-muted-foreground hover:bg-white/[0.04] hover:text-foreground',
                       )}
                     >
                       {full?.fijada ? (
-                        <Pin className="mt-0.5 h-3 w-3 shrink-0 text-amber-400/90" />
+                        <Pin className="mt-1 h-3 w-3 shrink-0 text-[#f6c46b]" />
                       ) : (
                         <span className="w-3 shrink-0" />
                       )}
-                      <span className="line-clamp-2 font-medium">{label}</span>
+                      <span className="line-clamp-2">{label}</span>
                     </button>
                   </li>
                 );
@@ -355,22 +369,28 @@ export function AnotacionesTab() {
           </ul>
         </div>
 
-        <div className="flex min-h-[320px] flex-1 flex-col rounded-xl border border-white/10 bg-white/[0.02] p-4">
+        <div className="flex min-h-[420px] min-w-0 flex-col rounded-3xl bg-white/[0.035] p-5 sm:p-6">
           {!selectedId ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
               <p>Creá una anotación para empezar.</p>
-              <Button type="button" size="sm" onClick={() => void handleNueva()}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="rounded-full bg-white/[0.06] hover:bg-white/[0.1]"
+                onClick={() => void handleNueva()}
+              >
                 Nueva anotación
               </Button>
             </div>
           ) : (
             <>
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <Input
+                <input
                   value={titulo}
                   onChange={(e) => handleFieldChange('titulo', e.target.value)}
                   placeholder="Título"
-                  className="h-9 flex-1 min-w-[160px] text-sm font-medium"
+                  className="h-10 min-w-[160px] flex-1 bg-transparent text-xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/60"
                 />
                 <Button
                   type="button"
@@ -407,7 +427,7 @@ export function AnotacionesTab() {
                     disabled={saveState !== 'error'}
                     onClick={handleRetry}
                     className={cn(
-                      'text-[10px] uppercase tracking-wide',
+                      'px-1 text-xs',
                       saveState === 'error'
                         ? 'cursor-pointer text-destructive underline-offset-2 hover:underline'
                         : 'text-muted-foreground',
@@ -420,7 +440,7 @@ export function AnotacionesTab() {
 
               {preview ? (
                 <div
-                  className="prose prose-invert prose-sm max-w-none flex-1 overflow-y-auto rounded-lg border border-white/5 bg-black/20 p-3"
+                  className="prose prose-invert prose-sm max-w-none flex-1 overflow-y-auto rounded-2xl bg-black/20 p-4"
                   dangerouslySetInnerHTML={{ __html: previewHtml || '<p class="text-muted-foreground">Vacío</p>' }}
                 />
               ) : (
@@ -428,7 +448,7 @@ export function AnotacionesTab() {
                   value={contenido}
                   onChange={(e) => handleFieldChange('contenido', e.target.value)}
                   placeholder="Escribí en Markdown…"
-                  className="min-h-[280px] flex-1 resize-y font-mono text-sm"
+                  className="min-h-[280px] flex-1 resize-none rounded-2xl border-0 bg-black/20 p-4 font-mono text-sm leading-relaxed focus-visible:ring-1 focus-visible:ring-white/15 focus-visible:ring-offset-0"
                 />
               )}
             </>

@@ -28,9 +28,9 @@ export function PerfilNoActivoMensaje({
       : `Pedile a ${admin} que lo complete.`;
 
   return (
-    <div className="rounded-[20px] border border-white/10 bg-zinc-900/80 px-5 py-12 text-center">
-      <h1 className="text-lg font-semibold text-white">{titulo}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{detalle}</p>
+    <div className="flex min-h-[50vh] flex-col items-center justify-center rounded-3xl bg-white/[0.035] px-6 py-16 text-center">
+      <h1 className="text-2xl font-semibold tracking-tight">{titulo}</h1>
+      <p className="mt-2 max-w-md text-sm text-muted-foreground">{detalle}</p>
     </div>
   );
 }

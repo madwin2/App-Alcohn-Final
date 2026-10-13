@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase/client';
+import { todayArgentinaDateKey } from '@/lib/utils/argentinaDate';
 import {
   DEFAULT_CONTROL_GASTOS_CONFIG,
+  completarPagosAutomaticos,
   publicidadArsAUsd,
   type ControlGastosConfig,
   type GastoAutoCategoria,
@@ -21,7 +23,10 @@ export type GastoRecurrente = {
   monto: number;
   ivaAplica: boolean;
   diaDelMes: number;
+  /** Se sigue cobrando: la generación diaria lo crea en los meses que vienen. */
   activo: boolean;
+  /** Meses (YYYY-MM) en que no se cobró: apagado solo para ese mes desde Gastos. */
+  mesesExcluidos: string[];
 };
 
 export type CotizacionUsd = { fecha: string; blueVenta: number; oficialVenta: number | null };
@@ -172,7 +177,9 @@ export async function fetchGastosAutoData(): Promise<GastosAutoData> {
   ]);
   // Meta/Google en pesos → USD (llegan a la tarjeta en dólares).
   const registrosUsd = publicidadArsAUsd(registros, cotizaciones, cotizacion?.blueVenta ?? null);
-  return { config, registros: registrosUsd, pagos, cotizacion, ultimosSync, recurrentes, feriados, cotizaciones };
+  // Meses sin pago marcado: pagados el día 10 del mes siguiente al blue de ese día (sin cargar nada a mano).
+  const pagosCompletos = completarPagosAutomaticos(registrosUsd, pagos, cotizaciones, todayArgentinaDateKey());
+  return { config, registros: registrosUsd, pagos: pagosCompletos, cotizacion, ultimosSync, recurrentes, feriados, cotizaciones };
 }
 
 export async function createPagoUsd(input: { mes: string; fecha: string; usd: number; cotizacion: number; nota?: string }): Promise<void> {
@@ -194,7 +201,7 @@ export async function deletePagoUsd(id: string): Promise<void> {
 export async function fetchGastosRecurrentes(): Promise<GastoRecurrente[]> {
   const { data, error } = await supabase
     .from('gastos_recurrentes')
-    .select('id, nombre, categoria, moneda, monto, iva_aplica, dia_del_mes, activo')
+    .select('id, nombre, categoria, moneda, monto, iva_aplica, dia_del_mes, activo, meses_excluidos')
     .order('activo', { ascending: false })
     .order('nombre', { ascending: true });
   if (error) throw error;
@@ -207,10 +214,13 @@ export async function fetchGastosRecurrentes(): Promise<GastoRecurrente[]> {
     ivaAplica: !!r.iva_aplica,
     diaDelMes: Number(r.dia_del_mes) || 1,
     activo: !!r.activo,
+    mesesExcluidos: (r.meses_excluidos as string[] | null) ?? [],
   }));
 }
 
-export async function upsertGastoRecurrente(input: Omit<GastoRecurrente, 'id'> & { id?: string }): Promise<void> {
+export async function upsertGastoRecurrente(
+  input: Omit<GastoRecurrente, 'id' | 'mesesExcluidos'> & { id?: string },
+): Promise<void> {
   const row = {
     nombre: input.nombre.trim(),
     categoria: input.categoria,
@@ -225,6 +235,52 @@ export async function upsertGastoRecurrente(input: Omit<GastoRecurrente, 'id'> &
     ? await supabase.from('gastos_recurrentes').update(row).eq('id', input.id)
     : await supabase.from('gastos_recurrentes').insert(row);
   if (error) throw error;
+}
+
+/**
+ * Prende o apaga una recurrente solo en un mes (YYYY-MM): borra o crea su registro de ese mes y guarda
+ * la excepción para que la generación diaria no lo vuelva a crear. No toca los demás meses.
+ */
+export async function setRecurrenteEnMes(rec: GastoRecurrente, mes: string, incluido: boolean): Promise<void> {
+  const [y, m] = mes.split('-').map(Number);
+  const ultimoDia = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const fecha = `${mes}-${String(Math.min(rec.diaDelMes, ultimoDia)).padStart(2, '0')}`;
+  const excluidos = new Set(rec.mesesExcluidos);
+  if (incluido) excluidos.delete(mes);
+  else excluidos.add(mes);
+
+  const { error: e1 } = await supabase
+    .from('gastos_recurrentes')
+    .update({ meses_excluidos: [...excluidos].sort(), updated_at: new Date().toISOString() })
+    .eq('id', rec.id);
+  if (e1) throw e1;
+
+  if (incluido) {
+    const { error } = await supabase.from('gastos_registros').upsert(
+      {
+        fecha,
+        proveedor: 'recurrente',
+        categoria: rec.categoria,
+        concepto: rec.nombre,
+        external_ref: rec.id,
+        moneda: rec.moneda,
+        monto: rec.monto,
+        iva_aplica: rec.ivaAplica,
+        synced_at: new Date().toISOString(),
+      },
+      { onConflict: 'proveedor,fecha,external_ref,concepto' },
+    );
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('gastos_registros')
+      .delete()
+      .eq('proveedor', 'recurrente')
+      .eq('external_ref', rec.id)
+      .gte('fecha', `${mes}-01`)
+      .lte('fecha', `${mes}-${String(ultimoDia).padStart(2, '0')}`);
+    if (error) throw error;
+  }
 }
 
 /** Corre la sincronización ahora (cotización, recurrentes, Meta, OpenAI). */

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Estado, Panel, formatArs, formatArsCorto, formatUsd, type Tono } from '@/components/economia/controlGastosUi';
-import { type ConceptoValuado, type GastoProveedor, type ValuacionMes } from '@/lib/gastos/gastosAuto';
+import { PAGO_AUTOMATICO_PREFIJO, type ConceptoValuado, type GastoProveedor, type ValuacionMes } from '@/lib/gastos/gastosAuto';
 import {
   createPagoUsd,
   deletePagoUsd,
@@ -22,6 +22,7 @@ const FUENTES: Array<{ proveedor: GastoProveedor; label: string; detalle: string
   { proveedor: 'meta_ads', label: 'Meta Ads', detalle: 'Facebook e Instagram' },
   { proveedor: 'google_ads', label: 'Google Ads', detalle: 'Búsqueda y display' },
   { proveedor: 'openai', label: 'OpenAI', detalle: 'Imágenes web y automatizaciones' },
+  { proveedor: 'anthropic', label: 'Claude', detalle: 'API de Anthropic' },
   { proveedor: 'recurrente', label: 'Recurrentes', detalle: 'Apps, servidor y suscripciones' },
 ];
 
@@ -29,6 +30,7 @@ const SYNC_KEY: Partial<Record<GastoProveedor, string>> = {
   meta_ads: 'meta_ads',
   google_ads: 'google_ads',
   openai: 'openai',
+  anthropic: 'anthropic',
   recurrente: 'recurrentes',
 };
 
@@ -130,7 +132,7 @@ export function GastosAutoCard({ mes, etiquetaMes, valuacion, data, blueHoy, loa
 
       {!mesConAuto && data ? (
         <p className="mt-6 text-sm text-muted-foreground">
-          Este mes es anterior a los gastos automáticos: se usa solo lo cargado a mano abajo.
+          Este mes es anterior a los gastos automáticos (septiembre 2025): se usa solo lo cargado a mano abajo.
         </p>
       ) : (
         <>
@@ -321,9 +323,13 @@ function PagoDialog({
                   {new Date(`${p.fecha}T12:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} ·{' '}
                   {formatUsd(p.usd)} a {formatArs(p.cotizacion)}
                 </span>
-                <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => void borrar(p.id)} aria-label="Borrar pago">
-                  <Trash2 className="size-3.5" aria-hidden />
-                </Button>
+                {p.id.startsWith(PAGO_AUTOMATICO_PREFIJO) ? (
+                  <span className="text-xs text-muted-foreground">automático</span>
+                ) : (
+                  <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => void borrar(p.id)} aria-label="Borrar pago">
+                    <Trash2 className="size-3.5" aria-hidden />
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

@@ -28,6 +28,8 @@ import { describirFrecuencia } from '@/lib/equipo/tareasRecurrentes';
 import { todayArgentinaDateKey } from '@/lib/utils/argentinaDate';
 import { parseOrderDateLocal } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
+import { getUserInitials, getUserProfileImage } from '@/lib/utils/userImages';
+import { Aviso, BotonIcono, CAMPO, DIALOGO, Estado, Panel, PanelTitle, Vacio } from '@/components/perfil/perfilUi';
 import {
   desactivarPerfil,
   getMiembrosEquipo,
@@ -101,6 +103,14 @@ const emptyForm = (): FormState => ({
   esAdmin: false,
   saldoBaseEditado: false,
 });
+
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/** 2026-03-01 → 1 mar 2026 */
+function fmtFechaCorta(key: string): string {
+  const [y, m, d] = key.split('-');
+  return `${Number(d)} ${MESES_CORTOS[Number(m) - 1] ?? m} ${y}`;
+}
 
 function dateToKey(d: Date | undefined): string | null {
   if (!d || Number.isNaN(d.getTime())) return null;
@@ -343,12 +353,13 @@ export function EquipoTab({ onChanged, onFeriadosChanged }: EquipoTabProps) {
     }
   };
 
-  const openCreate = () => {
+  const openCreate = (userId?: string) => {
     const usados = miembros.filter((m) => m.activo).map((m) => m.color);
     const primerLibre = COLORES_EQUIPO.find((c) => !colorYaUsado(c, usados));
     setMode('create');
     setForm({
       ...emptyForm(),
+      userId: userId ?? '',
       color: primerLibre ?? COLORES_EQUIPO[0],
       saldoBaseFecha: parseOrderDateLocal(todayArgentinaDateKey()),
       saldoBaseEditado: true,
@@ -493,220 +504,200 @@ export function EquipoTab({ onChanged, onFeriadosChanged }: EquipoTabProps) {
     );
   }
 
+  const activos = miembros.filter((m) => m.activo);
+  const inactivos = miembros.filter((m) => !m.activo);
+
+  const tarjeta = (m: PerfilEquipo) => {
+    const foto = getUserProfileImage(m.nombre);
+    const s = saldosPorUser.get(m.userId);
+    const vacaciones = m.vacacionesSinLimite
+      ? 'Sin límite'
+      : s
+        ? `${s.disponiblesHoy} ${s.disponiblesHoy === 1 ? 'día' : 'días'}${s.planificados > 0 ? ` · ${s.planificados} planif.` : ''}`
+        : '—';
+    return (
+      <li key={m.userId} className={cn('flex flex-col rounded-3xl bg-white/[0.035] p-5', !m.activo && 'opacity-60')}>
+        <div className="flex items-start gap-3">
+          <div className="relative size-12 shrink-0">
+            <div className="size-full overflow-hidden rounded-2xl bg-white/[0.05]">
+              {foto ? (
+                <img src={foto} alt={m.nombre} className="size-full object-cover" draggable={false} />
+              ) : (
+                <div className="flex size-full items-center justify-center text-sm font-semibold text-foreground/80">
+                  {getUserInitials(m.nombre)}
+                </div>
+              )}
+            </div>
+            <span
+              className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full ring-[3px] ring-[#141416]"
+              style={{ backgroundColor: m.color }}
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] font-medium">{m.nombre}</p>
+            <p className="truncate text-[13px] text-muted-foreground">
+              {[m.puesto, m.areaPrincipal ? AREA_LABEL[m.areaPrincipal] : null].filter(Boolean).join(' · ') ||
+                'Sin puesto'}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {m.esAdmin ? <span className="text-xs text-muted-foreground">Admin</span> : null}
+            {!m.activo ? <Estado tono="neutro" className="text-xs text-muted-foreground">Desactivado</Estado> : null}
+          </div>
+        </div>
+
+        <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Ingreso</dt>
+            <dd className="mt-0.5 truncate">{m.fechaIngreso ? fmtFechaCorta(m.fechaIngreso) : '—'}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Cumpleaños</dt>
+            <dd className="mt-0.5 truncate">
+              {m.fechaNacimiento ? formatearCumpleaniosSinAnio(m.fechaNacimiento) : '—'}
+            </dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-muted-foreground">Vacaciones</dt>
+            <dd className="mt-0.5 truncate" title={m.vacacionesSinLimite ? undefined : `${m.diasVacacionesAnuales} días por año · saldo base ${m.vacacionesSaldoBase} al ${m.vacacionesSaldoBaseFecha}`}>
+              {vacaciones}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="mt-4 flex flex-wrap items-center gap-0.5 border-t border-white/[0.06] pt-3">
+          {m.activo ? (
+            <>
+              <BotonIcono label="Cargar vacaciones" onClick={() => openVacacionesPara(m)}>
+                <CalendarDays />
+              </BotonIcono>
+              <BotonIcono label="Cambiar un día" onClick={() => openCambioPara(m)}>
+                <Repeat />
+              </BotonIcono>
+              <BotonIcono label={`Tareas de ${m.nombre}`} onClick={() => openTareasPara(m)}>
+                <ListTodo />
+              </BotonIcono>
+              <BotonIcono label={`Feedback y objetivos de ${m.nombre}`} onClick={() => openFeedbackPara(m)}>
+                <HeartHandshake />
+              </BotonIcono>
+            </>
+          ) : null}
+          <BotonIcono label="Ver ausencias (corregir)" onClick={() => openAusenciasPara(m)}>
+            <CalendarRange />
+          </BotonIcono>
+          <span className="flex-1" />
+          <BotonIcono label={`Editar ${m.nombre}`} onClick={() => openEdit(m)}>
+            <Pencil />
+          </BotonIcono>
+          {m.activo ? (
+            <BotonIcono
+              label={m.userId === user?.id ? 'No podés desactivarte a vos mismo' : `Desactivar ${m.nombre}`}
+              peligro
+              disabled={m.userId === user?.id}
+              onClick={() => void handleDesactivar(m)}
+            >
+              <UserMinus />
+            </BotonIcono>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-full px-3 text-xs"
+              onClick={() => void handleReactivar(m)}
+            >
+              Reactivar
+            </Button>
+          )}
+        </div>
+      </li>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-white">Equipo</h2>
-          <p className="text-xs text-muted-foreground">
-            Perfiles laborales del equipo. Al cargar el saldo base, indicá la fecha a la que
-            corresponden esos días (las vacaciones futuras ya cargadas se restan solas).
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Perfiles del equipo, feriados y pedidos. Esta pestaña la ven solo los administradores del equipo.
+        </p>
         <Button
           type="button"
           size="sm"
-          onClick={openCreate}
+          variant="ghost"
+          onClick={() => openCreate()}
           disabled={sinPerfil.length === 0}
-          className="gap-1.5"
+          className="h-9 gap-1.5 rounded-full bg-white/[0.06] px-4 hover:bg-white/[0.1]"
         >
           <Plus className="h-4 w-4" />
           Agregar al equipo
         </Button>
       </div>
 
-      <EquipoNecesidadesBandeja nombresPorUserId={nombresPorUserId} />
+      {sinPerfil.length > 0 ? (
+        <Panel>
+          <PanelTitle
+            title="Usuarios de la app sin perfil de equipo"
+            sub="Están aprobados para usar la app, pero todavía no tienen perfil laboral. Hasta que lo tengan no ven Mi perfil, el calendario ni el corcho, y no aparecen en el equipo."
+          />
+          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {sinPerfil.map((u) => (
+              <li key={u.userId} className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.03] px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm">{u.nombre}</p>
+                  {u.email ? <p className="truncate text-xs text-muted-foreground">{u.email}</p> : null}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 shrink-0 gap-1 rounded-full bg-white/[0.06] px-3 text-xs hover:bg-white/[0.1]"
+                  onClick={() => openCreate(u.userId)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Sumar
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      ) : null}
 
       {miembros.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted-foreground">
-          Todavía no hay perfiles. Agregá al primer integrante.
-        </p>
+        <Vacio>Todavía no hay perfiles. Agregá al primer integrante.</Vacio>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="w-full min-w-[1020px] text-left text-xs">
-            <thead className="border-b border-white/10 bg-white/[0.03] text-[10px] uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2 font-medium">Nombre</th>
-                <th className="px-3 py-2 font-medium">Puesto</th>
-                <th className="px-3 py-2 font-medium">Área</th>
-                <th className="px-3 py-2 font-medium">Ingreso</th>
-                <th className="px-3 py-2 font-medium">Cumpleaños</th>
-                <th className="px-3 py-2 font-medium">Color</th>
-                <th className="px-3 py-2 font-medium">Días/año</th>
-                <th className="px-3 py-2 font-medium">Saldo base</th>
-                <th className="px-3 py-2 font-medium">Vac. disponibles</th>
-                <th className="px-3 py-2 font-medium">Activo</th>
-                <th className="px-3 py-2 font-medium" />
-              </tr>
-            </thead>
-            <tbody>
-              {miembros.map((m) => (
-                <tr key={m.userId} className="border-b border-white/[0.06] last:border-0">
-                  <td className="px-3 py-2.5 font-medium text-white">
-                    {m.nombre}
-                    {m.esAdmin ? (
-                      <span className="ml-1.5 rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                        admin
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{m.puesto || '—'}</td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {m.areaPrincipal ? AREA_LABEL[m.areaPrincipal] : '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{m.fechaIngreso || '—'}</td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {m.fechaNacimiento
-                      ? formatearCumpleaniosSinAnio(m.fechaNacimiento)
-                      : '—'}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span
-                      className="inline-block h-4 w-4 rounded-full border border-white/20"
-                      style={{ backgroundColor: m.color }}
-                      title={m.color}
-                    />
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {m.vacacionesSinLimite ? 'Sin límite' : m.diasVacacionesAnuales}
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {m.vacacionesSinLimite
-                      ? '—'
-                      : `${m.vacacionesSaldoBase} (al ${m.vacacionesSaldoBaseFecha})`}
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {m.vacacionesSinLimite
-                      ? 'Sin límite'
-                      : (() => {
-                          const s = saldosPorUser.get(m.userId);
-                          if (!s) return '—';
-                          return s.planificados > 0
-                            ? `${s.disponiblesHoy} (${s.planificados} planif.)`
-                            : String(s.disponiblesHoy);
-                        })()}
-                  </td>
-                  <td className="px-3 py-2.5 text-muted-foreground">
-                    {m.activo ? 'Sí' : 'No'}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex justify-end gap-1">
-                      {m.activo ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title="Cargar vacaciones"
-                            onClick={() => openVacacionesPara(m)}
-                            aria-label={`Vacaciones de ${m.nombre}`}
-                          >
-                            <CalendarDays className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title="Cambiar un día"
-                            onClick={() => openCambioPara(m)}
-                            aria-label={`Cambio de día de ${m.nombre}`}
-                          >
-                            <Repeat className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title={`Tareas de ${m.nombre}`}
-                            onClick={() => openTareasPara(m)}
-                            aria-label={`Tareas de ${m.nombre}`}
-                          >
-                            <ListTodo className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            title={`Dejar feedback a ${m.nombre}`}
-                            onClick={() => openFeedbackPara(m)}
-                            aria-label={`Feedback a ${m.nombre}`}
-                          >
-                            <HeartHandshake className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
-                      ) : null}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Ver ausencias (corregir)"
-                        onClick={() => openAusenciasPara(m)}
-                        aria-label={`Ver ausencias de ${m.nombre}`}
-                      >
-                        <CalendarRange className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => openEdit(m)}
-                        aria-label={`Editar ${m.nombre}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      {m.activo ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => void handleDesactivar(m)}
-                          disabled={m.userId === user?.id}
-                          title={
-                            m.userId === user?.id
-                              ? 'No podés quitarte el rol a vos mismo'
-                              : `Desactivar ${m.nombre}`
-                          }
-                          aria-label={`Desactivar ${m.nombre}`}
-                        >
-                          <UserMinus className="h-3.5 w-3.5" />
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => void handleReactivar(m)}
-                        >
-                          Reactivar
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div>
+          <p className="mb-3 text-[13px] text-muted-foreground">
+            Integrantes · {activos.length}
+          </p>
+          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {activos.map(tarjeta)}
+          </ul>
+          {inactivos.length > 0 ? (
+            <>
+              <p className="mb-3 mt-6 text-[13px] text-muted-foreground">
+                Desactivados · {inactivos.length}
+              </p>
+              <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {inactivos.map(tarjeta)}
+              </ul>
+            </>
+          ) : null}
         </div>
       )}
 
-      <EquipoFeriadosPanel
-        onImported={() => {
-          // El saldo cambia al sumar feriados: recalcular sin parpadeo y avisar al encabezado.
-          void load({ silent: true });
-          onFeriadosChanged?.();
-        }}
-      />
+      <div className="grid items-start gap-4 xl:grid-cols-2">
+        <EquipoNecesidadesBandeja nombresPorUserId={nombresPorUserId} />
+        <EquipoFeriadosPanel
+          onImported={() => {
+            // El saldo cambia al sumar feriados: recalcular sin parpadeo y avisar al encabezado.
+            void load({ silent: true });
+            onFeriadosChanged?.();
+          }}
+        />
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className={cn(DIALOGO, 'max-h-[90vh] overflow-y-auto sm:max-w-lg')}>
           <DialogHeader>
             <DialogTitle>
               {mode === 'create' ? 'Agregar al equipo' : 'Editar perfil'}
@@ -740,7 +731,7 @@ export function EquipoTab({ onChanged, onFeriadosChanged }: EquipoTabProps) {
                 </Select>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-lg font-semibold tracking-tight">
                 {miembros.find((m) => m.userId === form.userId)?.nombre}
               </p>
             )}
@@ -779,7 +770,7 @@ export function EquipoTab({ onChanged, onFeriadosChanged }: EquipoTabProps) {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Fecha de ingreso</Label>
-                <div className="rounded-md border border-input px-3 py-2">
+                <div className={CAMPO}>
                   <DatePicker
                     date={form.fechaIngreso}
                     onDateChange={(d) => setForm((f) => ({ ...f, fechaIngreso: d }))}
@@ -789,7 +780,7 @@ export function EquipoTab({ onChanged, onFeriadosChanged }: EquipoTabProps) {
               </div>
               <div className="space-y-1.5">
                 <Label>Cumpleaños</Label>
-                <div className="rounded-md border border-input px-3 py-2">
+                <div className={CAMPO}>
                   <DatePicker
                     date={form.fechaNacimiento}
                     onDateChange={(d) => setForm((f) => ({ ...f, fechaNacimiento: d }))}
@@ -809,17 +800,17 @@ export function EquipoTab({ onChanged, onFeriadosChanged }: EquipoTabProps) {
                     title={c}
                     onClick={() => pickColor(c)}
                     className={cn(
-                      'h-7 w-7 rounded-full border-2 transition-transform hover:scale-110',
+                      'size-7 rounded-full ring-offset-2 ring-offset-[#111113] transition-transform hover:scale-110',
                       form.color.toLowerCase() === c.toLowerCase()
-                        ? 'border-white scale-110'
-                        : 'border-transparent',
+                        ? 'scale-110 ring-2 ring-white'
+                        : '',
                     )}
                     style={{ backgroundColor: c }}
                   />
                 ))}
               </div>
               {colorAviso ? (
-                <p className="text-[11px] text-amber-400">{colorAviso}</p>
+                <Aviso>{colorAviso}</Aviso>
               ) : null}
             </div>
 
@@ -874,7 +865,7 @@ export function EquipoTab({ onChanged, onFeriadosChanged }: EquipoTabProps) {
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <Label>Fecha del saldo base</Label>
-                  <div className="rounded-md border border-input px-3 py-2">
+                  <div className={CAMPO}>
                     <DatePicker
                       date={form.saldoBaseFecha}
                       onDateChange={(d) =>
@@ -976,7 +967,7 @@ export function EquipoTab({ onChanged, onFeriadosChanged }: EquipoTabProps) {
               if (!v) setTargetPerfil(null);
             }}
           >
-            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogContent className={cn(DIALOGO, 'max-h-[90vh] overflow-y-auto sm:max-w-2xl')}>
               <DialogHeader>
                 <DialogTitle>Tareas de {targetPerfil.nombre}</DialogTitle>
                 <DialogDescription>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils/cn'
+import { Aviso, CAMPO, DIALOGO } from '@/components/perfil/perfilUi'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -298,7 +300,7 @@ export function CargarVacacionesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={cn(DIALOGO, 'sm:max-w-md')}>
         <DialogHeader>
           <DialogTitle>
             {initial ? 'Editar vacaciones' : 'Cargar vacaciones'}
@@ -312,7 +314,7 @@ export function CargarVacacionesDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Desde</Label>
-              <div className="rounded-md border border-input px-3 py-2">
+              <div className={CAMPO}>
                 <DatePicker
                   date={desde}
                   onDateChange={handleDesdeChange}
@@ -323,7 +325,7 @@ export function CargarVacacionesDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Hasta</Label>
-              <div className="rounded-md border border-input px-3 py-2">
+              <div className={CAMPO}>
                 <DatePicker
                   date={hasta}
                   onDateChange={setHasta}
@@ -335,36 +337,32 @@ export function CargarVacacionesDialog({
           </div>
 
           {rangoInvalido ? (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <Aviso tono="mal">
               «Hasta» no puede ser anterior a «Desde». Ajustá el rango para
               continuar.
-            </p>
+            </Aviso>
           ) : null}
 
           {fechaPasadaBloqueada ? (
-            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              Para hoy o días que ya pasaron, pedíselo a {adminNombre}.
-            </p>
+            <Aviso>Para hoy o días que ya pasaron, pedíselo a {adminNombre}.</Aviso>
           ) : null}
 
           {superposicionPropia ? (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <Aviso tono="mal">
               Ya tenés cargado algo esos días
               {esAdmin ? ` (${perfil.nombre.split(/\s+/)[0]})` : ''}.
-            </p>
+            </Aviso>
           ) : null}
 
           {preview && preview.diasHabiles === 0 ? (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              Ese rango no tiene días hábiles.
-            </p>
+            <Aviso tono="mal">Ese rango no tiene días hábiles.</Aviso>
           ) : null}
 
           {aniosSinFeriados.length > 0 ? (
-            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            <Aviso>
               Todavía no están cargados los feriados de{' '}
               {aniosSinFeriados.join(', ')}; el número puede cambiar.
-            </p>
+            </Aviso>
           ) : null}
 
           {calculando ? (
@@ -372,37 +370,36 @@ export function CargarVacacionesDialog({
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Calculando días…
             </p>
-          ) : preview ? (
-            <p className="text-xs text-muted-foreground">
-              Son {preview.diasHabiles} día
-              {preview.diasHabiles === 1 ? '' : 's'} hábil
-              {preview.diasHabiles === 1 ? '' : 'es'}
+          ) : preview && preview.diasHabiles > 0 ? (
+            <div className="grid grid-cols-2 gap-4 rounded-2xl bg-white/[0.04] px-4 py-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Días hábiles</p>
+                <p className="text-2xl font-semibold tabular-nums tracking-tight">
+                  {preview.diasHabiles}
+                </p>
+              </div>
               {preview.teQuedarian != null ? (
-                <>
-                  {' '}
-                  · Te quedarían{' '}
-                  <span
-                    className={
-                      preview.teQuedarian < 0
-                        ? 'font-medium text-amber-400'
-                        : 'text-white'
-                    }
+                <div>
+                  <p className="text-xs text-muted-foreground">Te quedarían</p>
+                  <p
+                    className={cn(
+                      'text-2xl font-semibold tabular-nums tracking-tight',
+                      preview.teQuedarian < 0 && 'text-amber-400'
+                    )}
                   >
                     {preview.teQuedarian}
-                  </span>
-                </>
+                  </p>
+                </div>
               ) : null}
-            </p>
+            </div>
           ) : null}
 
           {preview && preview.teQuedarian != null && preview.teQuedarian < 0 ? (
-            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              Te quedarían {preview.teQuedarian} días. Podés cargarlo igual.
-            </p>
+            <Aviso>Te pasás del saldo. Podés cargarlo igual.</Aviso>
           ) : null}
 
           {solapes.length > 0 ? (
-            <p className="rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-muted-foreground">
+            <Aviso tono="neutro" className="text-muted-foreground">
               {solapes
                 .map(s => {
                   const d0 = `${s.fechaDesde.slice(8, 10)}/${s.fechaDesde.slice(5, 7)}`
@@ -411,7 +408,7 @@ export function CargarVacacionesDialog({
                 })
                 .join('. ')}
               .
-            </p>
+            </Aviso>
           ) : null}
 
           <div className="space-y-1.5">

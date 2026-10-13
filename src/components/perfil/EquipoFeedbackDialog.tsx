@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Eye, EyeOff, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { DIALOGO } from '@/components/perfil/perfilUi';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -203,7 +204,7 @@ export function EquipoFeedbackDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className={cn(DIALOGO, 'max-h-[90vh] overflow-y-auto sm:max-w-3xl')}>
           <DialogHeader>
             <DialogTitle>Feedback y crecimiento — {perfil.nombre}</DialogTitle>
             <DialogDescription>
@@ -220,30 +221,36 @@ export function EquipoFeedbackDialog({
             <div className="space-y-6 py-1">
               <section className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-white">Feedback</h3>
-                  <Button type="button" size="sm" className="gap-1.5" onClick={openNuevo}>
+                  <h3 className="text-[15px] font-medium">Feedback</h3>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 gap-1.5 rounded-full bg-white/[0.06] px-3 hover:bg-white/[0.1]"
+                    onClick={openNuevo}
+                  >
                     <Plus className="h-3.5 w-3.5" />
                     Dejar feedback
                   </Button>
                 </div>
                 {feedback.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Todavía no le dejaste feedback.</p>
+                  <p className="text-sm text-muted-foreground">Todavía no le dejaste feedback.</p>
                 ) : (
                   <ul className="space-y-2">
                     {feedback.map((f) => (
                       <li
                         key={f.id}
-                        className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm"
+                        className="group rounded-2xl bg-white/[0.03] px-4 py-3 text-sm"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            <p className="text-foreground">
+                              {f.titulo?.trim() || labelTipoFeedback(f.tipo)}
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
                               {emojiTipoFeedback(f.tipo)} {labelTipoFeedback(f.tipo)} ·{' '}
                               {fmtFecha(f.createdAt)}
-                              {f.leidoAt ? '' : ' · Sin leer'}
-                            </p>
-                            <p className="mt-1 font-medium text-white">
-                              {f.titulo?.trim() || labelTipoFeedback(f.tipo)}
+                              {f.leidoAt ? ' · leído' : ' · sin leer'}
                             </p>
                             <p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{f.texto}</p>
                           </div>
@@ -274,8 +281,10 @@ export function EquipoFeedbackDialog({
                 )}
               </section>
 
-              <section className="space-y-2 border-t border-white/10 pt-4">
-                <h3 className="text-sm font-semibold text-white">Sus objetivos (solo lectura)</h3>
+              <section className="space-y-3 border-t border-white/[0.06] pt-5">
+                <h3 className="text-[15px] font-medium">
+                  Sus objetivos <span className="font-normal text-muted-foreground">· solo lectura</span>
+                </h3>
                 <CrecimientoTab readOnly items={objetivos} />
               </section>
             </div>
@@ -284,7 +293,7 @@ export function EquipoFeedbackDialog({
       </Dialog>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className={cn(DIALOGO, 'sm:max-w-lg')}>
           <DialogHeader>
             <DialogTitle>
               {form.id ? 'Editar feedback' : `Dejar feedback a ${perfil.nombre}`}
@@ -335,7 +344,7 @@ export function EquipoFeedbackDialog({
               {preview ? (
                 <div
                   className={cn(
-                    'prose prose-invert prose-sm min-h-[120px] max-w-none rounded-md border border-white/10 bg-black/20 px-3 py-2',
+                    'prose prose-invert prose-sm min-h-[120px] max-w-none rounded-2xl bg-black/20 px-4 py-3',
                   )}
                   dangerouslySetInnerHTML={{
                     __html: previewHtml || '<p class="text-muted-foreground">Vacío</p>',
@@ -345,7 +354,7 @@ export function EquipoFeedbackDialog({
                 <Textarea
                   value={form.texto}
                   onChange={(e) => setForm((f) => ({ ...f, texto: e.target.value }))}
-                  className="min-h-[120px] font-mono text-xs"
+                  className="min-h-[140px] resize-none rounded-2xl border-0 bg-black/20 p-4 font-mono text-sm focus-visible:ring-1 focus-visible:ring-white/15 focus-visible:ring-offset-0"
                   placeholder="Escribí el mensaje…"
                 />
               )}
