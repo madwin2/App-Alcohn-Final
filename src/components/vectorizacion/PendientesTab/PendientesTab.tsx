@@ -35,7 +35,13 @@ export function PendientesTab() {
     <div className="flex min-h-0 flex-1 flex-col gap-3 pb-20">
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(260px,42%)_minmax(0,1fr)] gap-6 lg:grid-rows-none lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)] lg:gap-8">
         <SheetStage selectedCount={selectedSellos.length} hojasCount={sheets.length} className="min-h-0">
-          <SheetPreview sheets={sheets} images={byId} className="h-full" />
+          <SheetPreview
+            sheets={sheets}
+            images={byId}
+            className="h-full"
+            scales={store.sheetScales}
+            onScaleChange={store.setSheetScale}
+          />
         </SheetStage>
 
         <ThumbsRail className="min-h-0">

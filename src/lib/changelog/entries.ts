@@ -29,6 +29,8 @@ import {
   Target,
   Pin,
   BarChart3,
+  Scaling,
+  ZoomIn,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -848,6 +850,70 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Agregar desde el calendario',
         body: 'Un botón + Agregar (o clic derecho en un día) abre tarea, vacaciones o cambio de día con la fecha ya elegida. Podés arrastrar varios días para un rango de vacaciones.',
         icon: MousePointerClick,
+      },
+    ],
+  },
+  {
+    id: 48,
+    date: '2026-10-06',
+    title: 'Novedades',
+    version: '1.66',
+    slides: [
+      {
+        heading: 'Mi perfil, renovado',
+        body: 'Ahora usa toda la pantalla: tu día y tus tareas a la izquierda, un resumen a la derecha y el calendario del equipo abajo, más grande.',
+        icon: UserCircle,
+      },
+      {
+        heading: 'Feedback para leer tranquilo',
+        body: 'En Lo mío → Feedback la lista queda a la izquierda y el que abrís se lee a la derecha. El número en la pestaña te dice cuántos tenés sin leer.',
+        icon: HeartHandshake,
+      },
+    ],
+  },
+  {
+    id: 49,
+    date: '2026-10-08',
+    title: 'Novedades',
+    version: '1.67',
+    slides: [
+      {
+        heading: 'Achicá diseños en la hoja',
+        body: 'En Vectorización, arrastrá las esquinas de un diseño para escalarlo y dejar lugar a más logos en el mismo crédito. Doble clic vuelve al 100%.',
+        icon: Scaling,
+      },
+      {
+        heading: 'Zoom al revisar el vector',
+        body: 'En Revisión, tocá la comparación o Zoom: se abre base y vector juntos, con la misma lupa y arrastre para mirar detalles.',
+        icon: ZoomIn,
+      },
+    ],
+  },
+  {
+    id: 50,
+    date: '2026-10-09',
+    title: 'Novedades',
+    version: '1.68',
+    slides: [
+      {
+        heading: 'Las ideas del corcho se abren enteras',
+        body: 'Tocá una idea para leerla completa, ver quién votó a favor y en contra, y desde cuándo está. Las notificaciones te llevan directo a esa idea.',
+        icon: Pin,
+      },
+      {
+        heading: 'Ahora se puede comentar',
+        body: 'Si querés sumar algo a una idea, comentala; si no, votá y listo. A quien la pinchó le llega un aviso.',
+        icon: MessageCircle,
+      },
+      {
+        heading: 'Corcho más ordenado',
+        body: 'Las descartadas se esconden (están en el filtro Descartadas) y una idea ya votada no se puede editar, para que nadie termine votando algo distinto.',
+        icon: Filter,
+      },
+      {
+        heading: 'Y con cara nueva',
+        body: 'Notas clavadas con chinche, sin huecos entre filas, sello de Aprobada en las que vamos a hacer y filtros en una sola línea.',
+        icon: Pin,
       },
     ],
   },

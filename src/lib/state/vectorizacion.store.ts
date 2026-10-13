@@ -8,6 +8,7 @@ import type {
   VectorResult,
 } from '@/lib/vectorizacion/types';
 import type { VectorizeMode } from '@/lib/vectorizacion/vectorizerPreset';
+import { clampSheetScale } from '@/lib/vectorizacion/sheetPacking';
 import { saveReviewQueue } from '@/lib/vectorizacion/reviewQueuePersist';
 import { dedupeReviewItems, mergeReviewItems } from '@/lib/vectorizacion/reviewQueueDedupe';
 
@@ -19,6 +20,8 @@ interface VectorizacionStore {
   cleanLevels: boolean;
   mode: VectorizeMode;
   selectedIds: string[];
+  /** Escala en la hoja por imagen (1 = tamaño preparado; solo ≤1). */
+  sheetScales: Record<string, number>;
   sources: Record<string, SourceImage>;
   prepared: Record<string, PreparedImage>;
   crops: Record<string, NormalizedCrop>;
@@ -45,6 +48,7 @@ interface VectorizacionStore {
   setMode: (mode: VectorizeMode) => void;
   setSelectedIds: (ids: string[]) => void;
   toggleSelected: (id: string, rangeIds?: string[]) => void;
+  setSheetScale: (id: string, scale: number) => void;
   putSource: (source: SourceImage) => void;
   putPrepared: (prepared: PreparedImage) => void;
   setCrop: (id: string, crop: NormalizedCrop) => void;
@@ -93,6 +97,7 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
   cleanLevels: true,
   mode: 'production',
   selectedIds: [],
+  sheetScales: {},
   sources: {},
   prepared: {},
   crops: {},
@@ -108,18 +113,43 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
   setMaximizeResolution: (maximizeResolution) => set({ maximizeResolution }),
   setCleanLevels: (cleanLevels) => set({ cleanLevels }),
   setMode: (mode) => set({ mode }),
-  setSelectedIds: (selectedIds) => set({ selectedIds }),
+  setSelectedIds: (selectedIds) => {
+    const { sheetScales } = get();
+    const keep = new Set(selectedIds);
+    const nextScales = { ...sheetScales };
+    for (const key of Object.keys(nextScales)) {
+      if (!keep.has(key)) delete nextScales[key];
+    }
+    set({ selectedIds, sheetScales: nextScales });
+  },
   toggleSelected: (id, rangeIds) => {
-    const { selectedIds } = get();
+    const { selectedIds, sheetScales } = get();
     if (rangeIds?.length) {
       set({ selectedIds: [...new Set([...selectedIds, ...rangeIds])] });
       return;
     }
-    set({
-      selectedIds: selectedIds.includes(id)
-        ? selectedIds.filter((item) => item !== id)
-        : [...selectedIds, id],
-    });
+    if (selectedIds.includes(id)) {
+      const nextScales = { ...sheetScales };
+      delete nextScales[id];
+      set({
+        selectedIds: selectedIds.filter((item) => item !== id),
+        sheetScales: nextScales,
+      });
+      return;
+    }
+    set({ selectedIds: [...selectedIds, id] });
+  },
+  setSheetScale: (id, scale) => {
+    const next = clampSheetScale(scale);
+    const { sheetScales } = get();
+    if (next >= 1) {
+      if (!(id in sheetScales)) return;
+      const copy = { ...sheetScales };
+      delete copy[id];
+      set({ sheetScales: copy });
+      return;
+    }
+    set({ sheetScales: { ...sheetScales, [id]: next } });
   },
   putSource: (source) => {
     const prev = get().sources[source.id];
@@ -129,18 +159,21 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
   putPrepared: (prepared) => set({ prepared: { ...get().prepared, [prepared.id]: prepared } }),
   setCrop: (id, crop) => set({ crops: { ...get().crops, [id]: crop } }),
   removeLocal: (id) => {
-    const { sources, prepared, crops, selectedIds, results } = get();
+    const { sources, prepared, crops, sheetScales, selectedIds, results } = get();
     closeBitmap(sources[id]);
     const nextSources = { ...sources };
     const nextPrepared = { ...prepared };
     const nextCrops = { ...crops };
+    const nextScales = { ...sheetScales };
     delete nextSources[id];
     delete nextPrepared[id];
     delete nextCrops[id];
+    delete nextScales[id];
     set({
       sources: nextSources,
       prepared: nextPrepared,
       crops: nextCrops,
+      sheetScales: nextScales,
       selectedIds: selectedIds.filter((item) => item !== id),
       results: results.filter((item) => item.id !== id),
     });

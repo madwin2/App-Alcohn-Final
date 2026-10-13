@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clampSheetScale,
   packSheets,
   scalePlacement,
   sheetUpscale,
   SHEET_GUTTER_PX,
   SHEET_MAX_ITEMS,
   SHEET_MAX_PIXELS,
+  SHEET_SCALE_MIN,
 } from './sheetPacking';
+import { packPrepared } from './runVectorizacion';
+import type { PreparedImage } from './types';
 
 function overlaps(
   a: { x: number; y: number; w: number; h: number },
@@ -62,6 +66,44 @@ describe('packSheets', () => {
     const sheets = packSheets(items);
     expect(sheets.length).toBeGreaterThan(1);
     expect(Math.max(...sheets.map((sheet) => sheet.cells.length))).toBeLessThanOrEqual(SHEET_MAX_ITEMS);
+  });
+});
+
+describe('clampSheetScale', () => {
+  it('limita entre mínimo y 1', () => {
+    expect(clampSheetScale(0.1)).toBe(SHEET_SCALE_MIN);
+    expect(clampSheetScale(1.5)).toBe(1);
+    expect(clampSheetScale(0.5)).toBe(0.5);
+    expect(clampSheetScale(Number.NaN)).toBe(1);
+  });
+});
+
+describe('packPrepared con escalas', () => {
+  const fake = (id: string, w: number, h: number): PreparedImage =>
+    ({
+      id,
+      name: id,
+      width: w,
+      height: h,
+      canvas: {} as HTMLCanvasElement,
+      previewDataUrl: '',
+      empty: false,
+      cropReason: 'ok',
+      cropPx: { x: 0, y: 0, w, h },
+      sourceSize: { w, h },
+    }) as PreparedImage;
+
+  it('aplica la escala al tamaño empaquetado', () => {
+    const a = fake('a', 800, 600);
+    const [sheet] = packPrepared([a], { a: 0.5 });
+    expect(sheet.cells[0].w).toBe(400);
+    expect(sheet.cells[0].h).toBe(300);
+  });
+
+  it('achicar puede bajar de 2 hojas a 1', () => {
+    const items = [fake('a', 1600, 1600), fake('b', 1600, 1600)];
+    expect(packPrepared(items).length).toBeGreaterThan(1);
+    expect(packPrepared(items, { a: 0.35, b: 0.35 }).length).toBe(1);
   });
 });
 

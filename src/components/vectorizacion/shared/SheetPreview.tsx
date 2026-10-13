@@ -14,10 +14,15 @@ export function SheetPreview({
   sheets,
   images,
   className,
+  scales,
+  onScaleChange,
 }: {
   sheets: PackedSheet[];
   images: Map<string, PreparedImage>;
   className?: string;
+  /** Escala por imagen (hoja activa editable si hay onScaleChange). */
+  scales?: Record<string, number>;
+  onScaleChange?: (imageId: string, scale: number) => void;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
@@ -120,6 +125,7 @@ export function SheetPreview({
           </p>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
             {current.cells.length} {current.cells.length === 1 ? 'diseño' : 'diseños'} · 1 crédito
+            {onScaleChange ? ' · esquinas para achicar' : ''}
           </p>
         </div>
         <div className="min-w-[140px]">
@@ -160,10 +166,19 @@ export function SheetPreview({
             key={index}
             data-sheet-card
             data-index={index}
-            className="pointer-events-none absolute inset-[6%_10%] origin-center will-change-transform"
+            className={cn(
+              'absolute inset-[6%_10%] origin-center will-change-transform',
+              index === active && onScaleChange ? 'pointer-events-auto' : 'pointer-events-none',
+            )}
             aria-hidden={index !== active}
           >
-            <SheetCanvas sheet={sheet} images={images} />
+            <SheetCanvas
+              sheet={sheet}
+              images={images}
+              interactive={index === active && Boolean(onScaleChange)}
+              scales={scales}
+              onScaleChange={index === active ? onScaleChange : undefined}
+            />
           </div>
         ))}
 
