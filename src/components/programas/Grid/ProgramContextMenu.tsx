@@ -1,4 +1,4 @@
-import { RefreshCw, Trash2 } from 'lucide-react';
+import { RefreshCw, ScanSearch, Trash2 } from 'lucide-react';
 import type { FabricationState } from '@/lib/types/index';
 import {
   ContextMenuContent,
@@ -21,6 +21,8 @@ interface ProgramContextMenuProps {
   hasStamps?: boolean;
   onDelete?: () => void;
   onSetFabricationState?: (state: FabricationState) => void;
+  /** Abre el chequeo de fresa de todos los sellos del programa. */
+  onCheckFresa?: () => void;
 }
 
 /** Contenido del menú contextual (botón secundario) de una tarjeta de programa. */
@@ -30,12 +32,30 @@ export function ProgramContextMenu({
   hasStamps = true,
   onDelete,
   onSetFabricationState,
+  onCheckFresa,
 }: ProgramContextMenuProps) {
   const cannotDelete = locked || busy || !onDelete;
   const cannotChangeState = busy || !hasStamps || !onSetFabricationState;
 
   return (
     <ContextMenuContent className="w-48" onClick={(e) => e.stopPropagation()}>
+      {onCheckFresa ? (
+        <>
+          <ContextMenuItem
+            disabled={!hasStamps}
+            className="gap-2"
+            onSelect={() => {
+              if (!hasStamps) return;
+              onCheckFresa();
+            }}
+          >
+            <ScanSearch className="h-4 w-4" />
+            Chequear fresa
+          </ContextMenuItem>
+          {onDelete || onSetFabricationState ? <ContextMenuSeparator /> : null}
+        </>
+      ) : null}
+
       {onDelete ? (
         <ContextMenuItem
           disabled={cannotDelete}

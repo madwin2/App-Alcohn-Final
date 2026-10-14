@@ -47,6 +47,7 @@
     "@tanstack/react-table": "^8.21.3",
     "cfb": "^1.2.2",
     "class-variance-authority": "^0.7.0",
+    "clipper2-ts": "2.0.1-18",
     "clsx": "^2.0.0",
     "date-fns": "^4.1.0",
     "dompurify": "^3.4.16",

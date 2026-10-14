@@ -31,6 +31,8 @@ import {
   BarChart3,
   Scaling,
   ZoomIn,
+  ScanSearch,
+  Wand2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -955,6 +957,29 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Menú más corto',
         body: 'Sacamos del menú Verificación, Áreas y WhatsApp Bot. Mi perfil se abre tocando tu foto y nombre abajo del menú.',
         icon: Filter,
+      },
+    ],
+  },
+  {
+    id: 53,
+    date: '2026-10-14',
+    title: 'Chequeo de fresa',
+    version: '1.71',
+    slides: [
+      {
+        heading: 'Dónde no llega la fresa',
+        body: 'En Vectorización cada vector muestra el chip «Fresa»: marca las letras muy juntas y los huecos chicos donde la fresa más fina no llega a 0,4 mm, a la medida en que se fabrica.',
+        icon: ScanSearch,
+      },
+      {
+        heading: 'Se corrige solo, antes de Aspire',
+        body: 'Tocá el chip y «Corregir automáticamente»: abre solo esos huecos, lo justo. Comparás antes y después y usás el corregido. Lo que no se puede arreglar sin romper el diseño queda marcado para hacer a mano.',
+        icon: Wand2,
+      },
+      {
+        heading: 'También en Programas',
+        body: 'En la hoja del programa, el botón «Fresa» revisa todos los sellos antes de armarlo en Aspire. En Pedidos y Producción: clic derecho en el vector → Chequear fresa.',
+        icon: Layers,
       },
     ],
   },

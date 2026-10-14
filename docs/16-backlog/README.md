@@ -47,3 +47,12 @@ Surgido de la auditoría (2026-09-27) y de las respuestas del equipo (2026-09-28
 | B-24 | Quitar o redefinir la prioridad caliente/tibio/frío de Comercial (no se usa) | POL-029 |
 | B-25 | Decidir la vista "lista" de Programas: llevar sus funciones únicas (subir `.crv3d` a mano, revisión por sello) al tablero o eliminarla | Q-PROG-007, AUD-DEAD-003 |
 | B-26 | Eliminar código muerto listado en auditorías | AUD-DEAD-* |
+
+## E. Chequeo de fresa (2026-10-14)
+
+| ID | Qué | Evidencia | Esfuerzo |
+|---|---|---|---|
+| B-27 | Que el gadget detecte que cambió el vector de un sello ya armado y lo reimporte en modo Actualizar (hoy hay que borrarlo a mano o usar Rehacer) | [chequeo-de-fresa §5](../02-modules/vectorizacion/chequeo-de-fresa.md) | M |
+| B-28 | Guardar el resultado del chequeo en la base para mostrar un aviso en cada sello del tablero de Programas sin recalcular | ADR-024 | S–M |
+| B-29 | Corrección que conserve curvas (por ejemplo, `pathops` de VectorCraft) en vez de polígonos finos en las figuras tocadas | ADR-024 | M |
+| B-30 | Perfiles de fresa por tipo de sello (3 mm, Alimento, Lacre) si difieren | Q-VEC-008 | S |

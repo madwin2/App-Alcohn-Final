@@ -12,11 +12,53 @@ import type { PendingSello } from '@/lib/vectorizacion/types';
 import { LoteDropzone } from '../LoteTab/LoteDropzone';
 import { AsignacionRow } from './AsignacionRow';
 import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
+import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
+import { FresaChip } from '@/components/fresa/FresaChip';
+import { FresaCheckDialog } from '@/components/fresa/FresaCheckDialog';
+import { chequearSvg, type FresaTarget } from '@/lib/fresa/chequeoFresa';
+import { useFresaReport } from '@/lib/fresa/useFresaReport';
 
 interface LocalSvg {
   fileName: string;
   svg: string;
   previewUrl: string;
+}
+
+function selloTarget(sello: PendingSello | undefined): FresaTarget | null {
+  return sello
+    ? { mode: 'pedido', requestedWidthMm: sello.requestedWidthMm, requestedHeightMm: sello.requestedHeightMm }
+    : null;
+}
+
+/** Chequeo de fresa de un SVG suelto: se puede analizar recién cuando se sabe a qué sello (medida) va. */
+function AsignacionFresa({
+  file,
+  sello,
+  onReplaceSvg,
+}: {
+  file: LocalSvg;
+  sello: PendingSello | undefined;
+  onReplaceSvg: (svg: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const target = selloTarget(sello);
+  const report = useFresaReport(file.svg, target);
+  return (
+    <>
+      <FresaChip report={report} idle={!target} onClick={target ? () => setOpen(true) : undefined} />
+      <FresaCheckDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={sello ? `${sello.designName} — ${sello.clienteNombre}` : file.fileName}
+        svgText={file.svg}
+        target={target}
+        downloadName={file.fileName.replace(/\.svg$/i, '')}
+        onApply={(svg) => onReplaceSvg(svg)}
+        applyLabel="Usar el corregido"
+        applyHint="Reemplaza este SVG en la lista. Se guarda en el pedido al confirmar las asignaciones."
+      />
+    </>
+  );
 }
 
 function DraggableFile({ id, label }: { id: string; label: string }) {
@@ -64,6 +106,34 @@ export function AsignarTab() {
   const [files, setFiles] = useState<LocalSvg[]>([]);
   const [assignment, setAssignment] = useState<Record<string, string | null>>({});
   const [saving, setSaving] = useState(false);
+  const [fresaGuard, setFresaGuard] = useState<string[] | null>(null);
+
+  const replaceFileSvg = (fileName: string, svg: string) => {
+    setFiles((prev) =>
+      prev.map((f) => {
+        if (f.fileName !== fileName) return f;
+        URL.revokeObjectURL(f.previewUrl);
+        return { ...f, svg, previewUrl: URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })) };
+      }),
+    );
+    toast({ title: 'SVG corregido', description: 'Se guarda en el pedido al confirmar las asignaciones.' });
+  };
+
+  /** Antes de guardar: avisar si algún SVG asignado tiene lugares donde no llega la fresa. */
+  const confirmWithFresaCheck = async () => {
+    const assigned = files
+      .map((f) => ({ f, sello: sellos.find((x) => x.id === assignment[f.fileName]) }))
+      .filter((x): x is { f: LocalSvg; sello: PendingSello } => Boolean(x.sello));
+    const reports = await Promise.all(assigned.map(({ f, sello }) => chequearSvg(f.svg, selloTarget(sello)!)));
+    const withIssues = assigned
+      .filter((_, k) => reports[k].groupCounts.alta + reports[k].groupCounts.media > 0)
+      .map(({ sello }) => sello.designName);
+    if (withIssues.length) {
+      setFresaGuard(withIssues);
+      return;
+    }
+    await confirm();
+  };
 
   useEffect(() => {
     void fetchPendientes(includeRehacer).then(setSellos);
@@ -192,11 +262,27 @@ export function AsignarTab() {
                 sellos={sellos}
                 onChange={(selloId) => setAssignment((prev) => ({ ...prev, [file.fileName]: selloId }))}
               />
+              <div className="pl-1">
+                <AsignacionFresa
+                  file={file}
+                  sello={sellos.find((x) => x.id === assignment[file.fileName])}
+                  onReplaceSvg={(svg) => replaceFileSvg(file.fileName, svg)}
+                />
+              </div>
             </div>
           ))}
-          <Button type="button" disabled={!assignedCount || saving} onClick={() => void confirm()}>
+          <Button type="button" disabled={!assignedCount || saving} onClick={() => void confirmWithFresaCheck()}>
             Confirmar asignaciones
           </Button>
+          <ConfirmDialog
+            open={Boolean(fresaGuard)}
+            onOpenChange={(o) => !o && setFresaGuard(null)}
+            title="Hay vectores donde la fresa no llega"
+            description={`${fresaGuard?.join(', ') ?? ''}: tienen lugares donde la fresa no llega a la profundidad mínima. Tocá el chip «Fresa» de cada uno para ver y corregir, o guardá igual.`}
+            cancelLabel="Revisar"
+            confirmLabel="Guardar igual"
+            onConfirm={() => void confirm()}
+          />
         </div>
         <div className="space-y-2">
           <p className="text-sm font-medium">Soltá un SVG sobre el sello</p>

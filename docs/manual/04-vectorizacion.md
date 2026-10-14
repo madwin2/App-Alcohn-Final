@@ -50,6 +50,27 @@ Por cada diseño se ve el antes y el después (**Damero** muestra el fondo a cua
 | **Cambiar** (SVG) | Reemplaza el resultado por un SVG propio (por ejemplo, uno corregido en Illustrator) |
 | **Confirmar todos** / **Descargar todos** | Para toda la tanda |
 
+### Chequeo de fresa
+
+Cada tarjeta muestra un chip **Fresa**: la app revisa sola si la fresa más fina (cónica de 60°, punta 0,1 mm) llega a **0,4 mm de profundidad** en todo el diseño, a la medida a la que se va a fabricar. Para eso, cada hueco blanco necesita al menos **0,56 mm** de ancho.
+
+| Chip | Qué significa |
+|---|---|
+| **Fresa OK** (verde) | La fresa llega bien en todo el diseño |
+| **Fresa: N lugares** (rojo o amarillo) | Hay lugares donde no llega: letras muy juntas, ojos de letras chicos, ranuras finas |
+| **Sin chequeo** | No se pudo leer el archivo (por ejemplo, texto sin convertir a curvas) |
+
+Tocá el chip para abrir el **Chequeo de fresa**:
+
+1. A la izquierda, el diseño con los lugares marcados y numerados (rojo = **No llega**, amarillo = **Llega poco**). Rueda del mouse para acercar, arrastrá para mover, **Ver todo** para volver.
+2. A la derecha, la lista: tocá un lugar y la vista va directo ahí. Dice el ancho del hueco y a qué profundidad llega la fresa.
+3. **Mostrar rincones chicos**: rincones que la fresa siempre redondea (uniones de serifas). Suelen aceptarse; por eso están ocultos.
+4. **Corregir automáticamente**: abre solo los huecos marcados, lo justo para que entre la fresa. Si arreglar uno rompería el diseño (partir un trazo fino, unir dos huecos), lo deja para editar a mano.
+5. Compará con **Original**, **Corregido** y **Qué cambia** (en celeste, el negro que se saca).
+6. **Usar el corregido** reemplaza el vector en revisión. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
+
+Si confirmás un vector con lugares donde la fresa no llega, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.
+
 🤖 Al confirmar, la app escala el vector a la medida pedida y lo mide:
 - Si entra bien en la planchuela y no se desvía más de 6 mm de lo pedido, se guarda directo.
 - Si no, aparece **Confirmar medida de fabricación** (ver abajo).
@@ -61,7 +82,8 @@ Para los diseños que vectorizaste en Illustrator u otro programa.
 1. **Arrastrá SVG ya hechos** a la pestaña (o soltá un SVG directamente sobre un sello).
 2. La app los empareja con los sellos pendientes **por el nombre del archivo** (ignora palabras como "logo", "vector", "final"). Por eso conviene nombrar el archivo como el diseño.
 3. Revisá cada emparejamiento; si alguno está mal, cambialo en **Elegir sello…**.
-4. Tocá **Confirmar asignaciones**.
+4. Cuando un SVG ya tiene sello asignado, aparece su chip **Fresa** (ver [Chequeo de fresa](#chequeo-de-fresa)). Antes de asignarlo no se puede chequear porque no se sabe la medida.
+5. Tocá **Confirmar asignaciones**. Si alguno tiene lugares donde la fresa no llega, la app avisa (**Revisar** o **Guardar igual**).
 
 También se puede subir un vector a mano desde la celda **Vector** en [Pedidos](03-pedidos.md#archivos-base-vector-y-foto) o [Producción](06-produccion.md).
 

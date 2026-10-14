@@ -47,6 +47,7 @@
 - **Panel lateral "Vectores"** (`ProgramsSidePanel`): sellos elegibles sin programa, con badges de nota, prioridad (rojo) y máquinas donde entran. Se arrastran:
   - sobre un programa → se agregan;
   - sobre un bolsillo vacío → se crea un programa nuevo con ese sello (fecha de hoy, nombre automático).
+- **Chequeo de fresa** (2026-10-14): botón **Fresa** en el pie de la hoja y **Chequear fresa** en el clic derecho de la tarjeta → `FresaProgramaDialog`: estado de cada sello del programa y corrección por sello (guarda el SVG nuevo en `archivo_vector_preview`). Ver [chequeo-de-fresa](../vectorizacion/chequeo-de-fresa.md).
 - **Carpeta "Terminados"**: soltar un programa ahí = marcar **todos** sus sellos `Hecho`. Click abre el fichero de programas finalizados (`FinishedProgramsBrowse`).
 - **Papelera**: soltar un programa = borrar (pide confirmación y qué estado devolverles a los sellos). Bloqueado si el programa tiene candado.
 - **Hoja abierta** (`ProgramCardDesign`, formato A4): fecha, preview 2D del `.crv3d`, estado ("Borrador", "Listo para Fabricar", "En fabricación", "Finalizado", candado), alertas, lista de diseños (quitar con ✕, nota con "!", medida en hover), carga por planchuela, botón **+** para agregar desde un selector en línea (`HojaInlineStampPicker`: búsqueda, filtro por tipo y planchuela, botón **Sugerir**), botón **Descargar** (baja el Aspire subido si existe; si no, genera el paquete), candado.

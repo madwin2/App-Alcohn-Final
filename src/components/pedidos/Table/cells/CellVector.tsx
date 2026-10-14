@@ -1,4 +1,4 @@
-import { Upload, Loader2, Download, Trash2, FileType2, Ruler } from 'lucide-react';
+import { ScanSearch, Upload, Loader2, Download, Trash2, FileType2, Ruler } from 'lucide-react';
 import { storageFileKindFromUrl, storageFileKindLabel } from '@/lib/utils/storageFileKind';
 import { Order } from '@/lib/types/index';
 import { useOrdersStore } from '@/lib/state/orders.store';
@@ -22,6 +22,8 @@ import { NonSvgVectorConfirmDialog } from '@/components/shared/NonSvgVectorConfi
 import { getFileExtension, isSvgFileName } from '@/lib/utils/vectorFileFormat';
 import { formatDimensions } from '@/lib/utils/format';
 import { ordenMedidaLargoCortoMm } from '@/lib/utils/medidaOrientacion';
+import { FresaVectorDialog } from '@/components/fresa/FresaVectorDialog';
+import { forgetSvgText, isSvgUrl } from '@/lib/fresa/useFresaReport';
 
 interface CellVectorProps {
   order: Order;
@@ -35,6 +37,7 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   const { preview, openPreview, closePreview } = useImagePreviewLightbox();
   const [uploading, setUploading] = useState(false);
   const [pendingNonSvgFile, setPendingNonSvgFile] = useState<File | null>(null);
+  const [fresaOpen, setFresaOpen] = useState(false);
   const openFabricationSizeDialog = useFabricationSizeDialogStore((s) => s.open);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const item = order.items[0];
@@ -319,6 +322,20 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
     }
   };
 
+  const isSvgVector = isSvgUrl(typeof hasFile === 'string' ? hasFile : null);
+
+  /** Sube el SVG corregido y lo deja como vector del sello (la medida de fabricación no cambia). */
+  const saveCorrectedVector = async (file: File) => {
+    if (!onUpdate || !item) throw new Error('No se puede editar este pedido.');
+    const filePath = generateFilePath(order.id, 'vector', file.name, item.id);
+    const url = await uploadFile('vector', file, filePath);
+    if (typeof hasFile === 'string') forgetSvgText(hasFile);
+    const updatedItems = order.items.map((i) =>
+      i.id === item.id ? { ...i, files: { ...i.files, vectorUrl: url, vectorPreviewUrl: url } } : i,
+    );
+    await onUpdate(order.id, { items: updatedItems });
+  };
+
   let content: ReactNode;
 
   if (hasFile === 'summary') {
@@ -381,6 +398,12 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
                 <Download className="mr-2 h-4 w-4" />
                 Descargar archivo
               </ContextMenuItem>
+              {isSvgVector ? (
+                <ContextMenuItem onClick={() => setFresaOpen(true)}>
+                  <ScanSearch className="mr-2 h-4 w-4" />
+                  Chequear fresa
+                </ContextMenuItem>
+              ) : null}
               <ContextMenuSeparator />
               <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -497,6 +520,12 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
               <Download className="mr-2 h-4 w-4" />
               Descargar archivo
             </ContextMenuItem>
+            {isSvgVector ? (
+              <ContextMenuItem onClick={() => setFresaOpen(true)}>
+                <ScanSearch className="mr-2 h-4 w-4" />
+                Chequear fresa
+              </ContextMenuItem>
+            ) : null}
             <ContextMenuSeparator />
             <ContextMenuItem onClick={handleDelete} className="text-red-500 focus:text-red-500">
               <Trash2 className="mr-2 h-4 w-4" />
@@ -516,6 +545,21 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   return (
     <>
       {content}
+      {isSvgVector ? (
+        <FresaVectorDialog
+          open={fresaOpen}
+          onOpenChange={setFresaOpen}
+          vectorUrl={typeof hasFile === 'string' ? hasFile : null}
+          title={item?.designName || 'Vector'}
+          size={{
+            fabricationWidthMm: item?.fabricationWidthMm,
+            fabricationHeightMm: item?.fabricationHeightMm,
+            requestedWidthMm: item?.requestedWidthMm,
+            requestedHeightMm: item?.requestedHeightMm,
+          }}
+          onSaveCorrected={onUpdate ? saveCorrectedVector : undefined}
+        />
+      ) : null}
       <NonSvgVectorConfirmDialog
         open={Boolean(pendingNonSvgFile)}
         onOpenChange={(open) => {

@@ -83,7 +83,16 @@ Clic en una tarjeta abre la hoja completa (formato A4, la **Hoja de producción*
 | **Carga por planchuela** | Cuánto se usa de cada planchuela |
 | **+** | Agregar diseños |
 | **Descargar Aspire** / **Descargar paquete** | Ver [gadget](#llevarlo-a-aspire-con-el-gadget) |
+| **Fresa** | Chequeo de fresa de todos los sellos del programa (ver abajo) |
 | Candado | **Bloquear** / **Desbloquear** |
+
+### Chequeo de fresa del programa
+
+Antes de llevar el programa a Aspire, tocá **Fresa** en la hoja (o clic derecho en la tarjeta → **Chequear fresa**). Aparece la lista de sellos con su chip: **Fresa OK** o **Fresa: N lugares** donde la fresa más fina no llega a 0,4 mm, a la medida de fabricación de cada sello. Los que no son SVG (por ejemplo EPS) no se pueden chequear.
+
+Tocá **Ver** en un sello para abrir el detalle, corregirlo automáticamente y **Guardar el corregido en el sello** (funciona igual que en [Vectorización](04-vectorizacion.md#chequeo-de-fresa)).
+
+⚠️ Si el sello **ya está armado en el Aspire**, el gadget no lo vuelve a importar solo al correr Actualizar: borralo del archivo de Aspire y corré Actualizar eligiendo **reimportar**, o usá **Rehacer desde cero**.
 
 ### Avisos de la hoja
 

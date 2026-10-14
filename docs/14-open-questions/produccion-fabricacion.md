@@ -86,3 +86,10 @@
 - **Módulo**: Programas / abecedarios · **Estado**: pendiente
 - **Pregunta**: Los abecedarios se fabrican en la **Grande** en un programa especial armado a mano, pero en el sistema existe una "máquina" `ABC` separada (sin paquete ni gadget) y los ítems ABECEDARIO no pueden entrar a programas. ¿Se usa esa máquina `ABC` en la app o el programa del abecedario no se registra en Alcohn AI?
 - **Impacto**: bajo.
+
+### Q-CNC-008
+- **Módulo**: CNC / Vectorización · **Estado**: documentada (2026-10-14)
+- **Pregunta**: ¿Cuál es la fresa más fina, a qué profundidad trabaja y qué hace hoy el operario cuando un detalle no llega a mecanizarse (por ejemplo, texto muy junto)?
+- **Por qué importa**: es el mayor trabajo manual actual en Aspire; con estos datos se puede detectar automáticamente qué zonas del diseño no llegan a mecanizarse.
+- **Impacto**: alto.
+- Respuesta: La fresa más fina es de punta 0,1 mm con **30° por lado (60° total)**. Ese mecanizado tiene profundidad final de 0,6 mm; alcanza con que llegue a 0,4 mm. Ancho de canal resultante: ≈ 0,56 mm a 0,4 mm de profundidad (≈ 0,79 mm a 0,6 mm) → todo hueco blanco más angosto que ~0,56 mm no llega a la profundidad mínima. En el vector, **lo negro es el sello positivo (relieve) y lo blanco es lo que se saca**. Hoy Fede lo corrige a mano en Aspire (agranda, mueve nodos, hace offsets). Fede trabaja desde la PC de la CNC. El equipo prefiere no cargar el Aspire con capas/objetos extra (genera errores de selección): la detección y corrección conviene hacerla al vectorizar.

@@ -13,7 +13,7 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 
 ## Estado general (2026-10-02)
 
-116 preguntas: **103 documentadas**, 2 parciales, **11 pendientes**.
+120 preguntas: **104 documentadas**, 2 parciales, **14 pendientes**.
 
 ## Pendientes
 
@@ -35,6 +35,9 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 | [Q-PED-005](pedidos.md#q-ped-005) | Uso real de tareas y post-its (parcial) | Revisar uso |
 | [Q-EQ-029](equipo.md#q-eq-029) | Corcho: ¿los 👎 muestran el nombre de quien votó? | Decisión del dueño |
 | [Q-EQ-030](equipo.md#q-eq-030) | Corcho: ¿se votan las ideas ya aprobadas? | Decisión del dueño |
+| [Q-VEC-007](vectorizacion.md#q-vec-007) | Chequeo de fresa: ¿los umbrales coinciden con lo que se corrige en Aspire? | Probarlo con Fede |
+| [Q-VEC-008](vectorizacion.md#q-vec-008) | ¿Misma fresa fina para todos los tipos de sello? | Respuesta del equipo |
+| [Q-VEC-009](vectorizacion.md#q-vec-009) | ¿Confirmar con problemas de fresa debe bloquearse? | Decisión del dueño |
 
 ## Archivos por área
 

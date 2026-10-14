@@ -72,7 +72,8 @@ La columna también permite elegir a mano un estado **Aspire** (Aspire C, G, XL 
 En la columna **VECTOR**:
 
 - Clic en una celda vacía para subir (SVG recomendado; también EPS, PDF o AI). Si no es SVG, la app avisa.
-- Clic derecho: **Reemplazar archivo**, **Descargar archivo**, **Eliminar archivo**.
+- Clic derecho: **Reemplazar archivo**, **Descargar archivo**, **Chequear fresa** (solo SVG), **Eliminar archivo**.
+- **Chequear fresa** muestra dónde no llega la fresa más fina a la medida de fabricación del sello, y permite corregirlo y **Guardar el corregido en el sello** (ver [Chequeo de fresa](04-vectorizacion.md#chequeo-de-fresa)).
 - Al subir un SVG, la app controla la medida (**Medida OK** o **Confirmar medida de fabricación**; ver [Vectorización](04-vectorizacion.md#la-medida-de-fabricación)).
 
 ## Menú de clic derecho

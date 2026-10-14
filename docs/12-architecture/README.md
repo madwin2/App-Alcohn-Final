@@ -9,6 +9,7 @@
 | Formularios | React Hook Form + Zod |
 | Datos | Supabase JS v2 (Postgres, Auth, Storage, Realtime, Edge Functions) — **sin backend propio**: el navegador habla directo con la base |
 | Archivos/PDF | pdf-lib (armar etiquetas y hojas), pdfjs-dist (leer PDFs de etiquetas), JSZip (paquetes), cfb (leer `.crv3d`) |
+| Geometría | clipper2-ts (booleanas y offsets exactos para el [chequeo de fresa](../02-modules/vectorizacion/chequeo-de-fresa.md), en Web Worker) |
 | Serverless | Funciones `/api/*.js` (🔶 Vercel) para proxy a Vectorizer.AI, OpenAI y workers |
 | Edge | Deno (Supabase Edge Functions) |
 | Workers | Node + Playwright (MiCorreo, Andreani), Python + FastAPI (vector-worker) |

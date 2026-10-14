@@ -9,6 +9,7 @@ import {
   FileCheck2,
   Plus,
   X,
+  ScanSearch,
 } from 'lucide-react';
 import {
   useEffect,
@@ -40,6 +41,7 @@ import {
 } from '@/components/programas/RemoveStamp/RemoveStampDialog';
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { ProgramContextMenu } from '@/components/programas/Grid/ProgramContextMenu';
+import { FresaProgramaDialog } from '@/components/fresa/FresaProgramaDialog';
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -477,6 +479,7 @@ export function ProgramCardDesign({
   const [flyerOn, setFlyerOn] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [fresaOpen, setFresaOpen] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeleteEmptyDialog, setShowDeleteEmptyDialog] = useState(false);
   const [stampToRemove, setStampToRemove] = useState<ProgramStamp | null>(null);
@@ -631,6 +634,7 @@ export function ProgramCardDesign({
     lengthLines,
     canDownload,
     actionBusy,
+    onCheckFresa: program.stamps.length > 0 ? () => setFresaOpen(true) : undefined,
     onDownload: onDownload
       ? () => {
           void runAction(
@@ -1141,11 +1145,12 @@ export function ProgramCardDesign({
         )}
           </div>
         </ContextMenuTrigger>
-        {(onDelete || onSetFabricationState) && (
+        {(onDelete || onSetFabricationState || program.stamps.length > 0) && (
           <ProgramContextMenu
             locked={locked}
             busy={actionBusy || busy}
             hasStamps={program.stamps.length > 0}
+            onCheckFresa={program.stamps.length > 0 ? () => setFresaOpen(true) : undefined}
             onDelete={onDelete ? openDeleteFromMenu : undefined}
             onSetFabricationState={
               onSetFabricationState ? handleMenuSetFabricationState : undefined
@@ -1190,6 +1195,13 @@ export function ProgramCardDesign({
           </>,
           document.body,
         )}
+
+      <FresaProgramaDialog
+        open={fresaOpen}
+        onOpenChange={setFresaOpen}
+        programName={program.name}
+        stamps={program.stamps}
+      />
 
       {onRemoveStamp && (
         <RemoveStampDialog
@@ -1263,6 +1275,8 @@ export function ProgramCardDesign({
 
 
 type HojaBodyProps = {
+  /** Abre el chequeo de fresa de los sellos del programa. */
+  onCheckFresa?: () => void;
   program: Program;
   locked: boolean;
   dateLabel: string;
@@ -1310,6 +1324,7 @@ function HojaBody({
   size = 'peek',
   actionBusy = false,
   onDownload,
+  onCheckFresa,
   onToggleLock,
   onAddStampsClick,
   pickingStamps = false,
@@ -1824,6 +1839,25 @@ function HojaBody({
                 ? 'Sync archivo'
                 : '—'}
           </span>
+          <div className="flex items-center gap-1.5">
+          {onCheckFresa ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCheckFresa();
+              }}
+              className={cn(
+                'inline-flex items-center justify-center gap-1 rounded-full border border-zinc-200 bg-zinc-50 text-zinc-500',
+                full ? 'h-9 px-3 text-xs' : 'h-7 w-7',
+                'hover:border-sky-500/50 hover:bg-sky-50 hover:text-sky-700',
+              )}
+              title="Chequear dónde no llega la fresa en los sellos de este programa"
+            >
+              <ScanSearch className={full ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+              {full ? 'Fresa' : null}
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={!canDownload || actionBusy || !onDownload}
@@ -1847,6 +1881,7 @@ function HojaBody({
           >
             <Download className={full ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
           </button>
+          </div>
         </footer>
       </div>
       </div>

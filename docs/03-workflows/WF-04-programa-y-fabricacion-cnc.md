@@ -47,14 +47,15 @@ sequenceDiagram
    - Arrastrar un sello a un bolsillo vacío (crea programa con nombre automático y fecha de hoy) o a un programa existente; o abrir la hoja → **+** → filtrar por planchuela → **Sugerir** (prioridad + antigüedad, hasta llenar planchuelas).
    - Validaciones: máquina admite la planchuela del sello; no superar el largo máximo por planchuela.
    - Criterio confirmado: prioritarios → más viejos → aprovechar la planchuela; un programa por día por máquina.
-2. **Llevar a Aspire**:
+2. **Chequear la fresa** (opcional, recomendado): hoja → **Fresa** (o clic derecho → Chequear fresa) muestra qué sellos tienen lugares donde la fresa no llega y permite corregirlos y guardar el vector nuevo → [chequeo-de-fresa](../02-modules/vectorizacion/chequeo-de-fresa.md).
+3. **Llevar a Aspire**:
    - Preferido: en la PC de la máquina, abrir el `.crv3d` base y correr el gadget → elige el programa de la lista (baja el paquete solo).
    - Alternativa sin internet: **Descargar** el ZIP en Alcohn AI, descomprimir, correr el gadget eligiendo la carpeta.
-3. **Gadget** (ver [gadget-aspire.md](../02-modules/programas/gadget-aspire.md)): modo Armar/Actualizar/Rehacer/Solo recalcular; importa SVG/DXF; rechaza EPS; pregunta por sellos faltantes; recalcula; reporta; sube el `.crv3d`.
-4. **Resultado en Alcohn AI**: hoja en **Listo para Fabricar**, preview 2D, alertas (no importados, otra planchuela, sobrantes). Sellos que el operario borró por falta de material vuelven a la cola (`motivo_salida_programa='SIN_MATERIAL'`).
-5. **Fabricar** (externo, confirmado): guardar trayectorias en pendrive, cargarlas en la CNC, colocar planchuelas precortadas, dejar corriendo (→ Haciendo), cortar y probar en cuero (→ Hecho). El armado con mango/varilla lo hace Cachi al despachar → [FR-04](../10-operational-boundaries/README.md#fr-04), [SOP fabricar un sello](../11-operations-sops/fabricar-un-sello.md).
-6. **Registrar avance**: menú del programa → **Haciendo**; al terminar arrastrar a **Terminados** (todos `Hecho`) o, desde la vista lista, revisar sello por sello (Hecho/Retocar/Rehacer). También se puede marcar por sello en Producción/Pedidos.
-7. **Efectos de `Hecho`** (✅): trigger `registrar_bronce_consumo_sello` (cada vez que un ítem `SELLO` entra a `Hecho`; si se rehace y vuelve a `Hecho`, registra otro consumo) guarda largo y costo de bronce y fija `tipo_planchuela`; notificación v3 "N sellos terminados" a Ventas; el programa pasa a `FINALIZADO` cuando todos sus sellos están `Hecho`/`Verificar`.
+4. **Gadget** (ver [gadget-aspire.md](../02-modules/programas/gadget-aspire.md)): modo Armar/Actualizar/Rehacer/Solo recalcular; importa SVG/DXF; rechaza EPS; pregunta por sellos faltantes; recalcula; reporta; sube el `.crv3d`.
+5. **Resultado en Alcohn AI**: hoja en **Listo para Fabricar**, preview 2D, alertas (no importados, otra planchuela, sobrantes). Sellos que el operario borró por falta de material vuelven a la cola (`motivo_salida_programa='SIN_MATERIAL'`).
+6. **Fabricar** (externo, confirmado): guardar trayectorias en pendrive, cargarlas en la CNC, colocar planchuelas precortadas, dejar corriendo (→ Haciendo), cortar y probar en cuero (→ Hecho). El armado con mango/varilla lo hace Cachi al despachar → [FR-04](../10-operational-boundaries/README.md#fr-04), [SOP fabricar un sello](../11-operations-sops/fabricar-un-sello.md).
+7. **Registrar avance**: menú del programa → **Haciendo**; al terminar arrastrar a **Terminados** (todos `Hecho`) o, desde la vista lista, revisar sello por sello (Hecho/Retocar/Rehacer). También se puede marcar por sello en Producción/Pedidos.
+8. **Efectos de `Hecho`** (✅): trigger `registrar_bronce_consumo_sello` (cada vez que un ítem `SELLO` entra a `Hecho`; si se rehace y vuelve a `Hecho`, registra otro consumo) guarda largo y costo de bronce y fija `tipo_planchuela`; notificación v3 "N sellos terminados" a Ventas; el programa pasa a `FINALIZADO` cuando todos sus sellos están `Hecho`/`Verificar`.
 
 ## Cambios de estado
 

@@ -176,6 +176,7 @@ Cada ítem tiene tres archivos. En la celda:
   - Si coincide con la medida pedida, dice **Medida OK**.
   - Si se desvía 6 mm o más, aparece **Confirmar medida de fabricación** con la medida sugerida. Podés tocar **Acercar a lo pedido**, **Usar vector medido** o escribir ancho y alto (el candado mantiene la proporción). Tocá **Confirmar medida**.
 - Los EPS pueden quedar sin miniatura: igual quedan guardados y se pueden descargar.
+- **Clic derecho** en un vector SVG → **Chequear fresa**: muestra dónde no llega la fresa más fina y permite corregirlo y **Guardar el corregido en el sello** (ver [Chequeo de fresa](04-vectorizacion.md#chequeo-de-fresa)).
 - ⚠️ Subir la **foto** le manda un WhatsApp al cliente. Ver [Subir fotos](#subir-fotos-de-sellos-terminados).
 
 La vectorización normalmente se hace en la pantalla [Vectorización](04-vectorizacion.md); acá se puede subir un vector hecho a mano.

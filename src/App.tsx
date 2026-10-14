@@ -28,6 +28,7 @@ import ControlGastosSandboxPage from './app/dev/ControlGastosSandboxPage'
 import HomeNuevaSandboxPage from './app/dev/HomeNuevaSandboxPage'
 import CorchoSandboxPage from './app/dev/CorchoSandboxPage'
 import PerfilTourSandboxPage from './app/dev/PerfilTourSandboxPage'
+import ChequeoFresaSandboxPage from './app/dev/ChequeoFresaSandboxPage'
 import StockPendienteSandboxPage from './app/stock-pendiente/index'
 import CentroPage from './app/centro/index'
 import PerfilPage from './app/perfil/index'
@@ -89,6 +90,7 @@ function App() {
               <Route path="/dev/programas-tour" element={<ProgramasTourSandboxPage />} />
               <Route path="/dev/perfil-tour" element={<PerfilTourSandboxPage />} />
               <Route path="/dev/control-gastos" element={<ControlGastosSandboxPage />} />
+              <Route path="/dev/chequeo-fresa" element={<ChequeoFresaSandboxPage />} />
             </>
           ) : null}
         </Routes>

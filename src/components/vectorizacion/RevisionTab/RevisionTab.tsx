@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { useVectorizacionStore } from '@/lib/state/vectorizacion.store';
 import { saveSelloVector } from '@/lib/vectorizacion/saveVector';
@@ -8,22 +9,43 @@ import type { ReviewItem } from '@/lib/vectorizacion/types';
 import { Check, Download, Replace, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { ReviewCompareDialog } from './ReviewCompareDialog';
+import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
+import { FresaChip } from '@/components/fresa/FresaChip';
+import { FresaCheckDialog } from '@/components/fresa/FresaCheckDialog';
+import { chequearSvg, fresaCacheKey, type FresaReport, type FresaTarget } from '@/lib/fresa/chequeoFresa';
+
+/** La medida con la que se va a guardar: la misma lógica que "Confirmar". */
+function reviewTarget(item: ReviewItem): FresaTarget {
+  return { mode: 'pedido', requestedWidthMm: item.requestedWidthMm, requestedHeightMm: item.requestedHeightMm };
+}
+
+function reviewKey(item: ReviewItem): string {
+  return fresaCacheKey(item.svg, reviewTarget(item));
+}
+
+const fresaProblemas = (r: FresaReport | null | undefined) => (r ? r.groupCounts.alta + r.groupCounts.media : 0);
 
 function ReviewCard({
   item,
   confirming,
+  fresa,
   onConfirm,
   onReject,
   onChangeSvg,
 }: {
   item: ReviewItem;
   confirming: boolean;
+  /** Chequeo de fresa del SVG actual (null = analizando). */
+  fresa: FresaReport | null;
   onConfirm: () => void;
   onReject: () => void;
   onChangeSvg: (svg: string) => void;
 }) {
   const [checker, setChecker] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [fresaOpen, setFresaOpen] = useState(false);
+  const [guardOpen, setGuardOpen] = useState(false);
+  const problemas = fresaProblemas(fresa);
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const svgUrl = `data:image/svg+xml;utf8,${encodeURIComponent(item.svg)}`;
@@ -75,10 +97,13 @@ function ReviewCard({
             <p className="truncate text-sm font-medium">
               {item.designName} — {item.clienteNombre}
             </p>
-            <p className="text-xs text-muted-foreground">
-              {(Math.max(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} ×{' '}
-              {(Math.min(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} cm
-            </p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+              <p className="text-xs text-muted-foreground">
+                {(Math.max(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} ×{' '}
+                {(Math.min(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} cm
+              </p>
+              <FresaChip report={fresa} onClick={() => setFresaOpen(true)} />
+            </div>
           </div>
           <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
             <input type="checkbox" checked={checker} onChange={(e) => setChecker(e.target.checked)} />
@@ -103,7 +128,7 @@ function ReviewCard({
             type="button"
             size="sm"
             disabled={confirming || item.mode !== 'production'}
-            onClick={onConfirm}
+            onClick={() => (problemas > 0 ? setGuardOpen(true) : onConfirm())}
           >
             <Check className="mr-1 size-3.5" />
             Confirmar
@@ -139,6 +164,30 @@ function ReviewCard({
         afterUrl={svgUrl}
         checker={checker}
       />
+      <FresaCheckDialog
+        open={fresaOpen}
+        onOpenChange={setFresaOpen}
+        title={`${item.designName} — ${item.clienteNombre}`}
+        svgText={item.svg}
+        target={reviewTarget(item)}
+        downloadName={item.designName}
+        onApply={(svg) => {
+          onChangeSvg(svg);
+          toast({ title: 'Vector corregido', description: 'Se guarda en el pedido cuando lo confirmás.' });
+        }}
+        applyLabel="Usar el corregido"
+        applyHint="Reemplaza el vector en revisión. Se guarda en el pedido cuando apretás Confirmar."
+      />
+      <ConfirmDialog
+        open={guardOpen}
+        onOpenChange={setGuardOpen}
+        title="La fresa no llega en todo el diseño"
+        description={`Hay ${problemas} lugar${problemas === 1 ? '' : 'es'} donde la fresa no llega a la profundidad mínima. Podés revisarlo y corregirlo antes, o confirmarlo igual.`}
+        cancelLabel="Revisar"
+        confirmLabel="Confirmar igual"
+        onCancel={() => setFresaOpen(true)}
+        onConfirm={onConfirm}
+      />
     </div>
   );
 }
@@ -147,6 +196,43 @@ export function RevisionTab() {
   const store = useVectorizacionStore();
   const { toast } = useToast();
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [fresaReports, setFresaReports] = useState<Record<string, FresaReport>>({});
+  const [bulkGuard, setBulkGuard] = useState<{ ok: ReviewItem[]; withIssues: ReviewItem[] } | null>(null);
+
+  // Clave por ítem (hash del SVG + medida): se calcula una vez por cambio de la cola.
+  const fresaKeys = useMemo(
+    () => new Map(store.reviewQueue.map((item) => [item.id, reviewKey(item)])),
+    [store.reviewQueue],
+  );
+
+  // Chequeo de fresa de toda la cola (en segundo plano, cacheado por contenido).
+  useEffect(() => {
+    let alive = true;
+    for (const item of store.reviewQueue) {
+      const key = fresaKeys.get(item.id) ?? reviewKey(item);
+      void chequearSvg(item.svg, reviewTarget(item)).then((r) => {
+        if (alive) setFresaReports((prev) => (prev[key] === r ? prev : { ...prev, [key]: r }));
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [store.reviewQueue, fresaKeys]);
+
+  const fresaFor = (item: ReviewItem): FresaReport | null => fresaReports[fresaKeys.get(item.id) ?? ''] ?? null;
+  const fresaResumen = useMemo(() => {
+    let conProblemas = 0;
+    let analizados = 0;
+    let errores = 0;
+    for (const item of store.reviewQueue) {
+      const r = fresaReports[fresaKeys.get(item.id) ?? ''];
+      if (!r) continue;
+      analizados++;
+      if (r.status === 'error') errores++;
+      else if (fresaProblemas(r) > 0) conProblemas++;
+    }
+    return { conProblemas, analizados, errores };
+  }, [store.reviewQueue, fresaReports, fresaKeys]);
 
   const confirmOne = async (item: ReviewItem) => {
     setConfirmingId(item.id);
@@ -187,12 +273,23 @@ export function RevisionTab() {
     }
   };
 
-  const confirmAll = async () => {
-    for (const item of [...store.reviewQueue]) {
+  const confirmItems = async (items: ReviewItem[]) => {
+    for (const item of items) {
       if (item.mode !== 'production') continue;
       if (!useVectorizacionStore.getState().reviewQueue.some((r) => r.id === item.id)) continue;
       await confirmOne(item);
     }
+  };
+
+  const confirmAll = async () => {
+    const items = store.reviewQueue.filter((i) => i.mode === 'production');
+    const reports = await Promise.all(items.map((i) => chequearSvg(i.svg, reviewTarget(i))));
+    const withIssues = items.filter((_, k) => fresaProblemas(reports[k]) > 0);
+    if (withIssues.length) {
+      setBulkGuard({ ok: items.filter((i) => !withIssues.includes(i)), withIssues });
+      return;
+    }
+    await confirmItems(items);
   };
 
   const downloadAll = async () => {
@@ -219,9 +316,25 @@ export function RevisionTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm">
-          {store.reviewQueue.length} en revisión — confirmá antes de que entren a un programa.
-        </p>
+        <div className="space-y-0.5">
+          <p className="text-sm">
+            {store.reviewQueue.length} en revisión — confirmá antes de que entren a un programa.
+          </p>
+          {fresaResumen.conProblemas > 0 ? (
+            <p className="text-xs text-rose-700 dark:text-rose-300">
+              {fresaResumen.conProblemas} con lugares donde la fresa no llega: tocá el chip «Fresa» para ver y
+              corregir.
+            </p>
+          ) : fresaResumen.analizados === store.reviewQueue.length && fresaResumen.errores > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {fresaResumen.errores} no se pudieron chequear; en el resto la fresa llega bien.
+            </p>
+          ) : fresaResumen.analizados === store.reviewQueue.length ? (
+            <p className="text-xs text-emerald-700 dark:text-emerald-300">La fresa llega bien en todos.</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">Chequeando la fresa…</p>
+          )}
+        </div>
         <div className="flex gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => void downloadAll()}>
             Descargar todos
@@ -242,6 +355,7 @@ export function RevisionTab() {
             key={item.id}
             item={item}
             confirming={confirmingId === item.id}
+            fresa={fresaFor(item)}
             onConfirm={() => void confirmOne(item)}
             onReject={() => {
               store.removeReview(item.id);
@@ -251,6 +365,43 @@ export function RevisionTab() {
           />
         ))}
       </div>
+      <Dialog open={Boolean(bulkGuard)} onOpenChange={(o) => !o && setBulkGuard(null)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Hay vectores donde la fresa no llega</DialogTitle>
+            <DialogDescription>
+              {bulkGuard?.withIssues.length} de {(bulkGuard?.ok.length ?? 0) + (bulkGuard?.withIssues.length ?? 0)}{' '}
+              tienen lugares donde la fresa no llega a la profundidad mínima:{' '}
+              {bulkGuard?.withIssues.map((i) => i.designName).join(', ')}.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => setBulkGuard(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const items = [...(bulkGuard?.ok ?? []), ...(bulkGuard?.withIssues ?? [])];
+                setBulkGuard(null);
+                void confirmItems(items);
+              }}
+            >
+              Confirmar todos igual
+            </Button>
+            <Button
+              disabled={!bulkGuard?.ok.length}
+              onClick={() => {
+                const items = bulkGuard?.ok ?? [];
+                setBulkGuard(null);
+                void confirmItems(items);
+              }}
+            >
+              Confirmar solo los OK ({bulkGuard?.ok.length ?? 0})
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
