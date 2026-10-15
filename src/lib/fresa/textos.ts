@@ -110,6 +110,10 @@ export function resumenOperaciones(ops: FixOperation[]): string {
   if (manual && manual.kind === 'manual') {
     parts.push(`se ${manual.cambios === 1 ? 'hizo 1 cambio' : `hicieron ${manual.cambios} cambios`} a mano`);
   }
+  const simp = ops.find((o) => o.kind === 'simplificar');
+  if (simp && simp.kind === 'simplificar') {
+    parts.push(`se simplificó de ${simp.antes.toLocaleString('es-AR')} a ${simp.despues.toLocaleString('es-AR')} nodos sin cambiar el diseño`);
+  }
   const text = parts.join(', ');
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }

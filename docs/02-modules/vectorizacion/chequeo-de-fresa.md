@@ -115,11 +115,23 @@ El panel muestra el estado en vivo con **Ir a: 1 2…** (acerca la vista a cada 
 
 **VectorCraft**: se tomó la idea (el método de simplificación de su `pathops` es el de Schneider), no el código: se escribió en TypeScript para no sumar Rust/WebAssembly. Su editor (Rust/egui) no se puede reusar en la app.
 
+## 4 ter. Corrección automática al vectorizar (✅ 2026-10-15, `chequeoFresa.ts`, `RevisionTab.tsx`)
+
+Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo plano, de a uno, cacheado por contenido + medida):
+
+1. Chequeo de fresa a la medida con que se va a guardar.
+2. Si hay lugares (`revisar`), `corregirSvg` (sección 4).
+3. Siempre, `simplificarSinDeformar`: modelo editable (`editDoc.ts`) → `removeRedundant` → `simplifyDoc` con error **0,02 mm**; se re-chequea a la misma escala y se acepta solo si **no cambia la medida (±0,05 mm) ni empeora el chequeo**; si no, prueba **0,01 mm**; si no, no simplifica. Pide ahorrar al menos 5 % de nodos. Queda como operación `simplificar` ("Se simplificó de N a M nodos sin cambiar el diseño").
+
+`corregirYSimplificar` es lo mismo sin el chequeo inicial; lo usa el botón **Corregir automáticamente** del diálogo en todas las pantallas (si la fresa ya llega, el botón dice **Simplificar nodos**).
+
+**Elegir versión** (Revisión): `ReviewItem.originalSvg` guarda el vector como salió (o el cargado con «Cambiar») y `ReviewItem.fresaChoice` qué versión es `svg`: `original`, `auto` o `manual`. Si la automática cambió algo y todavía no se eligió, **queda elegida**; la tarjeta muestra **Guardar: Original | Automático (| A mano)** y **Ver / editar** abre el diálogo con la corrección ya hecha (`initialFix`), con **Editar el corregido / Editar el original** y **Usar el original**. Confirmar guarda `svg`. «Cambiar» borra `originalSvg` y `fresaChoice` (el archivo nuevo es el original). La versión agrandada (último recurso) sigue siendo una decisión manual en el diálogo.
+
 ## 5. Dónde aparece en la app
 
 | Pantalla | Qué se ve | Qué se puede hacer |
 |---|---|---|
-| **Vectorización → Revisión** | Chip **Fresa OK / Fresa: N lugares** en cada tarjeta; resumen arriba ("N con lugares donde la fresa no llega") | Abrir el chequeo, **Corregir automáticamente**, comparar (Original / Corregido / Qué cambia), **Usar el corregido** (reemplaza el SVG en revisión; se guarda al Confirmar). **Confirmar** con problemas pide confirmación ("Revisar" / "Confirmar igual"); **Confirmar todos** ofrece "Confirmar solo los OK". |
+| **Vectorización → Revisión** | Chip **Fresa OK / Fresa: N lugares** en cada tarjeta; resumen arriba ("N con lugares donde la fresa no llega"); **Guardar: Original \| Automático** con la corrección ya hecha (4 ter) | Elegir versión; abrir el chequeo con la corrección hecha, comparar (Original / Corregido / Qué cambia), editar el corregido o el original, **Usar el corregido** / **Usar el original** (se guarda al Confirmar). **Confirmar** con problemas pide confirmación ("Revisar" / "Confirmar igual"); **Confirmar todos** ofrece "Confirmar solo los OK". |
 | **Vectorización → Asignar SVG** | Chip por archivo una vez asignado a un sello (antes no se sabe la medida) | Igual que Revisión; "Confirmar asignaciones" avisa si alguno tiene problemas |
 | **Pedidos / Producción** (celda Vector, clic derecho) | **Chequear fresa** en vectores SVG | Ver, corregir y **Guardar el corregido en el sello** (sube el SVG nuevo; la medida de fabricación no cambia; dispara el aviso `p1_sello_modificado` como cualquier cambio de vector) |
 | **Programas** (hoja: botón **Fresa**; tarjeta: clic derecho → **Chequear fresa**) | Lista de los sellos del programa con su estado | Abrir cada uno, corregir y guardar en el sello (sin aviso p1: escribe directo `archivo_vector_preview`) |

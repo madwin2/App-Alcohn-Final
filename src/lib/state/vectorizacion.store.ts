@@ -58,7 +58,15 @@ interface VectorizacionStore {
   setResults: (results: VectorResult[]) => void;
   pushReviews: (items: ReviewItem[]) => void;
   /** Cambia el SVG en revisión. `fabricationOverrideMm` solo si se agrandó el sello (si no, se borra). */
+  /** Reemplaza el vector en revisión por otro archivo (pasa a ser el nuevo original). */
   updateReviewSvg: (id: string, svg: string, fabricationOverrideMm?: { widthMm: number; heightMm: number }) => void;
+  /** Elige qué versión se guarda (original, automática o a mano); el original se conserva. */
+  chooseReviewSvg: (
+    id: string,
+    choice: NonNullable<ReviewItem['fresaChoice']>,
+    svg: string,
+    fabricationOverrideMm?: { widthMm: number; heightMm: number },
+  ) => void;
   removeReview: (id: string) => void;
   /** Carga inicial desde IndexedDB; fusiona con la cola en memoria (la sesión gana en conflictos). */
   hydrateReviewQueue: (items: ReviewItem[]) => void;
@@ -193,7 +201,17 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
   updateReviewSvg: (id, svg, fabricationOverrideMm) => {
     set({
       reviewQueue: get().reviewQueue.map((item) =>
-        item.id === id ? { ...item, svg, fabricationOverrideMm } : item,
+        item.id === id ? { ...item, svg, fabricationOverrideMm, originalSvg: undefined, fresaChoice: undefined } : item,
+      ),
+    });
+    schedulePersistReviewQueue(() => get().reviewQueue);
+  },
+  chooseReviewSvg: (id, choice, svg, fabricationOverrideMm) => {
+    set({
+      reviewQueue: get().reviewQueue.map((item) =>
+        item.id === id
+          ? { ...item, svg, fabricationOverrideMm, originalSvg: item.originalSvg ?? item.svg, fresaChoice: choice }
+          : item,
       ),
     });
     schedulePersistReviewQueue(() => get().reviewQueue);

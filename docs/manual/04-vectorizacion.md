@@ -60,12 +60,21 @@ Cada tarjeta muestra un chip **Fresa**: la app simula el V-carve de la fresa má
 | **Fresa: N lugares** (rojo o amarillo) | Hay lugares donde no llega: letras muy juntas, ojos de letras chicos, ranuras finas |
 | **Sin chequeo** | No se pudo leer el archivo (por ejemplo, texto sin convertir a curvas) |
 
+#### Corrección automática al vectorizar
+
+Apenas un vector llega a Revisión, la app **lo corrige sola** en segundo plano (mientras tanto la tarjeta dice "Corrigiendo y simplificando…"):
+
+- Si la fresa no llega en algún lugar, aplica la **corrección automática** (ver abajo).
+- Siempre **simplifica los nodos sin cambiar el diseño**: las rectas llenas de nodos quedan con un nodo por esquina y las curvas con pocos nodos. Prueba sacar todo lo posible (la forma se mueve como mucho 0,02 mm, mucho menos de lo que marca la fresa más fina) y, si eso cambiara la medida o empeorara el chequeo de fresa, prueba con 0,01 mm; si tampoco, no simplifica.
+
+En la tarjeta aparece **Guardar: Original | Automático** (y **A mano** si lo editaste), con lo que hizo la corrección (por ejemplo, "Se simplificó de 776 a 508 nodos sin cambiar el diseño"). Si la automática cambió algo, **queda elegida**; tocá **Original** para guardar el vector tal como salió. **Ver / editar** abre el chequeo con la corrección ya hecha, donde podés compararla, **Editar el corregido** o **Editar el original** a mano, o **Usar el original**. El original nunca se pierde: lo podés volver a elegir hasta que confirmás. **Cambiar** (cargar otro SVG) lo toma como nuevo original y lo vuelve a corregir.
+
 Tocá el chip para abrir el **Chequeo de fresa**:
 
 1. A la izquierda, el diseño con los lugares marcados y numerados (rojo = **Hay que corregir**, amarillo = **Se pierde el detalle**). Rueda del mouse para acercar, arrastrá para mover, **Ver todo** para volver.
 2. A la derecha, la lista: tocá un lugar y la vista va directo ahí. Dice el ancho del hueco y a qué profundidad llega la fresa.
 3. **Ver qué tan hondo baja la fresa**: un degradé azul muestra lo que se talla menos hondo que la mínima (más oscuro = menos hondo). **Mostrar ángulos y rincones**: lugares donde la fresa sube y marca menos hondo. Están bien así; por eso están ocultos y la corrección no los toca.
-4. **Corregir automáticamente**: adapta el diseño para que entre la fresa, como se haría a mano:
+4. **Corregir automáticamente** (en Revisión ya viene hecho; en otras pantallas, el botón; si la fresa ya llega bien, el botón dice **Simplificar nodos**): adapta el diseño para que entre la fresa, como se haría a mano, y después simplifica los nodos sin cambiar el diseño:
    - **Letras o renglones muy juntos**: corre letras enteras sin deformarlas, respetando la alineación (si el bloque está alineado a la izquierda, corre hacia la derecha). Si casi todo el renglón está justo, abre el espaciado de todo el renglón por igual.
    - **Bloques de texto**: si ese renglón va justificado con otro (por ejemplo, el nombre y el tagline del mismo ancho), el otro también se ensancha en la misma proporción, para que sigan parejos.
    - **Texto en arco**: separa a lo largo del arco o acerca/aleja el texto del centro; si hace falta, corre una letra sola un poquito.
@@ -74,7 +83,7 @@ Tocá el chip para abrir el **Chequeo de fresa**:
    - **No cambia la medida del sello**: si al abrir espacios el diseño quedó más ancho, achica todo parejo (ícono incluido) para que entre en la misma medida, y lo vuelve a chequear así. Abajo dice cuánto se achicó.
    - **Último recurso**: si igual quedan lugares y agrandar el sello un poco (hasta 6 %, sin pasar el tope de la planchuela) los resuelve, aparece **Agrandar a A × B mm y usar**. Cambia la medida de fabricación: usalo solo si es imprescindible.
 5. Compará con **Original**, **Corregido** y **Qué cambia** (en celeste, lo que cambió).
-6. **Editar a mano** (o **Editar a mano el corregido**): abre un editor en el mismo lugar, para lo que la corrección automática no resuelve. Arriba a la derecha ves si la fresa separa todo, los lugares numerados (**Ir a: 1 2…** acerca la vista a cada uno) y la medida del sello. La fresa se vuelve a chequear sola cada vez que soltás un cambio.
+6. **Editar a mano** (con una corrección hecha: **Editar el corregido** o **Editar el original**): abre un editor en el mismo lugar, para lo que la corrección automática no resuelve. Arriba a la derecha ves si la fresa separa todo, los lugares numerados (**Ir a: 1 2…** acerca la vista a cada uno) y la medida del sello. La fresa se vuelve a chequear sola cada vez que soltás un cambio.
    - **Elegir y mover** (V): tocá una pieza (una letra, el ícono) para elegirla; se pinta de azul con su medida. Arrastrala, o usá las flechas del panel o del teclado (eligís cuánto: 0,02 a 0,5 mm). **Doble clic** en una pieza la acerca.
    - **Varias piezas**: arrastrá un rectángulo en el fondo, o **Shift+clic** para sumar o sacar; **Ctrl+A** elige todo. Mover, tamaño, grosor y borrar se aplican a todas juntas.
    - **Guías e imán** (botón del imán o tecla G): al arrastrar, lo que movés se pega a los bordes y centros de las otras piezas y al centro del diseño, y aparece una línea violeta. **Shift** mientras arrastrás: solo en horizontal o solo en vertical (no se desalinea el renglón). **Ctrl**: suelta el imán. Al mover nodos, se alinean con los otros nodos de la pieza.
@@ -88,7 +97,7 @@ Tocá el chip para abrir el **Chequeo de fresa**:
    - **Borrar pieza** y **Borrar motas** (aparece si hay piezas sueltas de menos de 0,05 mm², restos de la vectorización).
    - Para moverte: la herramienta **Mano** (H), Espacio + arrastrar o clic derecho + arrastrar (en Elegir y mover, arrastrar el fondo hace un rectángulo de selección); rueda para acercar; **0** o el botón de los cuatro lados para ver todo. **Atajos** muestra la lista.
    - **Ctrl+Z** deshace, **Ctrl+Y** rehace. **Terminar edición** vuelve al chequeo con lo editado para compararlo y usarlo; **Descartar** pregunta antes de tirar los cambios. Solo funciona con vectores de rellenos negros (sin blancos ni trazos).
-7. **Usar el corregido** reemplaza el vector en revisión. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
+7. **Usar el corregido** elige esa versión para guardar; **Usar el original**, el vector como salió. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
 
 Si confirmás un vector con lugares donde la fresa no llega, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.
 

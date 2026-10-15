@@ -1008,6 +1008,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 55,
+    date: '2026-10-15',
+    title: 'Vectores corregidos solos',
+    version: '1.73',
+    slides: [
+      {
+        heading: 'La corrección se hace sola',
+        body: 'Cuando un vector llega a Revisión, la app ya lo corrige donde no llega la fresa y simplifica sus nodos sin cambiar el diseño. En la tarjeta elegís qué guardar: Original o Automático.',
+        icon: Wand2,
+      },
+      {
+        heading: 'Original, automático o a mano',
+        body: '«Ver / editar» abre el chequeo con la corrección ya hecha: podés compararla, editar el corregido o el original, o quedarte con el original. El original nunca se pierde hasta que confirmás.',
+        icon: PencilRuler,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

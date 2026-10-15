@@ -6,7 +6,7 @@ import { analyzeBlackRegion, buildBlackRegion } from './analyze';
 import { FRESA_ALIMENTO, FRESA_FINA, cutRadiusAtDepth, depthForRadius, minGapWidthMm } from './config';
 import { planFix } from './fix';
 import { groupZones } from './engine';
-import { chequearSvg, corregirSvg } from './chequeoFresa';
+import { autoCorregir, chequearSvg, corregirSvg, corregirYSimplificar } from './chequeoFresa';
 import { bounds, components, regionArea } from './geometry';
 import { MAX_ARC_LETTER_RADIAL_MM, buildLayout } from './layout';
 
@@ -439,6 +439,46 @@ describe('chequearSvg / corregirSvg', () => {
     const r = await chequearSvg(svg(body), { mode: 'pedido', requestedWidthMm: 40, requestedHeightMm: 20 });
     expect(r.widthMm).toBeCloseTo(40, 2);
     expect(r.heightMm).toBeCloseTo(20, 2);
+  });
+
+  /** Rectángulo con un nodo cada 0,2 mm en cada lado (como sale de la vectorización). */
+  const denseRectD = (x: number, y: number, w: number, h: number) => {
+    const pts: Array<[number, number]> = [];
+    const edge = (x0: number, y0: number, x1: number, y1: number) => {
+      const n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / 0.2));
+      for (let k = 0; k < n; k++) pts.push([x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n]);
+    };
+    edge(x, y, x + w, y);
+    edge(x + w, y, x + w, y + h);
+    edge(x + w, y + h, x, y + h);
+    edge(x, y + h, x, y);
+    return polyD(pts);
+  };
+
+  it('corrección automática: simplifica aunque la fresa ya llegue bien, sin cambiar el diseño', async () => {
+    const text = svg(`<path d="${denseRectD(2, 2, 6, 6)}${denseRectD(11, 2, 6, 6)}"/>`);
+    const before = await chequearSvg(text, { mode: 'declarado' });
+    expect(before.status).toBe('ok');
+    const res = (await corregirYSimplificar(text, before, []))!;
+    const simp = res.operations.find((o) => o.kind === 'simplificar');
+    expect(simp && simp.kind === 'simplificar' && simp.despues).toBe(8);
+    expect(res.after.status).toBe('ok');
+    expect(res.after.widthMm).toBeCloseTo(before.widthMm, 2);
+    const area = (t: string) => regionArea(buildBlackRegion(parseSvgShapes(t).shapes, 1)) / 1e6;
+    expect(area(res.svg)).toBeCloseTo(72, 2);
+  });
+
+  it('corrección automática: corrige y después simplifica', async () => {
+    // Dos bloques a 0,2 mm (la fresa no pasa), llenos de nodos.
+    const text = svg(`<path d="${denseRectD(2, 2, 6, 6)}"/><path d="${denseRectD(8.2, 2, 6, 6)}"/>`);
+    const { report, fix } = await autoCorregir(text, { mode: 'declarado' });
+    expect(report.status).toBe('revisar');
+    expect(fix).not.toBeNull();
+    const kinds = fix!.operations.map((o) => o.kind);
+    expect(kinds).toContain('simplificar');
+    expect(kinds.some((k) => k !== 'simplificar')).toBe(true);
+    const places = (r: typeof report) => r.groupCounts.alta + r.groupCounts.media;
+    expect(places(fix!.after)).toBeLessThan(places(report));
   });
 
   it('mueve letras dentro de un path compuesto sin perder las curvas', async () => {

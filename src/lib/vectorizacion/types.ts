@@ -125,4 +125,11 @@ export interface ReviewItem {
    * fresa (mm). Se guarda al confirmar. Se borra si se cambia el SVG.
    */
   fabricationOverrideMm?: { widthMm: number; heightMm: number };
+  /**
+   * Vector como salió de la vectorización (o el que se cargó con «Cambiar»).
+   * `svg` es el que se va a guardar. Falta mientras no se eligió otra versión.
+   */
+  originalSvg?: string;
+  /** Qué versión es `svg`: la original, la corrección automática o una edición a mano. */
+  fresaChoice?: 'original' | 'auto' | 'manual';
 }

@@ -6,8 +6,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils/cn';
 import {
-  corregirSvg,
+  corregirYSimplificar,
   resultadoManual,
+  zonasCorregibles,
   type FresaFixResult,
   type FresaReport,
   type FresaTarget,
@@ -61,6 +62,13 @@ interface Props {
   applyHint?: string;
   /** Nombre base para descargar. */
   downloadName?: string;
+  /**
+   * Corrección automática ya hecha (por ejemplo, al vectorizar): el diálogo
+   * abre mostrándola, sin tener que apretar «Corregir».
+   */
+  initialFix?: FresaFixResult | null;
+  /** Si se pasa, aparece «Usar el original» (descarta la corrección). */
+  onUseOriginal?: () => void;
 }
 
 const DEFAULT_VISIBLE: ZoneSeverity[] = ['alta', 'media'];
@@ -123,6 +131,8 @@ export function FresaCheckDialog({
   applyLabel = 'Usar el corregido',
   applyHint,
   downloadName = 'vector',
+  initialFix = null,
+  onUseOriginal,
 }: Props) {
   const { toast } = useToast();
   const report = useFresaReport(open ? svgText : null, open ? target : null);
@@ -134,16 +144,25 @@ export function FresaCheckDialog({
   const [fixing, setFixing] = useState(false);
   const [applying, setApplying] = useState(false);
   const [mode, setMode] = useState<FresaViewMode>('original');
-  const [editing, setEditing] = useState(false);
+  /** Editor abierto, y sobre qué versión. */
+  const [editing, setEditing] = useState<false | 'original' | 'corregido'>(false);
   const [showDepth, setShowDepth] = useState(true);
 
-  // Al abrir otro diseño, empezar de cero.
+  // Al abrir otro diseño, empezar de cero (o de la corrección ya hecha).
   useEffect(() => {
-    setFix(null);
-    setMode('original');
+    setFix(open ? initialFix : null);
+    // Si solo se simplificó, «Qué cambia» no muestra nada: se abre en «Corregido».
+    setMode(
+      open && initialFix
+        ? initialFix.operations.some((o) => o.kind !== 'simplificar')
+          ? 'diferencias'
+          : 'corregido'
+        : 'original',
+    );
     setSelected(null);
     setVisible(new Set(DEFAULT_VISIBLE));
     setEditing(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al abrir o cambiar de diseño
   }, [svgText, open]);
 
   const active = mode !== 'original' && fix ? fix.after : report;
@@ -153,10 +172,7 @@ export function FresaCheckDialog({
   );
   const allGroups = active?.check?.groups ?? [];
   const lowCount = allGroups.filter((g) => g.severity === 'baja').length;
-  const fixableZoneIds = useMemo(
-    () => (report?.check?.zones ?? []).filter((z) => z.severity !== 'baja').map((z) => z.id),
-    [report],
-  );
+  const fixableZoneIds = useMemo(() => (report ? zonasCorregibles(report) : []), [report]);
   const selectedGroup = allGroups.find((g) => g.id === selected) ?? null;
 
   const select = (id: string | null) => {
@@ -183,7 +199,11 @@ export function FresaCheckDialog({
     if (!report || !svgText) return;
     setFixing(true);
     try {
-      const res = await corregirSvg(svgText, report, fixableZoneIds);
+      const res = await corregirYSimplificar(svgText, report, fixableZoneIds);
+      if (!res) {
+        toast({ title: 'No hay nada para corregir ni simplificar sin cambiar el diseño.' });
+        return;
+      }
       setFix(res);
       setMode('diferencias');
       setSelected(null);
@@ -238,7 +258,7 @@ export function FresaCheckDialog({
 
         {editing && svgText && report && report.status !== 'error' ? (
           <FresaEditor
-            svgText={fix?.svg ?? svgText}
+            svgText={editing === 'corregido' && fix ? fix.svg : svgText}
             report={report}
             onDone={(edited, cambios) => void finishEdit(edited, cambios)}
             onCancel={() => setEditing(false)}
@@ -410,10 +430,22 @@ export function FresaCheckDialog({
 
             {report && report.status !== 'error' ? (
               <div className="shrink-0 space-y-1">
-                <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setEditing(true)}>
-                  <PencilRuler className="mr-1.5 size-4" />
-                  {fix ? 'Editar a mano el corregido' : 'Editar a mano'}
-                </Button>
+                {fix ? (
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditing('corregido')}>
+                      <PencilRuler className="mr-1.5 size-4" />
+                      Editar el corregido
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditing('original')}>
+                      Editar el original
+                    </Button>
+                  </div>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setEditing('original')}>
+                    <PencilRuler className="mr-1.5 size-4" />
+                    Editar a mano
+                  </Button>
+                )}
                 <p className="text-[11px] leading-snug text-muted-foreground">
                   Mover o agrandar una letra, afinarla o engordarla, mover nodos y simplificar. La fresa se vuelve a
                   chequear con cada cambio.
@@ -426,23 +458,23 @@ export function FresaCheckDialog({
                   <Button
                     type="button"
                     className="w-full"
-                    disabled={!report || report.status !== 'revisar' || fixing || !fixableZoneIds.length}
+                    disabled={!report || report.status === 'error' || fixing}
                     onClick={() => void runFix()}
                   >
                     {fixing ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Wand2 className="mr-2 size-4" />}
-                    {fixing ? 'Corrigiendo…' : 'Corregir automáticamente'}
+                    {fixing ? 'Corrigiendo…' : report?.status === 'ok' ? 'Simplificar nodos' : 'Corregir automáticamente'}
                   </Button>
                   <p className="text-[11px] leading-snug text-muted-foreground">
                     Separa las letras que están muy juntas moviéndolas enteras (respeta la alineación), y agranda en
                     paralelo los ojos y ranuras chicas sin dejar trazos de menos de 0,4 mm. Los ángulos en punta no
-                    se tocan. Lo que no se puede resolver así queda para editar a mano. Antes de usarlo vas a poder
-                    comparar.
+                    se tocan. Después saca los nodos de más sin cambiar el diseño. Lo que no se puede resolver así
+                    queda para editar a mano. Antes de usarlo vas a poder comparar.
                   </p>
                 </>
               ) : (
                 <>
                   <p className="text-xs">
-                    {remaining === 0 ? (
+                    {before === 0 ? null : remaining === 0 ? (
                       <span className="text-emerald-700 dark:text-emerald-300">
                         Listo: se resolvieron los {before} lugares.
                       </span>
@@ -483,6 +515,18 @@ export function FresaCheckDialog({
                       <Button type="button" disabled={applying} onClick={() => void apply()}>
                         {applying ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
                         {applyLabel}
+                      </Button>
+                    ) : null}
+                    {onUseOriginal ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          onUseOriginal();
+                          onOpenChange(false);
+                        }}
+                      >
+                        Usar el original
                       </Button>
                     ) : null}
                     <Button type="button" variant="outline" onClick={() => downloadSvg(fix.svg, `${downloadName}-corregido`)}>

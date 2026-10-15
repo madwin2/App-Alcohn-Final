@@ -77,7 +77,9 @@ export type FixOperation =
   | { kind: 'agrandar_ojo'; mm: number }
   | { kind: 'ensanchar'; mm: number }
   /** Cambios hechos a mano en el editor (mover, escalar, offsets, nodos). */
-  | { kind: 'manual'; cambios: number };
+  | { kind: 'manual'; cambios: number }
+  /** Nodos de más que se sacaron sin cambiar el diseño (`tolMm`: cuánto se movió la forma como mucho). */
+  | { kind: 'simplificar'; antes: number; despues: number; tolMm: number };
 
 export interface FixResult {
   /** Región negra corregida (µm). */
