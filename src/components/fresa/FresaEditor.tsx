@@ -72,6 +72,7 @@ import {
   type Guide,
 } from '@/lib/fresa/editTools';
 import type { Pt } from '@/lib/fresa/pathData';
+import { renderRelief } from '@/lib/fresa/vcarveRelief';
 import { SEVERITY_FILL, mm } from '@/lib/fresa/textos';
 
 interface Props {
@@ -161,6 +162,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   const [selNode, setSelNode] = useState<NodeRef | null>(null);
   const [showAllNodes, setShowAllNodes] = useState(false);
   const [showZones, setShowZones] = useState(true);
+  const [showRelief, setShowRelief] = useState(false);
   const [snapOn, setSnapOn] = useState(true);
   const [stepMm, setStepMm] = useState('0.05');
   const [scalePct, setScalePct] = useState('100');
@@ -304,6 +306,35 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   });
+
+  // ------------------------------------------------------------ relieve 3D
+  // Se calcula para lo que se ve (con margen), así al acercarse queda nítido.
+  // Espera un instante a que termine el zoom o el paneo.
+  const [reliefBox, setReliefBox] = useState<DocBox | null>(null);
+  useEffect(() => {
+    if (!showRelief || !designBox) return;
+    const t = window.setTimeout(() => {
+      // Margen: lo que puede "ver" la fresa más allá del borde (su radio a la
+      // profundidad final), para que el corte de la grilla no falsee la profundidad.
+      const reach = (report.profile.finalDepthMm * Math.tan((report.profile.halfAngleDeg * Math.PI) / 180) + 0.3) / k;
+      const minX = Math.max(view.x, designBox.minX - reach) - reach;
+      const minY = Math.max(view.y, designBox.minY - reach) - reach;
+      const maxX = Math.min(view.x + view.w, designBox.maxX + reach) + reach;
+      const maxY = Math.min(view.y + view.h, designBox.maxY + reach) + reach;
+      setReliefBox(maxX > minX && maxY > minY ? { minX, minY, maxX, maxY } : null);
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [showRelief, designBox, view.x, view.y, view.w, view.h, k, report.profile]);
+  const relief = useMemo(() => {
+    if (!showRelief || !doc || !reliefBox) return null;
+    return renderRelief(
+      doc.paths.map((p) => ({ d: p.subs.map(subToD).join(''), fillRule: p.fillRule })),
+      reliefBox,
+      k,
+      report.profile,
+      700,
+    );
+  }, [showRelief, doc, reliefBox, k, report.profile]);
 
   // ------------------------------------------------------------ nodos
   const nodeRefs = useMemo(() => {
@@ -845,6 +876,10 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               <Magnet className="size-3.5" />
             </button>
           </div>
+          <label className="flex items-center gap-1 text-xs text-muted-foreground" title="Simula cómo talla la fresa (V-carve) y lo muestra con luz, como relieve">
+            <Checkbox checked={showRelief} onCheckedChange={(v) => setShowRelief(Boolean(v))} />
+            Relieve 3D
+          </label>
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
             <Checkbox checked={showZones} onCheckedChange={(v) => setShowZones(Boolean(v))} />
             Lugares
@@ -885,9 +920,21 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
             preserveAspectRatio="xMidYMid meet"
           >
-            {shown?.paths.map((p, pi) => (
-              <path key={pi} d={p.subs.map(subToD).join('')} fill="#111" fillRule={p.fillRule} />
-            ))}
+            {relief && dragging !== 'move' && dragging !== 'node' ? (
+              <image
+                href={relief.href}
+                x={relief.x}
+                y={relief.y}
+                width={relief.w}
+                height={relief.h}
+                preserveAspectRatio="none"
+                style={{ imageRendering: 'auto' }}
+              />
+            ) : (
+              shown?.paths.map((p, pi) => (
+                <path key={pi} d={p.subs.map(subToD).join('')} fill="#111" fillRule={p.fillRule} />
+              ))
+            )}
 
             {/* Lo que se va a agarrar (hover) y lo elegido */}
             {hovered ? (
@@ -1060,6 +1107,19 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
           </div>
         </div>
 
+        {showRelief ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span
+              className="inline-block h-2.5 w-16 rounded-sm"
+              style={{ background: 'linear-gradient(90deg, rgb(214,160,96), rgb(92,58,28))' }}
+            />
+            <span>
+              Relieve simulado: bronce = arriba (lo que marca); más oscuro = más hondo, hasta{' '}
+              {mm(report.profile.finalDepthMm, 1)} mm. Entre letras, si queda claro, la fresa no bajó.
+              {!relief ? ' Calculando…' : ''}
+            </span>
+          </div>
+        ) : null}
         <div className="flex shrink-0 items-start justify-between gap-2">
           <p className="min-h-[2.5em] text-xs leading-snug text-muted-foreground">{hint}</p>
           <button
