@@ -15,7 +15,7 @@ import {
   ArrowUp,
   CheckCircle2,
   Eraser,
-  Hand,
+  Focus,
   Keyboard,
   Loader2,
   Magnet,
@@ -41,6 +41,9 @@ import {
   isSmooth,
   moveNodePart,
   offsetPieces,
+  scaleRefsAt,
+  setNodeCorner,
+  setNodeSmooth,
   pieceAt,
   redundantNodes,
   removeRedundant,
@@ -84,7 +87,8 @@ interface Props {
   onCancel: () => void;
 }
 
-type Tool = 'mover' | 'nodos' | 'mano';
+/** Modo del clic izquierdo: elegir y mover piezas, o editar los nodos de una. */
+type Tool = 'mover' | 'nodos';
 
 interface Box {
   x: number;
@@ -175,6 +179,12 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   const [dragInfo, setDragInfo] = useState<{ dx: number; dy: number } | null>(null);
   const [marquee, setMarquee] = useState<DocBox | null>(null);
   const spaceDown = useRef(false);
+  /** Menú del clic derecho (posición dentro del lienzo y sobre qué se abrió). */
+  const [menu, setMenu] = useState<{ x: number; y: number; target: 'pieza' | 'nodo' | 'fondo' } | null>(null);
+  const colRef = useRef<HTMLDivElement>(null);
+  /** Escala mientras se arrastra un tirador (para mostrar el %). */
+  const [scaleInfo, setScaleInfo] = useState<number | null>(null);
+  const [hoverHandle, setHoverHandle] = useState<number | null>(null);
 
   const tolUnits = 0.004 / k; // aplanado para piezas y toques
   const pieces = useMemo(() => (shown ? computePieces(shown, tolUnits) : []), [shown, tolUnits]);
@@ -398,11 +408,20 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   const selNodeData = selNode && shown ? shown.paths[selNode.path]?.subs[selNode.sub]?.nodes[selNode.node] : undefined;
 
   // ------------------------------------------------------------ arrastre
+  //
+  // Mouse (como en Illustrator / Figma, sin elegir herramientas):
+  //   izquierdo  clic elige · arrastrar mueve · arrastrar en el fondo elige varias
+  //              doble clic en una pieza: editar sus nodos (Esc o clic afuera: salir)
+  //              tiradores de las esquinas: escalar parejo (Alt: desde el centro)
+  //   rueda      girar: acercar / alejar · apretada y arrastrar: moverse
+  //   derecho    menú con lo que se puede hacer ahí
+  //   Espacio + arrastrar: moverse (para mouse sin rueda o touchpad)
   type Drag =
     | { kind: 'pan'; x: number; y: number; view: Box; moved: boolean }
     | { kind: 'move'; start: Pt; refs: SubRef[]; box: DocBox; others: DocBox[]; moved: boolean }
     | { kind: 'marquee'; start: Pt; additive: boolean; moved: boolean }
-    | { kind: 'node'; ref: NodeRef; part: NodePart; xs: number[]; ys: number[]; moved: boolean };
+    | { kind: 'node'; ref: NodeRef; part: NodePart; xs: number[]; ys: number[]; moved: boolean }
+    | { kind: 'scale'; refs: SubRef[]; corner: Pt; opposite: Pt; center: Pt; moved: boolean };
   const drag = useRef<Drag | null>(null);
   const [dragging, setDragging] = useState<Drag['kind'] | null>(null);
 
@@ -430,6 +449,26 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     return best ? { ref: best.ref, part: best.part } : null;
   };
 
+  /** Esquinas de la caja de lo elegido (para los tiradores), en el orden NO, NE, SE, SO. */
+  const handleCorners = (b: DocBox | null): Pt[] => {
+    if (!b) return [];
+    const m = 3 / pxPerUnit;
+    return [
+      { x: b.minX - m, y: b.minY - m },
+      { x: b.maxX + m, y: b.minY - m },
+      { x: b.maxX + m, y: b.maxY + m },
+      { x: b.minX - m, y: b.maxY + m },
+    ];
+  };
+  /** ¿Hay un tirador bajo el punto? Devuelve cuál (0-3). */
+  const hitHandle = (p: Pt): number | null => {
+    if (tool !== 'mover' || !nSel || !selBox) return null;
+    const r = 7 / pxPerUnit;
+    const cs = handleCorners(selBox);
+    const i = cs.findIndex((c) => Math.abs(c.x - p.x) <= r && Math.abs(c.y - p.y) <= r);
+    return i >= 0 ? i : null;
+  };
+
   /** x e y de los otros nodos de la pieza (imán para un nodo). */
   const nodeSnapLines = (ref: NodeRef): { xs: number[]; ys: number[] } => {
     const xs: number[] = [];
@@ -446,18 +485,75 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     return { xs, ys };
   };
 
+  /** Abre el menú del clic derecho con lo que se puede hacer ahí. */
+  const openMenu = (e: React.PointerEvent, p: Pt) => {
+    const col = colRef.current?.getBoundingClientRect();
+    if (!col) return;
+    let target: 'pieza' | 'nodo' | 'fondo' = 'fondo';
+    if (tool === 'nodos' && primary) {
+      const h = hitNode(p);
+      if (h && h.part === 'p') {
+        setSelNode(h.ref);
+        target = 'nodo';
+      }
+    }
+    if (target === 'fondo') {
+      const pc = pieceAt(pieces, p);
+      if (pc) {
+        const key = keyOf(pc);
+        if (!selKeys.includes(key)) setSelection([key]);
+        target = 'pieza';
+      }
+    }
+    const W = 220;
+    const H = target === 'pieza' ? 290 : target === 'nodo' ? 130 : 150;
+    setMenu({
+      x: Math.max(4, Math.min(e.clientX - col.left, col.width - W - 4)),
+      y: Math.max(4, Math.min(e.clientY - col.top, col.height - H - 4)),
+      target,
+    });
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (!doc) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setMenu(null);
     hostRef.current?.focus();
     const p = toUser(e.clientX, e.clientY);
     if (!p) return;
-    const panning = tool === 'mano' || spaceDown.current || e.button === 1 || e.button === 2;
-    const startPan = () => {
+    if (e.button === 2) {
+      openMenu(e, p);
+      return;
+    }
+    // Rueda apretada: sin el "autoscroll" del navegador.
+    if (e.button === 1) e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    if (spaceDown.current || e.button === 1) {
       drag.current = { kind: 'pan', x: e.clientX, y: e.clientY, view, moved: false };
       setDragging('pan');
-    };
-    if (panning) return startPan();
+      return;
+    }
+    if (e.button !== 0) return;
+
+    // Tiradores de las esquinas: escalar.
+    const hh = hitHandle(p);
+    if (hh != null && selBox) {
+      const cs = [
+        { x: selBox.minX, y: selBox.minY },
+        { x: selBox.maxX, y: selBox.minY },
+        { x: selBox.maxX, y: selBox.maxY },
+        { x: selBox.minX, y: selBox.maxY },
+      ];
+      drag.current = {
+        kind: 'scale',
+        refs: selRefs,
+        corner: cs[hh],
+        opposite: cs[(hh + 2) % 4],
+        center: { x: (selBox.minX + selBox.maxX) / 2, y: (selBox.minY + selBox.maxY) / 2 },
+        moved: false,
+      };
+      setDragging('scale');
+      return;
+    }
 
     if (tool === 'nodos' && primary) {
       const h = hitNode(p);
@@ -473,8 +569,13 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     const pc = pieceAt(pieces, p);
     if (pc) {
       const key = keyOf(pc);
+      if (tool === 'nodos') {
+        // Editando nodos: tocar otra pieza pasa a editar los de esa.
+        if (key !== keyOf(primary ?? pc) || !primary) setSelection([key]);
+        return;
+      }
       let keys = selKeys;
-      if (e.shiftKey && tool === 'mover') {
+      if (e.shiftKey) {
         // Shift: suma o saca de la selección (no arrastra).
         keys = selKeys.includes(key) ? selKeys.filter((x) => x !== key) : [...selKeys, key];
         setSelection(keys);
@@ -483,36 +584,34 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       if (!selKeys.includes(key)) {
         keys = [key];
         setSelection(keys);
-      } else if (tool === 'nodos') {
-        // En nodos, la pieza tocada pasa a ser la principal.
-        keys = [key, ...selKeys.filter((x) => x !== key)];
-        setSelKeys(keys);
       }
-      if (tool === 'mover') {
-        const chosen = keys.map((x) => byKey.get(x)).filter((q): q is EditPiece => !!q);
-        const box = unionBox(chosen.map((q) => q.bounds))!;
-        const others = pieces.filter((q) => !keys.includes(keyOf(q))).map((q) => q.bounds);
-        drag.current = { kind: 'move', start: p, refs: chosen.flatMap((q) => q.refs), box, others, moved: false };
-        setDragging('move');
-      }
+      const chosen = keys.map((x) => byKey.get(x)).filter((q): q is EditPiece => !!q);
+      const box = unionBox(chosen.map((q) => q.bounds))!;
+      const others = pieces.filter((q) => !keys.includes(keyOf(q))).map((q) => q.bounds);
+      drag.current = { kind: 'move', start: p, refs: chosen.flatMap((q) => q.refs), box, others, moved: false };
+      setDragging('move');
       return;
     }
 
-    if (tool === 'mover') {
-      drag.current = { kind: 'marquee', start: p, additive: e.shiftKey, moved: false };
-      setDragging('marquee');
+    // Fondo: editando nodos, sale de la edición; si no, rectángulo de selección.
+    if (tool === 'nodos') {
+      setTool('mover');
+      setSelNode(null);
       return;
     }
-    startPan();
+    drag.current = { kind: 'marquee', start: p, additive: e.shiftKey, moved: false };
+    setDragging('marquee');
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d) {
       // Resaltar lo que se va a agarrar.
-      if (tool === 'mano' || !doc) return;
+      if (!doc) return;
       const p = toUser(e.clientX, e.clientY);
-      const pc = p ? pieceAt(pieces, p) : null;
+      const hh = p ? hitHandle(p) : null;
+      if (hh !== hoverHandle) setHoverHandle(hh);
+      const pc = p && hh == null ? pieceAt(pieces, p) : null;
       const key = pc ? keyOf(pc) : null;
       if (key !== hoverKey) setHoverKey(key);
       return;
@@ -530,6 +629,19 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     if (!p) return;
     const useSnap = snapOn && !(e.ctrlKey || e.metaKey);
     const threshold = SNAP_PX / pxPerUnit;
+    if (d.kind === 'scale') {
+      // Alt: desde el centro; si no, queda fija la esquina de enfrente.
+      const anchor = e.altKey ? d.center : d.opposite;
+      const vx = d.corner.x - anchor.x;
+      const vy = d.corner.y - anchor.y;
+      const l2 = vx * vx + vy * vy;
+      if (!l2) return;
+      const f = Math.max(0.05, ((p.x - anchor.x) * vx + (p.y - anchor.y) * vy) / l2);
+      d.moved = true;
+      setScaleInfo(f);
+      setTemp(scaleRefsAt(doc, d.refs, f, anchor.x, anchor.y));
+      return;
+    }
     if (d.kind === 'marquee') {
       if (Math.hypot(p.x - d.start.x, p.y - d.start.y) * pxPerUnit > 3) d.moved = true;
       setMarquee({
@@ -585,15 +697,9 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     setDragging(null);
     setGuides([]);
     setDragInfo(null);
-    if (!d) return;
-    if (d.kind === 'pan') {
-      // Un toque en el fondo (sin arrastrar) suelta la selección.
-      if (!d.moved && tool !== 'mano' && !spaceDown.current) {
-        if (selNode) setSelNode(null);
-        else setSelection([]);
-      }
-      return;
-    }
+    const f = scaleInfo;
+    setScaleInfo(null);
+    if (!d || d.kind === 'pan') return;
     if (d.kind === 'marquee') {
       const m = marquee;
       setMarquee(null);
@@ -607,21 +713,68 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       return;
     }
     if (d.moved && temp) {
-      const n = d.kind === 'move' ? selection.length : 0;
+      const n = selection.length;
       commit(
         temp,
-        d.kind === 'move'
-          ? n > 1
-            ? `${n} piezas movidas.`
-            : 'Pieza movida.'
-          : d.part === 'p'
-            ? 'Nodo movido.'
-            : 'Manija movida.',
+        d.kind === 'scale'
+          ? `${n > 1 ? `${n} piezas` : 'Pieza'} al ${mm((f ?? 1) * 100, 1)} % de su tamaño.`
+          : d.kind === 'move'
+            ? n > 1
+              ? `${n} piezas movidas.`
+              : 'Pieza movida.'
+            : d.part === 'p'
+              ? 'Nodo movido.'
+              : 'Manija movida.',
       );
     } else {
       setTemp(null);
     }
   };
+
+  /** Doble clic: en una pieza, editar sus nodos (acercando si hace falta); en el fondo, salir. */
+  const onDoubleClick = (e: React.MouseEvent) => {
+    const p = toUser(e.clientX, e.clientY);
+    const pc = p ? pieceAt(pieces, p) : null;
+    if (!pc) {
+      if (tool === 'nodos') {
+        setTool('mover');
+        setSelNode(null);
+      }
+      return;
+    }
+    setSelection([keyOf(pc)]);
+    setTool('nodos');
+    // Si los nodos quedan muy juntos para tocarlos, acercar justo lo necesario,
+    // centrado donde se hizo el doble clic.
+    const gaps: number[] = [];
+    for (const r of pc.refs) {
+      const ns = doc?.paths[r.path]?.subs[r.sub]?.nodes ?? [];
+      for (let i = 1; i < ns.length; i++) gaps.push(Math.hypot(ns[i].p.x - ns[i - 1].p.x, ns[i].p.y - ns[i - 1].p.y));
+    }
+    gaps.sort((a, b) => a - b);
+    const g = gaps[Math.floor(gaps.length / 2)] ?? 0;
+    if (g > 0 && g * pxPerUnit < NODE_MIN_SPACING_PX && p) {
+      const w = Math.max(0.8 / k, (hostW * g) / (NODE_MIN_SPACING_PX * 1.6));
+      const h = w / aspect;
+      setView({ x: p.x - w / 2, y: p.y - h / 2, w, h });
+    }
+  };
+
+  // El menú se cierra al tocar afuera o con Esc.
+  useEffect(() => {
+    if (!menu) return;
+    const close = (ev: Event) => {
+      if (ev instanceof KeyboardEvent && ev.key !== 'Escape') return;
+      if (ev.target instanceof Node && document.querySelector('[data-fresa-menu]')?.contains(ev.target)) return;
+      setMenu(null);
+    };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', close, true);
+    return () => {
+      window.removeEventListener('pointerdown', close, true);
+      window.removeEventListener('keydown', close, true);
+    };
+  }, [menu]);
 
   // ------------------------------------------------------------ operaciones
   const num = (s: string) => Number(String(s).replace(',', '.'));
@@ -679,6 +832,19 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     commit(deleteNode(doc, selNode), 'Nodo borrado.');
     setSelNode(null);
   };
+  const doNodeCorner = () => {
+    if (!selNode || !doc) return;
+    commit(setNodeCorner(doc, selNode), 'Nodo en esquina (sin manijas).');
+  };
+  const doNodeSmooth = () => {
+    if (!selNode || !doc) return;
+    commit(setNodeSmooth(doc, selNode), 'Nodo suave (manijas alineadas).');
+  };
+  /** Acercar a lo elegido (o ver todo si no hay nada elegido). */
+  const frameSelection = () => {
+    if (selBox) zoomTo(selBox, 0.8);
+    else fitAll();
+  };
   const doRedundant = () => {
     if (!doc) return;
     const { doc: next, removed } = removeRedundant(doc, 0.002 / k, selRefs.length ? selRefs : undefined);
@@ -731,8 +897,15 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     }
     if (e.key === 'Escape') {
       e.preventDefault();
-      if (selNode) setSelNode(null);
+      if (menu) setMenu(null);
+      else if (selNode) setSelNode(null);
+      else if (tool === 'nodos') setTool('mover');
       else setSelection([]);
+      return;
+    }
+    if (e.key === 'Enter' && nSel && tool === 'mover') {
+      e.preventDefault();
+      setTool('nodos');
       return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -755,9 +928,12 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     }
     const key = e.key.toLowerCase();
     if (!mod && key === 'v') setTool('mover');
-    if (!mod && key === 'a') setTool('nodos');
-    if (!mod && key === 'h') setTool('mano');
+    if (!mod && key === 'a' && (primary || tool === 'nodos')) {
+      setTool((t) => (t === 'nodos' ? 'mover' : 'nodos'));
+      setSelNode(null);
+    }
     if (!mod && key === 'g') setSnapOn((v) => !v);
+    if (!mod && key === 'f') frameSelection();
     if (key === '0') fitAll();
   };
   const onKeyUp = (e: React.KeyboardEvent) => {
@@ -797,52 +973,38 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       : {};
 
   const hint =
-    tool === 'mano'
-      ? 'Arrastrá para moverte por el dibujo. Rueda: acercar o alejar.'
-      : tool === 'nodos'
-        ? !primary
-          ? 'Tocá una pieza para ver sus nodos.'
-          : !nodesTouchable
-            ? 'Doble clic en la pieza (o rueda) para acercarte y poder tocar los nodos.'
-            : selNode
-              ? 'Arrastrá el nodo o sus manijas; se alinea con los otros nodos (Ctrl lo suelta). Supr lo borra.'
-              : 'Tocá un nodo para elegirlo y ver sus manijas, o arrastralo directamente.'
-        : dragging === 'move'
-          ? 'Shift: solo en horizontal o vertical. Ctrl: sin imán.'
+    tool === 'nodos'
+      ? !primary
+        ? 'Tocá una pieza para editar sus nodos. Esc o clic en el fondo: terminar.'
+        : !nodesTouchable
+          ? 'Los nodos están muy juntos: acercate con la rueda (o F) para poder tocarlos.'
+          : selNode
+            ? 'Arrastrá el nodo o sus manijas (se alinea con los otros; Ctrl lo suelta). Clic derecho: esquina, suave o borrar.'
+            : 'Arrastrá un nodo, o tocalo para ver sus manijas. Esc o clic en el fondo: terminar.'
+      : dragging === 'move'
+        ? 'Shift: solo en horizontal o vertical. Ctrl: sin imán.'
+        : dragging === 'scale'
+          ? 'Escala pareja. Alt: desde el centro.'
           : nSel
-            ? 'Arrastrá para mover (se imanta a las otras piezas). Shift+clic suma o saca piezas. Flechas: mover un poco.'
-            : 'Tocá una pieza para elegirla, o arrastrá en el fondo para elegir varias. Shift+clic suma piezas; Ctrl+A elige todo.';
+            ? 'Arrastrá para mover · esquinas: escalar · doble clic: nodos · clic derecho: más acciones · rueda apretada: moverse.'
+            : 'Clic: elegir · arrastrar en el fondo: varias · doble clic: nodos · clic derecho: acciones · rueda: zoom (apretada: moverse).';
 
-  const toolBtn = (t: Tool, icon: ReactNode, label: string, key: string) => (
-    <button
-      type="button"
-      title={`${label} (tecla ${key})`}
-      onClick={() => setTool(t)}
-      className={cn(
-        'flex items-center gap-1.5 rounded px-2.5 py-1 text-xs',
-        tool === t ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-
+  const HANDLE_CURSORS = ['cursor-nwse-resize', 'cursor-nesw-resize', 'cursor-nwse-resize', 'cursor-nesw-resize'];
   const cursor =
     dragging === 'pan'
       ? 'cursor-grabbing'
-      : dragging === 'move' || dragging === 'node'
-        ? 'cursor-move'
-        : dragging === 'marquee'
-          ? 'cursor-crosshair'
-          : tool === 'mano'
-            ? 'cursor-grab'
-            : hovered || (hoverKey && selKeys.includes(hoverKey))
-              ? tool === 'mover'
-                ? 'cursor-move'
-                : 'cursor-pointer'
-              : tool === 'mover'
-                ? 'cursor-crosshair'
+      : dragging === 'scale'
+        ? 'cursor-nwse-resize'
+        : dragging === 'move' || dragging === 'node'
+          ? 'cursor-move'
+          : dragging === 'marquee'
+            ? 'cursor-crosshair'
+            : hoverHandle != null
+              ? HANDLE_CURSORS[hoverHandle]
+              : hovered || (hoverKey && selKeys.includes(hoverKey))
+                ? tool === 'mover'
+                  ? 'cursor-move'
+                  : 'cursor-pointer'
                 : 'cursor-default';
 
   const subsPath = (piece: EditPiece) =>
@@ -878,13 +1040,25 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     // Las teclas funcionan en todo el editor: también después de tocar un botón del panel.
     <div className="flex flex-col gap-3 md:min-h-0 md:flex-1 md:flex-row" onKeyDown={onKeyDown} onKeyUp={onKeyUp}>
       {/* ---------------------------------------------------- lienzo */}
-      <div className="relative flex h-[55vh] min-w-0 shrink-0 flex-col gap-2 md:h-auto md:min-h-[300px] md:flex-1 md:shrink">
+      <div ref={colRef} className="relative flex h-[55vh] min-w-0 shrink-0 flex-col gap-2 md:h-auto md:min-h-[300px] md:flex-1 md:shrink">
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-md border bg-muted/40 p-0.5">
-            {toolBtn('mover', <MousePointer2 className="size-3.5" />, 'Elegir y mover', 'V')}
-            {toolBtn('nodos', <Spline className="size-3.5" />, 'Nodos', 'A')}
-            {toolBtn('mano', <Hand className="size-3.5" />, 'Mano', 'H')}
-          </div>
+          <button
+            type="button"
+            className={cn(
+              'flex h-7 items-center gap-1.5 rounded border px-2.5 text-xs disabled:opacity-40',
+              tool === 'nodos' ? 'border-blue-400 bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300' : 'bg-background hover:bg-muted',
+            )}
+            disabled={tool !== 'nodos' && !primary}
+            aria-pressed={tool === 'nodos'}
+            onClick={() => {
+              setTool(tool === 'nodos' ? 'mover' : 'nodos');
+              setSelNode(null);
+            }}
+            title={tool === 'nodos' ? 'Terminar de editar nodos (Esc)' : primary ? 'Editar los nodos de lo elegido (doble clic o tecla A)' : 'Elegí una pieza para editar sus nodos (o doble clic en ella)'}
+          >
+            {tool === 'nodos' ? <MousePointer2 className="size-3.5" /> : <Spline className="size-3.5" />}
+            {tool === 'nodos' ? 'Terminar nodos' : 'Editar nodos'}
+          </button>
           <div className="flex items-center gap-0.5">
             <button type="button" className={iconBtn} disabled={idx === 0} onClick={undo} title="Deshacer (Ctrl+Z)">
               <Undo2 className="size-3.5" />
@@ -900,6 +1074,9 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             </button>
             <button type="button" className={iconBtn} onClick={fitAll} title="Ver todo el dibujo (tecla 0)">
               <Maximize2 className="size-3.5" />
+            </button>
+            <button type="button" className={iconBtn} disabled={!nSel} onClick={frameSelection} title="Acercar a lo elegido (tecla F)">
+              <Focus className="size-3.5" />
             </button>
             <button
               type="button"
@@ -934,13 +1111,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           onPointerLeave={() => !drag.current && setHoverKey(null)}
-          onDoubleClick={(e) => {
-            const p = toUser(e.clientX, e.clientY);
-            const pc = p ? pieceAt(pieces, p) : null;
-            if (!pc) return;
-            setSelection([keyOf(pc)]);
-            zoomTo(pc.bounds, 0.6);
-          }}
+          onDoubleClick={onDoubleClick}
+          onAuxClick={(e) => e.preventDefault()}
           className={cn(
             'relative min-h-0 flex-1 touch-none select-none overflow-hidden rounded-md border bg-white outline-none focus-visible:ring-2 focus-visible:ring-ring',
             'bg-[length:20px_20px] bg-[radial-gradient(circle,#e5e7eb_1px,transparent_1px)]',
@@ -991,6 +1163,20 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                   strokeWidth={u}
                   strokeDasharray={`${4 * u} ${3 * u}`}
                 />
+                {tool === 'mover' && dragging !== 'move'
+                  ? handleCorners(shownSelBox).map((c, i) => (
+                      <rect
+                        key={i}
+                        x={c.x - 4 * u}
+                        y={c.y - 4 * u}
+                        width={8 * u}
+                        height={8 * u}
+                        fill={hoverHandle === i ? '#2563eb' : '#fff'}
+                        stroke="#2563eb"
+                        strokeWidth={1.3 * u}
+                      />
+                    ))
+                  : null}
                 <text
                   x={shownSelBox.minX - 3 * u}
                   y={shownSelBox.minY - 6 * u}
@@ -1004,6 +1190,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                   {nSel > 1 ? `${nSel} piezas · ` : ''}
                   {mm((shownSelBox.maxX - shownSelBox.minX) * k)} × {mm((shownSelBox.maxY - shownSelBox.minY) * k)} mm
                   {dragInfo ? `  ·  ↔ ${mm(dragInfo.dx * k)}  ↕ ${mm(dragInfo.dy * k)} mm` : ''}
+                  {scaleInfo != null ? `  ·  ${mm(scaleInfo * 100, 1)} %` : ''}
                 </text>
               </g>
             ) : null}
@@ -1139,6 +1326,23 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
           <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-background/90 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground shadow-sm">
             {mm(view.w * k, view.w * k < 10 ? 1 : 0)} mm de ancho en pantalla
           </div>
+          {tool === 'nodos' ? (
+            <div className="absolute left-2 top-2 flex items-center gap-2 rounded-md bg-blue-600 px-2.5 py-1 text-xs text-white shadow-md">
+              <Spline className="size-3.5" />
+              Editando nodos
+              <button
+                type="button"
+                className="rounded bg-white/20 px-1.5 py-0.5 hover:bg-white/30"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => {
+                  setTool('mover');
+                  setSelNode(null);
+                }}
+              >
+                Listo (Esc)
+              </button>
+            </div>
+          ) : null}
           {/* Aviso de lo que se hizo: flota sobre el dibujo, no corre nada de lugar. */}
           {notice ? (
             <div
@@ -1169,8 +1373,76 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
           ) : null}
         </div>
 
+
+        {/* Menú del clic derecho */}
+        {menu ? (
+          <div
+            data-fresa-menu
+            role="menu"
+            className="absolute z-20 w-[220px] rounded-md border bg-popover py-1 text-xs text-popover-foreground shadow-lg"
+            style={{ left: menu.x, top: menu.y }}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {(() => {
+              const item = (label: string, action: () => void, opts: { keys?: string; disabled?: boolean; danger?: boolean } = {}) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="menuitem"
+                  disabled={opts.disabled}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent',
+                    opts.danger && 'text-destructive',
+                  )}
+                  onClick={() => {
+                    setMenu(null);
+                    action();
+                  }}
+                >
+                  <span>{label}</span>
+                  {opts.keys ? <span className="text-[10px] text-muted-foreground">{opts.keys}</span> : null}
+                </button>
+              );
+              const sep = (key: string) => <div key={key} className="my-1 border-t" />;
+              const off = mm(Math.abs(num(offsetMm)) || 0.05);
+              if (menu.target === 'nodo') {
+                return [
+                  item('Esquina (sin manijas)', doNodeCorner, { disabled: !selNodeData?.i && !selNodeData?.o }),
+                  item('Suave (manijas alineadas)', doNodeSmooth),
+                  sep('s1'),
+                  item('Borrar nodo', doDeleteNode, { keys: 'Supr', danger: true }),
+                ];
+              }
+              if (menu.target === 'pieza') {
+                return [
+                  item(tool === 'nodos' ? 'Terminar nodos' : 'Editar nodos', () => {
+                    setTool(tool === 'nodos' ? 'mover' : 'nodos');
+                    setSelNode(null);
+                  }, { keys: tool === 'nodos' ? 'Esc' : 'doble clic' }),
+                  item('Acercar', frameSelection, { keys: 'F' }),
+                  sep('s1'),
+                  item('Agrandar 1 %', () => scaleBy(1.01)),
+                  item('Achicar 1 %', () => scaleBy(0.99)),
+                  item(`Engordar ${off} mm`, () => doOffset(1)),
+                  item(`Afinar ${off} mm`, () => doOffset(-1)),
+                  item('Simplificar nodos', doSimplify),
+                  sep('s2'),
+                  item(nSel > 1 ? `Borrar ${nSel} piezas` : 'Borrar pieza', doDeleteSelection, { keys: 'Supr', danger: true }),
+                ];
+              }
+              return [
+                item('Elegir todo', () => setSelection(pieces.map(keyOf)), { keys: 'Ctrl+A' }),
+                item('Ver todo', fitAll, { keys: '0' }),
+                sep('s1'),
+                item('Deshacer', undo, { keys: 'Ctrl+Z', disabled: idx === 0 }),
+                item('Rehacer', redo, { keys: 'Ctrl+Y', disabled: idx >= history.length - 1 }),
+              ];
+            })()}
+          </div>
+        ) : null}
+
         <div className="flex shrink-0 items-start justify-between gap-2">
-          {/* Alto fijo (2 renglones): cambiar de herramienta no achica el dibujo. */}
+          {/* Alto fijo (2 renglones): cambiar de modo no achica el dibujo. */}
           <p className="h-8 overflow-hidden text-xs leading-4 text-muted-foreground">{hint}</p>
           <button
             type="button"
@@ -1185,25 +1457,34 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
           // Flota sobre el dibujo (no lo achica).
           <ul className="absolute bottom-10 right-0 z-10 grid w-[min(560px,100%)] grid-cols-1 gap-x-4 gap-y-0.5 rounded-md border bg-background p-2.5 text-[11px] text-muted-foreground shadow-lg sm:grid-cols-2">
             <li>
-              <b>V</b> elegir y mover · <b>A</b> nodos · <b>H</b> mano
+              <b>Clic</b> elegir · <b>arrastrar</b> mover · <b>en el fondo</b> elegir varias
             </li>
             <li>
-              <b>Shift+clic</b> sumar o sacar · <b>Ctrl+A</b> todo · arrastrar en el fondo: varias
+              <b>Doble clic</b> editar nodos · <b>Esc</b> terminar / soltar
             </li>
             <li>
-              <b>Flechas</b> mover ({mm(step)} mm; Shift ×10)
+              <b>Esquinas</b> de lo elegido: escalar (<b>Alt</b> desde el centro)
+            </li>
+            <li>
+              <b>Clic derecho</b> acciones de la pieza, el nodo o el fondo
+            </li>
+            <li>
+              <b>Rueda</b> zoom · <b>rueda apretada</b> o <b>Espacio</b> + arrastrar: moverse
+            </li>
+            <li>
+              <b>Shift+clic</b> sumar o sacar · <b>Ctrl+A</b> todo
+            </li>
+            <li>
+              <b>Flechas</b> mover ({mm(step)} mm; Shift ×10) · <b>Supr</b> borrar
             </li>
             <li>
               Al arrastrar: <b>Shift</b> un solo eje · <b>Ctrl</b> sin imán · <b>G</b> imán sí/no
             </li>
             <li>
-              <b>Espacio</b> + arrastrar: moverse · <b>Rueda</b> acercar · <b>0</b> ver todo
+              <b>A</b> nodos sí/no · <b>F</b> acercar a lo elegido · <b>0</b> ver todo
             </li>
             <li>
-              <b>Doble clic</b> acercar a la pieza · <b>Esc</b> soltar
-            </li>
-            <li>
-              <b>Supr</b> borrar nodo o piezas · <b>Ctrl+Z</b> / <b>Ctrl+Y</b> deshacer / rehacer
+              <b>Ctrl+Z</b> / <b>Ctrl+Y</b> deshacer / rehacer
             </li>
           </ul>
         ) : null}
@@ -1421,33 +1702,38 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
           }
         >
           {/* Renglón de alto fijo: el nodo elegido o cómo empezar. */}
-          <div className="flex h-7 items-center justify-between gap-2 text-xs">
+          <div className="flex h-7 items-center justify-between gap-1 text-xs">
             {tool !== 'nodos' ? (
-              <Button type="button" size="sm" variant="outline" className="h-7" onClick={() => setTool('nodos')}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7"
+                disabled={!primary}
+                onClick={() => setTool('nodos')}
+                title="También: doble clic en la pieza"
+              >
                 <Spline className="mr-1 size-3.5" />
-                Editar nodos (A)
+                Editar nodos
               </Button>
             ) : (
               <>
-                <span className="truncate text-muted-foreground">
+                <span className="min-w-0 truncate text-muted-foreground">
                   {selNodeData
-                    ? `Nodo elegido: ${selNodeData.i || selNodeData.o ? (isSmooth(selNodeData) ? 'curva suave' : 'esquina con curva') : 'esquina'}`
-                    : primary
-                      ? 'Tocá un nodo para elegirlo.'
-                      : 'Tocá una pieza para ver sus nodos.'}
+                    ? `Nodo: ${selNodeData.i || selNodeData.o ? (isSmooth(selNodeData) ? 'suave' : 'con curva') : 'esquina'}`
+                    : 'Tocá un nodo.'}
                 </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 shrink-0 px-2 text-destructive"
-                  disabled={!selNodeData}
-                  onClick={doDeleteNode}
-                  title="Borrar el nodo elegido (Supr)"
-                >
-                  <Trash2 className="mr-1 size-3" />
-                  Borrar nodo
-                </Button>
+                <span className="flex shrink-0 items-center gap-0.5">
+                  <Button type="button" size="sm" variant="outline" className="h-7 px-2" disabled={!selNodeData || (!selNodeData.i && !selNodeData.o)} onClick={doNodeCorner} title="Esquina: sin manijas">
+                    Esquina
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="h-7 px-2" disabled={!selNodeData} onClick={doNodeSmooth} title="Suave: manijas alineadas">
+                    Suave
+                  </Button>
+                  <button type="button" className={cn(iconBtn, 'text-destructive')} disabled={!selNodeData} onClick={doDeleteNode} title="Borrar el nodo (Supr)">
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </span>
               </>
             )}
           </div>

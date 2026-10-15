@@ -1045,6 +1045,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 59,
+    date: '2026-10-15',
+    title: 'Editor de vectores con el mouse',
+    version: '1.77',
+    slides: [
+      {
+        heading: 'Sin elegir herramientas',
+        body: 'Clic izquierdo elige y mueve, las esquinas escalan, doble clic edita los nodos, la rueda apretada mueve la vista y el clic derecho abre las acciones de lo que tocaste (también Esquina y Suave en un nodo).',
+        icon: PencilRuler,
+      },
+      {
+        heading: 'Afinar y engordar sin romper',
+        body: 'Afinar o engordar una letra ya no la deforma: el resultado queda pegado al offset exacto, con sus esquinas.',
+        icon: Wand2,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

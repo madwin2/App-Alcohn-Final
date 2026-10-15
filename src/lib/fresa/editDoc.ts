@@ -16,7 +16,7 @@
  * que es lo que sale de Vectorizer.AI e Illustrator.
  */
 import { FillRule } from 'clipper2-ts';
-import { bezierPoint, cornerIndices, fitCubics, isNearlyStraight, type Cubic } from './curveFit';
+import { bezierPoint, fitCubics, isNearlyStraight, type Cubic } from './curveFit';
 import { UM, offset as offsetRegion, toPath64, union, type Paths64 } from './geometry';
 import { absoluteSubpaths, flattenPathData, parsePointList, type AbsSegment, type Pt } from './pathData';
 import { applyMatrix, multiply, parseSvgShapes, parseTransform, type Matrix } from './svgShapes';
@@ -483,6 +483,11 @@ export function scaleRefs(doc: EditDoc, refs: SubRef[], f: number, b: Box): Edit
   return mapPoints(doc, refs, (p) => ({ x: cx + (p.x - cx) * f, y: cy + (p.y - cy) * f }));
 }
 
+/** Escala pareja (sin deformar) alrededor del punto (cx, cy): tiradores de las esquinas. */
+export function scaleRefsAt(doc: EditDoc, refs: SubRef[], f: number, cx: number, cy: number): EditDoc {
+  return mapPoints(doc, refs, (p) => ({ x: cx + (p.x - cx) * f, y: cy + (p.y - cy) * f }));
+}
+
 /** Saca sub-trayectos (y los caminos que queden vacíos). */
 export function removeRefs(doc: EditDoc, refs: SubRef[]): EditDoc {
   const kill = new Set(refs.map(refKey));
@@ -500,45 +505,11 @@ export function removeRefs(doc: EditDoc, refs: SubRef[]): EditDoc {
 export function fitClosedRing(ring: Pt[], tol: number): ESub | null {
   const pts = ring.filter((p, k) => k === 0 || dist(p, ring[k - 1]) > tol * 0.01);
   if (pts.length < 3) return null;
-  const corners = cornerIndices(pts, true, 35);
-  const nodes: ENode[] = [];
-  const pushCubic = (c: Cubic) => {
-    if (isNearlyStraight(c, tol * 0.25)) {
-      nodes.push({ p: c[3] });
-      return;
-    }
-    nodes[nodes.length - 1].o = c[1];
-    nodes.push({ p: c[3], i: c[2] });
-  };
-  if (!corners.length) {
-    // Sin esquinas: se parte en dos mitades para cerrar suave.
-    const h = Math.floor(pts.length / 2);
-    const a = fitCubics(pts.slice(0, h + 1), tol);
-    const b = fitCubics([...pts.slice(h), pts[0]], tol);
-    nodes.push({ p: pts[0] });
-    for (const c of [...a, ...b]) pushCubic(c);
-  } else {
-    const n = pts.length;
-    nodes.push({ p: pts[corners[0]] });
-    for (let k = 0; k < corners.length; k++) {
-      const from = corners[k];
-      const to = corners[(k + 1) % corners.length];
-      const run: Pt[] = [];
-      for (let j = from; ; j = (j + 1) % n) {
-        run.push(pts[j]);
-        if (j === to && run.length > 1) break;
-        if (run.length > n + 1) break;
-      }
-      if (corners.length === 1) run.push(pts[from]);
-      for (const c of fitCubics(run, tol)) pushCubic(c);
-    }
-  }
-  // El último nodo repite el primero: se fusiona.
-  if (nodes.length > 2 && near(nodes[0].p, nodes[nodes.length - 1].p, tol * 0.01)) {
-    const last = nodes.pop()!;
-    if (last.i) nodes[0].i = last.i;
-  }
-  return validClosed(nodes) ? { closed: true, nodes } : null;
+  // Mismo método que «Simplificar»: forma mínima, esquinas reales (también las
+  // redondeadas) y curvas controladas contra el contorno exacto, así nunca se
+  // sale de la forma. Si no ahorra nodos, queda el polígono tal cual.
+  const poly: ESub = { closed: true, nodes: pts.map((p) => ({ p })) };
+  return simplifySub(poly, tol) ?? poly;
 }
 
 /** Un contorno cerrado necesita 3 nodos, o 2 si hay curvas (un círculo en dos mitades). */
@@ -654,6 +625,49 @@ export function moveNodePart(doc: EditDoc, ref: NodeRef, part: NodePart, to: Pt)
     const l = Math.hypot(vx, vy);
     const keep = Math.hypot(o.x - n.p.x, o.y - n.p.y);
     if (l > 0) n[other] = { x: n.p.x + (vx / l) * keep, y: n.p.y + (vy / l) * keep };
+  }
+  return next;
+}
+
+/** Nodo en esquina: sin manijas (los tramos que llegan a él quedan rectos de su lado). */
+export function setNodeCorner(doc: EditDoc, ref: NodeRef): EditDoc {
+  const next = cloneDoc(doc);
+  const n = next.paths[ref.path]?.subs[ref.sub]?.nodes[ref.node];
+  if (!n) return doc;
+  delete n.i;
+  delete n.o;
+  return next;
+}
+
+/**
+ * Nodo suave: manijas alineadas con la dirección de vecino a vecino, de un
+ * tercio de cada tramo (como una curva que pasa por los tres puntos).
+ */
+export function setNodeSmooth(doc: EditDoc, ref: NodeRef): EditDoc {
+  const sub = doc.paths[ref.path]?.subs[ref.sub];
+  if (!sub) return doc;
+  const nodes = sub.nodes;
+  const k = ref.node;
+  const prev = sub.closed || k > 0 ? nodes[(k - 1 + nodes.length) % nodes.length] : null;
+  const nxt = sub.closed || k < nodes.length - 1 ? nodes[(k + 1) % nodes.length] : null;
+  const n = nodes[k];
+  const a = prev?.p ?? n.p;
+  const b = nxt?.p ?? n.p;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const l = Math.hypot(dx, dy);
+  if (!l) return doc;
+  const ux = dx / l;
+  const uy = dy / l;
+  const next = cloneDoc(doc);
+  const m = next.paths[ref.path].subs[ref.sub].nodes[k];
+  if (prev) {
+    const li = dist(prev.p, n.p) / 3;
+    m.i = { x: n.p.x - ux * li, y: n.p.y - uy * li };
+  }
+  if (nxt) {
+    const lo = dist(nxt.p, n.p) / 3;
+    m.o = { x: n.p.x + ux * lo, y: n.p.y + uy * lo };
   }
   return next;
 }

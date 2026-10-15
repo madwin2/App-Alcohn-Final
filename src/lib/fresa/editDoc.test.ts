@@ -6,6 +6,7 @@ import {
   computePieces,
   countNodes,
   docBounds,
+  flattenSub,
   deleteNode,
   moveNodePart,
   offsetPiece,
@@ -18,7 +19,8 @@ import {
 } from './editDoc';
 import { buildBlackRegion } from './analyze';
 import { parseSvgShapes } from './svgShapes';
-import { regionArea } from './geometry';
+import { FillRule } from 'clipper2-ts';
+import { UM, offset as offsetRegion, regionArea, toPath64, union } from './geometry';
 
 const svg = (body: string, w = 20, h = 10) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">${body}</svg>`;
@@ -198,6 +200,33 @@ describe('editDoc', () => {
     const next = ns[(k + 1) % ns.length];
     expect(Math.abs(next.p.y - ns[k].p.y)).toBeGreaterThan(400);
     expect(ns[k].o ?? next.i).toBeUndefined();
+  });
+
+  it('afinar y engordar no se salen de la forma exacta (esquinas, redondeos y ojo)', () => {
+    // Una "a" esquemática: esquinas vivas, una esquina redondeada chiquita y un ojo.
+    const text = svg(
+      `<path fill-rule="evenodd" d="M1 1H8C8.3 1 8.5 1.2 8.5 1.5V9H5.5L5 8.2L4.4 9H1Z M3 3.2H6.3V6.8H3Z"/>`,
+    );
+    const d = doc(text);
+    const [p] = computePieces(d, 0.005);
+    const segD = (q: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => {
+      const l2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
+      const t = l2 ? Math.max(0, Math.min(1, ((q.x - a.x) * (b.x - a.x) + (q.y - a.y) * (b.y - a.y)) / l2)) : 0;
+      return Math.hypot(q.x - a.x - t * (b.x - a.x), q.y - a.y - t * (b.y - a.y));
+    };
+    type P = { x: number; y: number };
+    const far = (qs: P[], rings: P[][]) =>
+      Math.max(...qs.map((q) => Math.min(...rings.flatMap((r) => r.map((_, k) => segD(q, r[k], r[(k + 1) % r.length]))))));
+    for (const delta of [-0.1, 0.1]) {
+      const out = offsetPiece(d, p, delta, 1)!;
+      const exact = offsetRegion(
+        union(p.refs.map((r) => toPath64(flattenSub(d.paths[r.path].subs[r.sub], 0.001), 1)), null, FillRule.EvenOdd),
+        Math.round(delta * UM),
+      ).map((ring) => ring.map((q) => ({ x: q.x / UM, y: q.y / UM })));
+      const got = out.paths.flatMap((pa) => pa.subs.map((s) => flattenSub(s, 0.001)));
+      expect(got.length).toBe(2); // sigue teniendo el ojo
+      expect(Math.max(far(got.flat(), exact), far(exact.flat(), got))).toBeLessThan(0.03);
+    }
   });
 
   it('mueve un nodo con sus manijas y borra nodos', () => {
