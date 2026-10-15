@@ -10,13 +10,16 @@ import { useFresaReport } from '@/lib/fresa/useFresaReport';
 import type { ZoneSeverity } from '@/lib/fresa/analyze';
 import {
   KIND_HELP,
+  DEPTH_BAND_FILL,
   SEVERITY_DOT,
+  depthBandLabel,
   SEVERITY_LABEL,
   SIZE_SOURCE_LABEL,
   criterioTexto,
   groupDetail,
   groupTitle,
   mm,
+  resumenOperaciones,
 } from '@/lib/fresa/textos';
 import { downloadSvg } from '@/lib/vectorizacion/zipResults';
 import { FresaViewer, type FresaViewMode } from './FresaViewer';
@@ -67,8 +70,8 @@ function StatusSummary({ report }: { report: FresaReport | null }) {
       <div className="flex items-start gap-2 rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
         <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
         <span>
-          La fresa llega a {mm(report.profile.minDepthMm, 1)} mm en todo el diseño.
-          {g.baja ? ` Hay ${g.baja} rincón${g.baja === 1 ? '' : 'es'} chico${g.baja === 1 ? '' : 's'} que la fresa redondea (normal).` : ''}
+          Todo se separa: entre letras y en los ojos la fresa baja al menos {mm(report.profile.minDepthMm, 1)} mm.
+          {g.baja ? ` Hay ${g.baja} ángulo${g.baja === 1 ? '' : 's'} o rincón${g.baja === 1 ? '' : 'es'} donde la fresa sube y marca menos hondo (normal).` : ''}
         </span>
       </div>
     );
@@ -79,10 +82,10 @@ function StatusSummary({ report }: { report: FresaReport | null }) {
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
       <span>
         <strong>
-          {n} lugar{n === 1 ? '' : 'es'} donde la fresa no llega bien
+          {n} lugar{n === 1 ? '' : 'es'} donde se pierde el diseño
         </strong>
-        {g.alta ? ` · ${g.alta} no llega` : ''}
-        {g.media ? ` · ${g.media} llega poco` : ''}
+        {g.alta ? ` · ${g.alta} para corregir` : ''}
+        {g.media ? ` · ${g.media} detalle que se pierde` : ''}
       </span>
     </div>
   );
@@ -113,6 +116,7 @@ export function FresaCheckDialog({
   const [fixing, setFixing] = useState(false);
   const [applying, setApplying] = useState(false);
   const [mode, setMode] = useState<FresaViewMode>('original');
+  const [showDepth, setShowDepth] = useState(true);
 
   // Al abrir otro diseño, empezar de cero.
   useEffect(() => {
@@ -234,6 +238,7 @@ export function FresaCheckDialog({
                 fitKey={report.key}
                 mode={mode}
                 visibleSeverities={visible}
+                showDepth={showDepth}
                 selectedGroupId={selected}
                 hoveredGroupId={hovered}
                 onSelectGroup={select}
@@ -261,6 +266,28 @@ export function FresaCheckDialog({
               </ul>
             ) : null}
 
+            {active?.check?.depthBands?.length ? (
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox checked={showDepth} onCheckedChange={(v) => setShowDepth(v === true)} />
+                  Ver qué tan hondo baja la fresa (menos de {mm(active.profile.minDepthMm, 1)} mm)
+                </label>
+                {showDepth ? (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-[11px] text-muted-foreground">
+                    {active.check.depthBands.map((b, i) => (
+                      <span key={i} className="inline-flex items-center gap-1">
+                        <span
+                          className="inline-block size-2.5 rounded-sm"
+                          style={{ background: DEPTH_BAND_FILL[i] ?? DEPTH_BAND_FILL[DEPTH_BAND_FILL.length - 1] }}
+                        />
+                        {depthBandLabel(b.fromMm, b.toMm)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             {lowCount ? (
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Checkbox
@@ -274,7 +301,7 @@ export function FresaCheckDialog({
                     });
                   }}
                 />
-                Mostrar rincones chicos ({lowCount}) — la fresa los redondea, suelen aceptarse
+                Mostrar ángulos y rincones ({lowCount}) — la fresa sube y los marca menos hondo, están bien así
               </label>
             ) : null}
 
@@ -346,9 +373,10 @@ export function FresaCheckDialog({
                     {fixing ? 'Corrigiendo…' : 'Corregir automáticamente'}
                   </Button>
                   <p className="text-[11px] leading-snug text-muted-foreground">
-                    Abre solo los huecos marcados, lo justo para que entre la fresa. Si corregir uno rompería el
-                    diseño (partir un trazo fino, unir dos huecos) lo deja para editar a mano. Antes de usarlo vas a
-                    poder comparar.
+                    Separa las letras que están muy juntas moviéndolas enteras (respeta la alineación), y agranda en
+                    paralelo los ojos y ranuras chicas sin dejar trazos de menos de 0,4 mm. Los ángulos en punta no
+                    se tocan. Lo que no se puede resolver así queda para editar a mano. Antes de usarlo vas a poder
+                    comparar.
                   </p>
                 </>
               ) : (
@@ -367,7 +395,7 @@ export function FresaCheckDialog({
                         (se ven en «Corregido»).
                       </span>
                     )}{' '}
-                    <span className="text-muted-foreground">Se sacaron {mm(fix.removedAreaMm2)} mm² de negro.</span>
+                    <span className="text-muted-foreground">{resumenOperaciones(fix.operations)}</span>
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {onApply ? (

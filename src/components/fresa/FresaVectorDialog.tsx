@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
-import type { FresaTarget } from '@/lib/fresa/chequeoFresa';
+import { esTipoAlimento, type FresaTarget } from '@/lib/fresa/chequeoFresa';
 import { fetchSvgText } from '@/lib/fresa/useFresaReport';
 import { slugify } from '@/lib/vectorizacion/helpers';
 import { FresaCheckDialog } from './FresaCheckDialog';
@@ -11,6 +11,8 @@ export interface FresaSizeInfo {
   fabricationHeightMm?: number | null;
   requestedWidthMm?: number | null;
   requestedHeightMm?: number | null;
+  /** Tipo de sello: Alimento pide más profundidad mínima. */
+  stampType?: string | null;
 }
 
 /**
@@ -20,10 +22,11 @@ export interface FresaSizeInfo {
 export function fresaTargetFor(size: FresaSizeInfo): FresaTarget | null {
   const fw = Number(size.fabricationWidthMm);
   const fh = Number(size.fabricationHeightMm);
-  if (fw > 0 && fh > 0) return { mode: 'fabricacion', longSideMm: Math.max(fw, fh) };
+  const alimento = esTipoAlimento(size.stampType);
+  if (fw > 0 && fh > 0) return { mode: 'fabricacion', longSideMm: Math.max(fw, fh), alimento };
   const rw = Number(size.requestedWidthMm);
   const rh = Number(size.requestedHeightMm);
-  if (rw > 0 && rh > 0) return { mode: 'pedido', requestedWidthMm: rw, requestedHeightMm: rh };
+  if (rw > 0 && rh > 0) return { mode: 'pedido', requestedWidthMm: rw, requestedHeightMm: rh, alimento };
   return null;
 }
 

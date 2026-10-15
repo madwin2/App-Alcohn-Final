@@ -27,6 +27,10 @@ export interface ShapeItem {
   stroke: Paint;
   /** Ancho del trazo en unidades del viewBox raíz (ya escalado). */
   strokeWidth: number;
+  /** Coordenadas propias del elemento → viewBox raíz. */
+  matrix: Matrix;
+  /** Coordenadas del padre → viewBox raíz (para agregarle un `transform`). */
+  parentMatrix: Matrix;
 }
 
 export interface ParsedSvg {
@@ -57,6 +61,12 @@ export function multiply(m: Matrix, n: Matrix): Matrix {
 
 export function applyMatrix(m: Matrix, p: Pt): Pt {
   return { x: m[0] * p.x + m[2] * p.y + m[4], y: m[1] * p.x + m[3] * p.y + m[5] };
+}
+
+/** Lleva un desplazamiento del viewBox raíz a las coordenadas de la matriz (sin la traslación). */
+export function rootDeltaToLocal(m: Matrix, d: Pt): Pt {
+  const det = m[0] * m[3] - m[1] * m[2] || 1;
+  return { x: (m[3] * d.x - m[2] * d.y) / det, y: (-m[1] * d.x + m[0] * d.y) / det };
 }
 
 /** Escala media de una matriz (raíz del determinante). */
@@ -443,6 +453,8 @@ export function parseSvgShapes(svgText: string, tolMm = 0.004): ParsedSvg {
       fillRule: (style.fillRule ?? '').trim() === 'evenodd' ? 'evenodd' : 'nonzero',
       stroke,
       strokeWidth: swUnits * matrixScale(matrix),
+      matrix,
+      parentMatrix,
     });
   };
 

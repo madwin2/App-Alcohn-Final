@@ -1,19 +1,25 @@
 /**
- * Motor del chequeo de fresa: ¿dónde no llega la fresa más fina a la
- * profundidad mínima?
+ * Motor del chequeo de fresa: simula el V-carve de Aspire y avisa solo donde
+ * se pierde el diseño.
  *
  * Modelo (lo negro es relieve, lo blanco se saca):
  * - Con la punta a profundidad d, la fresa ocupa en la superficie un disco de
  *   radio r(d) = punta/2 + d·tan(flanco).
- * - Un punto blanco queda mecanizado hasta d solo si entra un disco de radio
- *   r(d) apoyado en el blanco que lo cubra. Eso es la "apertura" morfológica
- *   del blanco con radio r(d).
- * - Lo que queda afuera de esa apertura no llega a la profundidad mínima.
+ * - En V-carve la fresa nunca deja de pasar: donde el blanco se angosta, sube.
+ *   Cada punto blanco se talla a la profundidad del disco más grande que entra
+ *   en el blanco y lo cubre (la "apertura" morfológica con radio r(d)). Eso da
+ *   un mapa de profundidad (`depthBands`).
+ * - Lo que queda afuera de la apertura con la profundidad mínima se talla
+ *   menos hondo. Si eso importa depende de dónde está:
+ *   - paso angosto: une dos piezas negras distintas (dos letras). En el sello
+ *     se pegan → grave. Que el canal sea poco profundo en otro lado no importa:
+ *     se avisa solo el "puente", el tramo donde el canal se corta.
+ *   - hueco cerrado: un ojo de letra que entero queda poco profundo → grave.
+ *   - rincón o ángulo dentro de una misma pieza: la punta lo marca igual → está
+ *     bien, salvo que la fresa casi no entre en una superficie notable.
  *
- * De esas zonas se descartan las esquinas (toda esquina interior del blanco
- * queda redondeada por una fresa cónica: es normal) y se informa:
- * - hueco cerrado: un blanco encerrado (el ojo de una "e") que entero no llega.
- * - paso angosto: un canal entre dos partes negras más angosto que la fresa.
+ * Las esquinas (toda esquina interior del blanco queda redondeada por una
+ * fresa cónica: es normal) no se informan.
  *
  * Funciones puras (sin DOM): se pueden correr en un Web Worker.
  */
@@ -61,19 +67,23 @@ export interface PaintShape {
 }
 
 /**
- * - hueco_cerrado: un blanco encerrado (el ojo de una "e") que entero no llega.
- * - paso_angosto: un canal blanco entre dos piezas negras distintas (letras muy juntas).
+ * - hueco_cerrado: un blanco encerrado (el ojo de una "e") que entero queda poco profundo.
+ * - paso_angosto: un puente poco profundo entre dos piezas negras distintas (letras
+ *   que se pegan).
  * - rincon: un rincón o ranura angosta dentro de una misma pieza (unión de serifas,
- *   vértices agudos). La fresa cónica siempre los redondea; suelen aceptarse.
+ *   vértices agudos). La punta lo marca; solo importa si la fresa casi no entra.
+ * - angulo: un blanco sin salida que se angosta hasta una punta (el interior de
+ *   la M, la V, la unión de la A). La punta de la fresa igual le hace una pasada
+ *   poco profunda y queda marcado: está bien así y no se corrige.
  */
-export type ZoneKind = 'hueco_cerrado' | 'paso_angosto' | 'rincon';
+export type ZoneKind = 'hueco_cerrado' | 'paso_angosto' | 'rincon' | 'angulo';
 export type ZoneSeverity = 'alta' | 'media' | 'baja';
 
 export interface FresaZone {
   id: string;
   kind: ZoneKind;
   severity: ZoneSeverity;
-  /** Área que no llega a la profundidad mínima (mm²). */
+  /** Área que queda menos honda que la profundidad mínima (mm²). */
   areaMm2: number;
   /** Caja de la zona (mm, mismas coordenadas que el SVG × mm por unidad). */
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
@@ -87,8 +97,21 @@ export interface FresaZone {
   rings: Pt[][];
 }
 
+/** Franja del mapa de profundidad: lo que se talla entre `fromMm` y `toMm` (mm). */
+export interface DepthBand {
+  fromMm: number;
+  toMm: number;
+  rings: Pt[][];
+}
+
 export interface FresaCoreResult {
   zones: FresaZone[];
+  /**
+   * Mapa de profundidad del blanco que no llega a la mínima (de menos a más
+   * hondo; la primera franja, `toMm` 0, es lo que la fresa no saca). Solo se
+   * calcula si se pide.
+   */
+  depthBands?: DepthBand[];
   /** Zonas descartadas por ser esquinas normales (demasiado chicas para importar). */
   ignoredCorners: number;
   /** Medida del diseño analizado (mm). */
@@ -149,13 +172,48 @@ const toMmRings = (paths: Paths64): Pt[][] =>
 
 const boundsMm = (b: Bounds) => ({ minX: b.minX / UM, minY: b.minY / UM, maxX: b.maxX / UM, maxY: b.maxY / UM });
 
-/** Niveles de profundidad (mm) para estimar a qué profundidad llega la fresa en cada zona. */
-const DEPTH_LEVELS = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35];
+/** Niveles de profundidad (mm), por debajo de la mínima, para estimar a qué profundidad llega la fresa en cada zona. */
+function depthLevels(profile: FresaProfile): number[] {
+  const step = profile.minDepthMm > 0.5 ? 0.1 : 0.05;
+  const out: number[] = [];
+  for (let d = step; d < profile.minDepthMm - 1e-6; d += step) out.push(Math.round(d * 100) / 100);
+  return out;
+}
+
+/** Por dónde la zona se abre a blanco que la fresa sí alcanza (sus "bocas"). */
+function zoneMouths(comp: Component, reached: Paths64): Paths64[] {
+  const ring = offset(comp.paths, 12);
+  const contact = intersect(clipToBounds(reached, comp.bounds, 40), ring);
+  return components(contact)
+    .filter((c) => c.areaUm2 >= 400)
+    .map((c) => c.paths);
+}
+
+/**
+ * ¿La zona se angosta hasta una punta lejos de su boca? Se compara el grosor
+ * de la mitad más alejada con el de toda la zona: en un ángulo cae a menos de
+ * la mitad; en una ranura de paredes paralelas se mantiene.
+ */
+function isTapered(comp: Component, mouth: Paths64, thicknessUm: number): boolean {
+  let lo = 0;
+  let hi = Math.hypot(comp.bounds.maxX - comp.bounds.minX, comp.bounds.maxY - comp.bounds.minY) + 20;
+  for (let k = 0; k < 10 && hi - lo > 8; k++) {
+    const m = (lo + hi) / 2;
+    if (regionArea(difference(comp.paths, offset(mouth, m))) < 100) hi = m;
+    else lo = m;
+  }
+  const far = difference(comp.paths, offset(mouth, hi * 0.5));
+  if (regionArea(far) < 100) return true;
+  let farThickness = 0;
+  for (const c of components(far)) farThickness = Math.max(farThickness, interiorPoint(c).radiusUm);
+  return farThickness < 0.6 * thicknessUm;
+}
 
 export function analyzeBlackRegion(
   black: Paths64,
   profile: FresaProfile = FRESA_FINA,
   options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
+  withDepthMap = false,
 ): FresaCoreResult {
   const minGapMm = minGapWidthMm(profile);
   const b = bounds(black);
@@ -201,6 +259,8 @@ export function analyzeBlackRegion(
   const candidates: Array<{ comp: Component; thicknessUm: number; center: { x: number; y: number } }> = [];
   let ignoredCorners = 0;
   for (const comp of missComps) {
+    // Las esquinas del dominio (afuera del diseño) no son parte del sello.
+    if (!boundsOverlap(comp.bounds, b)) continue;
     if (comp.areaUm2 < minArea) {
       ignoredCorners++;
       continue;
@@ -210,7 +270,7 @@ export function analyzeBlackRegion(
   }
 
   // Erosiones del blanco a cada nivel de profundidad (se calculan una vez).
-  const levels = DEPTH_LEVELS.map((d) => {
+  const levels = depthLevels(profile).map((d) => {
     const r = Math.round(cutRadiusAtDepth(profile, d) * UM);
     const eroded = offset(white, -r);
     return { depth: d, radius: r, eroded, bounds: bounds(eroded) };
@@ -239,6 +299,11 @@ export function analyzeBlackRegion(
         ignoredCorners++;
         continue;
       }
+      const mouths = zoneMouths(comp, reached);
+      if (mouths.length === 1 && isTapered(comp, mouths[0], cand.thicknessUm)) kind = 'angulo';
+    }
+
+    if (!kind) {
       // ¿Cuántas piezas negras distintas toca la zona?
       const probe = offset(comp.paths, 8);
       const probeBounds = bounds(probe) ?? comp.bounds;
@@ -270,17 +335,18 @@ export function analyzeBlackRegion(
 
     const areaMm2 = regionArea(comp.paths) / (UM * UM);
     totalArea += areaMm2;
+    // Lo que separa piezas u ojos tiene que llegar sí o sí. En rincones y
+    // ángulos alcanza con que la punta marque.
+    const severity: ZoneSeverity =
+      kind === 'hueco_cerrado' || kind === 'paso_angosto'
+        ? 'alta'
+        : reachDepth < options.lostDetailDepthMm && areaMm2 >= options.notableCornerAreaMm2
+          ? 'media'
+          : 'baja';
     zones.push({
       id: `z${++idx}`,
       kind,
-      severity:
-        kind === 'rincon'
-          ? areaMm2 >= options.notableCornerAreaMm2
-            ? 'media'
-            : 'baja'
-          : kind === 'hueco_cerrado' || reachDepth < options.severeDepthMm
-            ? 'alta'
-            : 'media',
+      severity,
       areaMm2,
       bounds: boundsMm(comp.bounds),
       center: { x: cand.center.x / UM, y: cand.center.y / UM },
@@ -303,10 +369,33 @@ export function analyzeBlackRegion(
 
   return {
     zones,
+    depthBands: withDepthMap ? depthMap(white, reached, profile, b) : undefined,
     ignoredCorners,
     designWidthMm: (b.maxX - b.minX) / UM,
     designHeightMm: (b.maxY - b.minY) / UM,
     minGapMm,
     totalProblemAreaMm2: totalArea,
   };
+}
+
+/**
+ * Mapa de profundidad de lo que no llega a la mínima, en franjas: lo que la
+ * fresa no saca (ni la punta entra) y tres tramos hasta la mínima.
+ */
+function depthMap(white: Paths64, reached: Paths64, profile: FresaProfile, design: Bounds): DepthBand[] {
+  const min = profile.minDepthMm;
+  const edges = [0, min / 3, (2 * min) / 3];
+  const openings = edges.map((d) => opening(white, Math.round(cutRadiusAtDepth(profile, d) * UM)));
+  const bands: DepthBand[] = [];
+  const push = (fromMm: number, toMm: number, region: Paths64) => {
+    // Solo dentro del diseño: las esquinas del dominio no se tallan.
+    const clean = opening(intersect(region, [rect(design)]), 3);
+    if (clean.length) bands.push({ fromMm, toMm, rings: toMmRings(clean) });
+  };
+  push(0, 0, difference(white, openings[0]));
+  for (let k = 0; k < edges.length; k++) {
+    const deeper = k + 1 < openings.length ? openings[k + 1] : reached;
+    push(edges[k], k + 1 < edges.length ? edges[k + 1] : min, difference(openings[k], deeper));
+  }
+  return bands;
 }

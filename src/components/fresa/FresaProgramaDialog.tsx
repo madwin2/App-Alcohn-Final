@@ -31,6 +31,7 @@ function stampSize(s: ProgramStamp) {
     fabricationHeightMm: fabH,
     requestedWidthMm: s.anchoRealCm != null ? s.anchoRealCm * 10 : s.widthMm,
     requestedHeightMm: s.largoRealCm != null ? s.largoRealCm * 10 : s.heightMm,
+    stampType: s.stampType,
   };
 }
 
@@ -105,7 +106,7 @@ export function FresaProgramaDialog({ open, onOpenChange, programName, stamps, o
               </p>
             ) : withIssues ? (
               <p className="text-rose-700 dark:text-rose-300">
-                {withIssues} de {svgCount} sellos tienen lugares donde la fresa no llega.
+                {withIssues} de {svgCount} sellos tienen lugares donde se pierde el diseño.
               </p>
             ) : (
               <p className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">

@@ -69,6 +69,11 @@ export function offset(paths: Paths64, deltaUm: number): Paths64 {
   return inflatePaths(paths, deltaUm, JoinType.Round, EndType.Polygon, 2, ARC_TOL);
 }
 
+export function translate(paths: Paths64, dx: number, dy: number): Paths64 {
+  if (!dx && !dy) return paths;
+  return paths.map((p) => p.map((q) => ({ x: q.x + dx, y: q.y + dy })));
+}
+
 /** Apertura morfológica: lo que puede barrer un disco de radio r sin salirse de la región. */
 export function opening(paths: Paths64, rUm: number): Paths64 {
   return offset(offset(paths, -rUm), rUm);

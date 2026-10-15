@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FresaReport } from '@/lib/fresa/chequeoFresa';
 import type { FresaGroup } from '@/lib/fresa/engine';
 import type { ZoneSeverity } from '@/lib/fresa/analyze';
-import { SEVERITY_FILL } from '@/lib/fresa/textos';
+import { DEPTH_BAND_FILL, SEVERITY_FILL } from '@/lib/fresa/textos';
 import { cn } from '@/lib/utils/cn';
 
 export type FresaViewMode = 'original' | 'corregido' | 'diferencias';
@@ -24,6 +24,8 @@ interface Props {
   fitKey: string;
   mode: FresaViewMode;
   visibleSeverities: Set<ZoneSeverity>;
+  /** Dibujar el mapa de profundidad (lo que se talla menos hondo que la mínima). */
+  showDepth?: boolean;
   selectedGroupId: string | null;
   hoveredGroupId: string | null;
   onSelectGroup: (id: string | null) => void;
@@ -62,6 +64,7 @@ export function FresaViewer({
   fitKey,
   mode,
   visibleSeverities,
+  showDepth = false,
   selectedGroupId,
   hoveredGroupId,
   onSelectGroup,
@@ -292,6 +295,19 @@ export function FresaViewer({
           />
         )}
 
+        {showZones && showDepth && report.check?.depthBands ? (
+          <g transform={`scale(${1 / k})`} style={{ pointerEvents: 'none' }}>
+            {report.check.depthBands.map((b, i) => (
+              <path
+                key={`d${i}`}
+                d={zonePath(b.rings)}
+                fill={DEPTH_BAND_FILL[i] ?? DEPTH_BAND_FILL[DEPTH_BAND_FILL.length - 1]}
+                fillOpacity={0.9}
+                fillRule="nonzero"
+              />
+            ))}
+          </g>
+        ) : null}
         {showZones ? (
           <g transform={`scale(${1 / k})`} style={{ pointerEvents: 'none' }}>
             {groups.flatMap((g) =>

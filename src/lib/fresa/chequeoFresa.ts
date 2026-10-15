@@ -1,7 +1,7 @@
 /**
  * API del chequeo de fresa para la interfaz.
  *
- *   const report = await chequearSvg(svgText, { mode: 'pedido', requestedWidthMm, requestedHeightMm });
+ *   const report = await chequearSvg(svgText, { mode: 'pedido', requestedWidthMm, requestedHeightMm, alimento });
  *   const fixed  = await corregirSvg(svgText, report, zoneIds);
  *
  * - Lee el SVG en el hilo principal (DOMParser) y manda la geometría al Web
@@ -16,18 +16,23 @@ import { containSize } from '@/lib/vectorizacion/svgSize';
 import {
   DEFAULT_ANALYSIS_OPTIONS,
   FRESA_ANALYSIS_VERSION,
-  FRESA_FINA,
+  fresaProfile,
   type FresaAnalysisOptions,
   type FresaProfile,
 } from './config';
 import type { PaintShape } from './analyze';
 import { runCheck, runFix, type CheckOutput, type FixOutput } from './engine';
 import { buildCorrectedSvg } from './exportSvg';
+import type { FixOperation } from './fix';
+import { applyPieceMoves } from './moveSvg';
 import { parseSvgShapes, type ParsedSvg } from './svgShapes';
 import type { WorkerRequest, WorkerResponse } from './workerProtocol';
 
-/** A qué medida se analiza el diseño. */
-export type FresaTarget =
+/**
+ * A qué medida se analiza el diseño. `alimento`: sello de alimento, que pide
+ * más profundidad mínima (ver `FRESA_ALIMENTO`).
+ */
+export type FresaTarget = (
   /** Sello con medida de fabricación ya guardada (lado largo, mm). */
   | { mode: 'fabricacion'; longSideMm: number }
   /** Vector nuevo para un sello: se emula lo que hará "Confirmar" (medida pedida → fabricación). */
@@ -35,7 +40,13 @@ export type FresaTarget =
   /** Escala fija (mm por unidad del SVG); se usa para re-chequear una corrección. */
   | { mode: 'escala'; mmPerUnit: number }
   /** Sin sello: la medida que declara el propio SVG (width/height en mm). */
-  | { mode: 'declarado' };
+  | { mode: 'declarado' }
+) & { alimento?: boolean };
+
+/** ¿El tipo de sello (StampType o `sellos.tipo`) es de alimento? */
+export function esTipoAlimento(tipo: string | null | undefined): boolean {
+  return (tipo ?? '').toUpperCase() === 'ALIMENTO';
+}
 
 export type FresaSizeSource = 'fabricacion' | 'pedida' | 'sugerida' | 'escala' | 'declarada';
 
@@ -67,6 +78,8 @@ export interface FresaReport {
 export interface FresaFixResult {
   svg: string;
   removedAreaMm2: number;
+  /** Qué se hizo (separar letras, agrandar ojos, ensanchar ranuras). */
+  operations: FixOperation[];
   fixedZoneIds: string[];
   /** Zonas que no se corrigieron porque hacerlo rompía el diseño: editar a mano. */
   skippedZoneIds: string[];
@@ -207,6 +220,10 @@ function hashText(s: string): string {
 }
 
 function targetKey(t: FresaTarget): string {
+  return `${t.alimento ? 'A' : ''}${sizeKey(t)}`;
+}
+
+function sizeKey(t: FresaTarget): string {
   switch (t.mode) {
     case 'fabricacion':
       return `f${t.longSideMm.toFixed(2)}`;
@@ -316,7 +333,6 @@ async function computeReport(
 export function chequearSvg(
   svgText: string,
   target: FresaTarget,
-  profile: FresaProfile = FRESA_FINA,
   options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
 ): Promise<FresaReport> {
   const key = fresaCacheKey(svgText, target);
@@ -326,7 +342,7 @@ export function chequearSvg(
     cache.set(key, hit);
     return hit;
   }
-  const p = computeReport(svgText, target, key, profile, options);
+  const p = computeReport(svgText, target, key, fresaProfile(target.alimento), options);
   cache.set(key, p);
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
   p.then((r) => {
@@ -352,13 +368,23 @@ export async function corregirSvg(
     profile: before.profile,
     options,
   });
-  const svg = buildCorrectedSvg(parsed, before.mmPerUnit, fix.removed, fix.newBlack);
+  let base = parsed;
+  if (fix.moves.length) {
+    applyPieceMoves(parsed, before.mmPerUnit, fix.moves);
+    base = parseSvgShapes(new XMLSerializer().serializeToString(parsed.doc.documentElement), options.flattenTolMm);
+  }
+  const svg = buildCorrectedSvg(base, before.mmPerUnit, fix.removed, fix.newBlack);
   // Se re-chequea el archivo final (no el resultado intermedio), a la misma
   // escala: lo que se guarda es exactamente lo que se analizó.
-  const after = await chequearSvg(svg, { mode: 'escala', mmPerUnit: before.mmPerUnit }, before.profile, options);
+  const after = await chequearSvg(
+    svg,
+    { mode: 'escala', mmPerUnit: before.mmPerUnit, alimento: before.profile.id === 'alimento' },
+    options,
+  );
   return {
     svg,
     removedAreaMm2: fix.removedAreaMm2,
+    operations: fix.operations,
     fixedZoneIds: fix.fixedZoneIds,
     skippedZoneIds: fix.skippedZoneIds,
     before,
@@ -373,5 +399,5 @@ export function resumenFresa(r: FresaReport | null | undefined): string {
   const g = r.groupCounts;
   if (g.alta + g.media === 0) return 'La fresa llega bien';
   const n = g.alta + g.media;
-  return `${n} lugar${n === 1 ? '' : 'es'} donde no llega la fresa`;
+  return `${n} lugar${n === 1 ? '' : 'es'} donde se pierde el diseño`;
 }

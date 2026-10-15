@@ -562,6 +562,7 @@ export function CellVector({ item, onUpdateItem }: CellVectorProps) {
             fabricationHeightMm: item.fabricationHeightMm,
             requestedWidthMm: item.requestedWidthMm,
             requestedHeightMm: item.requestedHeightMm,
+            stampType: item.stampType,
           }}
           onSaveCorrected={onUpdateItem ? saveCorrectedVector : undefined}
         />

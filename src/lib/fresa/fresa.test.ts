@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { flattenPathData } from './pathData';
 import { parseSvgShapes } from './svgShapes';
 import { analyzeBlackRegion, buildBlackRegion } from './analyze';
-import { FRESA_FINA, cutRadiusAtDepth, depthForRadius, minGapWidthMm } from './config';
-import { fixZones } from './fix';
+import { FRESA_ALIMENTO, FRESA_FINA, cutRadiusAtDepth, depthForRadius, minGapWidthMm } from './config';
+import { planFix } from './fix';
 import { groupZones } from './engine';
 import { chequearSvg, corregirSvg } from './chequeoFresa';
-import { regionArea } from './geometry';
+import { bounds, components, regionArea } from './geometry';
+import { buildLayout } from './layout';
 
 /** SVG en mm (1 unidad = 1 mm). */
 const svg = (body: string, w = 20, h = 10) =>
@@ -22,9 +23,10 @@ function analyzeSvgText(text: string) {
 }
 
 describe('perfil de fresa', () => {
-  it('usa 30° por lado: hueco mínimo ≈ 0,56 mm para llegar a 0,4 mm', () => {
+  it('usa 30° por lado: hueco mínimo ≈ 0,45 mm para bajar 0,3 mm (alimento: ≈ 1,25 mm para 1 mm)', () => {
     expect(cutRadiusAtDepth(FRESA_FINA, 0.4)).toBeCloseTo(0.05 + 0.4 * Math.tan(Math.PI / 6), 6);
-    expect(minGapWidthMm(FRESA_FINA)).toBeCloseTo(0.5619, 3);
+    expect(minGapWidthMm(FRESA_FINA)).toBeCloseTo(0.4464, 3);
+    expect(minGapWidthMm(FRESA_ALIMENTO)).toBeCloseTo(1.2547, 3);
     expect(depthForRadius(FRESA_FINA, cutRadiusAtDepth(FRESA_FINA, 0.25))).toBeCloseTo(0.25, 6);
     expect(depthForRadius(FRESA_FINA, 0.01)).toBe(0);
   });
@@ -102,12 +104,38 @@ describe('análisis', () => {
     expect(pasos[0].reachDepthMm).toBeLessThan(0.2);
   });
 
-  it('un paso de 0,45 mm es gravedad media y uno de 0,70 mm está bien', () => {
-    const media = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.45, 2, 5, 5)}"/>`)).result;
-    expect(media.zones.map((z) => [z.kind, z.severity])).toEqual([['paso_angosto', 'media']]);
-    expect(media.zones[0].reachDepthMm).toBeGreaterThanOrEqual(0.25);
-    const ok = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.7, 2, 5, 5)}"/>`)).result;
+  it('un paso de 0,40 mm no separa y uno de 0,50 mm está bien (la fresa baja más de 0,3 mm)', () => {
+    const justo = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.4, 2, 5, 5)}"/>`)).result;
+    expect(justo.zones.map((z) => [z.kind, z.severity])).toEqual([['paso_angosto', 'alta']]);
+    expect(justo.zones[0].reachDepthMm).toBeGreaterThanOrEqual(0.2);
+    const ok = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.5, 2, 5, 5)}"/>`)).result;
     expect(ok.zones.filter((z) => z.kind === 'paso_angosto')).toHaveLength(0);
+  });
+
+  it('en alimento el mismo paso de 0,50 mm no separa (mínimo 1 mm)', () => {
+    const { black } = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.5, 2, 5, 5)}"/>`));
+    const r = analyzeBlackRegion(black, FRESA_ALIMENTO);
+    expect(r.zones.map((z) => [z.kind, z.severity])).toEqual([['paso_angosto', 'alta']]);
+  });
+
+  it('en un canal que se angosta, marca solo el puente y no todo el canal', () => {
+    // Dos piezas separadas por un canal de 0,8 mm con un tramo de 0,3 mm de 1 mm de largo.
+    const a = `M2 2H7V4H6.85V5H7V9H2Z`;
+    const b = `M7.8 2H12V9H7.8V5H7.15V4H7.8Z`;
+    const { result } = analyzeSvgText(svg(`<path d="${a}${b}"/>`, 14, 11));
+    const pasos = result.zones.filter((z) => z.kind === 'paso_angosto');
+    expect(pasos).toHaveLength(1);
+    expect(pasos[0].bounds.minY).toBeGreaterThan(3.5);
+    expect(pasos[0].bounds.maxY).toBeLessThan(5.5);
+  });
+
+  it('arma el mapa de profundidad de lo que queda menos hondo', () => {
+    const { black } = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.3, 2, 5, 5)}"/>`));
+    const r = analyzeBlackRegion(black, FRESA_FINA, undefined, true);
+    expect(r.depthBands?.length).toBeGreaterThan(0);
+    // Canal de 0,30 mm: la fresa baja ≈ 0,17 mm → cae en la franja 0,10–0,20.
+    const band = r.depthBands!.find((b) => b.fromMm <= 0.17 && b.toMm >= 0.17);
+    expect(band?.rings.length).toBeGreaterThan(0);
   });
 
   it('detecta un hueco cerrado chico (el ojo de una letra)', () => {
@@ -116,13 +144,16 @@ describe('análisis', () => {
     expect(result.zones[0].severity).toBe('alta');
   });
 
-  it('una ranura dentro de la misma pieza es "rincón" y la gravedad depende del tamaño', () => {
-    // U con ranura de 0,3 mm × 3 mm (pieza única).
+  it('una ranura dentro de la misma pieza que la fresa marca está bien; si casi no entra, se pierde', () => {
+    // U con ranura de 0,3 mm × 3 mm (pieza única): la fresa sube y la marca.
     const u = `M2 2H8V7H5.15V4H4.85V7H2Z`;
     const { result } = analyzeSvgText(svg(`<path d="${u}"/>`));
     const rincones = result.zones.filter((z) => z.kind === 'rincon');
     expect(rincones).toHaveLength(1);
-    expect(rincones[0].severity).toBe('media');
+    expect(rincones[0].severity).toBe('baja');
+    // Ranura de 0,12 mm: la punta casi no entra → el detalle se pierde.
+    const fina = analyzeSvgText(svg(`<path d="M2 2H8V7H5.06V4H4.94V7H2Z"/>`)).result;
+    expect(fina.zones.filter((z) => z.kind === 'rincon').map((z) => z.severity)).toEqual(['media']);
   });
 
   it('las esquinas normales no se informan', () => {
@@ -142,16 +173,106 @@ describe('análisis', () => {
   });
 });
 
+const serious = (zones: { severity: string }[]) => zones.filter((z) => z.severity !== 'baja');
+
+describe('ángulos', () => {
+  it('un ángulo que se cierra en punta (interior de una V) está bien y no se corrige', () => {
+    // V gruesa: el blanco de adentro se cierra en punta.
+    const { result } = analyzeSvgText(svg(`<path d="M2 2H4L7 7.5L10 2H12L8 9H6Z"/>`, 14, 10));
+    expect(serious(result.zones)).toHaveLength(0);
+    expect(result.zones.every((z) => z.kind === 'angulo' && z.severity === 'baja')).toBe(true);
+  });
+});
+
+describe('armado del diseño', () => {
+  it('reconoce renglones, alineación a la izquierda y texto recto', () => {
+    const { black } = analyzeSvgText(
+      svg(
+        `<path d="${rectD(1, 1, 2, 3)}${rectD(3.5, 1, 2, 3)}${rectD(6, 1, 2, 3)}"/>` +
+          `<path d="${rectD(1, 5, 2, 3)}${rectD(3.5, 5, 2, 3)}"/>`,
+        20,
+        10,
+      ),
+    );
+    const layout = buildLayout(black);
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.lines.every((l) => l.straight && l.align === 'left')).toBe(true);
+  });
+
+  it('un texto en arco no es un renglón recto', () => {
+    const arc = [0, 1, 2, 3, 4]
+      .map((k) => rectD(1 + k * 2.5, 1 + Math.abs(k - 2) * 0.8, 2, 3))
+      .join('');
+    const layout = buildLayout(analyzeSvgText(svg(`<path d="${arc}"/>`, 20, 10)).black);
+    expect(layout.lines.some((l) => l.glyphs.length >= 3 && l.straight)).toBe(false);
+  });
+});
+
 describe('corrección', () => {
-  it('abre el paso angosto lo justo y el resultado ya no tiene problemas', () => {
+  it('separa dos letras muy juntas moviéndolas enteras, sin recortar negro', () => {
     const { black, result } = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.3, 2, 5, 5)}"/>`));
-    const fixed = fixZones(black, result.zones);
-    const after = analyzeBlackRegion(fixed.black);
-    expect(after.zones.filter((z) => z.severity !== 'baja')).toHaveLength(0);
-    // Sacar ≈ (0,56 − 0,30) × 5 mm de negro; no mucho más.
-    const removed = (regionArea(black) - regionArea(fixed.black)) / 1e6;
-    expect(removed).toBeGreaterThan(0.9);
-    expect(removed).toBeLessThan(2.2);
+    const fixed = planFix(black, result.zones);
+    expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
+    expect(fixed.removedAreaMm2).toBe(0);
+    expect(fixed.operations.map((o) => o.kind)).toEqual(['separar']);
+    // Renglón único: se reparte a los dos lados (queda centrado).
+    expect(fixed.moves).toHaveLength(2);
+    expect(Math.sign(fixed.moves[0].dx)).not.toBe(Math.sign(fixed.moves[1].dx));
+  });
+
+  it('con renglones alineados a la izquierda, corre solo lo que está a la derecha del hueco', () => {
+    const { black, result } = analyzeSvgText(
+      svg(
+        `<path d="${rectD(1, 1, 3, 3)}${rectD(4.8, 1, 3, 3)}${rectD(8.6, 1, 3, 3)}"/>` +
+          `<path d="${rectD(1, 5, 3, 3)}${rectD(4.3, 5, 3, 3)}${rectD(8, 5, 3, 3)}"/>`,
+        20,
+        10,
+      ),
+    );
+    const fixed = planFix(black, result.zones);
+    expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
+    expect(fixed.moves.length).toBe(2);
+    expect(fixed.moves.every((m) => m.dx > 0 && m.dy === 0)).toBe(true);
+    // El borde izquierdo de los dos renglones no se movió.
+    const b = bounds(fixed.black)!;
+    expect(b.minX).toBe(1000);
+  });
+
+  it('si casi todos los pares de un renglón están justos, abre el espaciado parejo', () => {
+    // 5 letras de 2 mm con huecos 0,3 / 0,3 / 0,8 / 0,3 mm.
+    const xs = [1, 3.3, 5.6, 8.4, 10.7];
+    const { black, result } = analyzeSvgText(svg(`<path d="${xs.map((x) => rectD(x, 2, 2, 3)).join('')}"/>`, 20, 10));
+    const fixed = planFix(black, result.zones);
+    expect(fixed.operations[0]?.kind).toBe('espaciar');
+    expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
+    // Todos los corrimientos son múltiplos del mismo paso: el ritmo se mantiene.
+    const dxs = fixed.moves.map((m) => m.dx).sort((a, b) => a - b);
+    const step = Math.min(...dxs.filter((d) => d > 0));
+    expect(dxs.every((d) => Math.abs(d / step - Math.round(d / step)) < 0.02)).toBe(true);
+  });
+
+  it('nunca encima piezas para "resolver" un hueco', () => {
+    const { black, result } = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.3, 2, 5, 5)}"/>`));
+    const fixed = planFix(black, result.zones);
+    expect(components(fixed.black)).toHaveLength(2);
+  });
+
+  it('agranda en paralelo un ojo chico si los trazos quedan de al menos 0,4 mm', () => {
+    // Bloque de 4 mm con ojo de 0,4 mm: sobra grosor alrededor.
+    const { black, result } = analyzeSvgText(svg(`<path d="${rectD(2, 2, 4, 4)}${rectD(3.8, 3.8, 0.4, 0.4)}" fill-rule="evenodd"/>`));
+    const fixed = planFix(black, result.zones);
+    expect(fixed.operations.map((o) => o.kind)).toEqual(['agrandar_ojo']);
+    expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
+  });
+
+  it('no afina trazos por debajo de 0,4 mm: ese ojo queda para editar a mano', () => {
+    // Anillo de trazo 0,35 mm con ojo de 0,4 mm.
+    const { black, result } = analyzeSvgText(
+      svg(`<path d="${rectD(2, 2, 1.1, 1.1)}${rectD(2.35, 2.35, 0.4, 0.4)}" fill-rule="evenodd"/>`),
+    );
+    const fixed = planFix(black, result.zones);
+    expect(fixed.operations).toHaveLength(0);
+    expect(fixed.black).toEqual(black);
   });
 });
 
@@ -173,17 +294,36 @@ describe('chequearSvg / corregirSvg', () => {
     expect(r.heightMm).toBeCloseTo(20, 2);
   });
 
-  it('corrige el SVG, deja intactas las figuras no tocadas y queda sin problemas', async () => {
-    const untouched = `<path id="lejos" d="${rectD(15, 2, 3, 3)}"/>`;
-    const text = svg(`<path d="${rectD(2, 2, 5, 5)}"/><path d="${rectD(7.3, 2, 5, 5)}"/>${untouched}`);
-    const before = await chequearSvg(text, { mode: 'fabricacion', longSideMm: 16 });
+  it('mueve letras dentro de un path compuesto sin perder las curvas', async () => {
+    // Dos "O" con curvas en un solo path, muy juntas; una figura lejos que no se toca.
+    const o = (cx: number) =>
+      `M${cx - 2} 5C${cx - 2} 3.3 ${cx - 1.1} 2 ${cx} 2C${cx + 1.1} 2 ${cx + 2} 3.3 ${cx + 2} 5` +
+      `C${cx + 2} 6.7 ${cx + 1.1} 8 ${cx} 8C${cx - 1.1} 8 ${cx - 2} 6.7 ${cx - 2} 5Z`;
+    const untouched = `<rect id="lejos" x="1" y="9.2" width="0.6" height="0.6"/>`;
+    const text = svg(`<path d="${o(4)}${o(8.3)}"/>${untouched}`);
+    const before = await chequearSvg(text, { mode: 'declarado' });
     expect(before.status).toBe('revisar');
+    const ids = before.check!.zones.filter((z) => z.severity !== 'baja').map((z) => z.id);
+    const res = await corregirSvg(text, before, ids);
+    expect(res.after.status).toBe('ok');
+    expect(res.operations.map((op) => op.kind)).toEqual(['separar']);
+    expect(res.removedAreaMm2).toBe(0);
+    const d = new DOMParser().parseFromString(res.svg, 'image/svg+xml').querySelector('path')!.getAttribute('d')!;
+    expect(d.match(/C/g)).toHaveLength(8);
+    expect(res.svg).toContain('id="lejos" x="1" y="9.2"');
+    expect(res.svg).not.toContain('data-alcohn="corregido-fresa"');
+    expect(res.svg).toContain('width="20mm"');
+  });
+
+  it('agranda un ojo y deja intactas las figuras no tocadas', async () => {
+    const untouched = `<path id="lejos" d="${rectD(15, 2, 3, 3)}"/>`;
+    const text = svg(`<path d="${rectD(2, 2, 4, 4)}${rectD(3.8, 3.8, 0.4, 0.4)}" fill-rule="evenodd"/>${untouched}`);
+    const before = await chequearSvg(text, { mode: 'declarado' });
     const ids = before.check!.zones.filter((z) => z.severity !== 'baja').map((z) => z.id);
     const res = await corregirSvg(text, before, ids);
     expect(res.after.status).toBe('ok');
     expect(res.svg).toContain('id="lejos"');
     expect(res.svg).toContain('data-alcohn="corregido-fresa"');
-    expect(res.svg).toContain('width="20mm"');
     expect(res.removedAreaMm2).toBeGreaterThan(0);
   });
 

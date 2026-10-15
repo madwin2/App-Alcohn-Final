@@ -19,7 +19,7 @@ export async function fetchPendientes(includeRehacerPrioridad: boolean): Promise
       `
       id, orden_id, diseno, item_type, item_config, archivo_base, archivo_base_mejorado,
       mockup_solicitud_id, ancho_real, largo_real, estado_fabricacion, estado_vectorizacion,
-      es_prioritario, fecha_limite, created_at,
+      es_prioritario, fecha_limite, created_at, tipo,
       ordenes!inner ( id, clientes ( nombre, apellido ) )
     `,
     )
@@ -53,6 +53,7 @@ export async function fetchPendientes(includeRehacerPrioridad: boolean): Promise
       estadoFabricacion: (row.estado_fabricacion as string) || 'Sin Hacer',
       esPrioritario: Boolean(row.es_prioritario),
       fechaLimite: (row.fecha_limite as string | null) ?? null,
+      tipo: (row.tipo as string | null) ?? null,
     };
   });
 }

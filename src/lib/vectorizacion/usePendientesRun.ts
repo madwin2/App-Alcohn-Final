@@ -10,6 +10,7 @@ import { buildPrep } from '@/lib/vectorizacion/buildPrep';
 import { packPrepared, runVectorizacion } from '@/lib/vectorizacion/runVectorizacion';
 import { baseFileUtil } from '@/lib/vectorizacion/baseFile';
 import type { PendingSello, ReviewItem } from '@/lib/vectorizacion/types';
+import { esTipoAlimento } from '@/lib/fresa/chequeoFresa';
 
 export function usePendientesRun() {
   const { toast } = useToast();
@@ -177,6 +178,7 @@ export function usePendientesRun() {
           requestedWidthMm: sello.requestedWidthMm,
           requestedHeightMm: sello.requestedHeightMm,
           mode: store.mode,
+          alimento: esTipoAlimento(sello.tipo),
         });
       }
       if (reviews.length) {

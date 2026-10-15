@@ -17,8 +17,8 @@ import {
   type ZoneKind,
   type ZoneSeverity,
 } from './analyze';
-import { fixZones } from './fix';
-import { UM, components, difference, type Paths64 } from './geometry';
+import { planFix, type FixOperation, type PieceMove } from './fix';
+import { UM, bounds, type Paths64 } from './geometry';
 
 /** Zonas cercanas agrupadas: lo que el usuario ve como "un lugar a revisar". */
 export interface FresaGroup {
@@ -40,9 +40,13 @@ export interface CheckOutput extends FresaCoreResult {
 }
 
 export interface FixOutput {
+  /** Piezas movidas enteras (se reubican en el SVG sin perder curvas). */
+  moves: PieceMove[];
+  /** Lo que se sacó de negro, en la posición ya movida. */
   removed: Paths64;
   newBlack: Paths64;
   removedAreaMm2: number;
+  operations: FixOperation[];
   /** Zonas pedidas que se corrigieron / que no se pudieron corregir sin romper el diseño. */
   fixedZoneIds: string[];
   skippedZoneIds: string[];
@@ -106,7 +110,7 @@ export function groupZones(zones: FresaZone[], padMm = 0.5): FresaGroup[] {
 }
 
 function check(black: Paths64, profile: FresaProfile, options: FresaAnalysisOptions, t0: number): CheckOutput {
-  const core = analyzeBlackRegion(black, profile, options);
+  const core = analyzeBlackRegion(black, profile, options, true);
   return { ...core, groups: groupZones(core.zones), durationMs: Math.round(performance.now() - t0) };
 }
 
@@ -121,10 +125,12 @@ export function runCheck(
   return check(black, profile, options, t0);
 }
 
-/**
- * Corrige las zonas pedidas y vuelve a chequear. Hace hasta dos pasadas: a
- * veces abrir un hueco deja otro vecino justo en el límite.
- */
+/** Solo rellenos oscuros: cada pieza negra sale de figuras propias que se pueden mover. */
+export function isSimplePaint(shapes: PaintShape[]): boolean {
+  return shapes.every((s) => (s.fill === 'dark' || s.fill === 'none') && s.stroke === 'none');
+}
+
+/** Corrige las zonas pedidas (ver `planFix`) y vuelve a chequear. */
 export function runFix(
   shapes: PaintShape[],
   mmPerUnit: number,
@@ -137,38 +143,38 @@ export function runFix(
   const first = analyzeBlackRegion(original, profile, options);
   const wanted = new Set(zoneIds);
   const targets = first.zones.filter((z) => wanted.has(z.id));
-  const firstPass = fixZones(original, targets, profile);
-  let black = firstPass.black;
+  const plan = planFix(original, targets, profile, options, { allowMoves: isSimplePaint(shapes) });
+  const after = check(plan.black, profile, options, t0);
 
-  // Segunda pasada: solo zonas nuevas o que quedaron, cerca de lo corregido y
-  // de la misma clase que las elegidas (no se tocan rincones si no se pidieron).
-  const kinds = new Set(targets.map((z) => `${z.kind}:${z.severity}`));
-  const second = analyzeBlackRegion(black, profile, options);
-  const near = (z: FresaZone) =>
-    targets.some(
-      (t) =>
-        z.bounds.minX <= t.bounds.maxX + 0.6 &&
-        t.bounds.minX <= z.bounds.maxX + 0.6 &&
-        z.bounds.minY <= t.bounds.maxY + 0.6 &&
-        t.bounds.minY <= z.bounds.maxY + 0.6,
-    );
-  const leftover = second.zones.filter((z) => near(z) && (kinds.has(`${z.kind}:${z.severity}`) || z.severity === 'alta'));
-  if (leftover.length) black = fixZones(black, leftover, profile).black;
-
-  const removedResult = analyzeRemoved(original, black);
-  return {
-    removed: removedResult.removed,
-    newBlack: black,
-    removedAreaMm2: removedResult.areaMm2,
-    fixedZoneIds: firstPass.fixedZoneIds,
-    skippedZoneIds: firstPass.skippedZoneIds,
-    after: check(black, profile, options, t0),
+  // Una zona pedida quedó resuelta si ya no hay un problema donde estaba
+  // (corrida lo que se movió la pieza que la bordeaba).
+  const remaining = after.zones.filter((z) => z.severity !== 'baja');
+  const shiftNear = (z: FresaZone) => {
+    const m = plan.moves.find((mv) => {
+      const b = bounds(mv.region);
+      return b && z.bounds.minX * UM <= b.maxX && b.minX <= z.bounds.maxX * UM && z.bounds.minY * UM <= b.maxY && b.minY <= z.bounds.maxY * UM;
+    });
+    return m ? { dx: m.dx / UM, dy: m.dy / UM } : { dx: 0, dy: 0 };
   };
-}
+  const fixedZoneIds: string[] = [];
+  const skippedZoneIds: string[] = [];
+  for (const t of targets) {
+    const s = shiftNear(t);
+    const tb = { minX: t.bounds.minX + s.dx, maxX: t.bounds.maxX + s.dx, minY: t.bounds.minY + s.dy, maxY: t.bounds.maxY + s.dy };
+    const still = remaining.some(
+      (z) => z.bounds.minX <= tb.maxX + 0.05 && tb.minX <= z.bounds.maxX + 0.05 && z.bounds.minY <= tb.maxY + 0.05 && tb.minY <= z.bounds.maxY + 0.05,
+    );
+    (still ? skippedZoneIds : fixedZoneIds).push(t.id);
+  }
 
-function analyzeRemoved(before: Paths64, after: Paths64): { removed: Paths64; areaMm2: number } {
-  const removed = difference(before, after);
-  let a = 0;
-  for (const c of components(removed)) a += c.areaUm2;
-  return { removed, areaMm2: a / (UM * UM) };
+  return {
+    moves: plan.moves,
+    removed: plan.removed,
+    newBlack: plan.black,
+    removedAreaMm2: plan.removedAreaMm2,
+    operations: plan.operations,
+    fixedZoneIds,
+    skippedZoneIds,
+    after,
+  };
 }

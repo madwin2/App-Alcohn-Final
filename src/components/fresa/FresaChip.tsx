@@ -72,8 +72,8 @@ export function FresaChip({ report, idle = false, onClick, size = 'sm', classNam
         <AlertTriangle className={icon} /> Fresa: {n} {n === 1 ? 'lugar' : 'lugares'}
       </>
     );
-    title = `${n} lugar${n === 1 ? '' : 'es'} donde la fresa no llega bien${
-      g.alta ? ` (${g.alta} no llega)` : ''
+    title = `${n} lugar${n === 1 ? '' : 'es'} donde se pierde el diseño${
+      g.alta ? ` (${g.alta} no separa)` : ''
     }. Clic para ver y corregir.`;
   }
 

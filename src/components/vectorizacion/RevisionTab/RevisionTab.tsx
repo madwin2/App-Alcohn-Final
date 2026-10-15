@@ -16,7 +16,12 @@ import { chequearSvg, fresaCacheKey, type FresaReport, type FresaTarget } from '
 
 /** La medida con la que se va a guardar: la misma lógica que "Confirmar". */
 function reviewTarget(item: ReviewItem): FresaTarget {
-  return { mode: 'pedido', requestedWidthMm: item.requestedWidthMm, requestedHeightMm: item.requestedHeightMm };
+  return {
+    mode: 'pedido',
+    requestedWidthMm: item.requestedWidthMm,
+    requestedHeightMm: item.requestedHeightMm,
+    alimento: item.alimento,
+  };
 }
 
 function reviewKey(item: ReviewItem): string {

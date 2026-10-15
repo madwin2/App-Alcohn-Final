@@ -15,7 +15,7 @@ import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { FresaChip } from '@/components/fresa/FresaChip';
 import { FresaCheckDialog } from '@/components/fresa/FresaCheckDialog';
-import { chequearSvg, type FresaTarget } from '@/lib/fresa/chequeoFresa';
+import { chequearSvg, esTipoAlimento, type FresaTarget } from '@/lib/fresa/chequeoFresa';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
 
 interface LocalSvg {
@@ -26,7 +26,12 @@ interface LocalSvg {
 
 function selloTarget(sello: PendingSello | undefined): FresaTarget | null {
   return sello
-    ? { mode: 'pedido', requestedWidthMm: sello.requestedWidthMm, requestedHeightMm: sello.requestedHeightMm }
+    ? {
+        mode: 'pedido',
+        requestedWidthMm: sello.requestedWidthMm,
+        requestedHeightMm: sello.requestedHeightMm,
+        alimento: esTipoAlimento(sello.tipo),
+      }
     : null;
 }
 

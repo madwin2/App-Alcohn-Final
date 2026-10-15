@@ -14,6 +14,8 @@ El mayor trabajo manual al armar programas es corregir en Aspire los detalles do
 2. Detección **geométrica exacta** (apertura morfológica del blanco con el radio de la fresa a la profundidad mínima), no un modelo de IA mirando la imagen: las medidas en juego son de décimas de milímetro.
 3. Motor de geometría: **Clipper2** (`clipper2-ts`, TypeScript puro, sin WebAssembly), en un Web Worker.
 4. Corrección **local y conservadora**: abre solo los huecos marcados lo justo para la fresa; si la corrección cambiaría la topología del diseño, no se aplica y queda para edición manual. Siempre con vista previa y confirmación.
+   - **Revisión 2026-10-14**: la primera versión sacaba un círculo del tamaño de la fresa en cada zona y rompía el diseño ("es peor que no hacer nada"). Se reemplazó por un planificador de operaciones que **adapta el diseño**: mover letras o renglones respetando la alineación (o abrir el espaciado del renglón parejo), offset paralelo de ojos y ranuras con trazo mínimo de 0,4 mm, y aceptar los ángulos. Reglas en [Q-VEC-010](../14-open-questions/vectorizacion.md#q-vec-010).
+   - **Revisión 2026-10-14 (2)**: el criterio pasó de "¿llega a 0,4 mm?" a **simular el V-carve**: la fresa sube donde no entra, así que solo importa dónde se pierde el diseño. Graves: puentes entre piezas distintas y ojos tapados, a **0,3 mm** (Alimento **1 mm**). Rincones y ángulos: con que la punta marque alcanza. Se suma un mapa de profundidad en el visor. Respuestas en [Q-VEC-011](../14-open-questions/vectorizacion.md#q-vec-011).
 5. No se guarda el resultado en la base (sin migración): se recalcula, con caché en memoria.
 
 ## Alternativas descartadas
@@ -22,10 +24,12 @@ El mayor trabajo manual al armar programas es corregir en Aspire los detalles do
 - **IA (visión) como detector**: no es confiable para medidas por debajo del milímetro. Puede sumarse a futuro como capa de explicación, no de medida.
 - **VectorCraft (`pathops`, Rust → WebAssembly)** para la corrección con curvas: licencia compatible (MIT/Apache) y herramientas útiles (`offset_path`, booleanas, `simplify`), pero el proyecto está en alfa (motor de booleanas en beta, días de vida) y suma una cadena de compilación Rust. Queda como opción para mejorar la calidad de las curvas corregidas.
 - **Corrección global (offset negativo a todo el diseño)**: con 0,56 mm de hueco mínimo afinaría de más los trazos finos.
+- **Restar un círculo de fresa en cada zona** (primera versión): deformaba letras y dejaba mordidas visibles.
+- **Escalar el diseño** para que entre: solo si es imprescindible y con confirmación de quien revisa (no implementado).
 
 ## Consecuencias
 
 - Módulos: Vectorización (Revisión, Asignar), Pedidos y Producción (celda Vector), Programas (hoja y menú). Nuevo módulo de lógica `src/lib/fresa/`.
-- Las figuras corregidas pasan a polígonos finos (el resto del SVG queda igual).
+- Las letras movidas conservan sus curvas; solo las figuras con offset pasan a polígonos finos (el resto del SVG queda igual).
 - Corregir un vector de un sello ya armado en Aspire requiere reimportarlo (el gadget conserva lo que ya está) → backlog B-27.
 - Documentación: [chequeo-de-fresa.md](../02-modules/vectorizacion/chequeo-de-fresa.md).

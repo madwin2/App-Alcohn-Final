@@ -411,6 +411,219 @@ export function flattenRect(x: number, y: number, w: number, h: number, rxIn: nu
   return flattenPathData(d, tol)[0]?.points ?? [];
 }
 
+/** Comando de path en forma absoluta y canónica (H/V → L, S → C, T → Q). Conserva las curvas tal cual. */
+export interface AbsSegment {
+  c: 'M' | 'L' | 'C' | 'Q' | 'A' | 'Z';
+  v: number[];
+}
+
+/**
+ * Pasa un `d` a sub-trayectos con comandos absolutos, para poder mover uno sin
+ * tocar los demás (en un path compuesto, un `m` relativo depende del anterior).
+ */
+export function absoluteSubpaths(d: string): AbsSegment[][] {
+  const tokens = tokenize(d);
+  const subs: AbsSegment[][] = [];
+  let current = null as AbsSegment[] | null;
+  let cur: Pt = { x: 0, y: 0 };
+  let start: Pt = { x: 0, y: 0 };
+  let lastCtrl: Pt | null = null;
+  let lastCmd = '';
+  let i = 0;
+  let cmd = '';
+  const isNum = (t: Token | undefined): t is { num: number; raw: string } => !!t && 'num' in t;
+  const next = (): number | null => {
+    const t = tokens[i];
+    if (!isNum(t)) return null;
+    i++;
+    return t.num;
+  };
+  const nextFlag = (): number | null => {
+    const t = tokens[i];
+    if (!isNum(t)) return null;
+    const raw = t.raw.replace(/^\+/, '');
+    if (raw.length > 1 && (raw[0] === '0' || raw[0] === '1')) {
+      const rest = raw.slice(1);
+      tokens[i] = { num: parseFloat(rest), raw: rest };
+      return raw[0] === '1' ? 1 : 0;
+    }
+    i++;
+    return t.num ? 1 : 0;
+  };
+  const begin = (p: Pt) => {
+    current = [{ c: 'M', v: [p.x, p.y] }];
+    subs.push(current);
+    start = p;
+  };
+  const push = (seg: AbsSegment) => {
+    if (!current) begin(cur);
+    current!.push(seg);
+  };
+
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if ('cmd' in t) {
+      cmd = t.cmd;
+      i++;
+      if (cmd === 'Z' || cmd === 'z') {
+        if (current) {
+          current.push({ c: 'Z', v: [] });
+          current = null;
+        }
+        cur = start;
+        lastCtrl = null;
+        lastCmd = 'Z';
+        continue;
+      }
+    } else if (!cmd) {
+      break;
+    }
+    const rel = cmd === cmd.toLowerCase();
+    const C = cmd.toUpperCase();
+    const ox = rel ? cur.x : 0;
+    const oy = rel ? cur.y : 0;
+    let ok = true;
+    switch (C) {
+      case 'M': {
+        const x = next();
+        const y = next();
+        if (x == null || y == null) {
+          ok = false;
+          break;
+        }
+        cur = { x: ox + x, y: oy + y };
+        begin(cur);
+        cmd = rel ? 'l' : 'L';
+        lastCtrl = null;
+        break;
+      }
+      case 'L':
+      case 'H':
+      case 'V': {
+        const a = next();
+        const b = C === 'L' ? next() : 0;
+        if (a == null || b == null) {
+          ok = false;
+          break;
+        }
+        cur = C === 'L' ? { x: ox + a, y: oy + b } : C === 'H' ? { x: ox + a, y: cur.y } : { x: cur.x, y: oy + a };
+        push({ c: 'L', v: [cur.x, cur.y] });
+        lastCtrl = null;
+        break;
+      }
+      case 'C':
+      case 'S': {
+        let c1: Pt;
+        if (C === 'C') {
+          const x1 = next();
+          const y1 = next();
+          if (x1 == null || y1 == null) {
+            ok = false;
+            break;
+          }
+          c1 = { x: ox + x1, y: oy + y1 };
+        } else {
+          c1 =
+            lastCtrl && (lastCmd === 'C' || lastCmd === 'S')
+              ? { x: 2 * cur.x - lastCtrl.x, y: 2 * cur.y - lastCtrl.y }
+              : cur;
+        }
+        const x2 = next();
+        const y2 = next();
+        const x = next();
+        const y = next();
+        if (x2 == null || y2 == null || x == null || y == null) {
+          ok = false;
+          break;
+        }
+        const c2 = { x: ox + x2, y: oy + y2 };
+        cur = { x: ox + x, y: oy + y };
+        push({ c: 'C', v: [c1.x, c1.y, c2.x, c2.y, cur.x, cur.y] });
+        lastCtrl = c2;
+        break;
+      }
+      case 'Q':
+      case 'T': {
+        let c: Pt;
+        if (C === 'Q') {
+          const x1 = next();
+          const y1 = next();
+          if (x1 == null || y1 == null) {
+            ok = false;
+            break;
+          }
+          c = { x: ox + x1, y: oy + y1 };
+        } else {
+          c =
+            lastCtrl && (lastCmd === 'Q' || lastCmd === 'T')
+              ? { x: 2 * cur.x - lastCtrl.x, y: 2 * cur.y - lastCtrl.y }
+              : cur;
+        }
+        const x = next();
+        const y = next();
+        if (x == null || y == null) {
+          ok = false;
+          break;
+        }
+        cur = { x: ox + x, y: oy + y };
+        push({ c: 'Q', v: [c.x, c.y, cur.x, cur.y] });
+        lastCtrl = c;
+        break;
+      }
+      case 'A': {
+        const rx = next();
+        const ry = next();
+        const rot = next();
+        const large = nextFlag();
+        const sweep = nextFlag();
+        const x = next();
+        const y = next();
+        if (rx == null || ry == null || rot == null || large == null || sweep == null || x == null || y == null) {
+          ok = false;
+          break;
+        }
+        cur = { x: ox + x, y: oy + y };
+        push({ c: 'A', v: [rx, ry, rot, large, sweep, cur.x, cur.y] });
+        lastCtrl = null;
+        break;
+      }
+      default:
+        ok = false;
+    }
+    if (!ok) break;
+    lastCmd = C;
+  }
+  return subs;
+}
+
+export function translateSegments(segs: AbsSegment[], dx: number, dy: number): AbsSegment[] {
+  return segs.map((s) => {
+    if (s.c === 'Z') return s;
+    const v = [...s.v];
+    if (s.c === 'A') {
+      v[5] += dx;
+      v[6] += dy;
+    } else {
+      for (let k = 0; k + 1 < v.length; k += 2) {
+        v[k] += dx;
+        v[k + 1] += dy;
+      }
+    }
+    return { c: s.c, v };
+  });
+}
+
+const fmtNum = (n: number) => {
+  const s = n.toFixed(4);
+  return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+};
+
+export function segmentsToD(subs: AbsSegment[][]): string {
+  return subs
+    .map((segs) => segs.map((s) => (s.c === 'Z' ? 'Z' : `${s.c}${s.v.map(fmtNum).join(' ')}`)).join(''))
+    .join('');
+}
+
 /** Lista de puntos de <polygon>/<polyline>. */
 export function parsePointList(raw: string): Pt[] {
   const nums = (raw.match(/[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/g) ?? []).map(Number);

@@ -52,7 +52,7 @@ Por cada diseño se ve el antes y el después (**Damero** muestra el fondo a cua
 
 ### Chequeo de fresa
 
-Cada tarjeta muestra un chip **Fresa**: la app revisa sola si la fresa más fina (cónica de 60°, punta 0,1 mm) llega a **0,4 mm de profundidad** en todo el diseño, a la medida a la que se va a fabricar. Para eso, cada hueco blanco necesita al menos **0,56 mm** de ancho.
+Cada tarjeta muestra un chip **Fresa**: la app simula el V-carve de la fresa más fina (cónica de 60°, punta 0,1 mm) a la medida a la que se va a fabricar. Donde el blanco se angosta, la fresa sube y talla menos hondo: eso está bien en rincones y ángulos, pero **entre letras y en los ojos tiene que bajar al menos 0,3 mm** (en sellos de **Alimento, 1 mm**). Si no, las letras se pegan o el ojo se tapa.
 
 | Chip | Qué significa |
 |---|---|
@@ -64,9 +64,12 @@ Tocá el chip para abrir el **Chequeo de fresa**:
 
 1. A la izquierda, el diseño con los lugares marcados y numerados (rojo = **No llega**, amarillo = **Llega poco**). Rueda del mouse para acercar, arrastrá para mover, **Ver todo** para volver.
 2. A la derecha, la lista: tocá un lugar y la vista va directo ahí. Dice el ancho del hueco y a qué profundidad llega la fresa.
-3. **Mostrar rincones chicos**: rincones que la fresa siempre redondea (uniones de serifas). Suelen aceptarse; por eso están ocultos.
-4. **Corregir automáticamente**: abre solo los huecos marcados, lo justo para que entre la fresa. Si arreglar uno rompería el diseño (partir un trazo fino, unir dos huecos), lo deja para editar a mano.
-5. Compará con **Original**, **Corregido** y **Qué cambia** (en celeste, el negro que se saca).
+3. **Ver qué tan hondo baja la fresa**: un degradé azul muestra lo que se talla menos hondo que la mínima (más oscuro = menos hondo). **Mostrar ángulos y rincones**: lugares donde la fresa sube y marca menos hondo. Están bien así; por eso están ocultos y la corrección no los toca.
+4. **Corregir automáticamente**: adapta el diseño para que entre la fresa, como se haría a mano:
+   - **Letras o renglones muy juntos**: corre letras enteras sin deformarlas, respetando la alineación (si el bloque está alineado a la izquierda, corre hacia la derecha). Si casi todo el renglón está justo, abre el espaciado de todo el renglón por igual.
+   - **Ojos chicos y ranuras**: los agranda en paralelo, siempre que ningún trazo negro quede de menos de 0,4 mm.
+   - Abajo del botón dice qué hizo (por ejemplo, "Se abrió el espaciado de 2 renglones…"). Lo que no puede arreglar sin romper el diseño (texto en arco, ojos rodeados de trazos finos) queda marcado para editar a mano. No cambia la medida del sello.
+5. Compará con **Original**, **Corregido** y **Qué cambia** (en celeste, lo que cambió).
 6. **Usar el corregido** reemplaza el vector en revisión. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
 
 Si confirmás un vector con lugares donde la fresa no llega, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.

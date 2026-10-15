@@ -76,6 +76,8 @@ export interface PendingSello {
   estadoFabricacion: string;
   esPrioritario: boolean;
   fechaLimite: string | null;
+  /** `sellos.tipo` (Clasico, 3mm, Lacre, Alimento, ABC). */
+  tipo: string | null;
 }
 
 export interface VectorResult {
@@ -116,4 +118,6 @@ export interface ReviewItem {
   requestedWidthMm: number;
   requestedHeightMm: number;
   mode: import('./vectorizerPreset').VectorizeMode;
+  /** Sello de alimento (chequeo de fresa más exigente). Falta en revisiones viejas guardadas. */
+  alimento?: boolean;
 }
