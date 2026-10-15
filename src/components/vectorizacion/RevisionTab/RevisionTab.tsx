@@ -16,6 +16,16 @@ import { chequearSvg, fresaCacheKey, type FresaReport, type FresaTarget } from '
 
 /** La medida con la que se va a guardar: la misma lógica que "Confirmar". */
 function reviewTarget(item: ReviewItem): FresaTarget {
+  const o = item.fabricationOverrideMm;
+  if (o) {
+    return {
+      mode: 'fabricacion',
+      longSideMm: Math.max(o.widthMm, o.heightMm),
+      requestedWidthMm: item.requestedWidthMm,
+      requestedHeightMm: item.requestedHeightMm,
+      alimento: item.alimento,
+    };
+  }
   return {
     mode: 'pedido',
     requestedWidthMm: item.requestedWidthMm,
@@ -44,7 +54,7 @@ function ReviewCard({
   fresa: FresaReport | null;
   onConfirm: () => void;
   onReject: () => void;
-  onChangeSvg: (svg: string) => void;
+  onChangeSvg: (svg: string, fabricationOverrideMm?: { widthMm: number; heightMm: number }) => void;
 }) {
   const [checker, setChecker] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
@@ -176,9 +186,16 @@ function ReviewCard({
         svgText={item.svg}
         target={reviewTarget(item)}
         downloadName={item.designName}
-        onApply={(svg) => {
-          onChangeSvg(svg);
-          toast({ title: 'Vector corregido', description: 'Se guarda en el pedido cuando lo confirmás.' });
+        onApply={(svg, _fix, opts) => {
+          onChangeSvg(svg, opts.scaledUp ? opts.fabricationMm : undefined);
+          toast({
+            title: opts.scaledUp ? 'Vector corregido y agrandado' : 'Vector corregido',
+            description: opts.scaledUp
+              ? `Se guarda con ${opts.fabricationMm.widthMm.toFixed(1).replace('.', ',')} × ${opts.fabricationMm.heightMm
+                  .toFixed(1)
+                  .replace('.', ',')} mm cuando lo confirmás.`
+              : 'Se guarda en el pedido cuando lo confirmás.',
+          });
         }}
         applyLabel="Usar el corregido"
         applyHint="Reemplaza el vector en revisión. Se guarda en el pedido cuando apretás Confirmar."
@@ -250,6 +267,7 @@ export function RevisionTab() {
         requestedWidthMm: item.requestedWidthMm,
         requestedHeightMm: item.requestedHeightMm,
         mode: item.mode,
+        fabricationOverrideMm: item.fabricationOverrideMm,
       });
       store.removeReview(item.id);
       store.removeLocal(item.selloId);
@@ -366,7 +384,7 @@ export function RevisionTab() {
               store.removeReview(item.id);
               store.removeLocal(item.selloId);
             }}
-            onChangeSvg={(svg) => store.updateReviewSvg(item.id, svg)}
+            onChangeSvg={(svg, override) => store.updateReviewSvg(item.id, svg, override)}
           />
         ))}
       </div>

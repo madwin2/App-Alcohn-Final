@@ -50,7 +50,9 @@ import {
 import { analyzeBlackRegion, type FresaZone } from './analyze';
 import {
   arcTrackingPlan,
+  blockPartners,
   buildLayout,
+  partnersGrowth,
   separationPlan,
   trackingPlan,
   type Layout,
@@ -70,6 +72,8 @@ export type FixOperation =
   | { kind: 'separar'; axis: SeparationAxis; mm: number }
   /** Espacio extra entre todas las letras de un renglón (`arco`: de un texto en arco). */
   | { kind: 'espaciar'; axis: 'x' | 'arco'; mm: number }
+  /** Renglones del mismo bloque que se ensancharon para acompañar (quedan parejos). */
+  | { kind: 'acompanar'; renglones: number }
   | { kind: 'agrandar_ojo'; mm: number }
   | { kind: 'ensanchar'; mm: number };
 
@@ -352,34 +356,59 @@ export function planFix(
       entry.need = Math.max(entry.need, Math.max(0.03, minGap - z.gapWidthMm + 0.03) * UM);
       tight.set(key, entry);
     }
-    for (const { kind, idx, pairs, need } of tight.values()) {
+    // Renglones ya ensanchados (por su cuenta o acompañando a otro del bloque).
+    const adjusted = new Set<number>();
+    const ordered = [...tight.values()].sort((a, z) => z.need - a.need);
+    for (const { kind, idx, pairs, need } of ordered) {
+      if (kind === 'x' && adjusted.has(idx)) continue;
       const glyphs = kind === 'x' ? layout.lines[idx].glyphs : layout.arcs[idx].glyphs;
       const plan = kind === 'x' ? trackingPlan(layout, idx) : arcTrackingPlan(layout, idx);
       if (!plan || pairs.size / (glyphs.length - 1) < MIN_TIGHT_SHARE) continue;
-      const window = lineWindow(layout, glyphs.flat(), new Map());
-      const wide = window && grow(window, MAX_TRACKING_MM * UM * glyphs.length);
-      const before = seriousIn(current, wide, profile, options);
-      // Se queda con el paso que más resuelve (el menor si empatan): en un arco
-      // el hueco entre letras es una cuña y el ancho informado no alcanza para
-      // saber cuánto abrir.
-      let chosen: { t: number; next: PieceShift; candidate: Paths64; left: number } | null = null;
-      const steps = [need, need + 50, need + 120, need + 220, need + 350]
-        .map(Math.round)
-        .filter((v) => v <= MAX_TRACKING_MM * UM);
-      for (const t of steps) {
-        const next = combine(shift, plan(t));
-        const candidate = assemble(layout, next);
-        if (components(candidate).length !== layout.pieces.length) continue;
-        if (!keepsClearance(layout, shift, next, minGapUm)) continue;
-        if (!improves(before, candidate, wide, t * glyphs.length + 50, profile, options)) continue;
-        const left = seriousIn(candidate, wide, profile, options).length;
-        if (!chosen || left < chosen.left) chosen = { t, next, candidate, left };
-        if (left === 0) break;
+      // Con los renglones del bloque (si los hay) y, si eso no sirve, solo.
+      const partners = kind === 'x' ? blockPartners(layout, idx) : [];
+      const variants: Array<{ partners: number[]; shiftsFor: (t: number) => PieceShift }> = [];
+      if (partners.length) {
+        variants.push({
+          partners,
+          shiftsFor: (t) => combine(plan(t), partnersGrowth(layout, idx, t * (glyphs.length - 1))),
+        });
       }
-      if (chosen) {
-        shift = chosen.next;
-        current = chosen.candidate;
-        operations.push({ kind: 'espaciar', axis: kind, mm: chosen.t / UM });
+      variants.push({ partners: [], shiftsFor: plan });
+      let done = false;
+      for (const v of variants) {
+        if (done) break;
+        const ids = [...glyphs.flat(), ...v.partners.flatMap((pi) => layout.lines[pi].glyphs.flat())];
+        const window = lineWindow(layout, ids, new Map());
+        const wide = window && grow(window, MAX_TRACKING_MM * UM * glyphs.length);
+        const before = seriousIn(current, wide, profile, options);
+        // Se queda con el paso que más resuelve (el menor si empatan): en un arco
+        // el hueco entre letras es una cuña y el ancho informado no alcanza para
+        // saber cuánto abrir.
+        let chosen: { t: number; next: PieceShift; candidate: Paths64; left: number } | null = null;
+        const steps = [need, need + 50, need + 120, need + 220, need + 350]
+          .map(Math.round)
+          .filter((x) => x <= MAX_TRACKING_MM * UM);
+        for (const t of steps) {
+          const next = combine(shift, v.shiftsFor(t));
+          const candidate = assemble(layout, next);
+          if (components(candidate).length !== layout.pieces.length) continue;
+          if (!keepsClearance(layout, shift, next, minGapUm)) continue;
+          if (!improves(before, candidate, wide, t * glyphs.length + 50, profile, options)) continue;
+          const left = seriousIn(candidate, wide, profile, options).length;
+          if (!chosen || left < chosen.left) chosen = { t, next, candidate, left };
+          if (left === 0) break;
+        }
+        if (chosen) {
+          shift = chosen.next;
+          current = chosen.candidate;
+          operations.push({ kind: 'espaciar', axis: kind, mm: chosen.t / UM });
+          if (kind === 'x') {
+            adjusted.add(idx);
+            for (const pi of v.partners) adjusted.add(pi);
+            if (v.partners.length) operations.push({ kind: 'acompanar', renglones: v.partners.length });
+          }
+          done = true;
+        }
       }
     }
 
@@ -413,7 +442,7 @@ export function planFix(
         const zb = shiftedBounds(zb0, da);
         // El centro del hueco dice de qué lado de un arco está la otra pieza
         // (los corrimientos previos son chicos al lado del alto de una letra).
-        const plan = separationPlan(layout, touching[0], touching[1], {
+        let plan = separationPlan(layout, touching[0], touching[1], {
           x: Math.round(z.center.x * UM),
           y: Math.round(z.center.y * UM),
         });
@@ -423,6 +452,20 @@ export function planFix(
         }
         let accepted = false;
         const need = Math.max(0.03, minGap - z.gapWidthMm + 0.03) * UM;
+        // Separar dos letras de un renglón lo ensancha: los renglones del bloque
+        // acompañan en la misma proporción (si eso no sirve, se prueba solo).
+        const lineIdx = plan.axis === 'x' ? layout.lineOf.get(touching[0]) : undefined;
+        // Un par suelto mueve poco: solo arrastra a renglones justificados.
+        const partnerCount = lineIdx != null ? blockPartners(layout, lineIdx, true).length : 0;
+        if (lineIdx != null && partnerCount) {
+          const solo = plan;
+          plan = {
+            axis: 'x',
+            maxUm: solo.maxUm,
+            shiftsFor: (d) => combine(solo.shiftsFor(d), partnersGrowth(layout, lineIdx, d, true)),
+            fallback: solo,
+          };
+        }
         // Si el plan no sirve se prueba su alternativa (en un arco: la letra sola).
         for (let p: SeparationPlan | undefined = plan; p && !accepted; p = p.fallback) {
           const cap = Math.min(MAX_SHIFT_MM * UM, p.maxUm ?? Infinity);
@@ -450,6 +493,8 @@ export function planFix(
               shift = next;
               current = candidate;
               operations.push({ kind: 'separar', axis: p.axis, mm: d / UM });
+              // Solo si se usó la variante con el bloque (no la alternativa sola).
+              if (partnerCount && p === plan) operations.push({ kind: 'acompanar', renglones: partnerCount });
               accepted = true;
               acceptedInRound++;
               break;

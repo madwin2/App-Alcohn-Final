@@ -472,3 +472,88 @@ describe('chequearSvg / corregirSvg', () => {
     expect((await chequearSvg(svg(''), { mode: 'declarado' })).status).toBe('error');
   });
 });
+
+describe('logo con bloque de texto y medida fija', () => {
+  /**
+   * Ícono centrado arriba, nombre (5 letras, huecos de 0,8 mm) y tagline
+   * (7 letras, huecos de 0,3 mm) justificados al mismo ancho (13,2 mm).
+   */
+  function logoSvg() {
+    const x0 = 1;
+    const width = 13.2;
+    const row = (n: number, gap: number, y: number, h: number) => {
+      const w = (width - (n - 1) * gap) / n;
+      return Array.from({ length: n }, (_, k) => rectD(x0 + k * (w + gap), y, w, h)).join('');
+    };
+    const icon = rectD(x0 + width / 2 - 2.5, 0.5, 5, 4);
+    return svg(`<path d="${icon}${row(5, 0.8, 5.5, 2.5)}${row(7, 0.3, 8.8, 1.6)}"/>`, 16, 11);
+  }
+
+  const lineWidths = (text: string) => {
+    const black = buildBlackRegion(parseSvgShapes(text).shapes, 1);
+    const layout = buildLayout(black);
+    return layout.lines.filter((l) => l.straight).map((l) => (l.bounds.maxX - l.bounds.minX) / 1000);
+  };
+
+  it('al abrir el espaciado del tagline ensancha también el nombre y mantiene la medida', async () => {
+    const text = logoSvg();
+    const before = await chequearSvg(text, { mode: 'declarado' });
+    expect(before.status).toBe('revisar');
+    const ids = before.check!.zones.filter((z) => z.severity !== 'baja').map((z) => z.id);
+    const res = await corregirSvg(text, before, ids);
+    expect(res.after.status).toBe('ok');
+    expect(res.operations.map((o) => o.kind)).toContain('acompanar');
+    // Nombre y tagline siguen del mismo ancho.
+    const [nombre, tagline] = lineWidths(res.svg);
+    expect(Math.abs(nombre - tagline) / tagline).toBeLessThan(0.01);
+    // La medida del sello no cambió: todo se encajó en la caja original.
+    expect(res.fitScale).toBeLessThan(1);
+    expect(res.svg).toContain('data-alcohn="encaje-medida"');
+    expect(Math.max(res.after.widthMm, res.after.heightMm)).toBeCloseTo(Math.max(before.widthMm, before.heightMm), 1);
+    expect(res.after.widthMm).toBeLessThanOrEqual(before.widthMm + 0.01);
+    expect(res.after.heightMm).toBeLessThanOrEqual(before.heightMm + 0.01);
+    expect(res.fabricationMm.widthMm).toBeCloseTo(res.after.widthMm, 3);
+  });
+
+  it('si no hay forma de corregir sin romper, sugiere agrandar un poco (sin aplicarlo)', async () => {
+    // Ojo de 0,43 mm con paredes de 0,3 mm (ya más finas que el mínimo): no se
+    // pueden afinar. Agrandando ~4 % el ojo llega a 0,45 mm.
+    const text = svg(`<path d="${rectD(2, 2, 1.03, 1.03)}${rectD(2.3, 2.3, 0.43, 0.43)}" fill-rule="evenodd"/>`);
+    const before = await chequearSvg(text, { mode: 'declarado' });
+    expect(before.status).toBe('revisar');
+    const ids = before.check!.zones.filter((z) => z.severity !== 'baja').map((z) => z.id);
+    const res = await corregirSvg(text, before, ids);
+    expect(res.after.status).toBe('revisar');
+    expect(res.scaleUp).not.toBeNull();
+    expect(res.scaleUp!.factor).toBeGreaterThan(1.02);
+    expect(res.scaleUp!.factor).toBeLessThanOrEqual(1.06);
+    expect(res.scaleUp!.widthMm).toBeCloseTo(res.after.widthMm * res.scaleUp!.factor, 3);
+  });
+
+  it('no sugiere agrandar más allá del tope de la planchuela', async () => {
+    // Sello de 11,5 × 11,5 mm (planchuela 12, tope 11,5): ya está en el tope.
+    // El mismo ojo imposible que arriba, más un punto en la otra esquina.
+    const text = svg(
+      `<path d="${rectD(0, 0, 1.03, 1.03)}${rectD(0.3, 0.3, 0.43, 0.43)}" fill-rule="evenodd"/>` +
+        `<path d="${rectD(10.9, 10.9, 0.6, 0.6)}"/>`,
+      11.5,
+      11.5,
+    );
+    const before = await chequearSvg(text, {
+      mode: 'fabricacion',
+      longSideMm: 11.5,
+      requestedWidthMm: 11.5,
+      requestedHeightMm: 11.5,
+    });
+    expect(before.status).toBe('revisar');
+    const ids = before.check!.zones.filter((z) => z.severity !== 'baja').map((z) => z.id);
+    const res = await corregirSvg(text, before, ids);
+    expect(res.after.status).toBe('revisar');
+    expect(res.scaleUp).toBeNull();
+  });
+
+  it('sellos Alimento: profundidad final 3 mm y mínima 1 mm', () => {
+    expect(FRESA_ALIMENTO.finalDepthMm).toBe(3);
+    expect(FRESA_ALIMENTO.minDepthMm).toBe(1);
+  });
+});

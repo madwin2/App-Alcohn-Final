@@ -325,13 +325,20 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
   const isSvgVector = isSvgUrl(typeof hasFile === 'string' ? hasFile : null);
 
   /** Sube el SVG corregido y lo deja como vector del sello (la medida de fabricación no cambia). */
-  const saveCorrectedVector = async (file: File) => {
+  const saveCorrectedVector = async (file: File, fab: { widthMm: number; heightMm: number }) => {
     if (!onUpdate || !item) throw new Error('No se puede editar este pedido.');
     const filePath = generateFilePath(order.id, 'vector', file.name, item.id);
     const url = await uploadFile('vector', file, filePath);
     if (typeof hasFile === 'string') forgetSvgText(hasFile);
     const updatedItems = order.items.map((i) =>
-      i.id === item.id ? { ...i, files: { ...i.files, vectorUrl: url, vectorPreviewUrl: url } } : i,
+      i.id === item.id
+        ? {
+            ...i,
+            files: { ...i.files, vectorUrl: url, vectorPreviewUrl: url },
+            fabricationWidthMm: ordenMedidaLargoCortoMm(fab.widthMm, fab.heightMm).widthMm,
+            fabricationHeightMm: ordenMedidaLargoCortoMm(fab.widthMm, fab.heightMm).heightMm,
+          }
+        : i,
     );
     await onUpdate(order.id, { items: updatedItems });
   };

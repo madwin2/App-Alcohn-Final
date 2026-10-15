@@ -88,7 +88,7 @@ Clic en una tarjeta abre la hoja completa (formato A4, la **Hoja de producción*
 
 ### Chequeo de fresa del programa
 
-Antes de llevar el programa a Aspire, tocá **Fresa** en la hoja (o clic derecho en la tarjeta → **Chequear fresa**). Aparece la lista de sellos con su chip: **Fresa OK** o **Fresa: N lugares** donde la fresa más fina no llega a 0,4 mm, a la medida de fabricación de cada sello. Los que no son SVG (por ejemplo EPS) no se pueden chequear.
+Antes de llevar el programa a Aspire, tocá **Fresa** en la hoja (o clic derecho en la tarjeta → **Chequear fresa**). Aparece la lista de sellos con su chip: **Fresa OK** o **Fresa: N lugares** donde se pierde el diseño (letras que se pegan u ojos que se tapan porque la fresa no baja a la profundidad mínima: 0,3 mm; 1 mm en sellos Alimento), a la medida de fabricación de cada sello. Los que no son SVG (por ejemplo EPS) no se pueden chequear.
 
 Tocá **Ver** en un sello para abrir el detalle, corregirlo automáticamente y **Guardar el corregido en el sello** (funciona igual que en [Vectorización](04-vectorizacion.md#chequeo-de-fresa)).
 

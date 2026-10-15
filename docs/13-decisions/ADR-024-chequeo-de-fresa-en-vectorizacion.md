@@ -16,6 +16,7 @@ El mayor trabajo manual al armar programas es corregir en Aspire los detalles do
 4. Corrección **local y conservadora**: abre solo los huecos marcados lo justo para la fresa; si la corrección cambiaría la topología del diseño, no se aplica y queda para edición manual. Siempre con vista previa y confirmación.
    - **Revisión 2026-10-14**: la primera versión sacaba un círculo del tamaño de la fresa en cada zona y rompía el diseño ("es peor que no hacer nada"). Se reemplazó por un planificador de operaciones que **adapta el diseño**: mover letras o renglones respetando la alineación (o abrir el espaciado del renglón parejo), offset paralelo de ojos y ranuras con trazo mínimo de 0,4 mm, y aceptar los ángulos. Reglas en [Q-VEC-010](../14-open-questions/vectorizacion.md#q-vec-010).
    - **Revisión 2026-10-14 (2)**: el criterio pasó de "¿llega a 0,4 mm?" a **simular el V-carve**: la fresa sube donde no entra, así que solo importa dónde se pierde el diseño. Graves: puentes entre piezas distintas y ojos tapados, a **0,3 mm** (Alimento **1 mm**). Rincones y ángulos: con que la punta marque alcanza. Se suma un mapa de profundidad en el visor. Respuestas en [Q-VEC-011](../14-open-questions/vectorizacion.md#q-vec-011).
+   - **Revisión 2026-10-15 (3)**: la corrección **mantiene la medida** (si al abrir espacios el diseño crece, se encaja de nuevo en la caja original con escala pareja y se re-planifica sobre el diseño achicado; el gadget escala por el lado largo y si no lo achicaría igual), **ensancha en proporción los renglones del mismo bloque** (nombre y tagline justificados quedan parejos), **nunca empeora** el resultado y ofrece **agrandar hasta 6 %** como último recurso confirmado por quien revisa, sin pasar el tope de la planchuela.
 5. No se guarda el resultado en la base (sin migración): se recalcula, con caché en memoria.
 
 ## Alternativas descartadas
@@ -25,7 +26,7 @@ El mayor trabajo manual al armar programas es corregir en Aspire los detalles do
 - **VectorCraft (`pathops`, Rust → WebAssembly)** para la corrección con curvas: licencia compatible (MIT/Apache) y herramientas útiles (`offset_path`, booleanas, `simplify`), pero el proyecto está en alfa (motor de booleanas en beta, días de vida) y suma una cadena de compilación Rust. Queda como opción para mejorar la calidad de las curvas corregidas.
 - **Corrección global (offset negativo a todo el diseño)**: con 0,56 mm de hueco mínimo afinaría de más los trazos finos.
 - **Restar un círculo de fresa en cada zona** (primera versión): deformaba letras y dejaba mordidas visibles.
-- **Escalar el diseño** para que entre: solo si es imprescindible y con confirmación de quien revisa (no implementado).
+- **Escalar el diseño** para que entre: no como primera opción; queda como último recurso (hasta 6 %, confirmado por quien revisa).
 
 ## Consecuencias
 

@@ -17,7 +17,7 @@ ctx.onmessage = (ev) => {
       const result = runCheck(req.shapes, req.mmPerUnit, req.profile, req.options);
       ctx.postMessage({ id: req.id, ok: true, type: 'check', result });
     } else {
-      const result = runFix(req.shapes, req.mmPerUnit, req.zoneIds, req.profile, req.options);
+      const result = runFix(req.shapes, req.mmPerUnit, req.zoneIds, req.profile, req.options, req.maxScaleUp);
       ctx.postMessage({ id: req.id, ok: true, type: 'fix', result });
     }
   } catch (error) {

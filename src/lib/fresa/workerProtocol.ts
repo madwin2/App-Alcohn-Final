@@ -19,6 +19,8 @@ export type WorkerRequest =
       zoneIds: string[];
       profile: FresaProfile;
       options: FresaAnalysisOptions;
+      /** Cuánto se puede agrandar el sello como último recurso (1 = nada). */
+      maxScaleUp: number;
     };
 
 export type WorkerResponse =

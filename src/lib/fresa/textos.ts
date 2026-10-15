@@ -100,6 +100,8 @@ export function resumenOperaciones(ops: FixOperation[]): string {
     const rango = Math.abs(hi - lo) < 0.01 ? `${mm(lo)} mm` : `${mm(lo)}–${mm(hi)} mm`;
     parts.push(`se ${sep.length === 1 ? 'separó 1 letra' : `separaron ${sep.length} letras`} (${rango})`);
   }
+  const acomp = ops.filter((o) => o.kind === 'acompanar').reduce((n, o) => n + (o.kind === 'acompanar' ? o.renglones : 0), 0);
+  if (acomp) parts.push(`se ${acomp === 1 ? 'ensanchó 1 renglón' : `ensancharon ${acomp} renglones`} del mismo bloque para que quede parejo`);
   const ojos = ops.filter((o) => o.kind === 'agrandar_ojo').length;
   if (ojos) parts.push(`se ${ojos === 1 ? 'agrandó 1 ojo' : `agrandaron ${ojos} ojos`} de letra`);
   const ranuras = ops.filter((o) => o.kind === 'ensanchar').length;

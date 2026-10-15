@@ -18,7 +18,7 @@ Se hace **al vectorizar**, no en Aspire: el error se ve y se corrige antes de qu
 | Toolpath del detalle | **V-carve** en Aspire: donde el blanco se angosta, la fresa sube sola | Q-VEC-011 |
 | Profundidad final del detalle | 0,6 mm | Q-CNC-008 |
 | Profundidad mínima (entre letras y en ojos) | **0,3 mm** ("lo mínimo mínimo") | Q-VEC-011 |
-| Profundidad mínima en sellos **Alimento** | **1 mm** | Q-VEC-011 |
+| Profundidad mínima en sellos **Alimento** | **≈ 1 mm** (profundidad final 3 mm) | Q-VEC-011 |
 | Polaridad | Negro = relieve del sello; blanco = se saca | Q-CNC-008 |
 
 Con la punta a profundidad *d*, la fresa ocupa en la superficie un círculo de radio `r(d) = 0,05 + d · tan 30°`. A 0,3 mm: **r ≈ 0,223 mm → un canal más angosto que ≈ 0,45 mm se talla menos hondo que la mínima** (Alimento: ≈ 1,25 mm para 1 mm).
@@ -59,20 +59,28 @@ Objetivo: **adaptar el diseño para que la fresa pase**, como lo haría Fede, el
 
 **Operaciones, en este orden:**
 
-1. **Ángulos** (`angulo`, gravedad baja): punta que se afina hacia adentro. Se aceptan así: la fresa no llega a 0,4 mm pero igual pasa a ~0,1 mm y queda marcado (confirmado por el equipo, [Q-VEC-010](../../14-open-questions/vectorizacion.md#q-vec-010)). No se tocan.
+1. **Ángulos** (`angulo`, gravedad baja): punta que se afina hacia adentro. Se aceptan así: la fresa no baja a la profundidad mínima pero igual pasa a ~0,1 mm y queda marcado (confirmado por el equipo, [Q-VEC-010](../../14-open-questions/vectorizacion.md#q-vec-010)). No se tocan.
 2. **Letras que se pegan** (`paso_angosto` entre letras distintas): se **mueven letras enteras**, sin cambiar su forma.
    - Si en un renglón ≥ 40 % de los pares de letras están justos, se **abre el espaciado de todo el renglón por igual** (hasta 0,5 mm entre letras): queda parejo, no "CE RRO".
    - Si son pares sueltos, se separa solo ese par.
+   - **Bloques de texto** (✅ 2026-10-15): si el renglón forma bloque con otros (mismo ancho y ambos bordes alineados, como un nombre y su tagline; o, al abrir todo el renglón, misma alineación y ancho a menos de 5 %), esos renglones **se ensanchan en la misma proporción** para que el bloque siga parejo. Separar un par suelto solo arrastra a renglones justificados. Si con el bloque no se puede, se prueba el renglón solo.
    - La alineación manda qué se mueve: alineado a la izquierda → se corre lo de la derecha; a la derecha → lo de la izquierda; centrado → los dos lados por igual. Entre renglones, los de arriba suben y los de abajo bajan.
-   - **Texto en arco**: lo mismo, pero a lo largo del arco (las letras giran alrededor del centro del círculo; se mide la apertura en el borde de adentro). Si una letra del arco está pegada a **otra cosa** (un aro, el dibujo), **todo el tramo se acerca o se aleja del centro** en sentido radial, como achicar o agrandar el radio del arco. Si no hay lugar (el tramo está encajado entre dos aros y otra letra choca del otro lado), se corre **solo esa letra**, como mucho `MAX_ARC_LETTER_RADIAL_MM` = 0,15 mm (❓ provisorio, [Q-VEC-012](../../14-open-questions/vectorizacion.md#q-vec-012)). Las letras se trasladan, no se giran: en décimas de mm no se nota.
+   - **Texto en arco**: lo mismo, pero a lo largo del arco (las letras giran alrededor del centro del círculo; se mide la apertura en el borde de adentro). Si una letra del arco está pegada a **otra cosa** (un aro, el dibujo), **todo el tramo se acerca o se aleja del centro** en sentido radial, como achicar o agrandar el radio del arco. Si no hay lugar (el tramo está encajado entre dos aros y otra letra choca del otro lado), se corre **solo esa letra** hacia el centro o hacia afuera: queda un poco fuera de la curva de sus vecinas. Tope: 8 % del alto de la letra, entre 0,15 y 0,35 mm (dueño, 2026-10-15: "lo que se necesite sin deformarlo mucho"; [Q-VEC-012](../../14-open-questions/vectorizacion.md#q-vec-012)). Las letras se trasladan, no se giran: en décimas de mm no se nota.
    - Corrimiento máximo 0,8 mm. Solo se aplica si mejora (menos lugares con problema, ninguno nuevo), si no encima piezas y si **no acerca dos piezas que ya estén a menos del hueco mínimo** (se mide la distancia real: junto a una punta filosa, como la de una estrella, el análisis informa el mismo ancho aunque la punta casi toque). Piezas fijas: no se mueven. Para el espaciado parejo se prueban varios pasos y queda el que más resuelve (en un arco el hueco entre letras es una cuña).
 3. **Ojos chicos** (`hueco_cerrado`): offset paralelo del ojo hacia afuera, lo justo.
 4. **Ranuras** (`rincon`, `paso_angosto` dentro de una pieza): se ensanchan en paralelo.
    - En 3 y 4 **ningún trazo negro puede quedar por debajo de 0,4 mm** (`MIN_BLACK_WIDTH_MM`, confirmado por el equipo). Si para abrir el hueco habría que afinar de más, ese lugar queda para editar a mano.
 
-Siempre: **nunca cambia la topología** (no parte piezas, no une huecos, no borra detalles); no cambia la medida de fabricación; **no escala** el diseño (ver Q-VEC-010: escalar solo si es imprescindible y con confirmación de quien revisa — no implementado).
+Siempre: **nunca cambia la topología** (no parte piezas, no une huecos, no borra detalles) y **nunca empeora**: si el resultado tiene más lugares con problema que el original, no se propone ningún cambio.
 
-**SVG resultante**: las letras movidas se trasladan **en sus propias curvas** (comandos absolutos, nada pasa a polígono). Solo las figuras con offset pasan a polígonos finos (error < 2 µm), marcadas `data-alcohn="corregido-fresa"`; lo demás queda byte a byte. El movimiento solo se aplica si el SVG es "pintura simple" (sin rellenos blancos ni trazos); si no, se aplican solo los offsets. El archivo final se **vuelve a chequear** a la misma escala.
+**Mantener la medida** (✅ 2026-10-15): abrir espacios puede dejar el diseño más ancho o más alto. El gadget escala cada vector por su **lado largo** a la medida de fabricación, así que un diseño que creció se achicaría en Aspire y los huecos se volverían a cerrar. Por eso, después de corregir:
+1. Si el diseño creció, se **encaja en la caja original** con una escala pareja (sin deformar): todo, ícono incluido, se achica lo mismo. En el SVG es un grupo con `transform` marcado `data-alcohn="encaje-medida"`; el `viewBox` y el `width`/`height` no cambian.
+2. Se chequea así, como va a quedar fabricado. Si al achicar vuelven a aparecer problemas, se **re-planifica sobre el diseño achicado** (los espacios se abren lo necesario para que, después de encajar, sigan alcanzando). Hasta 4 vueltas; queda la mejor.
+3. Ningún lado queda más grande que el original. Al guardar el vector de un sello que ya tiene medida de fabricación (Pedidos, Producción, Programas), se guarda la medida del resultado, para que coincida con el dibujo y el gadget no lo vuelva a escalar. En Revisión y Asignar SVG la medida se calcula sola al confirmar.
+
+**Agrandar como último recurso** (✅ 2026-10-15, Q-VEC-010): si después de todo quedan lugares, se prueba agrandar **todo el sello** de a 1 % hasta 6 % (`MAX_SCALE_UP`, provisorio) y sin pasar el tope de la planchuela (si no se sabe la planchuela de un sello ya fabricable, no se ofrece). Si con eso se resuelve todo, el diálogo lo ofrece como **"Último recurso: agrandar a A × B mm y usar"**: nunca se aplica solo, lo confirma quien revisa, y cambia la medida de fabricación del sello.
+
+**SVG resultante**: las letras movidas se trasladan **en sus propias curvas** (comandos absolutos, nada pasa a polígono). Solo las figuras con offset pasan a polígonos finos (error < 2 µm), marcadas `data-alcohn="corregido-fresa"`; lo demás queda byte a byte. El movimiento solo se aplica si el SVG es "pintura simple" (sin rellenos blancos ni trazos); si no, se aplican solo los offsets. El archivo final (con el encaje) se **vuelve a chequear** a la misma escala que el original.
 
 Resultado con vectores reales (oct. 2026): textos con letras justas (OliFlowers, Cerro Colorado, Samadhi) se resuelven moviendo letras, sin sacar negro. **Rockets Butchery** (40 mm): de 18 lugares a 13; se resuelven las 5 letras pegadas al aro (C, O, ' y S de ROCKET'S, corridas solas 0,04–0,09 mm hacia adentro porque abajo tienen el círculo interior; BUTCHERY entera 0,10 mm hacia adentro). Lo que queda no es texto en arco que se pueda mover: las estrellas están a 0,22 mm del aro **y** del círculo (la suma no alcanza para que pase la fresa de los dos lados: habría que achicarlas), y el resto es el lobo, los cuchillos y el círculo interior (piezas fijas, ojos con trazos finos). Siguen para edición manual: ojos rodeados de trazos finos (sacar más afinaría por debajo de 0,4 mm) y piezas encajadas sin lugar.
 
@@ -96,7 +104,7 @@ Resultado con vectores reales (oct. 2026): textos con letras justas (OliFlowers,
 ## 7. Límites conocidos
 
 - Solo lee **SVG** (EPS/PDF/AI no).
-- Dos perfiles: general (0,3 mm) y Alimento (1 mm). ❓ Profundidad final del V-carve en Alimento: [Q-VEC-011](../../14-open-questions/vectorizacion.md#q-vec-011).
+- Dos perfiles: general (mínima 0,3 mm, final 0,6 mm) y Alimento (mínima ≈ 1 mm, final 3 mm; [Q-VEC-011](../../14-open-questions/vectorizacion.md#q-vec-011)).
 - Texto en arco: se mueve entero (radial o a lo largo del arco) o, poco, letra por letra. No se achica ni se gira ninguna letra; una pieza encajada entre dos aros sin lugar de ningún lado (p. ej. las estrellas de "Rockets Butchery") queda para editar a mano.
 - No mira trazos negros demasiado finos (frágiles) ni el desbaste con la fresa grande.
 - La lista puede ser larga en diseños con muchas líneas finas (p. ej. vetas de madera): son problemas reales con este criterio.

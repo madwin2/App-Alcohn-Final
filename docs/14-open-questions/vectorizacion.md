@@ -77,14 +77,14 @@
   - **0,3 mm** es lo mínimo mínimo.
   - **Alimento** necesita más: **1 mm**.
   - Zonas: entre letras distintas y en ojos de letras tiene que llegar a la mínima; en ángulos, ranuras y rincones alcanza con que marque (tabla aprobada).
-- ❓ **Pendiente**: profundidad final del V-carve en Alimento (para el detalle general es 0,6 mm; con 1 mm de mínima tiene que ser mayor). No cambia el cálculo, solo el texto.
-- ❓ **Pendiente**: el 1 mm de Alimento, ¿aplica a toda separación entre letras y ojos (como hoy) o solo a algunas zonas?
+- **Respuesta (2026-10-15)**: en Alimento la profundidad final es **3 mm**; hay que simular que llegue a **≈ 1 mm** (se aplica igual que el 0,3 mm general: entre letras y en los ojos).
 - **Documentado en**: [chequeo-de-fresa §2–3](../02-modules/vectorizacion/chequeo-de-fresa.md), [ADR-024](../13-decisions/ADR-024-chequeo-de-fresa-en-vectorizacion.md).
 
 ### Q-VEC-012
-- **Módulo**: Vectorización / chequeo de fresa · **Estado**: pendiente (dueño)
+- **Módulo**: Vectorización / chequeo de fresa · **Estado**: documentada (respondida 2026-10-15)
 - **Pregunta**: En **texto en arco** pegado a un aro, la corrección acerca o aleja del centro **todo el tramo** (hasta 0,8 mm, como con renglones rectos). Cuando el tramo está encajado entre dos aros y eso no alcanza, corre **una letra sola** fuera del arco, hoy hasta **0,15 mm** (valor provisorio, `MAX_ARC_LETTER_RADIAL_MM`). ¿Está bien correr una letra sola fuera de su arco? ¿Hasta cuánto?
 - **Evidencia**: "Rockets Butchery" (40 mm): con letra sola se resuelven C, O, ' y S (0,04–0,09 mm); sin esa opción quedaban pegadas al aro.
 - **Por qué importa**: es una regla de cuánto se puede cambiar el diseño; si una letra se sale mucho del arco se nota.
 - **Impacto**: bajo.
+- **Respuesta**: se puede ajustar lo que se necesite sin deformarlo mucho. "Fuera de su arco" = esa letra sola se acerca o se aleja del centro, así que queda un poco corrida respecto de la curva de sus vecinas. Se tomó como tope el **8 % del alto de la letra**, entre 0,15 y 0,35 mm (a esa escala no se nota a simple vista).
 - **Documentado en**: [chequeo-de-fresa §4](../02-modules/vectorizacion/chequeo-de-fresa.md).

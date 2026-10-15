@@ -22,9 +22,23 @@ interface LocalSvg {
   fileName: string;
   svg: string;
   previewUrl: string;
+  /** Medida elegida al agrandar el sello desde el chequeo de fresa (mm). */
+  fabricationOverrideMm?: { widthMm: number; heightMm: number };
 }
 
-function selloTarget(sello: PendingSello | undefined): FresaTarget | null {
+function selloTarget(
+  sello: PendingSello | undefined,
+  override?: { widthMm: number; heightMm: number },
+): FresaTarget | null {
+  if (sello && override) {
+    return {
+      mode: 'fabricacion',
+      longSideMm: Math.max(override.widthMm, override.heightMm),
+      requestedWidthMm: sello.requestedWidthMm,
+      requestedHeightMm: sello.requestedHeightMm,
+      alimento: esTipoAlimento(sello.tipo),
+    };
+  }
   return sello
     ? {
         mode: 'pedido',
@@ -43,10 +57,10 @@ function AsignacionFresa({
 }: {
   file: LocalSvg;
   sello: PendingSello | undefined;
-  onReplaceSvg: (svg: string) => void;
+  onReplaceSvg: (svg: string, fabricationOverrideMm?: { widthMm: number; heightMm: number }) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const target = selloTarget(sello);
+  const target = selloTarget(sello, file.fabricationOverrideMm);
   const report = useFresaReport(file.svg, target);
   return (
     <>
@@ -58,7 +72,7 @@ function AsignacionFresa({
         svgText={file.svg}
         target={target}
         downloadName={file.fileName.replace(/\.svg$/i, '')}
-        onApply={(svg) => onReplaceSvg(svg)}
+        onApply={(svg, _fix, opts) => onReplaceSvg(svg, opts.scaledUp ? opts.fabricationMm : undefined)}
         applyLabel="Usar el corregido"
         applyHint="Reemplaza este SVG en la lista. Se guarda en el pedido al confirmar las asignaciones."
       />
@@ -113,12 +127,17 @@ export function AsignarTab() {
   const [saving, setSaving] = useState(false);
   const [fresaGuard, setFresaGuard] = useState<string[] | null>(null);
 
-  const replaceFileSvg = (fileName: string, svg: string) => {
+  const replaceFileSvg = (fileName: string, svg: string, fabricationOverrideMm?: { widthMm: number; heightMm: number }) => {
     setFiles((prev) =>
       prev.map((f) => {
         if (f.fileName !== fileName) return f;
         URL.revokeObjectURL(f.previewUrl);
-        return { ...f, svg, previewUrl: URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })) };
+        return {
+          ...f,
+          svg,
+          fabricationOverrideMm,
+          previewUrl: URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })),
+        };
       }),
     );
     toast({ title: 'SVG corregido', description: 'Se guarda en el pedido al confirmar las asignaciones.' });
@@ -129,7 +148,7 @@ export function AsignarTab() {
     const assigned = files
       .map((f) => ({ f, sello: sellos.find((x) => x.id === assignment[f.fileName]) }))
       .filter((x): x is { f: LocalSvg; sello: PendingSello } => Boolean(x.sello));
-    const reports = await Promise.all(assigned.map(({ f, sello }) => chequearSvg(f.svg, selloTarget(sello)!)));
+    const reports = await Promise.all(assigned.map(({ f, sello }) => chequearSvg(f.svg, selloTarget(sello, f.fabricationOverrideMm)!)));
     const withIssues = assigned
       .filter((_, k) => reports[k].groupCounts.alta + reports[k].groupCounts.media > 0)
       .map(({ sello }) => sello.designName);
@@ -209,6 +228,7 @@ export function AsignarTab() {
           requestedWidthMm: sello.requestedWidthMm,
           requestedHeightMm: sello.requestedHeightMm,
           mode: 'production',
+          fabricationOverrideMm: file.fabricationOverrideMm,
         });
         if (saved.needsReview) {
           reviews.push({
@@ -271,7 +291,7 @@ export function AsignarTab() {
                 <AsignacionFresa
                   file={file}
                   sello={sellos.find((x) => x.id === assignment[file.fileName])}
-                  onReplaceSvg={(svg) => replaceFileSvg(file.fileName, svg)}
+                  onReplaceSvg={(svg, override) => replaceFileSvg(file.fileName, svg, override)}
                 />
               </div>
             </div>

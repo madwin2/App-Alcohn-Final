@@ -11,18 +11,20 @@
  *   hueco.
  * - Cachea por contenido + medida + versión del algoritmo.
  */
-import { resolveFabricationSize } from '@/lib/programas/fabricationSize';
+import { KNOWN_MAX_FABRICATION_MM, resolveFabricationSize } from '@/lib/programas/fabricationSize';
+import { resolvePlanchuelaRef } from '@/lib/programas/material';
 import { containSize } from '@/lib/vectorizacion/svgSize';
 import {
   DEFAULT_ANALYSIS_OPTIONS,
   FRESA_ANALYSIS_VERSION,
+  MAX_SCALE_UP,
   fresaProfile,
   type FresaAnalysisOptions,
   type FresaProfile,
 } from './config';
 import type { PaintShape } from './analyze';
 import { runCheck, runFix, type CheckOutput, type FixOutput } from './engine';
-import { buildCorrectedSvg } from './exportSvg';
+import { buildCorrectedSvg, wrapFit } from './exportSvg';
 import type { FixOperation } from './fix';
 import { applyPieceMoves } from './moveSvg';
 import { parseSvgShapes, type ParsedSvg } from './svgShapes';
@@ -33,8 +35,11 @@ import type { WorkerRequest, WorkerResponse } from './workerProtocol';
  * más profundidad mínima (ver `FRESA_ALIMENTO`).
  */
 export type FresaTarget = (
-  /** Sello con medida de fabricación ya guardada (lado largo, mm). */
-  | { mode: 'fabricacion'; longSideMm: number }
+  /**
+   * Sello con medida de fabricación ya guardada (lado largo, mm). La medida
+   * pedida, si se conoce, dice la planchuela (tope para agrandar).
+   */
+  | { mode: 'fabricacion'; longSideMm: number; requestedWidthMm?: number; requestedHeightMm?: number }
   /** Vector nuevo para un sello: se emula lo que hará "Confirmar" (medida pedida → fabricación). */
   | { mode: 'pedido'; requestedWidthMm: number; requestedHeightMm: number }
   /** Escala fija (mm por unidad del SVG); se usa para re-chequear una corrección. */
@@ -73,6 +78,8 @@ export interface FresaReport {
   groupCounts: { alta: number; media: number; baja: number };
   warnings: string[];
   profile: FresaProfile;
+  /** Medida con la que se analizó (para re-chequear la corrección igual). */
+  target: FresaTarget;
 }
 
 export interface FresaFixResult {
@@ -83,6 +90,24 @@ export interface FresaFixResult {
   fixedZoneIds: string[];
   /** Zonas que no se corrigieron porque hacerlo rompía el diseño: editar a mano. */
   skippedZoneIds: string[];
+  /**
+   * Cuánto se achicó el dibujo para volver a la medida original después de
+   * abrir espacios (1 = no hizo falta). Ej. 0,97 = todo quedó 3 % más chico
+   * dentro de la misma medida.
+   */
+  fitScale: number;
+  /**
+   * Medida real del dibujo corregido (mm), a la escala del original. Nunca es
+   * más grande que la original en ningún lado. Al guardar un vector de un sello
+   * con medida de fabricación, se guarda esta (el gadget escala por el lado
+   * largo y, si no coincide, lo vuelve a escalar).
+   */
+  fabricationMm: { widthMm: number; heightMm: number };
+  /**
+   * Último recurso: agrandar el sello (cambia la medida de fabricación)
+   * resuelve lo que quedó. Lo tiene que confirmar quien revisa.
+   */
+  scaleUp: { factor: number; resolves: number; widthMm: number; heightMm: number } | null;
   before: FresaReport;
   after: FresaReport;
 }
@@ -187,7 +212,7 @@ async function inWorker(req: CheckReq | FixReq): Promise<CheckOutput | FixOutput
   const local = () =>
     req.type === 'check'
       ? runCheck(req.shapes, req.mmPerUnit, req.profile, req.options)
-      : runFix(req.shapes, req.mmPerUnit, req.zoneIds, req.profile, req.options);
+      : runFix(req.shapes, req.mmPerUnit, req.zoneIds, req.profile, req.options, req.maxScaleUp);
   const w = getWorker();
   if (!w) return local();
   const id = ++seq;
@@ -256,8 +281,9 @@ function emptyCounts() {
   return { alta: 0, media: 0, baja: 0 };
 }
 
-function errorReport(key: string, message: string, profile: FresaProfile): FresaReport {
+function errorReport(key: string, message: string, profile: FresaProfile, target: FresaTarget): FresaReport {
   return {
+    target,
     key,
     status: 'error',
     error: message,
@@ -286,19 +312,19 @@ async function computeReport(
   try {
     parsed = parseSvgShapes(svgText, options.flattenTolMm);
   } catch (e) {
-    return errorReport(key, e instanceof Error ? e.message : 'No se pudo leer el SVG.', profile);
+    return errorReport(key, e instanceof Error ? e.message : 'No se pudo leer el SVG.', profile, target);
   }
   const box = geometryBox(parsed);
-  if (!box) return errorReport(key, 'El SVG no tiene figuras para analizar.', profile);
+  if (!box) return errorReport(key, 'El SVG no tiene figuras para analizar.', profile, target);
   const { mmPerUnit, source } = resolveScale(parsed, box, target);
   if (!(mmPerUnit > 0) || !Number.isFinite(mmPerUnit)) {
-    return errorReport(key, 'No se pudo determinar la medida del diseño.', profile);
+    return errorReport(key, 'No se pudo determinar la medida del diseño.', profile, target);
   }
   let check: CheckOutput;
   try {
     check = await inWorker({ type: 'check', shapes: plainShapes(parsed), mmPerUnit, profile, options });
   } catch (e) {
-    return errorReport(key, e instanceof Error ? e.message : 'Falló el análisis.', profile);
+    return errorReport(key, e instanceof Error ? e.message : 'Falló el análisis.', profile, target);
   }
   const counts = emptyCounts();
   for (const z of check.zones) counts[z.severity]++;
@@ -326,6 +352,7 @@ async function computeReport(
     groupCounts,
     warnings: parsed.warnings,
     profile,
+    target,
   };
 }
 
@@ -360,6 +387,7 @@ export async function corregirSvg(
 ): Promise<FresaFixResult> {
   if (before.status === 'error' || !before.check) throw new Error('No hay análisis para corregir.');
   const parsed = parseSvgShapes(svgText, options.flattenTolMm);
+  const maxScaleUp = scaleUpLimit(before);
   const fix = await inWorker({
     type: 'fix',
     shapes: plainShapes(parsed),
@@ -367,29 +395,93 @@ export async function corregirSvg(
     zoneIds,
     profile: before.profile,
     options,
+    maxScaleUp,
   });
+  // Las piezas y los cortes vienen en el espacio en que se planificó.
+  const planMmPerUnit = before.mmPerUnit * fix.planScale;
   let base = parsed;
   if (fix.moves.length) {
-    applyPieceMoves(parsed, before.mmPerUnit, fix.moves);
+    applyPieceMoves(parsed, planMmPerUnit, fix.moves);
     base = parseSvgShapes(new XMLSerializer().serializeToString(parsed.doc.documentElement), options.flattenTolMm);
   }
-  const svg = buildCorrectedSvg(base, before.mmPerUnit, fix.removed, fix.newBlack);
-  // Se re-chequea el archivo final (no el resultado intermedio), a la misma
-  // escala: lo que se guarda es exactamente lo que se analizó.
-  const after = await chequearSvg(
-    svg,
-    { mode: 'escala', mmPerUnit: before.mmPerUnit, alimento: before.profile.id === 'alimento' },
-    options,
-  );
+  const svg = wrapFit(buildCorrectedSvg(base, planMmPerUnit, fix.removed, fix.newBlack), fix.fit);
+  // Se re-chequea el archivo final (no el resultado intermedio) con la misma
+  // medida que el original: así se fabrica (el gadget escala a esa medida).
+  const after = await chequearSvg(svg, sameScaleTarget(before), options);
+  // Nunca empeorar lo que ve el usuario: si quedan más lugares que antes, no
+  // se propone ningún cambio.
+  const places = (r: FresaReport) => r.groupCounts.alta + r.groupCounts.media;
+  if (after.status === 'error' || places(after) > places(before)) {
+    return {
+      svg: svgText,
+      removedAreaMm2: 0,
+      operations: [],
+      fixedZoneIds: [],
+      skippedZoneIds: zoneIds,
+      fitScale: 1,
+      fabricationMm: { widthMm: before.widthMm, heightMm: before.heightMm },
+      scaleUp: null,
+      before,
+      after: before,
+    };
+  }
   return {
     svg,
     removedAreaMm2: fix.removedAreaMm2,
     operations: fix.operations,
     fixedZoneIds: fix.fixedZoneIds,
     skippedZoneIds: fix.skippedZoneIds,
+    fitScale: fix.fit.scale,
+    fabricationMm: { widthMm: after.widthMm, heightMm: after.heightMm },
+    scaleUp: fix.scaleUp
+      ? {
+          factor: fix.scaleUp.factor,
+          resolves: fix.scaleUp.resolves,
+          widthMm: after.widthMm * fix.scaleUp.factor,
+          heightMm: after.heightMm * fix.scaleUp.factor,
+        }
+      : null,
     before,
     after,
   };
+}
+
+/**
+ * Para re-chequear una corrección: misma medida de fabricación que el original
+ * (el dibujo corregido ya está encajado en la misma caja, así que la escala
+ * coincide con la del original).
+ */
+function sameScaleTarget(before: FresaReport): FresaTarget {
+  return { mode: 'escala', mmPerUnit: before.mmPerUnit, alimento: before.profile.id === 'alimento' };
+}
+
+/**
+ * Hasta cuánto se puede agrandar como último recurso: `MAX_SCALE_UP`, sin que
+ * el lado menor pase el tope de la planchuela. Si no se sabe la planchuela de
+ * un sello con medida de fabricación, no se ofrece.
+ */
+function scaleUpLimit(r: FresaReport): number {
+  const t = r.target;
+  let reqW: number | undefined;
+  let reqH: number | undefined;
+  if (t.mode === 'pedido') {
+    reqW = t.requestedWidthMm;
+    reqH = t.requestedHeightMm;
+  } else if (t.mode === 'fabricacion') {
+    reqW = t.requestedWidthMm;
+    reqH = t.requestedHeightMm;
+    if (!(reqW && reqH)) return 1;
+  } else if (t.mode === 'escala') {
+    return 1;
+  }
+  const minor = Math.min(r.widthMm, r.heightMm);
+  if (!(minor > 0)) return 1;
+  if (reqW && reqH) {
+    const tipo = resolvePlanchuelaRef({ anchoRealCm: reqW / 10, largoRealCm: reqH / 10 });
+    const tope = tipo != null ? KNOWN_MAX_FABRICATION_MM[tipo] ?? null : null;
+    if (tope != null) return Math.max(1, Math.min(MAX_SCALE_UP, (tope + 0.05) / minor));
+  }
+  return MAX_SCALE_UP;
 }
 
 /** Texto corto para chips y tooltips. */

@@ -22,6 +22,11 @@ export async function saveSelloVector(params: {
   requestedWidthMm: number;
   requestedHeightMm: number;
   mode: VectorizeMode;
+  /**
+   * Medida de fabricación decidida a mano (por ejemplo, al agrandar el sello
+   * desde el chequeo de fresa). Si viene, se guarda tal cual y no hay popup.
+   */
+  fabricationOverrideMm?: { widthMm: number; heightMm: number };
 }): Promise<SavedVector> {
   if (params.mode !== 'production') {
     throw new Error('No se puede guardar un vector generado en modo test/preview.');
@@ -34,11 +39,15 @@ export async function saveSelloVector(params: {
   const url = await uploadFile('vector', file, path);
 
   const measurement = measureSvgString(sized);
-  const resolution = resolveFabricationSize(
+  const measured = resolveFabricationSize(
     params.requestedWidthMm,
     params.requestedHeightMm,
     measurement ? { widthMm: measurement.widthMm, heightMm: measurement.heightMm } : null,
   );
+  const override = params.fabricationOverrideMm;
+  const resolution = override
+    ? { ...measured, widthMm: override.widthMm, heightMm: override.heightMm, needsReview: false, reviewReason: null }
+    : measured;
 
   await setSelloVectorState(params.selloId, 'VECTORIZADO', {
     vectorUrl: url,

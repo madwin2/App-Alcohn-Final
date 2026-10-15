@@ -74,6 +74,12 @@ export function translate(paths: Paths64, dx: number, dy: number): Paths64 {
   return paths.map((p) => p.map((q) => ({ x: q.x + dx, y: q.y + dy })));
 }
 
+/** Escala `f` y traslada (`tx`, `ty`): p' = p·f + t (µm). */
+export function affine(paths: Paths64, f: number, tx: number, ty: number): Paths64 {
+  if (f === 1 && !tx && !ty) return paths;
+  return paths.map((p) => p.map((q) => ({ x: Math.round(q.x * f + tx), y: Math.round(q.y * f + ty) })));
+}
+
 /** Apertura morfológica: lo que puede barrer un disco de radio r sin salirse de la región. */
 export function opening(paths: Paths64, rUm: number): Paths64 {
   return offset(offset(paths, -rUm), rUm);

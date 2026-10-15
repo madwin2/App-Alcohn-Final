@@ -15,6 +15,34 @@ import type { ParsedSvg } from './svgShapes';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+/**
+ * Encaja el dibujo en la medida original: mete todo lo dibujable en un grupo
+ * con p' = (p − from) · scale + to (unidades del viewBox). Escala pareja, sin
+ * deformar; el viewBox y la medida declarada no cambian.
+ */
+export function wrapFit(
+  svgText: string,
+  fit: { scale: number; from: { x: number; y: number }; to: { x: number; y: number } },
+): string {
+  if (!(fit.scale < 0.9995)) return svgText;
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  const root = doc.documentElement;
+  const g = doc.createElementNS(SVG_NS, 'g');
+  const n = (v: number) => Number(v.toFixed(6));
+  g.setAttribute(
+    'transform',
+    `translate(${n(fit.to.x)} ${n(fit.to.y)}) scale(${n(fit.scale)}) translate(${n(-fit.from.x)} ${n(-fit.from.y)})`,
+  );
+  g.setAttribute('data-alcohn', 'encaje-medida');
+  const keep = new Set(['defs', 'style', 'title', 'desc', 'metadata']);
+  for (const child of Array.from(root.childNodes)) {
+    if (child.nodeType === 1 && keep.has((child as Element).localName.toLowerCase())) continue;
+    g.appendChild(child);
+  }
+  root.appendChild(g);
+  return new XMLSerializer().serializeToString(root);
+}
+
 /** Paths64 (µm) → atributo `d` en unidades del viewBox. */
 export function pathsToD(paths: Paths64, mmPerUnit: number, decimals = 4): string {
   const f = 1 / (mmPerUnit * UM);

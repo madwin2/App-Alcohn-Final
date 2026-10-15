@@ -968,13 +968,18 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
     slides: [
       {
         heading: 'Dónde no llega la fresa',
-        body: 'En Vectorización cada vector muestra el chip «Fresa»: marca las letras muy juntas y los huecos chicos donde la fresa más fina no llega a 0,4 mm, a la medida en que se fabrica.',
+        body: 'En Vectorización cada vector muestra el chip «Fresa»: simula el V-carve y marca dónde se pegan letras o se tapan ojos porque la fresa no baja a 0,3 mm (1 mm en Alimento), a la medida en que se fabrica.',
         icon: ScanSearch,
       },
       {
         heading: 'Se corrige solo, antes de Aspire',
         body: '«Corregir automáticamente» adapta el diseño: separa letras manteniendo la alineación y agranda ojos sin dejar trazos de menos de 0,4 mm. Comparás antes y después; lo que no se puede arreglar queda marcado para hacer a mano.',
         icon: Wand2,
+      },
+      {
+        heading: 'El sello no cambia de medida',
+        body: 'Si al separar letras el diseño queda más ancho, se achica parejo para entrar en la misma medida. Los renglones de un mismo bloque (nombre y tagline) se ensanchan juntos y quedan parejos.',
+        icon: Scaling,
       },
       {
         heading: 'También en Programas',

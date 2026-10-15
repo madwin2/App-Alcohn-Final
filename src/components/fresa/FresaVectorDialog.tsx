@@ -23,9 +23,17 @@ export function fresaTargetFor(size: FresaSizeInfo): FresaTarget | null {
   const fw = Number(size.fabricationWidthMm);
   const fh = Number(size.fabricationHeightMm);
   const alimento = esTipoAlimento(size.stampType);
-  if (fw > 0 && fh > 0) return { mode: 'fabricacion', longSideMm: Math.max(fw, fh), alimento };
   const rw = Number(size.requestedWidthMm);
   const rh = Number(size.requestedHeightMm);
+  if (fw > 0 && fh > 0) {
+    return {
+      mode: 'fabricacion',
+      longSideMm: Math.max(fw, fh),
+      // La pedida dice la planchuela: tope si hiciera falta agrandar.
+      ...(rw > 0 && rh > 0 ? { requestedWidthMm: rw, requestedHeightMm: rh } : {}),
+      alimento,
+    };
+  }
   if (rw > 0 && rh > 0) return { mode: 'pedido', requestedWidthMm: rw, requestedHeightMm: rh, alimento };
   return null;
 }
@@ -41,7 +49,7 @@ interface Props {
    * Guarda el SVG corregido (por ejemplo, subirlo y reemplazar el vector del
    * sello). Si no se pasa, solo se puede descargar.
    */
-  onSaveCorrected?: (file: File) => Promise<void>;
+  onSaveCorrected?: (file: File, fabricationMm: { widthMm: number; heightMm: number }) => Promise<void>;
   saveHint?: string;
 }
 
@@ -86,9 +94,11 @@ export function FresaVectorDialog({ open, onOpenChange, vectorUrl, title, size, 
       downloadName={slugify(title || 'vector')}
       onApply={
         onSaveCorrected
-          ? async (svg) => {
+          ? async (svg, _fix, opts) => {
               const file = new File([svg], `${slugify(title || 'vector')}-corregido.svg`, { type: 'image/svg+xml' });
-              await onSaveCorrected(file);
+              // Se guarda la medida del resultado: el gadget escala por el lado
+              // largo, así que tiene que coincidir con el dibujo corregido.
+              await onSaveCorrected(file, opts.fabricationMm);
               toast({ title: 'Vector corregido guardado', description: 'Reemplazó al anterior en el sello.' });
             }
           : undefined

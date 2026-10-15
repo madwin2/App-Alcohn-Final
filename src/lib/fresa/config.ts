@@ -36,15 +36,14 @@ export const FRESA_FINA: FresaProfile = {
 };
 
 /**
- * Sellos de alimento: misma fresa, pero lo mínimo es 1 mm (equipo, 2026-10-14).
- * ❓ La profundidad final del V-carve en alimento no está confirmada (Q-VEC-011);
- * no se usa en el cálculo.
+ * Sellos de alimento: misma fresa, profundidad final 3 mm y lo mínimo para
+ * separar ≈ 1 mm (equipo, 2026-10-14/15, Q-VEC-011).
  */
 export const FRESA_ALIMENTO: FresaProfile = {
   ...FRESA_FINA,
   id: 'alimento',
   label: 'Alimento · fresa cónica 60° · punta 0,1 mm',
-  finalDepthMm: 1,
+  finalDepthMm: 3,
   minDepthMm: 1,
 };
 
@@ -107,5 +106,13 @@ export const DEFAULT_ANALYSIS_OPTIONS: FresaAnalysisOptions = {
  */
 export const MIN_BLACK_WIDTH_MM = 0.4;
 
+/**
+ * Cuánto se puede agrandar el sello como último recurso, si es imprescindible
+ * para que se separen letras u ojos (dueño, 2026-10-15: "se puede escalar un
+ * poquito"). Lo confirma quien revisa; nunca pasa el tope de la planchuela.
+ * PROVISORIO: 6 %.
+ */
+export const MAX_SCALE_UP = 1.06;
+
 /** Versión del algoritmo: cambia → se invalida la caché de resultados. */
-export const FRESA_ANALYSIS_VERSION = 3;
+export const FRESA_ANALYSIS_VERSION = 4;

@@ -14,7 +14,7 @@
 3. Seleccionar ítems → se preparan (recorte, margen, limpieza).
 4. **Vectorizar** → confirmar costo en créditos (modo `production`).
 5. Sistema: arma hojas, llama a Vectorizer.AI vía `/api/vectorize`, separa un SVG por ítem → cola de **Revisión** (persistida en IndexedDB de este navegador hasta confirmar/rechazar).
-6. Revisión (decisión humana): **Confirmar** / Rechazar / Reemplazar con SVG propio. ✅ Cada vector muestra el **chequeo de fresa** (dónde la fresa más fina no llega a 0,4 mm, a la medida que se va a fabricar) y se puede **corregir automáticamente** antes de confirmar; confirmar con problemas pide confirmación → [chequeo-de-fresa](../02-modules/vectorizacion/chequeo-de-fresa.md).
+6. Revisión (decisión humana): **Confirmar** / Rechazar / Reemplazar con SVG propio. ✅ Cada vector muestra el **chequeo de fresa** (simula el V-carve: dónde se pegan letras o se tapan ojos porque la fresa no baja a 0,3 mm —1 mm en Alimento—, a la medida que se va a fabricar) y se puede **corregir automáticamente** antes de confirmar; confirmar con problemas pide confirmación → [chequeo-de-fresa](../02-modules/vectorizacion/chequeo-de-fresa.md).
 7. Confirmar → el SVG se escala al tamaño pedido, se sube al bucket `vector`, `VECTORIZADO`. Si la medida medida difiere (tope de planchuela o ≥6 mm) → popup de **medida de fabricación** (ver [medida](../02-modules/vectorizacion/medida-de-fabricacion.md)).
 
 ## Camino B — Vector hecho por fuera

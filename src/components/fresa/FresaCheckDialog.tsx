@@ -24,6 +24,17 @@ import {
 import { downloadSvg } from '@/lib/vectorizacion/zipResults';
 import { FresaViewer, type FresaViewMode } from './FresaViewer';
 
+/** Cómo se aplica la corrección. */
+export interface FresaApplyOptions {
+  /**
+   * Medida de fabricación del resultado (mm). Es la del dibujo corregido
+   * (nunca más grande que la original), o la agrandada si se eligió agrandar.
+   */
+  fabricationMm: { widthMm: number; heightMm: number };
+  /** true = se eligió agrandar el sello (cambia la medida de fabricación). */
+  scaledUp: boolean;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,7 +47,7 @@ interface Props {
    * Qué hacer con el SVG corregido. Si no se pasa, el diálogo solo permite
    * descargarlo.
    */
-  onApply?: (svg: string, fix: FresaFixResult) => Promise<void> | void;
+  onApply?: (svg: string, fix: FresaFixResult, opts: FresaApplyOptions) => Promise<void> | void;
   /** Texto del botón de aplicar (por defecto "Usar el corregido"). */
   applyLabel?: string;
   /** Aclaración debajo del botón de aplicar. */
@@ -163,11 +174,14 @@ export function FresaCheckDialog({
     }
   };
 
-  const apply = async () => {
+  const apply = async (scaledUp = false) => {
     if (!fix || !onApply) return;
+    const fabricationMm = scaledUp && fix.scaleUp
+      ? { widthMm: fix.scaleUp.widthMm, heightMm: fix.scaleUp.heightMm }
+      : fix.fabricationMm;
     setApplying(true);
     try {
-      await onApply(fix.svg, fix);
+      await onApply(fix.svg, fix, { fabricationMm, scaledUp });
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -396,9 +410,30 @@ export function FresaCheckDialog({
                       </span>
                     )}{' '}
                     <span className="text-muted-foreground">{resumenOperaciones(fix.operations)}</span>
+                    {fix.fitScale < 0.999 ? (
+                      <span className="block text-muted-foreground">
+                        Para no cambiar la medida, todo el diseño se achicó {mm((1 - fix.fitScale) * 100, 1)} % dentro
+                        de la misma caja ({mm(fix.fabricationMm.widthMm, 1)} × {mm(fix.fabricationMm.heightMm, 1)} mm).
+                      </span>
+                    ) : null}
                   </p>
+                  {fix.scaleUp && remaining > 0 ? (
+                    <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                      <p>
+                        <strong>Último recurso:</strong> agrandar el sello un {mm((fix.scaleUp.factor - 1) * 100, 0)} % (
+                        {mm(fix.fabricationMm.widthMm, 1)} × {mm(fix.fabricationMm.heightMm, 1)} →{' '}
+                        {mm(fix.scaleUp.widthMm, 1)} × {mm(fix.scaleUp.heightMm, 1)} mm) resuelve lo que queda. Cambia
+                        la medida de fabricación: usalo solo si es imprescindible.
+                      </p>
+                      {onApply ? (
+                        <Button type="button" size="sm" variant="outline" disabled={applying} onClick={() => void apply(true)}>
+                          Agrandar a {mm(fix.scaleUp.widthMm, 1)} × {mm(fix.scaleUp.heightMm, 1)} mm y usar
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
-                    {onApply ? (
+                    {onApply && fix.operations.length ? (
                       <Button type="button" disabled={applying} onClick={() => void apply()}>
                         {applying ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
                         {applyLabel}

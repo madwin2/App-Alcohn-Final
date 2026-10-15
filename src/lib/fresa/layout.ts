@@ -516,10 +516,15 @@ export interface SeparationPlan {
 }
 
 /**
- * Corrimiento máximo (mm) de una letra sola de un texto en arco, fuera de su
- * arco (las demás quedan donde estaban). PROVISORIO: a confirmar con el dueño.
+ * Corrimiento de una letra sola de un texto en arco hacia el centro o hacia
+ * afuera (las demás quedan donde estaban, así que esa letra deja de estar
+ * exactamente sobre la curva). El dueño acepta "lo que se necesite sin
+ * deformarlo mucho" (Q-VEC-012): hasta el 8 % del alto de la letra, entre
+ * `MIN` y `MAX` mm. Con eso el salto no se nota a simple vista.
  */
-export const MAX_ARC_LETTER_RADIAL_MM = 0.15;
+export const MAX_ARC_LETTER_RADIAL_MM = 0.35;
+export const MIN_ARC_LETTER_RADIAL_MM = 0.15;
+export const ARC_LETTER_RADIAL_SHARE = 0.08;
 
 /**
  * Separación cuando alguna de las dos piezas es de un texto en arco.
@@ -558,9 +563,19 @@ function arcSeparationPlan(layout: Layout, a: number, b: number, near?: Pt): Sep
   const gi = layout.arcGlyphOf.get(aa != null ? a : b)!;
   const c = arc.centers[gi];
   const sign = Math.hypot(near.x - arc.cx, near.y - arc.cy) < Math.hypot(c.x - arc.cx, c.y - arc.cy) ? 1 : -1;
+  const glyphH = Math.max(
+    ...arc.glyphs[gi].map((id) => {
+      const pb = layout.pieces[id].bounds;
+      return Math.max(pb.maxX - pb.minX, pb.maxY - pb.minY);
+    }),
+  );
+  const letterMax = Math.min(
+    MAX_ARC_LETTER_RADIAL_MM * UM,
+    Math.max(MIN_ARC_LETTER_RADIAL_MM * UM, ARC_LETTER_RADIAL_SHARE * glyphH),
+  );
   const letter: SeparationPlan = {
     axis: 'radial',
-    maxUm: MAX_ARC_LETTER_RADIAL_MM * UM,
+    maxUm: letterMax,
     shiftsFor: (d) => {
       const m: PieceShift = new Map();
       setGlyph(m, arc.glyphs[gi], radialShift(arc, c, sign * d));
@@ -596,6 +611,54 @@ export function trackingPlan(layout: Layout, lineIdx: number): ((t: number) => P
     });
     return m;
   };
+}
+
+/**
+ * Renglones que forman bloque con `li`: texto recto que comparte con él los dos
+ * bordes (justificado, como un nombre y su tagline del mismo ancho) o, salvo
+ * `onlyJustified`, tiene la misma alineación y casi el mismo ancho. Si a uno se le abre el espaciado, a
+ * estos hay que ensancharlos en la misma proporción para que el bloque no
+ * quede desparejo.
+ */
+export function blockPartners(layout: Layout, li: number, onlyJustified = false): number[] {
+  const L = layout.lines[li];
+  if (!L?.straight) return [];
+  const width = (l: Line) => l.bounds.maxX - l.bounds.minX;
+  const wL = width(L);
+  const tol = Math.max(0.25 * UM, 0.015 * wL);
+  const out: number[] = [];
+  layout.lines.forEach((o, i) => {
+    if (i === li || !o.straight || o.glyphs.length < 3) return;
+    const wo = width(o);
+    const ov = overlap1d(o.bounds.minX, o.bounds.maxX, L.bounds.minX, L.bounds.maxX);
+    if (ov < 0.6 * Math.min(wo, wL)) return;
+    const justified =
+      Math.abs(o.bounds.minX - L.bounds.minX) <= tol && Math.abs(o.bounds.maxX - L.bounds.maxX) <= tol;
+    // "Casi el mismo ancho": a la vista se ven iguales (hasta 5 %).
+    const similar = o.align === L.align && Math.abs(wo - wL) <= 0.05 * wL;
+    if (justified || (!onlyJustified && similar)) out.push(i);
+  });
+  return out;
+}
+
+/**
+ * Espaciado de los renglones compañeros para que acompañen un ensanche de
+ * `growUm` del renglón `li` (misma proporción de ancho). Vacío si no tiene.
+ */
+export function partnersGrowth(layout: Layout, li: number, growUm: number, onlyJustified = false): PieceShift {
+  const m: PieceShift = new Map();
+  const L = layout.lines[li];
+  if (!L || growUm <= 0) return m;
+  const wL = L.bounds.maxX - L.bounds.minX;
+  for (const pi of blockPartners(layout, li, onlyJustified)) {
+    const P = layout.lines[pi];
+    const plan = trackingPlan(layout, pi);
+    if (!plan) continue;
+    const grow = (growUm * (P.bounds.maxX - P.bounds.minX)) / wL;
+    const t = Math.round(grow / (P.glyphs.length - 1));
+    for (const [id, d] of plan(t)) m.set(id, d);
+  }
+  return m;
 }
 
 /**

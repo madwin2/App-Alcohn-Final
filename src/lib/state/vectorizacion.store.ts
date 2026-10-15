@@ -57,7 +57,8 @@ interface VectorizacionStore {
   setProgress: (progress: SheetProgress[]) => void;
   setResults: (results: VectorResult[]) => void;
   pushReviews: (items: ReviewItem[]) => void;
-  updateReviewSvg: (id: string, svg: string) => void;
+  /** Cambia el SVG en revisión. `fabricationOverrideMm` solo si se agrandó el sello (si no, se borra). */
+  updateReviewSvg: (id: string, svg: string, fabricationOverrideMm?: { widthMm: number; heightMm: number }) => void;
   removeReview: (id: string) => void;
   /** Carga inicial desde IndexedDB; fusiona con la cola en memoria (la sesión gana en conflictos). */
   hydrateReviewQueue: (items: ReviewItem[]) => void;
@@ -189,9 +190,11 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
     set({ reviewQueue: queue });
     schedulePersistReviewQueue(() => get().reviewQueue);
   },
-  updateReviewSvg: (id, svg) => {
+  updateReviewSvg: (id, svg, fabricationOverrideMm) => {
     set({
-      reviewQueue: get().reviewQueue.map((item) => (item.id === id ? { ...item, svg } : item)),
+      reviewQueue: get().reviewQueue.map((item) =>
+        item.id === id ? { ...item, svg, fabricationOverrideMm } : item,
+      ),
     });
     schedulePersistReviewQueue(() => get().reviewQueue);
   },

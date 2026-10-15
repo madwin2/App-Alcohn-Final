@@ -62,13 +62,17 @@ Cada tarjeta muestra un chip **Fresa**: la app simula el V-carve de la fresa má
 
 Tocá el chip para abrir el **Chequeo de fresa**:
 
-1. A la izquierda, el diseño con los lugares marcados y numerados (rojo = **No llega**, amarillo = **Llega poco**). Rueda del mouse para acercar, arrastrá para mover, **Ver todo** para volver.
+1. A la izquierda, el diseño con los lugares marcados y numerados (rojo = **Hay que corregir**, amarillo = **Se pierde el detalle**). Rueda del mouse para acercar, arrastrá para mover, **Ver todo** para volver.
 2. A la derecha, la lista: tocá un lugar y la vista va directo ahí. Dice el ancho del hueco y a qué profundidad llega la fresa.
 3. **Ver qué tan hondo baja la fresa**: un degradé azul muestra lo que se talla menos hondo que la mínima (más oscuro = menos hondo). **Mostrar ángulos y rincones**: lugares donde la fresa sube y marca menos hondo. Están bien así; por eso están ocultos y la corrección no los toca.
 4. **Corregir automáticamente**: adapta el diseño para que entre la fresa, como se haría a mano:
    - **Letras o renglones muy juntos**: corre letras enteras sin deformarlas, respetando la alineación (si el bloque está alineado a la izquierda, corre hacia la derecha). Si casi todo el renglón está justo, abre el espaciado de todo el renglón por igual.
+   - **Bloques de texto**: si ese renglón va justificado con otro (por ejemplo, el nombre y el tagline del mismo ancho), el otro también se ensancha en la misma proporción, para que sigan parejos.
+   - **Texto en arco**: separa a lo largo del arco o acerca/aleja el texto del centro; si hace falta, corre una letra sola un poquito.
    - **Ojos chicos y ranuras**: los agranda en paralelo, siempre que ningún trazo negro quede de menos de 0,4 mm.
-   - Abajo del botón dice qué hizo (por ejemplo, "Se abrió el espaciado de 2 renglones…"). Lo que no puede arreglar sin romper el diseño (texto en arco, ojos rodeados de trazos finos) queda marcado para editar a mano. No cambia la medida del sello.
+   - Abajo del botón dice qué hizo (por ejemplo, "Se abrió el espaciado de 1 renglón, se ensanchó 1 renglón del mismo bloque para que quede parejo"). Lo que no puede arreglar sin romper el diseño (ojos rodeados de trazos finos, piezas encajadas sin lugar) queda marcado para editar a mano. Si el resultado fuera peor que el original, no propone nada.
+   - **No cambia la medida del sello**: si al abrir espacios el diseño quedó más ancho, achica todo parejo (ícono incluido) para que entre en la misma medida, y lo vuelve a chequear así. Abajo dice cuánto se achicó.
+   - **Último recurso**: si igual quedan lugares y agrandar el sello un poco (hasta 6 %, sin pasar el tope de la planchuela) los resuelve, aparece **Agrandar a A × B mm y usar**. Cambia la medida de fabricación: usalo solo si es imprescindible.
 5. Compará con **Original**, **Corregido** y **Qué cambia** (en celeste, lo que cambió).
 6. **Usar el corregido** reemplaza el vector en revisión. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
 
