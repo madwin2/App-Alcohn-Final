@@ -8,13 +8,68 @@ import { planFix } from './fix';
 import { groupZones } from './engine';
 import { chequearSvg, corregirSvg } from './chequeoFresa';
 import { bounds, components, regionArea } from './geometry';
-import { buildLayout } from './layout';
+import { MAX_ARC_LETTER_RADIAL_MM, buildLayout } from './layout';
 
 /** SVG en mm (1 unidad = 1 mm). */
 const svg = (body: string, w = 20, h = 10) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">${body}</svg>`;
 
 const rectD = (x: number, y: number, w: number, h: number) => `M${x} ${y}H${x + w}V${y + h}H${x}Z`;
+
+/** Polígono cerrado (mm) a partir de puntos. */
+const polyD = (pts: Array<[number, number]>) =>
+  `M${pts.map(([x, y]) => `${x.toFixed(4)} ${y.toFixed(4)}`).join('L')}Z`;
+
+/** Círculo como path (para combinar dos en un aro con evenodd). */
+const circleD = (cx: number, cy: number, r: number) =>
+  `M${cx + r} ${cy}A${r} ${r} 0 1 1 ${cx - r} ${cy}A${r} ${r} 0 1 1 ${cx + r} ${cy}Z`;
+
+/**
+ * Sello redondo de 40 mm: 7 "letras" (rectángulos de 2,2 × 3 mm puestos en
+ * sentido radial) en arco arriba, centros a 13 mm del centro, y un aro afuera.
+ * - `gapToRing`: blanco entre el borde de afuera de las letras y el aro.
+ * - `stepDeg`: ángulo entre letras (`tightPair`: el par 3–4 más junto).
+ * - `innerRing`: aro adentro, con su borde de afuera a ese radio.
+ * - `diamond`: un rombo a la izquierda (como una estrella) con las puntas a
+ *   0,22 mm del aro de afuera y del de adentro.
+ * - `raise`: la letra del medio corrida esos mm hacia afuera.
+ */
+function arcSvg(o: {
+  gapToRing: number;
+  stepDeg?: number;
+  tightPair?: number;
+  innerRing?: number;
+  diamond?: boolean;
+  raise?: number;
+}) {
+  const c = 20;
+  const step = o.stepDeg ?? 14;
+  const parts: string[] = [];
+  for (let k = 0; k < 7; k++) {
+    let deg = -90 + (k - 3) * step;
+    if (o.tightPair != null) deg += k <= 3 ? o.tightPair / 2 : -o.tightPair / 2;
+    const th = (deg * Math.PI) / 180;
+    const u: [number, number] = [Math.cos(th), Math.sin(th)];
+    const v: [number, number] = [-Math.sin(th), Math.cos(th)];
+    const lift = k === 3 ? (o.raise ?? 0) : 0;
+    const p = (r: number, t: number): [number, number] => [
+      c + (r + lift) * u[0] + t * v[0],
+      c + (r + lift) * u[1] + t * v[1],
+    ];
+    parts.push(polyD([p(11.5, -1.1), p(14.5, -1.1), p(14.5, 1.1), p(11.5, 1.1)]));
+  }
+  const ri = 14.5 + o.gapToRing;
+  let body = `<path d="${parts.join('')}"/><path d="${circleD(c, c, ri + 0.8)}${circleD(c, c, ri)}" fill-rule="evenodd"/>`;
+  if (o.innerRing != null)
+    body += `<path d="${circleD(c, c, o.innerRing)}${circleD(c, c, o.innerRing - 0.6)}" fill-rule="evenodd"/>`;
+  if (o.diamond && o.innerRing != null) {
+    const outer = ri - 0.22;
+    const inner = o.innerRing + 0.22;
+    const mid = (outer + inner) / 2;
+    body += `<path d="${polyD([[c - outer, c], [c - mid, c - 1], [c - inner, c], [c - mid, c + 1]])}"/>`;
+  }
+  return svg(body, 40, 40);
+}
 
 function analyzeSvgText(text: string) {
   const parsed = parseSvgShapes(text);
@@ -199,6 +254,21 @@ describe('armado del diseño', () => {
     expect(layout.lines.every((l) => l.straight && l.align === 'left')).toBe(true);
   });
 
+  it('reconoce un texto en arco: centro, radio y letras en orden', () => {
+    const { black } = analyzeSvgText(arcSvg({ gapToRing: 0.8 }));
+    const layout = buildLayout(black);
+    expect(layout.arcs).toHaveLength(1);
+    const arc = layout.arcs[0];
+    expect(arc.glyphs).toHaveLength(7);
+    expect(Math.hypot(arc.cx - 20000, arc.cy - 20000)).toBeLessThan(300);
+    expect(Math.abs(arc.r - 13000)).toBeLessThan(300);
+    // Ordenadas por ángulo: de izquierda a derecha en el arco de arriba.
+    const xs = arc.centers.map((c) => c.x);
+    expect([...xs].sort((a, z) => a - z)).toEqual(xs);
+    // Sus letras no forman renglones (antes el arco se partía en renglones falsos).
+    expect(layout.lines.flatMap((l) => l.glyphs)).toHaveLength(0);
+  });
+
   it('un texto en arco no es un renglón recto', () => {
     const arc = [0, 1, 2, 3, 4]
       .map((k) => rectD(1 + k * 2.5, 1 + Math.abs(k - 2) * 0.8, 2, 3))
@@ -272,6 +342,76 @@ describe('corrección', () => {
     );
     const fixed = planFix(black, result.zones);
     expect(fixed.operations).toHaveLength(0);
+    expect(fixed.black).toEqual(black);
+  });
+});
+
+describe('corrección de texto en arco', () => {
+  /** Componente radial (µm) de cada movimiento: negativo = hacia el centro (20, 20) mm. */
+  const radial = (moves: ReturnType<typeof planFix>['moves']) =>
+    moves.map((m) => {
+      const b = bounds(m.region)!;
+      const ux = (b.minX + b.maxX) / 2 - 20000;
+      const uy = (b.minY + b.maxY) / 2 - 20000;
+      return (m.dx * ux + m.dy * uy) / Math.hypot(ux, uy);
+    });
+
+  it('si las letras están pegadas al aro, acerca todo el arco al centro sin deformarlo', () => {
+    const { black, result } = analyzeSvgText(arcSvg({ gapToRing: 0.3 }));
+    expect(serious(result.zones).length).toBeGreaterThan(0);
+    const fixed = planFix(black, result.zones);
+    expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
+    expect(fixed.operations.every((o) => o.kind === 'separar' && o.axis === 'radial')).toBe(true);
+    expect(fixed.removedAreaMm2).toBe(0);
+    // Se movieron las 7 letras, todas hacia adentro y lo mismo: el arco sigue parejo.
+    const r = radial(fixed.moves);
+    expect(r).toHaveLength(7);
+    expect(r.every((x) => x < 0)).toBe(true);
+    expect(Math.max(...r) - Math.min(...r)).toBeLessThan(3);
+    // Solo se trasladan: el área negra no cambia.
+    expect(regionArea(fixed.black)).toBeCloseTo(regionArea(black), -4);
+  });
+
+  it('si dos letras del arco están muy juntas, abre el arco en ese par', () => {
+    // Par 3–4 a 11,5° en vez de 14°: casi se tocan del lado de adentro.
+    const { black, result } = analyzeSvgText(arcSvg({ gapToRing: 0.8, tightPair: 2.5 }));
+    expect(serious(result.zones).length).toBeGreaterThan(0);
+    const fixed = planFix(black, result.zones);
+    expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
+    expect(fixed.operations.map((o) => o.kind === 'separar' && o.axis)).toEqual(['arco']);
+    expect(components(fixed.black)).toHaveLength(components(black).length);
+  });
+
+  it('si casi todos los pares del arco están justos, abre el espaciado parejo a lo largo del arco', () => {
+    const { black, result } = analyzeSvgText(arcSvg({ gapToRing: 0.8, stepDeg: 11.6 }));
+    expect(serious(result.zones).length).toBeGreaterThan(2);
+    const fixed = planFix(black, result.zones);
+    expect(fixed.operations[0]).toMatchObject({ kind: 'espaciar', axis: 'arco' });
+    expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
+    // Las letras se corren a lo largo del arco: casi nada en sentido radial.
+    const r = radial(fixed.moves);
+    expect(fixed.moves.every((m, i) => Math.abs(r[i]) < 0.1 * Math.hypot(m.dx, m.dy))).toBe(true);
+  });
+
+  it('si el arco entero no tiene lugar, corre solo la letra pegada, poco', () => {
+    // La letra del medio está 0,42 mm más afuera (a 0,38 mm del aro); las demás,
+    // a 0,5 mm de un aro de adentro: si baja todo el arco, se pegan a ese aro.
+    const { black, result } = analyzeSvgText(arcSvg({ gapToRing: 0.8, raise: 0.42, innerRing: 11 }));
+    expect(serious(result.zones).length).toBeGreaterThan(0);
+    const fixed = planFix(black, result.zones);
+    expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
+    expect(fixed.moves).toHaveLength(1);
+    const [r] = radial(fixed.moves);
+    expect(r).toBeLessThan(0);
+    expect(-r).toBeLessThanOrEqual(MAX_ARC_LETTER_RADIAL_MM * 1000 + 1);
+  });
+
+  it('una pieza encajada entre dos aros sin lugar no se mueve (no acerca una punta para "resolver" la otra)', () => {
+    const { black, result } = analyzeSvgText(arcSvg({ gapToRing: 0.8, innerRing: 10.9, diamond: true }));
+    const before = serious(result.zones);
+    expect(before.length).toBeGreaterThan(0);
+    const fixed = planFix(black, result.zones);
+    expect(fixed.moves).toHaveLength(0);
     expect(fixed.black).toEqual(black);
   });
 });

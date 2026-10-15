@@ -8,7 +8,9 @@
  *    enteras, respetando la alineación del bloque (ver `layout.ts`). La forma de
  *    cada letra queda intacta. Si en un renglón la mayoría de los pares están
  *    justos, se abre el espaciado de todo el renglón por igual (queda parejo);
- *    si no, se separa solo el par.
+ *    si no, se separa solo el par. En texto en arco, lo mismo a lo largo del
+ *    arco; y si una letra del arco está pegada a un aro u otra pieza, se acerca
+ *    o se aleja del centro todo el tramo de texto.
  * 3. Ojos de letra chicos: se agranda el ojo en paralelo (offset del contorno).
  * 4. Ranuras dentro de una misma pieza: se ensanchan en paralelo.
  *
@@ -46,7 +48,16 @@ import {
   type Paths64,
 } from './geometry';
 import { analyzeBlackRegion, type FresaZone } from './analyze';
-import { buildLayout, separationPlan, trackingPlan, type Layout, type PieceShift } from './layout';
+import {
+  arcTrackingPlan,
+  buildLayout,
+  separationPlan,
+  trackingPlan,
+  type Layout,
+  type PieceShift,
+  type SeparationAxis,
+  type SeparationPlan,
+} from './layout';
 
 /** Una pieza que se movió entera: su región original y cuánto se corrió (µm). */
 export interface PieceMove {
@@ -56,9 +67,9 @@ export interface PieceMove {
 }
 
 export type FixOperation =
-  | { kind: 'separar'; axis: 'x' | 'y'; mm: number }
-  /** Espacio extra entre todas las letras de un renglón. */
-  | { kind: 'espaciar'; axis: 'x'; mm: number }
+  | { kind: 'separar'; axis: SeparationAxis; mm: number }
+  /** Espacio extra entre todas las letras de un renglón (`arco`: de un texto en arco). */
+  | { kind: 'espaciar'; axis: 'x' | 'arco'; mm: number }
   | { kind: 'agrandar_ojo'; mm: number }
   | { kind: 'ensanchar'; mm: number };
 
@@ -177,6 +188,52 @@ function combine(base: PieceShift, delta: PieceShift): PieceShift {
   return out;
 }
 
+const placed = (layout: Layout, id: number, shift: PieceShift): Paths64 => {
+  const t = shift.get(id);
+  return t ? translate(layout.pieces[id].paths, t.dx, t.dy) : layout.pieces[id].paths;
+};
+
+/** Distancia mínima entre dos regiones (µm, de a 10), hasta `max`. */
+function clearance(a: Paths64, b: Paths64, max: number): number {
+  const touches = (d: number) => regionArea(intersect(offset(a, d / 2), offset(b, d / 2))) > 0;
+  if (!touches(max)) return max;
+  let lo = 0;
+  let hi = max;
+  while (hi - lo > 10) {
+    const m = (lo + hi) / 2;
+    if (touches(m)) hi = m;
+    else lo = m;
+  }
+  return hi;
+}
+
+/**
+ * Un movimiento no puede acercar dos piezas que quedan a menos del hueco
+ * mínimo. El análisis puede no notarlo (junto a una punta filosa informa el
+ * mismo ancho aunque la punta casi toque), así que se mide la distancia real.
+ */
+function keepsClearance(layout: Layout, from: PieceShift, to: PieceShift, minGapUm: number): boolean {
+  const same = (a?: { dx: number; dy: number }, b?: { dx: number; dy: number }) =>
+    (a?.dx ?? 0) === (b?.dx ?? 0) && (a?.dy ?? 0) === (b?.dy ?? 0);
+  for (const p of layout.pieces) {
+    if (same(from.get(p.id), to.get(p.id))) continue;
+    const box = grow(unionBounds(shiftedBounds(p.bounds, from.get(p.id)), shiftedBounds(p.bounds, to.get(p.id))), minGapUm + 20);
+    const p0 = placed(layout, p.id, from);
+    const p1 = placed(layout, p.id, to);
+    for (const q of layout.pieces) {
+      if (q.id === p.id) continue;
+      const qa = from.get(q.id);
+      const qb = to.get(q.id);
+      if (!boundsOverlap(shiftedBounds(q.bounds, qa), box) && !boundsOverlap(shiftedBounds(q.bounds, qb), box)) continue;
+      const after = clearance(p1, clipToBounds(placed(layout, q.id, to), box, 0), minGapUm);
+      if (after >= minGapUm) continue;
+      const before = clearance(p0, clipToBounds(placed(layout, q.id, from), box, 0), minGapUm);
+      if (after < before - 10) return false;
+    }
+  }
+  return true;
+}
+
 function lineWindow(layout: Layout, pieceIds: Iterable<number>, shift: PieceShift): Bounds | null {
   let w: Bounds | null = null;
   for (const id of pieceIds) {
@@ -258,6 +315,7 @@ export function planFix(
 ): FixResult {
   const R = Math.round(cutRadiusAtDepth(profile, profile.minDepthMm) * UM);
   const minGap = minGapWidthMm(profile);
+  const minGapUm = Math.round(minGap * UM);
   const operations: FixOperation[] = [];
   const targetBounds = targets.filter(isSerious).map(zoneBoundsUm);
   // Las zonas se corren cuando se mueven letras: se reconocen por cercanía.
@@ -271,35 +329,57 @@ export function planFix(
   if (fixOptions.allowMoves) {
     // a) Renglones donde la mayoría de los pares de letras están muy juntos:
     //    se abre el espaciado de todo el renglón por igual (queda parejo).
-    const tight = new Map<number, { pairs: Set<number>; need: number }>();
+    //    Igual en un tramo de texto en arco, a lo largo del arco.
+    type Row = { kind: 'x' | 'arco'; idx: number };
+    const rowOf = (id: number): (Row & { glyph: number }) | null => {
+      const li = layout.lineOf.get(id);
+      if (li != null) return { kind: 'x', idx: li, glyph: layout.glyphOf.get(id)! };
+      const ai = layout.arcOf.get(id);
+      if (ai != null) return { kind: 'arco', idx: ai, glyph: layout.arcGlyphOf.get(id)! };
+      return null;
+    };
+    const tight = new Map<string, Row & { pairs: Set<number>; need: number }>();
     for (const z of analyzeBlackRegion(current, profile, options).zones) {
       if (z.kind !== 'paso_angosto' || !isTarget(z)) continue;
       const [a, b] = piecesTouching(layout, shift, toUm(z.rings), zoneBoundsUm(z));
       if (a == null || b == null) continue;
-      const la = layout.lineOf.get(a);
-      const ga = layout.glyphOf.get(a);
-      const gb = layout.glyphOf.get(b);
-      if (la == null || la !== layout.lineOf.get(b) || ga == null || gb == null || Math.abs(ga - gb) !== 1) continue;
-      const entry = tight.get(la) ?? { pairs: new Set<number>(), need: 0 };
-      entry.pairs.add(Math.min(ga, gb));
+      const ra = rowOf(a);
+      const rb = rowOf(b);
+      if (!ra || !rb || ra.kind !== rb.kind || ra.idx !== rb.idx || Math.abs(ra.glyph - rb.glyph) !== 1) continue;
+      const key = `${ra.kind}${ra.idx}`;
+      const entry = tight.get(key) ?? { kind: ra.kind, idx: ra.idx, pairs: new Set<number>(), need: 0 };
+      entry.pairs.add(Math.min(ra.glyph, rb.glyph));
       entry.need = Math.max(entry.need, Math.max(0.03, minGap - z.gapWidthMm + 0.03) * UM);
-      tight.set(la, entry);
+      tight.set(key, entry);
     }
-    for (const [li, { pairs, need }] of tight) {
-      const line = layout.lines[li];
-      const plan = trackingPlan(layout, li);
-      if (!plan || pairs.size / (line.glyphs.length - 1) < MIN_TIGHT_SHARE) continue;
-      const window = grow(line.bounds, MAX_TRACKING_MM * UM * line.glyphs.length + 1.5 * UM);
-      const before = seriousIn(current, window, profile, options);
-      for (const t of [need, need + 50, need + 120].map(Math.round).filter((v) => v <= MAX_TRACKING_MM * UM)) {
+    for (const { kind, idx, pairs, need } of tight.values()) {
+      const glyphs = kind === 'x' ? layout.lines[idx].glyphs : layout.arcs[idx].glyphs;
+      const plan = kind === 'x' ? trackingPlan(layout, idx) : arcTrackingPlan(layout, idx);
+      if (!plan || pairs.size / (glyphs.length - 1) < MIN_TIGHT_SHARE) continue;
+      const window = lineWindow(layout, glyphs.flat(), new Map());
+      const wide = window && grow(window, MAX_TRACKING_MM * UM * glyphs.length);
+      const before = seriousIn(current, wide, profile, options);
+      // Se queda con el paso que más resuelve (el menor si empatan): en un arco
+      // el hueco entre letras es una cuña y el ancho informado no alcanza para
+      // saber cuánto abrir.
+      let chosen: { t: number; next: PieceShift; candidate: Paths64; left: number } | null = null;
+      const steps = [need, need + 50, need + 120, need + 220, need + 350]
+        .map(Math.round)
+        .filter((v) => v <= MAX_TRACKING_MM * UM);
+      for (const t of steps) {
         const next = combine(shift, plan(t));
         const candidate = assemble(layout, next);
         if (components(candidate).length !== layout.pieces.length) continue;
-        if (!improves(before, candidate, window, t * line.glyphs.length + 50, profile, options)) continue;
-        shift = next;
-        current = candidate;
-        operations.push({ kind: 'espaciar', axis: 'x', mm: t / UM });
-        break;
+        if (!keepsClearance(layout, shift, next, minGapUm)) continue;
+        if (!improves(before, candidate, wide, t * glyphs.length + 50, profile, options)) continue;
+        const left = seriousIn(candidate, wide, profile, options).length;
+        if (!chosen || left < chosen.left) chosen = { t, next, candidate, left };
+        if (left === 0) break;
+      }
+      if (chosen) {
+        shift = chosen.next;
+        current = chosen.candidate;
+        operations.push({ kind: 'espaciar', axis: kind, mm: chosen.t / UM });
       }
     }
 
@@ -331,36 +411,49 @@ export function planFix(
         const db = since(touching[1]);
         if (da.dx !== db.dx || da.dy !== db.dy) continue;
         const zb = shiftedBounds(zb0, da);
-        const plan = separationPlan(layout, touching[0], touching[1]);
+        // El centro del hueco dice de qué lado de un arco está la otra pieza
+        // (los corrimientos previos son chicos al lado del alto de una letra).
+        const plan = separationPlan(layout, touching[0], touching[1], {
+          x: Math.round(z.center.x * UM),
+          y: Math.round(z.center.y * UM),
+        });
         if (!plan) {
           failed.push(zb);
           continue;
         }
         let accepted = false;
         const need = Math.max(0.03, minGap - z.gapWidthMm + 0.03) * UM;
-        const steps = [need, need + 50, need + 120, need + 220, need + 350]
-          .map(Math.round)
-          .filter((d) => d <= MAX_SHIFT_MM * UM);
-        const maxStep = steps[steps.length - 1] ?? 0;
-        const widest = plan.shiftsFor(maxStep);
-        const window = plan.axis === 'x' ? lineWindow(layout, widest.keys(), combine(shift, widest)) : null;
-        const near = grow(zb, maxStep + 1.5 * UM);
-        const beforeNear = seriousIn(current, near, profile, options);
-        let beforeWide: Bounds[] | null = null;
-        for (const d of steps) {
-          const next = combine(shift, plan.shiftsFor(d));
-          const candidate = assemble(layout, next);
-          // Mover nunca puede encimar piezas (dos letras pegadas "resuelven" el hueco).
-          if (components(candidate).length !== layout.pieces.length) continue;
-          if (!improves(beforeNear, candidate, near, d + 50, profile, options)) continue;
-          beforeWide ??= seriousIn(current, window, profile, options);
-          if (improves(beforeWide, candidate, window, d + 50, profile, options)) {
-            shift = next;
-            current = candidate;
-            operations.push({ kind: 'separar', axis: plan.axis, mm: d / UM });
-            accepted = true;
-            acceptedInRound++;
-            break;
+        // Si el plan no sirve se prueba su alternativa (en un arco: la letra sola).
+        for (let p: SeparationPlan | undefined = plan; p && !accepted; p = p.fallback) {
+          const cap = Math.min(MAX_SHIFT_MM * UM, p.maxUm ?? Infinity);
+          // Primero, casi sin margen: cuando la pieza está encajada entre dos
+          // cosas (una letra de arco entre dos aros) cada centésima cuenta.
+          const steps = [need - 25, need, need + 50, need + 120, need + 220, need + 350]
+            .map(Math.round)
+            .filter((d) => d >= 30 && d <= cap);
+          const maxStep = steps[steps.length - 1] ?? 0;
+          const widest = p.shiftsFor(maxStep);
+          // Entre renglones (y) se mueve medio diseño: se re-chequea todo.
+          const window = p.axis === 'y' ? null : lineWindow(layout, widest.keys(), combine(shift, widest));
+          const near = grow(zb, maxStep + 1.5 * UM);
+          const beforeNear = seriousIn(current, near, profile, options);
+          let beforeWide: Bounds[] | null = null;
+          for (const d of steps) {
+            const next = combine(shift, p.shiftsFor(d));
+            const candidate = assemble(layout, next);
+            // Mover nunca puede encimar piezas (dos letras pegadas "resuelven" el hueco).
+            if (components(candidate).length !== layout.pieces.length) continue;
+            if (!keepsClearance(layout, shift, next, minGapUm)) continue;
+            if (!improves(beforeNear, candidate, near, d + 50, profile, options)) continue;
+            beforeWide ??= seriousIn(current, window, profile, options);
+            if (improves(beforeWide, candidate, window, d + 50, profile, options)) {
+              shift = next;
+              current = candidate;
+              operations.push({ kind: 'separar', axis: p.axis, mm: d / UM });
+              accepted = true;
+              acceptedInRound++;
+              break;
+            }
           }
         }
         if (!accepted) failed.push(zb);

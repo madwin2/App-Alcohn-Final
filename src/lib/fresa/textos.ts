@@ -83,9 +83,15 @@ export function resumenOperaciones(ops: FixOperation[]): string {
   const esp = ops.filter((o) => o.kind === 'espaciar');
   if (esp.length) {
     const hi = Math.max(...esp.map((o) => o.mm));
-    parts.push(
-      `se abrió el espaciado de ${esp.length === 1 ? '1 renglón' : `${esp.length} renglones`} (hasta ${mm(hi)} mm entre letras)`,
-    );
+    const arcos = esp.filter((o) => o.axis === 'arco').length;
+    const renglones = esp.length - arcos;
+    const que = [
+      renglones ? (renglones === 1 ? '1 renglón' : `${renglones} renglones`) : '',
+      arcos ? (arcos === 1 ? '1 texto en arco' : `${arcos} textos en arco`) : '',
+    ]
+      .filter(Boolean)
+      .join(' y ');
+    parts.push(`se abrió el espaciado de ${que} (hasta ${mm(hi)} mm entre letras)`);
   }
   const sep = ops.filter((o) => o.kind === 'separar');
   if (sep.length) {

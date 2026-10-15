@@ -6,6 +6,13 @@
  * juntas se separan moviendo letras enteras, sin romper la alineación del
  * bloque (si las líneas están alineadas a la izquierda, se corre hacia la
  * derecha lo que está a la derecha del hueco; si están centradas, se reparte).
+ *
+ * El texto en arco (típico de los sellos redondos: un texto arriba y otro abajo
+ * siguiendo un aro) se reconoce aparte: letras cuyos centros caen sobre un mismo
+ * círculo. Ahí se separa en sentido radial (todo el tramo se acerca o se aleja
+ * del centro, como achicar o agrandar el radio del arco) o a lo largo del arco
+ * (se abre el espaciado girando las letras alrededor del centro). Las letras se
+ * trasladan, no se giran: en los corrimientos de décimas de mm no se nota.
  */
 import { UM, components, type Bounds, type Paths64 } from './geometry';
 
@@ -30,6 +37,26 @@ export interface Line {
   straight: boolean;
 }
 
+/**
+ * Tramo de texto en arco: letras seguidas sobre un mismo círculo. Un círculo
+ * puede tener varios tramos (el texto de arriba, el de abajo, una estrella suelta).
+ */
+export interface Arc {
+  /** Centro y radio (µm) del círculo por el que pasan los centros de las letras. */
+  cx: number;
+  cy: number;
+  r: number;
+  /**
+   * Radio del borde de adentro del tramo (µm): ahí las letras quedan más
+   * juntas, así que el espaciado se mide ahí.
+   */
+  inner: number;
+  /** Letras (grupos de piezas) ordenadas por ángulo. */
+  glyphs: number[][];
+  /** Centro de cada letra (µm). */
+  centers: Pt[];
+}
+
 export interface Layout {
   pieces: Piece[];
   /** Piezas que no se mueven nunca: marcos, recuadros y partes grandes de un dibujo. */
@@ -38,7 +65,13 @@ export interface Layout {
   lines: Line[];
   lineOf: Map<number, number>;
   glyphOf: Map<number, number>;
+  /** Tramos de texto en arco (sus piezas no están en `lines`). */
+  arcs: Arc[];
+  arcOf: Map<number, number>;
+  arcGlyphOf: Map<number, number>;
 }
+
+type Pt = { x: number; y: number };
 
 /** Desplazamiento (µm) por pieza. */
 export type PieceShift = Map<number, { dx: number; dy: number }>;
@@ -96,9 +129,67 @@ export function buildLayout(black: Paths64): Layout {
   const typicalH = median(pieces.filter((p) => !containers.has(p.id)).map((p) => p.bounds.maxY - p.bounds.minY));
   for (const p of pieces) if (p.bounds.maxY - p.bounds.minY > 2.5 * typicalH) containers.add(p.id);
 
-  // Líneas: piezas que se superponen bastante en vertical. Las más altas
-  // primero, para que definan la "caja" de cada línea.
-  const free = pieces.filter((p) => !containers.has(p.id));
+  // Texto en arco: al agrupar por altura un arco se parte en "renglones"
+  // falsos (dos letras de los extremos a la misma altura), así que se busca
+  // antes de armar los renglones. Para no confundir un bloque de texto recto
+  // con un arco, se le pasan los renglones rectos que se ven a primera vista.
+  const loose = pieces.filter((p) => !containers.has(p.id));
+  const straightRows = buildLines(loose, pieces)
+    .filter((l) => l.straight && l.glyphs.length >= 3)
+    .map((l) => l.glyphs);
+  const arcs = detectArcs(loose, straightRows);
+  const inArc = new Set(arcs.flatMap((a) => a.glyphs.flat()));
+
+  const lines = buildLines(
+    loose.filter((p) => !inArc.has(p.id)),
+    pieces,
+  );
+  lines.sort((a, z) => a.bounds.minY + a.bounds.maxY - (z.bounds.minY + z.bounds.maxY));
+
+  // Alineación: se compara cada renglón recto con los demás renglones rectos
+  // (un arco o una pieza suelta no definen alineación). Tolerancia: 1,5 % del
+  // ancho del bloque, al menos 0,25 mm. Sin otro renglón con quien comparar,
+  // se toma como centrado (se reparte a los dos lados).
+  const textLines = lines.filter((l) => l.straight);
+  if (textLines.length) {
+    const block = unionBounds(textLines.map((l) => l.bounds));
+    const tol = Math.max(0.25 * UM, 0.015 * (block.maxX - block.minX));
+    for (const l of textLines) {
+      const others = textLines.filter((o) => o !== l);
+      const left = others.some((o) => Math.abs(o.bounds.minX - l.bounds.minX) <= tol);
+      const right = others.some((o) => Math.abs(o.bounds.maxX - l.bounds.maxX) <= tol);
+      l.align = left ? 'left' : right ? 'right' : 'center';
+    }
+  }
+
+  const lineOf = new Map<number, number>();
+  const glyphOf = new Map<number, number>();
+  lines.forEach((l, li) =>
+    l.glyphs.forEach((g, gi) =>
+      g.forEach((id) => {
+        lineOf.set(id, li);
+        glyphOf.set(id, gi);
+      }),
+    ),
+  );
+  const arcOf = new Map<number, number>();
+  const arcGlyphOf = new Map<number, number>();
+  arcs.forEach((a, ai) =>
+    a.glyphs.forEach((g, gi) =>
+      g.forEach((id) => {
+        arcOf.set(id, ai);
+        arcGlyphOf.set(id, gi);
+      }),
+    ),
+  );
+  return { pieces, containers, lines, lineOf, glyphOf, arcs, arcOf, arcGlyphOf };
+}
+
+/**
+ * Renglones: piezas que se superponen bastante en vertical. Las más altas
+ * primero, para que definan la "caja" de cada renglón.
+ */
+function buildLines(free: Piece[], pieces: Piece[]): Line[] {
   const byHeight = [...free].sort(
     (a, z) => z.bounds.maxY - z.bounds.minY - (a.bounds.maxY - a.bounds.minY),
   );
@@ -174,35 +265,317 @@ export function buildLayout(black: Paths64): Layout {
       straight: isStraight(glyphBounds),
     };
   });
-  lines.sort((a, z) => a.bounds.minY + a.bounds.maxY - (z.bounds.minY + z.bounds.maxY));
+  return lines;
+}
 
-  // Alineación: se compara cada renglón recto con los demás renglones rectos
-  // (un arco o una pieza suelta no definen alineación). Tolerancia: 1,5 % del
-  // ancho del bloque, al menos 0,25 mm. Sin otro renglón con quien comparar,
-  // se toma como centrado (se reparte a los dos lados).
-  const textLines = lines.filter((l) => l.straight);
-  if (textLines.length) {
-    const block = unionBounds(textLines.map((l) => l.bounds));
-    const tol = Math.max(0.25 * UM, 0.015 * (block.maxX - block.minX));
-    for (const l of textLines) {
-      const others = textLines.filter((o) => o !== l);
-      const left = others.some((o) => Math.abs(o.bounds.minX - l.bounds.minX) <= tol);
-      const right = others.some((o) => Math.abs(o.bounds.maxX - l.bounds.maxX) <= tol);
-      l.align = left ? 'left' : right ? 'right' : 'center';
+// ---------------------------------------------------------------- texto en arco
+
+const centerOf = (b: Bounds): Pt => ({ x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 });
+
+interface Circle {
+  cx: number;
+  cy: number;
+  r: number;
+}
+
+function circleThrough(a: Pt, b: Pt, c: Pt): Circle | null {
+  const d = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+  if (Math.abs(d) < 1e-6) return null;
+  const a2 = a.x * a.x + a.y * a.y;
+  const b2 = b.x * b.x + b.y * b.y;
+  const c2 = c.x * c.x + c.y * c.y;
+  const cx = (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / d;
+  const cy = (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / d;
+  return { cx, cy, r: Math.hypot(a.x - cx, a.y - cy) };
+}
+
+/** Círculo por mínimos cuadrados (Kåsa), en coordenadas centradas. */
+function fitCircle(pts: Pt[]): Circle | null {
+  const mx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const my = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  let suu = 0;
+  let svv = 0;
+  let suv = 0;
+  let bu = 0;
+  let bv = 0;
+  for (const p of pts) {
+    const u = p.x - mx;
+    const v = p.y - my;
+    suu += u * u;
+    svv += v * v;
+    suv += u * v;
+    bu += (u * u * u + u * v * v) / 2;
+    bv += (v * v * v + v * u * u) / 2;
+  }
+  const det = suu * svv - suv * suv;
+  if (Math.abs(det) < 1e-6) return null;
+  const uc = (bu * svv - bv * suv) / det;
+  const vc = (suu * bv - suv * bu) / det;
+  return { cx: uc + mx, cy: vc + my, r: Math.sqrt(uc * uc + vc * vc + (suu + svv) / pts.length) };
+}
+
+/** Distancia máxima de los puntos a la recta que mejor los ajusta (≈ 0 en un renglón recto). */
+function sagitta(pts: Pt[]): number {
+  const mx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const my = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  let sxx = 0;
+  let syy = 0;
+  let sxy = 0;
+  for (const p of pts) {
+    sxx += (p.x - mx) ** 2;
+    syy += (p.y - my) ** 2;
+    sxy += (p.x - mx) * (p.y - my);
+  }
+  const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const nx = -Math.sin(th);
+  const ny = Math.cos(th);
+  return Math.max(...pts.map((p) => Math.abs((p.x - mx) * nx + (p.y - my) * ny)));
+}
+
+/**
+ * Busca círculos por los que pasan los centros de varias letras. Se acepta un
+ * círculo si tiene al menos 3 letras seguidas sobre él, si de verdad se curva
+ * (un renglón recto no es un arco) y si no corta un renglón recto por la mitad
+ * (eso es un bloque de texto, no un arco). Las letras de cada círculo se
+ * ordenan por ángulo y se cortan en tramos donde hay un salto grande.
+ *
+ * `straightRows`: renglones rectos de 3 o más letras que se ven a primera
+ * vista (letras = ids de piezas).
+ */
+function detectArcs(loose: Piece[], straightRows: number[][][]): Arc[] {
+  if (loose.length < 4) return [];
+  const size = (b: Bounds) => Math.max(b.maxX - b.minX, b.maxY - b.minY);
+  const typ = median(loose.map((p) => size(p.bounds)));
+  if (!(typ > 0)) return [];
+
+  // Letras: las piezas chicas (puntos, tildes) van con la letra más cercana.
+  const glyphs = loose.filter((p) => size(p.bounds) >= 0.4 * typ).map((p) => ({ ids: [p.id], b: p.bounds }));
+  for (const p of loose) {
+    if (size(p.bounds) >= 0.4 * typ) continue;
+    const c = centerOf(p.bounds);
+    let best: (typeof glyphs)[number] | null = null;
+    let bestD = 0.8 * typ;
+    for (const g of glyphs) {
+      const q = centerOf(g.b);
+      const d = Math.hypot(q.x - c.x, q.y - c.y);
+      if (d < bestD) {
+        bestD = d;
+        best = g;
+      }
+    }
+    if (best) {
+      best.ids.push(p.id);
+      best.b = unionBounds([best.b, p.bounds]);
     }
   }
+  const box = unionBounds(loose.map((p) => p.bounds));
+  const diag = Math.hypot(box.maxX - box.minX, box.maxY - box.minY);
+  // Tolerancia: las letras de un arco no tienen todas el mismo alto.
+  const tol = 0.3 * typ;
+  type G = { ids: number[]; c: Pt };
 
-  const lineOf = new Map<number, number>();
-  const glyphOf = new Map<number, number>();
-  lines.forEach((l, li) =>
-    l.glyphs.forEach((g, gi) =>
-      g.forEach((id) => {
-        lineOf.set(id, li);
-        glyphOf.set(id, gi);
-      }),
-    ),
-  );
-  return { pieces, containers, lines, lineOf, glyphOf };
+  /** Letras sobre el círculo, en tramos ordenados por ángulo; `null` si no es un arco. */
+  const evaluate = (pool: G[], k: Circle): G[][] | null => {
+    let members = pool.filter((g) => Math.abs(Math.hypot(g.c.x - k.cx, g.c.y - k.cy) - k.r) <= tol);
+    if (members.length < 4) return null;
+    const ids = new Set(members.flatMap((g) => g.ids));
+    for (const row of straightRows) {
+      const inside = row.filter((g) => g.some((id) => ids.has(id))).length;
+      if (inside && (inside < row.length || row.length >= 5)) return null;
+    }
+    if (sagitta(members.map((g) => g.c)) < 0.35 * typ) return null;
+    // Orden por ángulo, empezando después del salto más grande.
+    const ang = (p: Pt) => Math.atan2(p.y - k.cy, p.x - k.cx);
+    members.sort((a, z) => ang(a.c) - ang(z.c));
+    let start = 0;
+    let gapMax = -1;
+    members.forEach((g, i) => {
+      let gap = ang(g.c) - ang(members[(i + members.length - 1) % members.length].c);
+      if (gap <= 0) gap += 2 * Math.PI;
+      if (gap > gapMax) {
+        gapMax = gap;
+        start = i;
+      }
+    });
+    members = [...members.slice(start), ...members.slice(0, start)];
+    // Tramos: letras seguidas, con centros a menos de ~1,8 letras de distancia.
+    const runs: G[][] = [];
+    for (const g of members) {
+      const run = runs[runs.length - 1];
+      const last = run?.[run.length - 1];
+      if (last && Math.hypot(g.c.x - last.c.x, g.c.y - last.c.y) <= 1.8 * typ) run.push(g);
+      else runs.push([g]);
+    }
+    return runs.some((r) => r.length >= 3) ? runs : null;
+  };
+
+  const arcs: Arc[] = [];
+  let pool: G[] = glyphs.map((g) => ({ ids: g.ids, c: centerOf(g.b) }));
+  for (let pass = 0; pass < 4 && pool.length >= 4; pass++) {
+    // Ternas de letras → el círculo válido con más letras encima. Con muchas
+    // piezas se recorre una muestra fija (siempre la misma: determinístico).
+    const n = pool.length;
+    const every = Math.max(1, Math.ceil((n * (n - 1) * (n - 2)) / 6 / 20000));
+    let best: { circle: Circle; runs: G[][]; count: number } | null = null;
+    let t = 0;
+    for (let i = 0; i < n; i++)
+      for (let j = i + 1; j < n; j++)
+        for (let k = j + 1; k < n; k++) {
+          if (t++ % every) continue;
+          const c = circleThrough(pool[i].c, pool[j].c, pool[k].c);
+          if (!c || c.r < 1.2 * typ || c.r > diag) continue;
+          const m = pool.filter((g) => Math.abs(Math.hypot(g.c.x - c.cx, g.c.y - c.cy) - c.r) <= tol).length;
+          if (m < 4 || m <= (best?.count ?? 0)) continue;
+          const runs = evaluate(pool, c);
+          if (runs) best = { circle: c, runs, count: m };
+        }
+    if (!best) break;
+    // Ajuste fino con todas las letras del círculo.
+    for (let it = 0; it < 2; it++) {
+      const refit = fitCircle(best.runs.flat().map((g) => g.c));
+      if (!refit || refit.r > diag) break;
+      const runs = evaluate(pool, refit);
+      if (!runs || runs.flat().length < best.count) break;
+      best = { circle: refit, runs, count: runs.flat().length };
+    }
+    const { circle, runs } = best;
+    const byId = new Map(loose.map((p) => [p.id, p]));
+    const innerOf = (ids: number[]) =>
+      Math.min(
+        ...ids.flatMap((id) =>
+          byId.get(id)!.paths.flatMap((ring) => ring.map((q) => Math.hypot(q.x - circle.cx, q.y - circle.cy))),
+        ),
+      );
+    for (const r of runs)
+      arcs.push({
+        cx: Math.round(circle.cx),
+        cy: Math.round(circle.cy),
+        r: Math.round(circle.r),
+        inner: Math.max(1, Math.round(innerOf(r.flatMap((g) => g.ids)))),
+        glyphs: r.map((g) => g.ids),
+        centers: r.map((g) => g.c),
+      });
+    const used = new Set(runs.flat());
+    pool = pool.filter((g) => !used.has(g));
+  }
+  return arcs;
+}
+
+/** Traslación (µm) que lleva `p` a girar `angle` rad alrededor del centro del arco. */
+function rotationShift(arc: Arc, p: Pt, angle: number): { dx: number; dy: number } {
+  const ux = p.x - arc.cx;
+  const uy = p.y - arc.cy;
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return { dx: Math.round(ux * c - uy * s - ux), dy: Math.round(ux * s + uy * c - uy) };
+}
+
+/** Traslación (µm) de `d` en sentido radial (positivo: hacia afuera). */
+function radialShift(arc: Arc, p: Pt, d: number): { dx: number; dy: number } {
+  const ux = p.x - arc.cx;
+  const uy = p.y - arc.cy;
+  const len = Math.hypot(ux, uy) || 1;
+  return { dx: Math.round((ux / len) * d), dy: Math.round((uy / len) * d) };
+}
+
+function setGlyph(m: PieceShift, ids: number[], t: { dx: number; dy: number }) {
+  if (t.dx || t.dy) for (const id of ids) m.set(id, t);
+}
+
+/**
+ * Abrir el espaciado de todo un tramo de arco por igual: cada letra gira
+ * respecto de la anterior lo necesario para que el hueco se abra `t` µm en el
+ * borde de adentro, anclado en el medio del tramo (el texto sigue centrado
+ * donde estaba).
+ */
+export function arcTrackingPlan(layout: Layout, arcIdx: number): ((t: number) => PieceShift) | null {
+  const arc = layout.arcs[arcIdx];
+  if (!arc || arc.glyphs.length < 3) return null;
+  const anchor = (arc.glyphs.length - 1) / 2;
+  return (t) => {
+    const m: PieceShift = new Map();
+    arc.glyphs.forEach((g, k) => setGlyph(m, g, rotationShift(arc, arc.centers[k], ((k - anchor) * t) / arc.inner)));
+    return m;
+  };
+}
+
+/**
+ * - `x`, `y`: renglones rectos (a lo largo / entre renglones).
+ * - `radial`: un tramo de texto en arco se acerca o se aleja del centro.
+ * - `arco`: dos letras de un mismo tramo se separan a lo largo del arco.
+ */
+export type SeparationAxis = 'x' | 'y' | 'radial' | 'arco';
+
+export interface SeparationPlan {
+  axis: SeparationAxis;
+  shiftsFor: (d: number) => PieceShift;
+  /** Tope propio del corrimiento (µm), si es menor que el general. */
+  maxUm?: number;
+  /** Qué probar si este plan no sirve. */
+  fallback?: SeparationPlan;
+}
+
+/**
+ * Corrimiento máximo (mm) de una letra sola de un texto en arco, fuera de su
+ * arco (las demás quedan donde estaban). PROVISORIO: a confirmar con el dueño.
+ */
+export const MAX_ARC_LETTER_RADIAL_MM = 0.15;
+
+/**
+ * Separación cuando alguna de las dos piezas es de un texto en arco.
+ * `undefined`: ninguna lo es (sigue la lógica de renglones rectos).
+ */
+function arcSeparationPlan(layout: Layout, a: number, b: number, near?: Pt): SeparationPlan | null | undefined {
+  const aa = layout.arcOf.get(a);
+  const ab = layout.arcOf.get(b);
+  if (aa == null && ab == null) return undefined;
+
+  // Dos letras del mismo tramo: se abre el arco en ese par, mitad para cada lado.
+  if (aa != null && aa === ab) {
+    const arc = layout.arcs[aa];
+    const ga = layout.arcGlyphOf.get(a)!;
+    const gb = layout.arcGlyphOf.get(b)!;
+    if (ga === gb) return null;
+    const split = Math.min(ga, gb);
+    return {
+      axis: 'arco',
+      shiftsFor: (d) => {
+        const m: PieceShift = new Map();
+        const lo = -Math.round(d / 2);
+        const hi = d + lo;
+        arc.glyphs.forEach((g, k) => setGlyph(m, g, rotationShift(arc, arc.centers[k], (k <= split ? lo : hi) / arc.inner)));
+        return m;
+      },
+    };
+  }
+  // Letra de un arco contra otra cosa (un aro, un dibujo, un renglón): todo el
+  // tramo se aleja de esa pieza en sentido radial (como achicar o agrandar el
+  // radio del arco). Si no hay lugar (el tramo está encajado entre dos aros y
+  // otra letra choca del otro lado), se corre solo esa letra, poco. Dos arcos
+  // distintos no tienen un movimiento coherente.
+  if ((aa != null && ab != null) || !near) return null;
+  const arc = layout.arcs[(aa ?? ab)!];
+  const gi = layout.arcGlyphOf.get(aa != null ? a : b)!;
+  const c = arc.centers[gi];
+  const sign = Math.hypot(near.x - arc.cx, near.y - arc.cy) < Math.hypot(c.x - arc.cx, c.y - arc.cy) ? 1 : -1;
+  const letter: SeparationPlan = {
+    axis: 'radial',
+    maxUm: MAX_ARC_LETTER_RADIAL_MM * UM,
+    shiftsFor: (d) => {
+      const m: PieceShift = new Map();
+      setGlyph(m, arc.glyphs[gi], radialShift(arc, c, sign * d));
+      return m;
+    },
+  };
+  return {
+    axis: 'radial',
+    shiftsFor: (d) => {
+      const m: PieceShift = new Map();
+      arc.glyphs.forEach((g, k) => setGlyph(m, g, radialShift(arc, arc.centers[k], sign * d)));
+      return m;
+    },
+    fallback: arc.glyphs.length > 1 ? letter : undefined,
+  };
 }
 
 /**
@@ -234,7 +607,11 @@ export function separationPlan(
   layout: Layout,
   a: number,
   b: number,
-): { axis: 'x' | 'y'; shiftsFor: (d: number) => PieceShift } | null {
+  /** Un punto del hueco (µm): dice de qué lado de un arco está la otra pieza. */
+  near?: Pt,
+): SeparationPlan | null {
+  const arcPlan = arcSeparationPlan(layout, a, b, near);
+  if (arcPlan !== undefined) return arcPlan;
   if (layout.containers.has(a) || layout.containers.has(b)) return null;
   const la = layout.lineOf.get(a);
   const lb = layout.lineOf.get(b);

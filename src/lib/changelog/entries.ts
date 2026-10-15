@@ -973,7 +973,7 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
       {
         heading: 'Se corrige solo, antes de Aspire',
-        body: 'Tocá el chip y «Corregir automáticamente»: abre solo esos huecos, lo justo. Comparás antes y después y usás el corregido. Lo que no se puede arreglar sin romper el diseño queda marcado para hacer a mano.',
+        body: '«Corregir automáticamente» adapta el diseño: separa letras manteniendo la alineación y agranda ojos sin dejar trazos de menos de 0,4 mm. Comparás antes y después; lo que no se puede arreglar queda marcado para hacer a mano.',
         icon: Wand2,
       },
       {

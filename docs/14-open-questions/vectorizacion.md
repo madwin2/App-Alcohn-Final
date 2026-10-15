@@ -80,3 +80,11 @@
 - ❓ **Pendiente**: profundidad final del V-carve en Alimento (para el detalle general es 0,6 mm; con 1 mm de mínima tiene que ser mayor). No cambia el cálculo, solo el texto.
 - ❓ **Pendiente**: el 1 mm de Alimento, ¿aplica a toda separación entre letras y ojos (como hoy) o solo a algunas zonas?
 - **Documentado en**: [chequeo-de-fresa §2–3](../02-modules/vectorizacion/chequeo-de-fresa.md), [ADR-024](../13-decisions/ADR-024-chequeo-de-fresa-en-vectorizacion.md).
+
+### Q-VEC-012
+- **Módulo**: Vectorización / chequeo de fresa · **Estado**: pendiente (dueño)
+- **Pregunta**: En **texto en arco** pegado a un aro, la corrección acerca o aleja del centro **todo el tramo** (hasta 0,8 mm, como con renglones rectos). Cuando el tramo está encajado entre dos aros y eso no alcanza, corre **una letra sola** fuera del arco, hoy hasta **0,15 mm** (valor provisorio, `MAX_ARC_LETTER_RADIAL_MM`). ¿Está bien correr una letra sola fuera de su arco? ¿Hasta cuánto?
+- **Evidencia**: "Rockets Butchery" (40 mm): con letra sola se resuelven C, O, ' y S (0,04–0,09 mm); sin esa opción quedaban pegadas al aro.
+- **Por qué importa**: es una regla de cuánto se puede cambiar el diseño; si una letra se sale mucho del arco se nota.
+- **Impacto**: bajo.
+- **Documentado en**: [chequeo-de-fresa §4](../02-modules/vectorizacion/chequeo-de-fresa.md).

@@ -55,6 +55,8 @@ Objetivo: **adaptar el diseño para que la fresa pase**, como lo haría Fede, el
 
 **Armado del diseño** (`layout.ts`): las piezas negras se agrupan en letras (una letra con sus partes sueltas, p. ej. la i y su punto) y renglones. De cada renglón se calcula si es **recto** (letras de alto parecido sobre una misma base; un texto en arco no lo es) y su **alineación** (izquierda / derecha / centrada, comparando solo renglones rectos). Los marcos, contornos y dibujos grandes quedan **fijos**.
 
+**Texto en arco** (✅ 2026-10-14): antes de armar renglones se buscan **círculos por los que pasan los centros de varias letras** (típico de los sellos redondos: un texto arriba, otro abajo, estrellas entre los dos, todo sobre el mismo círculo). Se acepta un círculo si tiene al menos 3 letras seguidas encima, si de verdad se curva y si no corta un renglón recto por la mitad (así un bloque de texto recto nunca se toma por arco). Las letras del círculo se ordenan por ángulo y se cortan en **tramos** donde hay un salto grande (en "Rockets Butchery": ROCKET'S, BUTCHERY y cada estrella). De cada tramo se guarda centro, radio y el radio del borde de adentro (donde las letras quedan más juntas).
+
 **Operaciones, en este orden:**
 
 1. **Ángulos** (`angulo`, gravedad baja): punta que se afina hacia adentro. Se aceptan así: la fresa no llega a 0,4 mm pero igual pasa a ~0,1 mm y queda marcado (confirmado por el equipo, [Q-VEC-010](../../14-open-questions/vectorizacion.md#q-vec-010)). No se tocan.
@@ -62,7 +64,8 @@ Objetivo: **adaptar el diseño para que la fresa pase**, como lo haría Fede, el
    - Si en un renglón ≥ 40 % de los pares de letras están justos, se **abre el espaciado de todo el renglón por igual** (hasta 0,5 mm entre letras): queda parejo, no "CE RRO".
    - Si son pares sueltos, se separa solo ese par.
    - La alineación manda qué se mueve: alineado a la izquierda → se corre lo de la derecha; a la derecha → lo de la izquierda; centrado → los dos lados por igual. Entre renglones, los de arriba suben y los de abajo bajan.
-   - Corrimiento máximo 0,8 mm. Solo se aplica si mejora (menos lugares con problema, ninguno nuevo) y si no encima piezas. Texto en arco o piezas fijas: no se mueven.
+   - **Texto en arco**: lo mismo, pero a lo largo del arco (las letras giran alrededor del centro del círculo; se mide la apertura en el borde de adentro). Si una letra del arco está pegada a **otra cosa** (un aro, el dibujo), **todo el tramo se acerca o se aleja del centro** en sentido radial, como achicar o agrandar el radio del arco. Si no hay lugar (el tramo está encajado entre dos aros y otra letra choca del otro lado), se corre **solo esa letra**, como mucho `MAX_ARC_LETTER_RADIAL_MM` = 0,15 mm (❓ provisorio, [Q-VEC-012](../../14-open-questions/vectorizacion.md#q-vec-012)). Las letras se trasladan, no se giran: en décimas de mm no se nota.
+   - Corrimiento máximo 0,8 mm. Solo se aplica si mejora (menos lugares con problema, ninguno nuevo), si no encima piezas y si **no acerca dos piezas que ya estén a menos del hueco mínimo** (se mide la distancia real: junto a una punta filosa, como la de una estrella, el análisis informa el mismo ancho aunque la punta casi toque). Piezas fijas: no se mueven. Para el espaciado parejo se prueban varios pasos y queda el que más resuelve (en un arco el hueco entre letras es una cuña).
 3. **Ojos chicos** (`hueco_cerrado`): offset paralelo del ojo hacia afuera, lo justo.
 4. **Ranuras** (`rincon`, `paso_angosto` dentro de una pieza): se ensanchan en paralelo.
    - En 3 y 4 **ningún trazo negro puede quedar por debajo de 0,4 mm** (`MIN_BLACK_WIDTH_MM`, confirmado por el equipo). Si para abrir el hueco habría que afinar de más, ese lugar queda para editar a mano.
@@ -71,7 +74,7 @@ Siempre: **nunca cambia la topología** (no parte piezas, no une huecos, no borr
 
 **SVG resultante**: las letras movidas se trasladan **en sus propias curvas** (comandos absolutos, nada pasa a polígono). Solo las figuras con offset pasan a polígonos finos (error < 2 µm), marcadas `data-alcohn="corregido-fresa"`; lo demás queda byte a byte. El movimiento solo se aplica si el SVG es "pintura simple" (sin rellenos blancos ni trazos); si no, se aplican solo los offsets. El archivo final se **vuelve a chequear** a la misma escala.
 
-Resultado con vectores reales (oct. 2026): textos con letras justas (OliFlowers, Cerro Colorado, Samadhi) se resuelven moviendo letras, sin sacar negro. Siguen para edición manual: ojos rodeados de trazos finos (sacar más afinaría por debajo de 0,4 mm) y texto en arco.
+Resultado con vectores reales (oct. 2026): textos con letras justas (OliFlowers, Cerro Colorado, Samadhi) se resuelven moviendo letras, sin sacar negro. **Rockets Butchery** (40 mm): de 18 lugares a 13; se resuelven las 5 letras pegadas al aro (C, O, ' y S de ROCKET'S, corridas solas 0,04–0,09 mm hacia adentro porque abajo tienen el círculo interior; BUTCHERY entera 0,10 mm hacia adentro). Lo que queda no es texto en arco que se pueda mover: las estrellas están a 0,22 mm del aro **y** del círculo (la suma no alcanza para que pase la fresa de los dos lados: habría que achicarlas), y el resto es el lobo, los cuchillos y el círculo interior (piezas fijas, ojos con trazos finos). Siguen para edición manual: ojos rodeados de trazos finos (sacar más afinaría por debajo de 0,4 mm) y piezas encajadas sin lugar.
 
 ## 5. Dónde aparece en la app
 
@@ -94,7 +97,7 @@ Resultado con vectores reales (oct. 2026): textos con letras justas (OliFlowers,
 
 - Solo lee **SVG** (EPS/PDF/AI no).
 - Dos perfiles: general (0,3 mm) y Alimento (1 mm). ❓ Profundidad final del V-carve en Alimento: [Q-VEC-011](../../14-open-questions/vectorizacion.md#q-vec-011).
-- Texto en arco pegado a un aro (p. ej. "Rockets Butchery"): se detecta bien, pero la corrección no lo resuelve (no mueve letras en arco).
+- Texto en arco: se mueve entero (radial o a lo largo del arco) o, poco, letra por letra. No se achica ni se gira ninguna letra; una pieza encajada entre dos aros sin lugar de ningún lado (p. ej. las estrellas de "Rockets Butchery") queda para editar a mano.
 - No mira trazos negros demasiado finos (frágiles) ni el desbaste con la fresa grande.
 - La lista puede ser larga en diseños con muchas líneas finas (p. ej. vetas de madera): son problemas reales con este criterio.
 
