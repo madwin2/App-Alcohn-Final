@@ -427,6 +427,13 @@ describe('chequearSvg / corregirSvg', () => {
     expect(chico.sizeSource).toBe('fabricacion');
   });
 
+  it('modo pedido con un diseño parado: 50×10 es 10 de ancho × 50 de alto', async () => {
+    const body = `<path d="${rectD(0, 0, 10, 50)}"/>`;
+    const r = await chequearSvg(svg(body, 10, 50), { mode: 'pedido', requestedWidthMm: 50, requestedHeightMm: 10 });
+    expect(r.widthMm).toBeCloseTo(10, 2);
+    expect(r.heightMm).toBeCloseTo(50, 2);
+  });
+
   it('modo pedido emula la medida que guarda Confirmar', async () => {
     const body = `<path d="${rectD(0, 0, 20, 10)}"/>`;
     const r = await chequearSvg(svg(body), { mode: 'pedido', requestedWidthMm: 40, requestedHeightMm: 20 });

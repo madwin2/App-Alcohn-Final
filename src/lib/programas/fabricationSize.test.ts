@@ -116,6 +116,20 @@ describe('resolveFabricationSize', () => {
     expect(r.heightMm).toBeCloseTo(30, 5);
   });
 
+  it('diseño parado (10 de ancho × 50 de alto) en un pedido 50×10 → sin popup', () => {
+    const r = resolveFabricationSize(50, 10, { widthMm: 10, heightMm: 50 });
+    expect(r.needsReview).toBe(false);
+    expect(Math.max(r.widthMm, r.heightMm)).toBe(50);
+    expect(Math.min(r.widthMm, r.heightMm)).toBe(10);
+  });
+
+  it('diseño parado que sí se desvía ≥6mm → popup igual que acostado', () => {
+    const parado = resolveFabricationSize(50, 10, { widthMm: 10, heightMm: 40 });
+    const acostado = resolveFabricationSize(50, 10, { widthMm: 40, heightMm: 10 });
+    expect(parado.needsReview).toBe(true);
+    expect(acostado.needsReview).toBe(true);
+  });
+
   it('scaleMinorSideToTope agranda y achica', () => {
     expect(scaleMinorSideToTope(40, 32, 36.5).heightMm).toBeCloseTo(36.5, 5);
     expect(scaleMinorSideToTope(50, 40, 36.5).heightMm).toBeCloseTo(36.5, 5);

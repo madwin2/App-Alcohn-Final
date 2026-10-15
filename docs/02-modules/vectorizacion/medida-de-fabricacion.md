@@ -27,10 +27,10 @@
 1. Se determina la planchuela a partir de la **medida pedida** (lado menor).
 2. Tope útil por planchuela (`KNOWN_MAX_FABRICATION_MM`): 12→11,5 mm · 19→18 mm · 25→24 mm · 38→36,5 mm · 63→sin tope.
 3. Se mide el SVG (ancho/alto físico).
-4. **Se guarda directo** si el lado menor medido no supera el tope **y** ninguna dimensión se desvía ≥ 6 mm de lo pedido ("Medida OK").
+4. **Se guarda directo** si el lado menor medido no supera el tope **y** ni el lado largo ni el corto se desvían ≥ 6 mm de lo pedido ("Medida OK"). Se compara **largo con largo y corto con corto**, sin importar la orientación: un diseño parado de 10 × 50 mm es un "50×10" (corregido 2026-10-15; antes se comparaba ancho con ancho y un diseño parado abría el popup).
 5. **Si no**, se abre el popup: sugiere una medida que **conserva la proporción del vector**, recortada al tope si hace falta; el usuario confirma o ajusta. Nunca deforma forzando la medida pedida.
 
-En Vectorización, antes de medir, el SVG se **escala al tamaño pedido** (`applyPhysicalSize`).
+En Vectorización, antes de medir, el SVG se **escala al tamaño pedido** (`applyPhysicalSize` → `containSize`). La caja pedida se **gira según la orientación del diseño**: si el diseño es más alto que ancho, el "50×10" se usa como 10 de ancho × 50 de alto (corregido 2026-10-15; antes un diseño parado se encajaba acostado y quedaba chiquito, p. ej. 2 × 10 mm).
 
 ## Efectos
 

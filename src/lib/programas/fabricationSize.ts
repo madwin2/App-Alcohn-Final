@@ -145,10 +145,15 @@ export function resolveFabricationSize(
 
   const naturalMinor = Math.min(naturalWidth, naturalHeight);
   const exceedsTope = maxUsableMm != null && naturalMinor > maxUsableMm + 0.05;
+  // Las medidas se dicen "lado largo × lado corto" sin importar la orientación
+  // (un diseño parado de 10 × 50 es un "50×10"): se compara largo con largo y
+  // corto con corto, no ancho con ancho.
   const largeDiff =
     measured != null &&
-    (Math.abs(naturalWidth - requestedWidthMm) >= LARGE_SIZE_DIFF_MM ||
-      Math.abs(naturalHeight - requestedHeightMm) >= LARGE_SIZE_DIFF_MM);
+    (Math.abs(Math.max(naturalWidth, naturalHeight) - Math.max(requestedWidthMm, requestedHeightMm)) >=
+      LARGE_SIZE_DIFF_MM ||
+      Math.abs(Math.min(naturalWidth, naturalHeight) - Math.min(requestedWidthMm, requestedHeightMm)) >=
+        LARGE_SIZE_DIFF_MM);
 
   if (!exceedsTope && !largeDiff) {
     return {
