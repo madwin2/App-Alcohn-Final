@@ -547,12 +547,9 @@ function validClosed(nodes: ENode[]): boolean {
   return nodes.length === 2 && nodes.some((n) => n.i || n.o);
 }
 
-/**
- * Offset en paralelo de una pieza (`deltaMm` > 0 engorda, < 0 afina). La
- * pieza se reemplaza por el resultado, con curvas suaves (error < `tolMm`).
- */
-export function offsetPiece(doc: EditDoc, piece: EditPiece, deltaMm: number, mmPerUnit: number, tolMm = 0.01): EditDoc | null {
-  const flatTol = (tolMm / 3) / mmPerUnit;
+/** Contornos nuevos de una pieza con offset (null si desaparece). */
+function offsetSubs(doc: EditDoc, piece: EditPiece, deltaMm: number, mmPerUnit: number, tolMm: number): ESub[] | null {
+  const flatTol = tolMm / 3 / mmPerUnit;
   const byRule = new Map<string, Paths64>();
   for (const r of piece.refs) {
     const path = doc.paths[r.path];
@@ -574,12 +571,43 @@ export function offsetPiece(doc: EditDoc, piece: EditPiece, deltaMm: number, mmP
     const s = fitClosedRing(pts, tolMm / mmPerUnit);
     if (s) subs.push(s);
   }
-  if (!subs.length) return null;
-  const next = removeRefs(doc, piece.refs);
-  next.paths.push({ fillRule: 'nonzero', subs });
+  return subs.length ? subs : null;
+}
+
+/**
+ * Offset en paralelo de una o varias piezas (`deltaMm` > 0 engorda, < 0
+ * afina). Cada pieza se reemplaza por su resultado, con curvas suaves (error
+ * < `tolMm`). Todas se calculan sobre el dibujo original, así que el orden no
+ * importa. Devuelve null si alguna desaparece (afinar de más).
+ */
+export function offsetPieces(
+  doc: EditDoc,
+  pieces: EditPiece[],
+  deltaMm: number,
+  mmPerUnit: number,
+  tolMm = 0.01,
+): { doc: EditDoc; firstNewPath: number } | null {
+  const results: ESub[][] = [];
+  for (const pc of pieces) {
+    const subs = offsetSubs(doc, pc, deltaMm, mmPerUnit, tolMm);
+    if (!subs) return null;
+    results.push(subs);
+  }
+  let next = removeRefs(
+    doc,
+    pieces.flatMap((p) => p.refs),
+  );
+  const firstNewPath = next.paths.length;
+  for (const subs of results) next.paths.push({ fillRule: 'nonzero', subs });
   // Las rectas del offset salen partidas en varios tramos: se juntan.
-  const last = next.paths.length - 1;
-  return removeRedundant(next, (tolMm * 0.2) / mmPerUnit, subs.map((_, si) => ({ path: last, sub: si }))).doc;
+  const refs = results.flatMap((subs, k) => subs.map((_, si) => ({ path: firstNewPath + k, sub: si })));
+  next = removeRedundant(next, (tolMm * 0.2) / mmPerUnit, refs).doc;
+  return { doc: next, firstNewPath };
+}
+
+/** Offset de una sola pieza (ver `offsetPieces`). */
+export function offsetPiece(doc: EditDoc, piece: EditPiece, deltaMm: number, mmPerUnit: number, tolMm = 0.01): EditDoc | null {
+  return offsetPieces(doc, [piece], deltaMm, mmPerUnit, tolMm)?.doc ?? null;
 }
 
 export type NodePart = 'p' | 'i' | 'o';

@@ -76,12 +76,16 @@ Tocá el chip para abrir el **Chequeo de fresa**:
 5. Compará con **Original**, **Corregido** y **Qué cambia** (en celeste, lo que cambió).
 6. **Editar a mano** (o **Editar a mano el corregido**): abre un editor en el mismo lugar, para lo que la corrección automática no resuelve. Arriba a la derecha ves si la fresa separa todo, los lugares numerados (**Ir a: 1 2…** acerca la vista a cada uno) y la medida del sello. La fresa se vuelve a chequear sola cada vez que soltás un cambio.
    - **Elegir y mover** (V): tocá una pieza (una letra, el ícono) para elegirla; se pinta de azul con su medida. Arrastrala, o usá las flechas del panel o del teclado (eligís cuánto: 0,02 a 0,5 mm). **Doble clic** en una pieza la acerca.
+   - **Varias piezas**: arrastrá un rectángulo en el fondo, o **Shift+clic** para sumar o sacar; **Ctrl+A** elige todo. Mover, tamaño, grosor y borrar se aplican a todas juntas.
+   - **Guías e imán** (botón del imán o tecla G): al arrastrar, lo que movés se pega a los bordes y centros de las otras piezas y al centro del diseño, y aparece una línea violeta. **Shift** mientras arrastrás: solo en horizontal o solo en vertical (no se desalinea el renglón). **Ctrl**: suelta el imán. Al mover nodos, se alinean con los otros nodos de la pieza.
+   - **Medidas**: mientras arrastrás ves cuánto moviste; con algo elegido ves en celeste el espacio en mm a las piezas vecinas.
+   - **Alinear** (con 2 o más piezas): bordes izquierdos, centros, derechos, de arriba, centros o de abajo (la base del renglón). **Espaciar parejo ↔ / ↕** (con 3 o más): deja el mismo espacio entre todas, sin mover las de las puntas. Sirve para emparejar el espaciado de un renglón.
    - **Tamaño**: −1 % / +1 %, o un porcentaje. Parejo, sin deformar, desde el centro de la pieza.
    - **Grosor**: **Afinar** (offset interior) o **Engordar** (offset exterior) los mm que pongas, en paralelo y con curvas suaves.
    - **Nodos** (A): con una pieza elegida, ves sus nodos. Si están muy juntos aparecen como puntitos: acercate (doble clic o rueda) y se vuelven cuadraditos que podés arrastrar. Tocá un nodo para ver sus manijas (círculos). **Supr** borra el nodo elegido.
    - **Quitar N de más** (los naranjas): saca nodos repetidos o en medio de una recta, sin cambiar la forma. **Simplificar curvas**: deja menos nodos; la forma cambia como mucho lo que elegís (0,005 a 0,05 mm). Con una pieza elegida se aplica solo a esa.
    - **Borrar pieza** y **Borrar motas** (aparece si hay piezas sueltas de menos de 0,05 mm², restos de la vectorización).
-   - Para moverte: arrastrá el fondo, la herramienta **Mano** (H) o Espacio + arrastrar; rueda para acercar; **0** o el botón de los cuatro lados para ver todo. **Atajos** muestra la lista.
+   - Para moverte: la herramienta **Mano** (H), Espacio + arrastrar o clic derecho + arrastrar (en Elegir y mover, arrastrar el fondo hace un rectángulo de selección); rueda para acercar; **0** o el botón de los cuatro lados para ver todo. **Atajos** muestra la lista.
    - **Ctrl+Z** deshace, **Ctrl+Y** rehace. **Terminar edición** vuelve al chequeo con lo editado para compararlo y usarlo; **Descartar** pregunta antes de tirar los cambios. Solo funciona con vectores de rellenos negros (sin blancos ni trazos).
 7. **Usar el corregido** reemplaza el vector en revisión. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
 

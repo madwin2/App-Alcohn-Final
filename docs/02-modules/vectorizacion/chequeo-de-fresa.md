@@ -93,13 +93,17 @@ Botón **Editar a mano** en el diálogo del chequeo (sobre el original o sobre e
 | Herramienta | Qué hace |
 |---|---|
 | **Elegir y mover** (V) | Al pasar el mouse se resalta la pieza que se va a agarrar; tocarla la elige (azul, con su medida); arrastrarla la mueve. Flechas del panel o del teclado con paso elegible (0,02–0,5 mm; Shift ×10). Doble clic acerca la vista a la pieza. |
-| **Tamaño** | −1 % / +1 % o un porcentaje; parejo (sin deformar), desde el centro de la pieza. |
+| **Varias piezas** | Rectángulo en el fondo, Shift+clic (sumar/sacar), Ctrl+A. Todas las operaciones se aplican a la selección (tamaño desde el centro del conjunto; grosor pieza por pieza, calculado sobre el original). |
+| **Guías e imán** (G) | Al arrastrar, la caja de lo elegido se imanta (6 px en pantalla) a bordes y centros de las demás piezas y al centro del diseño, con guía violeta; Shift restringe a un eje; Ctrl suelta el imán. Los nodos se imantan a la x/y de los otros nodos de la pieza (`editTools.ts`). |
+| **Medidas** | Desplazamiento en vivo al arrastrar y cotas en mm al vecino más cercano de cada lado (cajas que se enfrentan). |
+| **Alinear / Espaciar parejo** | Con 2+: alinear bordes o centros. Con 3+: mismo espacio entre piezas, sin mover las de los extremos. |
+| **Tamaño** | −1 % / +1 % o un porcentaje; parejo (sin deformar), desde el centro de lo elegido. |
 | **Grosor**: Afinar / Engordar | Offset interior / exterior en paralelo (Clipper), devuelto con curvas suaves (ajuste de Schneider, error 0,01 mm), sin nodos de más. |
 | **Nodos** (A) | Ver y arrastrar nodos y manijas de la pieza elegida; en un nodo suave, mover una manija gira la otra para que no quede quiebre. Si en pantalla quedan a menos de 9 px se muestran como puntos (no se pueden tocar) y la ayuda pide acercarse. Supr borra el nodo elegido. "Todos los nodos" los muestra en todo el dibujo. |
 | **Quitar nodos de más** | Saca nodos repetidos y nodos en medio de una recta. **No cambia la forma.** Los nodos de más se ven en naranja. |
 | **Simplificar curvas** | Entre esquinas, reemplaza muchos nodos por pocas curvas (algoritmo de Schneider, el mismo de `simplify` en Paper.js y VectorCraft) con un **error máximo elegido** (0,005–0,05 mm). Las esquinas se conservan. |
 | **Borrar pieza / Borrar motas** | Borra la pieza elegida, o todas las piezas sueltas de menos de 0,05 mm² (restos de la vectorización). |
-| **Mano** (H), arrastrar el fondo, Espacio + arrastrar, rueda | Moverse y acercar. Tecla 0: ver todo. |
+| **Mano** (H), Espacio o clic derecho + arrastrar, rueda | Moverse y acercar. Tecla 0: ver todo. (En Elegir y mover, arrastrar el fondo hace un rectángulo de selección.) |
 | **Deshacer / Rehacer** | Ctrl+Z / Ctrl+Y (hasta 80 pasos). **Descartar** pide confirmación si hay cambios. |
 
 El panel muestra el estado en vivo con **Ir a: 1 2…** (acerca la vista a cada lugar), la medida del sello y avisos de cada acción; la ayuda debajo del lienzo cambia según la herramienta y lo elegido, y **Atajos** lista el teclado. El zoom se conserva al cambiar de herramienta (solo "ver todo" o la tecla 0 reencuadran).
@@ -135,4 +139,4 @@ El panel muestra el estado en vivo con **Ir a: 1 2…** (acerca la vista a cada 
 
 ## Implementación relacionada
 
-`src/lib/fresa/{editDoc,curveFit,config,pathData,svgShapes,geometry,analyze,layout,fix,moveSvg,engine,exportSvg,chequeoFresa,useFresaReport,guardarCorregido,textos,fresa.worker,workerProtocol}.ts`, `src/components/fresa/{FresaEditor,FresaChip,FresaCheckDialog,FresaViewer,FresaVectorDialog,FresaProgramaDialog}.tsx`, integración en `RevisionTab.tsx`, `AsignarTab.tsx`, `pedidos|produccion/Table/cells/CellVector.tsx`, `ProgramCardDesign.tsx`, `ProgramContextMenu.tsx`. Tests: `src/lib/fresa/fresa.test.ts`. Dependencia: `clipper2-ts` (BSL-1.0).
+`src/lib/fresa/{editDoc,editTools,curveFit,config,pathData,svgShapes,geometry,analyze,layout,fix,moveSvg,engine,exportSvg,chequeoFresa,useFresaReport,guardarCorregido,textos,fresa.worker,workerProtocol}.ts`, `src/components/fresa/{FresaEditor,FresaChip,FresaCheckDialog,FresaViewer,FresaVectorDialog,FresaProgramaDialog}.tsx`, integración en `RevisionTab.tsx`, `AsignarTab.tsx`, `pedidos|produccion/Table/cells/CellVector.tsx`, `ProgramCardDesign.tsx`, `ProgramContextMenu.tsx`. Tests: `src/lib/fresa/fresa.test.ts`. Dependencia: `clipper2-ts` (BSL-1.0).
