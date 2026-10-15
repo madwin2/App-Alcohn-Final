@@ -131,7 +131,7 @@ function Section({ title, extra, children }: { title: string; extra?: ReactNode;
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="w-14 shrink-0 text-xs text-muted-foreground">{label}</span>
+      <span className="w-12 shrink-0 text-xs text-muted-foreground">{label}</span>
       {children}
     </div>
   );
@@ -168,7 +168,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   const [scalePct, setScalePct] = useState('100');
   const [offsetMm, setOffsetMm] = useState('0.05');
   const [tolMm, setTolMm] = useState('0.01');
-  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'warn' } | null>(null);
+  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'warn'; id: number } | null>(null);
   const [showKeys, setShowKeys] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [guides, setGuides] = useState<Guide[]>([]);
@@ -199,8 +199,28 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     () => ({ mode: 'escala' as const, mmPerUnit: k, alimento: report.profile.id === 'alimento' }),
     [k, report.profile.id],
   );
-  const live = useFresaReport(docSvg, target);
+  const fresh = useFresaReport(docSvg, target);
+  // Mientras se re-chequea se sigue mostrando el último resultado (sin
+  // "Chequeando…" que cambie el alto del panel y corra los botones).
+  const [lastLive, setLastLive] = useState<FresaReport | null>(null);
+  useEffect(() => {
+    if (fresh) setLastLive(fresh);
+  }, [fresh]);
+  const live = fresh ?? lastLive;
+  const checking = !fresh;
   const liveGroups = useMemo(() => (live?.check?.groups ?? []).filter((g) => g.severity !== 'baja'), [live]);
+
+  // Aviso flotante sobre el dibujo (no ocupa lugar en el panel: no corre nada).
+  const noticeId = useRef(0);
+  const showNotice = useCallback((text: string, tone: 'ok' | 'warn') => {
+    noticeId.current += 1;
+    setNotice({ text, tone, id: noticeId.current });
+  }, []);
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), notice.tone === 'warn' ? 5000 : 2200);
+    return () => window.clearTimeout(t);
+  }, [notice]);
 
   const commit = useCallback(
     (next: EditDoc, text?: string, tone: 'ok' | 'warn' = 'ok') => {
@@ -208,24 +228,24 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       setHistory(nh);
       setIdx(nh.length - 1);
       setTemp(null);
-      setNotice(text ? { text, tone } : null);
+      if (text) showNotice(text, tone);
     },
-    [history, idx],
+    [history, idx, showNotice],
   );
-  const say = (text: string, tone: 'ok' | 'warn' = 'warn') => setNotice({ text, tone });
+  const say = (text: string, tone: 'ok' | 'warn' = 'warn') => showNotice(text, tone);
   const undo = () => {
     if (idx === 0) return;
     setIdx(idx - 1);
     setTemp(null);
     setSelNode(null);
-    setNotice({ text: 'Deshecho.', tone: 'ok' });
+    showNotice('Deshecho.', 'ok');
   };
   const redo = () => {
     if (idx >= history.length - 1) return;
     setIdx(idx + 1);
     setTemp(null);
     setSelNode(null);
-    setNotice({ text: 'Rehecho.', tone: 'ok' });
+    showNotice('Rehecho.', 'ok');
   };
 
   // ------------------------------------------------------------ vista
@@ -358,11 +378,18 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     () => (shown ? redundantNodes(shown, 0.002 / k, selRefs.length ? selRefs : undefined) : []),
     [shown, selRefs, k],
   );
-  // Cuántos nodos quedarían al simplificar (para mostrarlo en el botón).
-  const simplified = useMemo(() => {
-    if (!doc) return null;
-    const tol = Math.max(0.001, Number(tolMm.replace(',', '.'))) / k;
-    return simplifyDoc(doc, tol, selRefs.length ? selRefs : undefined);
+  // Cuántos nodos quedarían al simplificar (para mostrarlo debajo del botón).
+  // Se calcula un rato después del último cambio: así cada clic responde al
+  // instante aunque el dibujo tenga muchos nodos.
+  const [simplified, setSimplified] = useState<ReturnType<typeof simplifyDoc> | null>(null);
+  useEffect(() => {
+    setSimplified(null);
+    if (!doc) return;
+    const t = window.setTimeout(() => {
+      const tol = Math.max(0.001, Number(tolMm.replace(',', '.'))) / k;
+      setSimplified(simplifyDoc(doc, tol, selRefs.length ? selRefs : undefined));
+    }, 350);
+    return () => window.clearTimeout(t);
   }, [doc, tolMm, k, selRefs]);
   const extraKeys = useMemo(() => new Set(extra.map((n) => `${n.path}:${n.sub}:${n.node}`)), [extra]);
   const totalNodes = shown ? countNodes(shown) : 0;
@@ -576,7 +603,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       }
       const hit = pieces.filter((pc) => boxesTouch(pc.bounds, m)).map(keyOf);
       setSelection(d.additive ? Array.from(new Set([...selKeys, ...hit])) : hit);
-      if (hit.length) setNotice({ text: `${hit.length} pieza${hit.length === 1 ? '' : 's'} elegida${hit.length === 1 ? '' : 's'}.`, tone: 'ok' });
+      if (hit.length) showNotice(`${hit.length} pieza${hit.length === 1 ? '' : 's'} elegida${hit.length === 1 ? '' : 's'}.`, 'ok');
       return;
     }
     if (d.moved && temp) {
@@ -662,8 +689,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     commit(next, `Se sacaron ${removed} nodos de más. La forma no cambió.`);
   };
   const doSimplify = () => {
-    const r = simplified;
-    if (!doc || !r) return;
+    if (!doc) return;
+    const r = simplified ?? simplifyDoc(doc, Math.max(0.001, num(tolMm)) / k, selRefs.length ? selRefs : undefined);
     if (r.after >= r.before) {
       say('Ya está simple: con ese error no se pueden sacar más nodos.', 'ok');
       return;
@@ -677,6 +704,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    // En un campo de texto o un desplegable, las teclas son de ese campo.
+    if ((e.target as HTMLElement).closest('input, select, textarea')) return;
     if (e.key === ' ') {
       spaceDown.current = true;
       e.preventDefault();
@@ -697,7 +726,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     if (mod && e.key.toLowerCase() === 'a') {
       e.preventDefault();
       setSelection(pieces.map(keyOf));
-      setNotice({ text: `${pieces.length} piezas elegidas.`, tone: 'ok' });
+      showNotice(`${pieces.length} piezas elegidas.`, 'ok');
       return;
     }
     if (e.key === 'Escape') {
@@ -846,9 +875,10 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   );
 
   return (
-    <div className="flex flex-col gap-3 md:min-h-0 md:flex-1 md:flex-row">
+    // Las teclas funcionan en todo el editor: también después de tocar un botón del panel.
+    <div className="flex flex-col gap-3 md:min-h-0 md:flex-1 md:flex-row" onKeyDown={onKeyDown} onKeyUp={onKeyUp}>
       {/* ---------------------------------------------------- lienzo */}
-      <div className="flex h-[55vh] min-w-0 shrink-0 flex-col gap-2 md:h-auto md:min-h-[300px] md:flex-1 md:shrink">
+      <div className="relative flex h-[55vh] min-w-0 shrink-0 flex-col gap-2 md:h-auto md:min-h-[300px] md:flex-1 md:shrink">
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <div className="flex items-center gap-0.5 rounded-md border bg-muted/40 p-0.5">
             {toolBtn('mover', <MousePointer2 className="size-3.5" />, 'Elegir y mover', 'V')}
@@ -898,8 +928,6 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
         <div
           ref={hostRef}
           tabIndex={0}
-          onKeyDown={onKeyDown}
-          onKeyUp={onKeyUp}
           onContextMenu={(e) => e.preventDefault()}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -1009,7 +1037,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                         key={z.id}
                         d={z.rings.map((r) => `M${r.map((q) => `${q.x} ${q.y}`).join('L')}Z`).join('')}
                         fill={SEVERITY_FILL[z.severity]}
-                        fillOpacity={0.8}
+                        // Mientras se re-chequea, lo anterior queda más tenue.
+                        fillOpacity={checking ? 0.35 : 0.8}
                       />
                     ))}
                 </g>
@@ -1110,23 +1139,39 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
           <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-background/90 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground shadow-sm">
             {mm(view.w * k, view.w * k < 10 ? 1 : 0)} mm de ancho en pantalla
           </div>
+          {/* Aviso de lo que se hizo: flota sobre el dibujo, no corre nada de lugar. */}
+          {notice ? (
+            <div
+              key={notice.id}
+              role="status"
+              className={cn(
+                'pointer-events-none absolute left-1/2 top-2 max-w-[90%] -translate-x-1/2 rounded-md px-3 py-1.5 text-xs shadow-md animate-in fade-in',
+                notice.tone === 'ok'
+                  ? 'bg-slate-900/85 text-white'
+                  : 'bg-amber-100 text-amber-950 ring-1 ring-amber-300 dark:bg-amber-900 dark:text-amber-50',
+              )}
+            >
+              {notice.text}
+            </div>
+          ) : null}
+          {showRelief ? (
+            <div className="pointer-events-none absolute bottom-2 right-2 flex max-w-[60%] items-center gap-2 rounded bg-background/90 px-2 py-1 text-[11px] text-muted-foreground shadow-sm">
+              <span
+                className="inline-block h-2.5 w-12 shrink-0 rounded-sm"
+                style={{ background: 'linear-gradient(90deg, rgb(214,160,96), rgb(92,58,28))' }}
+              />
+              <span>
+                {relief
+                  ? `Claro = arriba (marca); oscuro = hondo, hasta ${mm(report.profile.finalDepthMm, 1)} mm. Claro entre letras: la fresa no bajó.`
+                  : 'Calculando el relieve…'}
+              </span>
+            </div>
+          ) : null}
         </div>
 
-        {showRelief ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <span
-              className="inline-block h-2.5 w-16 rounded-sm"
-              style={{ background: 'linear-gradient(90deg, rgb(214,160,96), rgb(92,58,28))' }}
-            />
-            <span>
-              Relieve simulado: bronce = arriba (lo que marca); más oscuro = más hondo, hasta{' '}
-              {mm(report.profile.finalDepthMm, 1)} mm. Entre letras, si queda claro, la fresa no bajó.
-              {!relief ? ' Calculando…' : ''}
-            </span>
-          </div>
-        ) : null}
         <div className="flex shrink-0 items-start justify-between gap-2">
-          <p className="min-h-[2.5em] text-xs leading-snug text-muted-foreground">{hint}</p>
+          {/* Alto fijo (2 renglones): cambiar de herramienta no achica el dibujo. */}
+          <p className="h-8 overflow-hidden text-xs leading-4 text-muted-foreground">{hint}</p>
           <button
             type="button"
             className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
@@ -1137,7 +1182,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
           </button>
         </div>
         {showKeys ? (
-          <ul className="grid shrink-0 grid-cols-1 gap-x-4 gap-y-0.5 rounded-md bg-muted/50 p-2 text-[11px] text-muted-foreground sm:grid-cols-2">
+          // Flota sobre el dibujo (no lo achica).
+          <ul className="absolute bottom-10 right-0 z-10 grid w-[min(560px,100%)] grid-cols-1 gap-x-4 gap-y-0.5 rounded-md border bg-background p-2.5 text-[11px] text-muted-foreground shadow-lg sm:grid-cols-2">
             <li>
               <b>V</b> elegir y mover · <b>A</b> nodos · <b>H</b> mano
             </li>
@@ -1164,241 +1210,258 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       </div>
 
       {/* ---------------------------------------------------- panel */}
-      <aside className="flex w-full shrink-0 flex-col gap-2 text-sm md:w-[330px] md:overflow-y-auto">
+      {/*
+        Estructura fija: todos los controles están siempre (deshabilitados si no
+        se pueden usar) y los textos que cambian tienen un alto fijo. Así nada se
+        corre de lugar al tocar un botón y se puede tocar dos veces seguidas.
+      */}
+      <aside className="flex w-full shrink-0 flex-col gap-2 text-sm md:min-h-0 md:w-[330px]">
+        {/* Lo de arriba se desplaza si no entra; «Terminar edición» queda siempre a la vista. */}
+        <div className="flex flex-col gap-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1">
         <div
           className={cn(
-            'space-y-1.5 rounded-md border p-2.5 text-xs',
-            liveProblems == null
+            'space-y-1 rounded-md border p-2.5 text-xs',
+            live == null
               ? 'bg-muted/40'
               : liveProblems === 0
                 ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
                 : 'border-rose-300 bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-100',
           )}
         >
-          <p className="flex items-center gap-1.5 font-medium">
-            {liveProblems == null ? (
-              <Loader2 className="size-3.5 animate-spin" />
+          <p className="flex h-5 items-center gap-1.5 font-medium">
+            {live == null ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin" />
             ) : liveProblems === 0 ? (
-              <CheckCircle2 className="size-3.5" />
+              <CheckCircle2 className="size-3.5 shrink-0" />
             ) : (
-              <AlertTriangle className="size-3.5" />
+              <AlertTriangle className="size-3.5 shrink-0" />
             )}
-            {liveProblems == null
-              ? 'Chequeando la fresa…'
-              : liveProblems === 0
-                ? 'La fresa separa todo'
-                : `${liveProblems} lugar${liveProblems === 1 ? '' : 'es'} donde se pierde el diseño`}
+            <span className="truncate">
+              {live == null
+                ? 'Chequeando la fresa…'
+                : liveProblems === 0
+                  ? 'La fresa separa todo'
+                  : `${liveProblems} lugar${liveProblems === 1 ? '' : 'es'} donde se pierde el diseño`}
+            </span>
+            {checking && live ? (
+              <span className="ml-auto flex shrink-0 items-center gap-1 font-normal opacity-70" title="Se está volviendo a chequear con el último cambio">
+                <Loader2 className="size-3 animate-spin" />
+                actualizando
+              </span>
+            ) : null}
           </p>
-          {liveGroups.length ? (
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="opacity-80">Ir a:</span>
-              {liveGroups.map((g, gi) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  className="flex size-6 items-center justify-center rounded-full text-[11px] font-bold text-white hover:opacity-80"
-                  style={{ background: SEVERITY_FILL[g.severity] }}
-                  onClick={() => zoomTo({ minX: g.bounds.minX / k, minY: g.bounds.minY / k, maxX: g.bounds.maxX / k, maxY: g.bounds.maxY / k })}
-                  title="Acercar a este lugar"
-                >
-                  {gi + 1}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {sizeNow ? (
-            <p className={cn(sizeChanged ? 'font-medium text-amber-700 dark:text-amber-300' : 'opacity-80')}>
-              Medida del sello: {mm(sizeNow.w, 1)} × {mm(sizeNow.h, 1)} mm
-              {sizeChanged ? ` · antes ${mm(sizeBefore.w, 1)} × ${mm(sizeBefore.h, 1)}` : ''}
-            </p>
-          ) : null}
-        </div>
-
-        {notice ? (
+          <div className="flex h-6 items-center gap-1 overflow-x-auto">
+            {liveGroups.length ? (
+              <>
+                <span className="shrink-0 opacity-80">Ir a:</span>
+                {liveGroups.map((g, gi) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white hover:opacity-80"
+                    style={{ background: SEVERITY_FILL[g.severity] }}
+                    onClick={() => zoomTo({ minX: g.bounds.minX / k, minY: g.bounds.minY / k, maxX: g.bounds.maxX / k, maxY: g.bounds.maxY / k })}
+                    title="Acercar a este lugar"
+                  >
+                    {gi + 1}
+                  </button>
+                ))}
+              </>
+            ) : (
+              <span className="opacity-70">{live ? 'Nada para corregir.' : ''}</span>
+            )}
+          </div>
           <p
-            className={cn(
-              'rounded-md px-2.5 py-1.5 text-xs',
-              notice.tone === 'ok' ? 'bg-muted/60' : 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100',
-            )}
+            className={cn('flex h-4 items-center gap-2 whitespace-nowrap tabular-nums', sizeChanged ? 'font-medium text-amber-700 dark:text-amber-300' : 'opacity-80')}
+            title={sizeChanged ? `Antes: ${mm(sizeBefore.w, 1)} × ${mm(sizeBefore.h, 1)} mm` : undefined}
           >
-            {notice.text}
+            <span>Medida del sello: {sizeNow ? `${mm(sizeNow.w, 1)} × ${mm(sizeNow.h, 1)} mm` : '—'}</span>
+            {sizeChanged ? <span className="truncate font-normal opacity-80">antes {mm(sizeBefore.w, 1)} × {mm(sizeBefore.h, 1)}</span> : null}
           </p>
-        ) : null}
+        </div>
 
         <Section
           title={nSel > 1 ? `${nSel} piezas elegidas` : nSel ? 'Pieza elegida' : 'Pieza'}
-          extra={selBox ? `${mm((selBox.maxX - selBox.minX) * k)} × ${mm((selBox.maxY - selBox.minY) * k)} mm` : undefined}
+          extra={
+            <span className="tabular-nums">
+              {selBox ? `${mm((selBox.maxX - selBox.minX) * k)} × ${mm((selBox.maxY - selBox.minY) * k)} mm` : 'ninguna elegida'}
+            </span>
+          }
         >
-          {!nSel ? (
-            <p className="text-xs text-muted-foreground">
-              Tocá una pieza en el dibujo (una letra, el ícono). Para varias: arrastrá un rectángulo en el fondo o usá
-              Shift+clic.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              <Row label="Mover">
-                <button type="button" className={iconBtn} onClick={() => nudge(-step, 0)} title="Izquierda">
-                  <ArrowLeft className="size-3.5" />
-                </button>
-                <button type="button" className={iconBtn} onClick={() => nudge(0, -step)} title="Arriba">
-                  <ArrowUp className="size-3.5" />
-                </button>
-                <button type="button" className={iconBtn} onClick={() => nudge(0, step)} title="Abajo">
-                  <ArrowDown className="size-3.5" />
-                </button>
-                <button type="button" className={iconBtn} onClick={() => nudge(step, 0)} title="Derecha">
-                  <ArrowRight className="size-3.5" />
-                </button>
-                <select
-                  className="h-7 rounded border bg-background px-1 text-xs"
-                  value={stepMm}
-                  onChange={(e) => setStepMm(e.target.value)}
-                  title="Cuánto se mueve por toque"
-                >
-                  {['0.02', '0.05', '0.1', '0.5'].map((v) => (
-                    <option key={v} value={v}>
-                      {v.replace('.', ',')} mm
-                    </option>
-                  ))}
-                </select>
-              </Row>
-              <Row label="Tamaño">
-                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => scaleBy(0.99)}>
-                  −1 %
-                </Button>
-                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => scaleBy(1.01)}>
-                  +1 %
-                </Button>
-                <input
-                  className="h-7 w-14 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
-                  inputMode="decimal"
-                  value={scalePct}
-                  onChange={(e) => setScalePct(e.target.value)}
-                  onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === 'Enter') scaleBy(num(scalePct) / 100);
-                  }}
-                  title="Porcentaje del tamaño actual (Enter para aplicar)"
-                />
-                <span className="text-xs text-muted-foreground">%</span>
-                <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={() => scaleBy(num(scalePct) / 100)}>
-                  Aplicar
-                </Button>
-              </Row>
-              <Row label="Grosor">
-                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => doOffset(-1)} title="Offset interior: afina en paralelo">
-                  Afinar
-                </Button>
-                <Button type="button" size="sm" variant="outline" className="h-7 px-2" onClick={() => doOffset(1)} title="Offset exterior: engorda en paralelo">
-                  Engordar
-                </Button>
-                <input
-                  className="h-7 w-14 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
-                  inputMode="decimal"
-                  value={offsetMm}
-                  onChange={(e) => setOffsetMm(e.target.value)}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  title="Cuánto afinar o engordar (offset interior / exterior)"
-                />
-                <span className="text-xs text-muted-foreground">mm</span>
-              </Row>
-              {nSel > 1 ? (
-                <>
-                  <Row label="Alinear">
-                    {(
-                      [
-                        ['left', AlignStartVertical, 'Bordes izquierdos'],
-                        ['hcenter', AlignCenterVertical, 'Centros (en vertical)'],
-                        ['right', AlignEndVertical, 'Bordes derechos'],
-                        ['top', AlignStartHorizontal, 'Bordes de arriba'],
-                        ['vcenter', AlignCenterHorizontal, 'Centros (en horizontal)'],
-                        ['bottom', AlignEndHorizontal, 'Bordes de abajo (la base del renglón)'],
-                      ] as const
-                    ).map(([mode, Icon, label]) => (
-                      <button key={mode} type="button" className={iconBtn} onClick={() => doAlign(mode)} title={`Alinear: ${label}`}>
-                        <Icon className="size-3.5" />
-                      </button>
-                    ))}
-                  </Row>
-                  <Row label="Espaciar">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2"
-                      disabled={nSel < 3}
-                      onClick={() => doDistribute('x')}
-                      title="Mismo espacio entre las piezas, de izquierda a derecha (las de los extremos no se mueven)"
-                    >
-                      <AlignHorizontalDistributeCenter className="mr-1 size-3.5" />
-                      Parejo ↔
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-2"
-                      disabled={nSel < 3}
-                      onClick={() => doDistribute('y')}
-                      title="Mismo espacio entre las piezas, de arriba a abajo (las de los extremos no se mueven)"
-                    >
-                      <AlignVerticalDistributeCenter className="mr-1 size-3.5" />
-                      Parejo ↕
-                    </Button>
-                  </Row>
-                  {nSel < 3 ? <p className="text-[11px] text-muted-foreground">Para espaciar parejo hacen falta 3 piezas o más.</p> : null}
-                </>
-              ) : null}
-              <p className="text-[11px] text-muted-foreground">
-                Tamaño: parejo, sin deformar{nSel > 1 ? ', todas juntas desde su centro' : ''}. Grosor: offset en paralelo
-                (afinar = interior, engordar = exterior).
-              </p>
-              <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={doDeleteSelection}>
-                <Trash2 className="mr-1 size-3.5" />
-                {nSel > 1 ? `Borrar ${nSel} piezas` : 'Borrar pieza'}
+          <p className="h-4 truncate text-[11px] text-muted-foreground">
+            {nSel ? 'Shift+clic en el dibujo suma o saca piezas.' : 'Tocá una pieza, o arrastrá un rectángulo en el fondo.'}
+          </p>
+          <fieldset disabled={!nSel} className="space-y-2 disabled:opacity-50">
+            <Row label="Mover">
+              <button type="button" className={iconBtn} onClick={() => nudge(-step, 0)} title="Izquierda (flecha ←)">
+                <ArrowLeft className="size-3.5" />
+              </button>
+              <button type="button" className={iconBtn} onClick={() => nudge(0, -step)} title="Arriba (flecha ↑)">
+                <ArrowUp className="size-3.5" />
+              </button>
+              <button type="button" className={iconBtn} onClick={() => nudge(0, step)} title="Abajo (flecha ↓)">
+                <ArrowDown className="size-3.5" />
+              </button>
+              <button type="button" className={iconBtn} onClick={() => nudge(step, 0)} title="Derecha (flecha →)">
+                <ArrowRight className="size-3.5" />
+              </button>
+              <select
+                className="h-7 rounded border bg-background px-1 text-xs"
+                value={stepMm}
+                onChange={(e) => setStepMm(e.target.value)}
+                title="Cuánto se mueve por toque (Shift + flecha: 10 veces más)"
+              >
+                {['0.02', '0.05', '0.1', '0.5'].map((v) => (
+                  <option key={v} value={v}>
+                    {v.replace('.', ',')} mm
+                  </option>
+                ))}
+              </select>
+            </Row>
+            <Row label="Tamaño">
+              <Button type="button" size="sm" variant="outline" className="h-7 w-11 px-0" onClick={() => scaleBy(0.99)} title="Achicar 1 %, parejo, desde el centro">
+                −1 %
               </Button>
-            </div>
-          )}
+              <Button type="button" size="sm" variant="outline" className="h-7 w-11 px-0" onClick={() => scaleBy(1.01)} title="Agrandar 1 %, parejo, desde el centro">
+                +1 %
+              </Button>
+              <input
+                className="h-7 w-12 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
+                inputMode="decimal"
+                value={scalePct}
+                onChange={(e) => setScalePct(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') scaleBy(num(scalePct) / 100);
+                }}
+                title="Porcentaje del tamaño actual (Enter para aplicar)"
+              />
+              <span className="text-xs text-muted-foreground">%</span>
+              <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={() => scaleBy(num(scalePct) / 100)}>
+                Aplicar
+              </Button>
+            </Row>
+            <Row label="Grosor">
+              <Button type="button" size="sm" variant="outline" className="h-7 w-[4.5rem] px-0" onClick={() => doOffset(-1)} title="Offset interior: afina en paralelo">
+                Afinar
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="h-7 w-[4.5rem] px-0" onClick={() => doOffset(1)} title="Offset exterior: engorda en paralelo">
+                Engordar
+              </Button>
+              <input
+                className="h-7 w-12 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
+                inputMode="decimal"
+                value={offsetMm}
+                onChange={(e) => setOffsetMm(e.target.value)}
+                title="Cuánto afinar o engordar (offset interior / exterior)"
+              />
+              <span className="text-xs text-muted-foreground">mm</span>
+            </Row>
+            <Row label="Alinear">
+              {(
+                [
+                  ['left', AlignStartVertical, 'Bordes izquierdos'],
+                  ['hcenter', AlignCenterVertical, 'Centros (en vertical)'],
+                  ['right', AlignEndVertical, 'Bordes derechos'],
+                  ['top', AlignStartHorizontal, 'Bordes de arriba'],
+                  ['vcenter', AlignCenterHorizontal, 'Centros (en horizontal)'],
+                  ['bottom', AlignEndHorizontal, 'Bordes de abajo (la base del renglón)'],
+                ] as const
+              ).map(([mode, Icon, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={iconBtn}
+                  disabled={nSel < 2}
+                  onClick={() => doAlign(mode)}
+                  title={nSel < 2 ? 'Para alinear, elegí 2 piezas o más' : `Alinear: ${label}`}
+                >
+                  <Icon className="size-3.5" />
+                </button>
+              ))}
+            </Row>
+            <Row label="Espaciar">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2"
+                disabled={nSel < 3}
+                onClick={() => doDistribute('x')}
+                title={nSel < 3 ? 'Para espaciar parejo, elegí 3 piezas o más' : 'Mismo espacio entre las piezas, de izquierda a derecha (las de los extremos no se mueven)'}
+              >
+                <AlignHorizontalDistributeCenter className="mr-1 size-3.5" />
+                Parejo ↔
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2"
+                disabled={nSel < 3}
+                onClick={() => doDistribute('y')}
+                title={nSel < 3 ? 'Para espaciar parejo, elegí 3 piezas o más' : 'Mismo espacio entre las piezas, de arriba a abajo (las de los extremos no se mueven)'}
+              >
+                <AlignVerticalDistributeCenter className="mr-1 size-3.5" />
+                Parejo ↕
+              </Button>
+            </Row>
+            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={doDeleteSelection} title="Supr">
+              <Trash2 className="mr-1 size-3.5" />
+              Borrar lo elegido
+            </Button>
+          </fieldset>
         </Section>
 
         <Section
           title="Nodos"
-          extra={nSel ? `${selNodes.toLocaleString('es-AR')} en lo elegido` : `${totalNodes.toLocaleString('es-AR')} en total`}
+          extra={
+            <span className="tabular-nums">
+              {nSel ? `${selNodes.toLocaleString('es-AR')} en lo elegido` : `${totalNodes.toLocaleString('es-AR')} en total`}
+            </span>
+          }
         >
-          {tool === 'nodos' && selNode && selNodeData ? (
-            <div className="flex items-center justify-between gap-2 rounded bg-muted/50 px-2 py-1 text-xs">
-              <span>
-                Nodo elegido · {selNodeData.i || selNodeData.o ? (isSmooth(selNodeData) ? 'curva suave' : 'esquina con curva') : 'esquina'}
-              </span>
-              <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-destructive" onClick={doDeleteNode}>
-                <Trash2 className="mr-1 size-3" />
-                Borrar
+          {/* Renglón de alto fijo: el nodo elegido o cómo empezar. */}
+          <div className="flex h-7 items-center justify-between gap-2 text-xs">
+            {tool !== 'nodos' ? (
+              <Button type="button" size="sm" variant="outline" className="h-7" onClick={() => setTool('nodos')}>
+                <Spline className="mr-1 size-3.5" />
+                Editar nodos (A)
               </Button>
-            </div>
-          ) : tool !== 'nodos' ? (
-            <Button type="button" size="sm" variant="outline" className="h-7" onClick={() => setTool('nodos')}>
-              <Spline className="mr-1 size-3.5" />
-              Editar nodos
-            </Button>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Button type="button" size="sm" variant="outline" className="h-7" disabled={!extra.length} onClick={doRedundant}>
-              {extra.length ? `Quitar ${extra.length} de más` : 'Sin nodos de más'}
-            </Button>
-            {extra.length ? <span className="text-[11px] text-orange-600">(en naranja)</span> : null}
+            ) : (
+              <>
+                <span className="truncate text-muted-foreground">
+                  {selNodeData
+                    ? `Nodo elegido: ${selNodeData.i || selNodeData.o ? (isSmooth(selNodeData) ? 'curva suave' : 'esquina con curva') : 'esquina'}`
+                    : primary
+                      ? 'Tocá un nodo para elegirlo.'
+                      : 'Tocá una pieza para ver sus nodos.'}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 shrink-0 px-2 text-destructive"
+                  disabled={!selNodeData}
+                  onClick={doDeleteNode}
+                  title="Borrar el nodo elegido (Supr)"
+                >
+                  <Trash2 className="mr-1 size-3" />
+                  Borrar nodo
+                </Button>
+              </>
+            )}
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
             <Button
               type="button"
               size="sm"
               variant="outline"
               className="h-7"
-              disabled={!simplified || simplified.after >= simplified.before}
+              disabled={simplified != null && simplified.after >= simplified.before}
               onClick={doSimplify}
+              title="Deja las rectas como rectas y las curvas con pocos nodos; la forma cambia como mucho el error elegido"
             >
-              {simplified && simplified.after < simplified.before
-                ? `Simplificar: ${simplified.before.toLocaleString('es-AR')} → ${simplified.after.toLocaleString('es-AR')} nodos`
-                : 'Ya está simple'}
+              Simplificar
             </Button>
             <select
               className="h-7 rounded border bg-background px-1 text-xs"
@@ -1413,23 +1476,47 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               ))}
             </select>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            {nSel ? 'Se aplica a lo elegido.' : 'Se aplica a todo el dibujo.'} «Simplificar» deja las rectas como rectas
-            y las curvas con pocos nodos, y la forma cambia como mucho lo elegido. «Quitar de más» no la cambia nada.
+          <p className="h-4 truncate text-[11px] tabular-nums text-muted-foreground">
+            {simplified == null
+              ? 'Calculando cuántos nodos se pueden sacar…'
+              : simplified.after < simplified.before
+                ? `Quedarían ${simplified.after.toLocaleString('es-AR')} de ${simplified.before.toLocaleString('es-AR')} nodos.`
+                : 'Ya está simple con ese error.'}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 tabular-nums"
+              disabled={!extra.length}
+              onClick={doRedundant}
+              title="Nodos repetidos o en medio de una recta (en naranja). Sacarlos no cambia la forma."
+            >
+              <span className="mr-1.5 inline-block size-2 rounded-sm bg-orange-500" />
+              Quitar de más ({extra.length})
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 tabular-nums"
+              disabled={!motas.length}
+              onClick={doSpecks}
+              title={`Piezas sueltas de menos de ${mm(SPECK_MM2)} mm² (restos de la vectorización)`}
+            >
+              <Eraser className="mr-1 size-3.5" />
+              Borrar motas ({motas.length})
+            </Button>
+          </div>
+          <p className="h-4 truncate text-[11px] text-muted-foreground">
+            {nSel ? 'Se aplica a lo elegido.' : 'Se aplica a todo el dibujo.'}
           </p>
         </Section>
 
-        {motas.length ? (
-          <Section title="Limpieza">
-            <Button type="button" size="sm" variant="outline" className="h-7" onClick={doSpecks}>
-              <Eraser className="mr-1 size-3.5" />
-              Borrar {motas.length} mota{motas.length === 1 ? '' : 's'}
-            </Button>
-            <p className="text-[11px] text-muted-foreground">Piezas sueltas de menos de {mm(SPECK_MM2)} mm² (restos de la vectorización).</p>
-          </Section>
-        ) : null}
+        </div>
 
-        <div className="mt-auto flex flex-wrap items-center gap-2 border-t pt-3">
+        <div className="flex shrink-0 items-center gap-2 border-t pt-3">
           <Button
             type="button"
             disabled={!changes || !doc}
@@ -1439,13 +1526,11 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             Terminar edición
           </Button>
           <Button type="button" variant="ghost" onClick={() => (changes ? setConfirmDiscard(true) : onCancel())}>
-            {changes ? 'Descartar' : 'Volver'}
+            Cancelar
           </Button>
-          {changes ? (
-            <span className="text-[11px] text-muted-foreground">
-              {changes} cambio{changes === 1 ? '' : 's'}
-            </span>
-          ) : null}
+          <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
+            {changes} cambio{changes === 1 ? '' : 's'}
+          </span>
         </div>
       </aside>
 

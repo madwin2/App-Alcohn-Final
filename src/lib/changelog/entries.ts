@@ -34,6 +34,7 @@ import {
   ScanSearch,
   Wand2,
   PencilRuler,
+  Keyboard,
   Spline,
   type LucideIcon,
 } from 'lucide-react';
@@ -1023,6 +1024,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Original, automático o a mano',
         body: '«Ver / editar» abre el chequeo con la corrección ya hecha: podés compararla, editar el corregido o el original, o quedarte con el original. El original nunca se pierde hasta que confirmás.',
         icon: PencilRuler,
+      },
+    ],
+  },
+  {
+    id: 58,
+    date: '2026-10-15',
+    title: 'Editor de vectores más cómodo',
+    version: '1.76',
+    slides: [
+      {
+        heading: 'Nada se corre de lugar',
+        body: 'En el editor del chequeo de fresa, los botones quedan siempre en el mismo lugar: podés tocar +1 % o una flecha varias veces seguidas. Los avisos aparecen flotando arriba del dibujo y se van solos.',
+        icon: PencilRuler,
+      },
+      {
+        heading: 'Más rápido y con el teclado',
+        body: 'Cada cambio responde al instante, Terminar edición queda siempre a la vista y los atajos (Ctrl+Z, flechas, Supr) andan aunque hayas tocado un botón del panel.',
+        icon: Keyboard,
       },
     ],
   },
