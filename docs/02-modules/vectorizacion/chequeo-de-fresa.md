@@ -92,17 +92,19 @@ Botón **Editar a mano** en el diálogo del chequeo (sobre el original o sobre e
 
 | Herramienta | Qué hace |
 |---|---|
-| **Mover** (V) | Tocar una pieza la elige; arrastrarla la mueve. Flechas: 0,05 mm (Shift: 0,5 mm). También con valores en mm. |
-| **Escalar** | Porcentaje, parejo (sin deformar), desde el centro de la pieza. |
-| **Offset** exterior / interior | Engorda o afina la pieza en paralelo (Clipper) y la devuelve con curvas suaves (ajuste de Schneider, error 0,01 mm), sin nodos de más. |
-| **Nodos** (A) | Ver y arrastrar nodos y manijas de la pieza elegida; en un nodo suave, mover una manija gira la otra para que no quede quiebre. Supr borra el nodo elegido. "Ver todos los nodos" los muestra en todo el dibujo. |
+| **Elegir y mover** (V) | Al pasar el mouse se resalta la pieza que se va a agarrar; tocarla la elige (azul, con su medida); arrastrarla la mueve. Flechas del panel o del teclado con paso elegible (0,02–0,5 mm; Shift ×10). Doble clic acerca la vista a la pieza. |
+| **Tamaño** | −1 % / +1 % o un porcentaje; parejo (sin deformar), desde el centro de la pieza. |
+| **Grosor**: Afinar / Engordar | Offset interior / exterior en paralelo (Clipper), devuelto con curvas suaves (ajuste de Schneider, error 0,01 mm), sin nodos de más. |
+| **Nodos** (A) | Ver y arrastrar nodos y manijas de la pieza elegida; en un nodo suave, mover una manija gira la otra para que no quede quiebre. Si en pantalla quedan a menos de 9 px se muestran como puntos (no se pueden tocar) y la ayuda pide acercarse. Supr borra el nodo elegido. "Todos los nodos" los muestra en todo el dibujo. |
 | **Quitar nodos de más** | Saca nodos repetidos y nodos en medio de una recta. **No cambia la forma.** Los nodos de más se ven en naranja. |
 | **Simplificar curvas** | Entre esquinas, reemplaza muchos nodos por pocas curvas (algoritmo de Schneider, el mismo de `simplify` en Paper.js y VectorCraft) con un **error máximo elegido** (0,005–0,05 mm). Las esquinas se conservan. |
 | **Borrar pieza / Borrar motas** | Borra la pieza elegida, o todas las piezas sueltas de menos de 0,05 mm² (restos de la vectorización). |
-| **Mano** (H), rueda, Alt o clic derecho + arrastrar | Moverse y acercar. |
-| **Deshacer / Rehacer** | Ctrl+Z / Ctrl+Y (hasta 80 pasos). |
+| **Mano** (H), arrastrar el fondo, Espacio + arrastrar, rueda | Moverse y acercar. Tecla 0: ver todo. |
+| **Deshacer / Rehacer** | Ctrl+Z / Ctrl+Y (hasta 80 pasos). **Descartar** pide confirmación si hay cambios. |
 
-**Listo** devuelve el resultado al diálogo como una corrección más ("Se hizo N cambios a mano"), re-chequeado a la misma escala; se usa con **Usar el corregido** como siempre. Si el dibujo cambió de medida (se agrandó o movió algo hacia afuera), el editor lo avisa y al guardar se usa la medida nueva.
+El panel muestra el estado en vivo con **Ir a: 1 2…** (acerca la vista a cada lugar), la medida del sello y avisos de cada acción; la ayuda debajo del lienzo cambia según la herramienta y lo elegido, y **Atajos** lista el teclado. El zoom se conserva al cambiar de herramienta (solo "ver todo" o la tecla 0 reencuadran).
+
+**Terminar edición** devuelve el resultado al diálogo como una corrección más ("Se hizo N cambios a mano"), re-chequeado a la misma escala; se usa con **Usar el corregido** como siempre. Si el dibujo cambió de medida (se agrandó o movió algo hacia afuera), el editor lo avisa y al guardar se usa la medida nueva.
 
 **VectorCraft**: se tomó la idea (el método de simplificación de su `pathops` es el de Schneider), no el código: se escribió en TypeScript para no sumar Rust/WebAssembly. Su editor (Rust/egui) no se puede reusar en la app.
 

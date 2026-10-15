@@ -409,10 +409,16 @@ export function FresaCheckDialog({
             ) : null}
 
             {report && report.status !== 'error' ? (
-              <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setEditing(true)}>
-                <PencilRuler className="mr-1.5 size-4" />
-                {fix ? 'Editar a mano el corregido' : 'Editar a mano'}
-              </Button>
+              <div className="shrink-0 space-y-1">
+                <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setEditing(true)}>
+                  <PencilRuler className="mr-1.5 size-4" />
+                  {fix ? 'Editar a mano el corregido' : 'Editar a mano'}
+                </Button>
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  Mover o agrandar una letra, afinarla o engordarla, mover nodos y simplificar. La fresa se vuelve a
+                  chequear con cada cambio.
+                </p>
+              </div>
             ) : null}
             <div className="shrink-0 space-y-2 border-t pt-3">
               {!fix ? (
