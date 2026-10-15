@@ -33,6 +33,8 @@ import {
   ZoomIn,
   ScanSearch,
   Wand2,
+  PencilRuler,
+  Spline,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -985,6 +987,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'También en Programas',
         body: 'En la hoja del programa, el botón «Fresa» revisa todos los sellos antes de armarlo en Aspire. En Pedidos y Producción: clic derecho en el vector → Chequear fresa.',
         icon: Layers,
+      },
+    ],
+  },
+  {
+    id: 54,
+    date: '2026-10-15',
+    title: 'Editar el vector a mano',
+    version: '1.72',
+    slides: [
+      {
+        heading: 'Editar a mano en el chequeo de fresa',
+        body: 'Para lo que la corrección automática no resuelve: mové, escalá o hacele offset a una letra o pieza, y la fresa se vuelve a chequear sola cada vez que soltás.',
+        icon: PencilRuler,
+      },
+      {
+        heading: 'Nodos a la vista',
+        body: 'Ves los nodos de cada pieza y los podés arrastrar. «Quitar nodos de más» los limpia sin cambiar la forma; «Simplificar curvas» deja menos nodos con un error que elegís.',
+        icon: Spline,
       },
     ],
   },

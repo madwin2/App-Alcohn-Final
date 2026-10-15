@@ -84,6 +84,28 @@ Siempre: **nunca cambia la topología** (no parte piezas, no une huecos, no borr
 
 Resultado con vectores reales (oct. 2026): textos con letras justas (OliFlowers, Cerro Colorado, Samadhi) se resuelven moviendo letras, sin sacar negro. **Rockets Butchery** (40 mm): de 18 lugares a 13; se resuelven las 5 letras pegadas al aro (C, O, ' y S de ROCKET'S, corridas solas 0,04–0,09 mm hacia adentro porque abajo tienen el círculo interior; BUTCHERY entera 0,10 mm hacia adentro). Lo que queda no es texto en arco que se pueda mover: las estrellas están a 0,22 mm del aro **y** del círculo (la suma no alcanza para que pase la fresa de los dos lados: habría que achicarlas), y el resto es el lobo, los cuchillos y el círculo interior (piezas fijas, ojos con trazos finos). Siguen para edición manual: ojos rodeados de trazos finos (sacar más afinaría por debajo de 0,4 mm) y piezas encajadas sin lugar.
 
+## 4 bis. Edición manual (✅ 2026-10-15, `editDoc.ts`, `curveFit.ts`, `FresaEditor.tsx`)
+
+Botón **Editar a mano** en el diálogo del chequeo (sobre el original o sobre el corregido). Abre un editor en el mismo lugar del visor, con el **chequeo de fresa recalculado al soltar cada cambio** (lugares en rojo/amarillo y la medida actual del dibujo).
+
+**Modelo** (`editDoc.ts`): el SVG se pasa a nodos con manijas (como Illustrator), en unidades del viewBox y con las transformaciones aplicadas; arcos, círculos, elipses y rectángulos redondeados pasan a curvas cúbicas. Una **pieza** es un contorno lleno con sus agujeros directos (una letra con su ojo); lo que está adentro de un agujero (las letras dentro de un aro) es otra pieza. Solo funciona con SVG de rellenos oscuros (sin blancos ni trazos), que es lo que sale de Vectorizer.AI e Illustrator; si no, avisa.
+
+| Herramienta | Qué hace |
+|---|---|
+| **Mover** (V) | Tocar una pieza la elige; arrastrarla la mueve. Flechas: 0,05 mm (Shift: 0,5 mm). También con valores en mm. |
+| **Escalar** | Porcentaje, parejo (sin deformar), desde el centro de la pieza. |
+| **Offset** exterior / interior | Engorda o afina la pieza en paralelo (Clipper) y la devuelve con curvas suaves (ajuste de Schneider, error 0,01 mm), sin nodos de más. |
+| **Nodos** (A) | Ver y arrastrar nodos y manijas de la pieza elegida; en un nodo suave, mover una manija gira la otra para que no quede quiebre. Supr borra el nodo elegido. "Ver todos los nodos" los muestra en todo el dibujo. |
+| **Quitar nodos de más** | Saca nodos repetidos y nodos en medio de una recta. **No cambia la forma.** Los nodos de más se ven en naranja. |
+| **Simplificar curvas** | Entre esquinas, reemplaza muchos nodos por pocas curvas (algoritmo de Schneider, el mismo de `simplify` en Paper.js y VectorCraft) con un **error máximo elegido** (0,005–0,05 mm). Las esquinas se conservan. |
+| **Borrar pieza / Borrar motas** | Borra la pieza elegida, o todas las piezas sueltas de menos de 0,05 mm² (restos de la vectorización). |
+| **Mano** (H), rueda, Alt o clic derecho + arrastrar | Moverse y acercar. |
+| **Deshacer / Rehacer** | Ctrl+Z / Ctrl+Y (hasta 80 pasos). |
+
+**Listo** devuelve el resultado al diálogo como una corrección más ("Se hizo N cambios a mano"), re-chequeado a la misma escala; se usa con **Usar el corregido** como siempre. Si el dibujo cambió de medida (se agrandó o movió algo hacia afuera), el editor lo avisa y al guardar se usa la medida nueva.
+
+**VectorCraft**: se tomó la idea (el método de simplificación de su `pathops` es el de Schneider), no el código: se escribió en TypeScript para no sumar Rust/WebAssembly. Su editor (Rust/egui) no se puede reusar en la app.
+
 ## 5. Dónde aparece en la app
 
 | Pantalla | Qué se ve | Qué se puede hacer |
@@ -111,4 +133,4 @@ Resultado con vectores reales (oct. 2026): textos con letras justas (OliFlowers,
 
 ## Implementación relacionada
 
-`src/lib/fresa/{config,pathData,svgShapes,geometry,analyze,layout,fix,moveSvg,engine,exportSvg,chequeoFresa,useFresaReport,guardarCorregido,textos,fresa.worker,workerProtocol}.ts`, `src/components/fresa/{FresaChip,FresaCheckDialog,FresaViewer,FresaVectorDialog,FresaProgramaDialog}.tsx`, integración en `RevisionTab.tsx`, `AsignarTab.tsx`, `pedidos|produccion/Table/cells/CellVector.tsx`, `ProgramCardDesign.tsx`, `ProgramContextMenu.tsx`. Tests: `src/lib/fresa/fresa.test.ts`. Dependencia: `clipper2-ts` (BSL-1.0).
+`src/lib/fresa/{editDoc,curveFit,config,pathData,svgShapes,geometry,analyze,layout,fix,moveSvg,engine,exportSvg,chequeoFresa,useFresaReport,guardarCorregido,textos,fresa.worker,workerProtocol}.ts`, `src/components/fresa/{FresaEditor,FresaChip,FresaCheckDialog,FresaViewer,FresaVectorDialog,FresaProgramaDialog}.tsx`, integración en `RevisionTab.tsx`, `AsignarTab.tsx`, `pedidos|produccion/Table/cells/CellVector.tsx`, `ProgramCardDesign.tsx`, `ProgramContextMenu.tsx`. Tests: `src/lib/fresa/fresa.test.ts`. Dependencia: `clipper2-ts` (BSL-1.0).

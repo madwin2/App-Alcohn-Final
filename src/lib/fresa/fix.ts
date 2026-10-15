@@ -75,7 +75,9 @@ export type FixOperation =
   /** Renglones del mismo bloque que se ensancharon para acompañar (quedan parejos). */
   | { kind: 'acompanar'; renglones: number }
   | { kind: 'agrandar_ojo'; mm: number }
-  | { kind: 'ensanchar'; mm: number };
+  | { kind: 'ensanchar'; mm: number }
+  /** Cambios hechos a mano en el editor (mover, escalar, offsets, nodos). */
+  | { kind: 'manual'; cambios: number };
 
 export interface FixResult {
   /** Región negra corregida (µm). */

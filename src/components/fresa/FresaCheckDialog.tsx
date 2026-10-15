@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Download, Loader2, Wand2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, Loader2, PencilRuler, Wand2, XCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils/cn';
-import { corregirSvg, type FresaFixResult, type FresaReport, type FresaTarget } from '@/lib/fresa/chequeoFresa';
+import {
+  corregirSvg,
+  resultadoManual,
+  type FresaFixResult,
+  type FresaReport,
+  type FresaTarget,
+} from '@/lib/fresa/chequeoFresa';
+import { FresaEditor } from './FresaEditor';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
 import type { ZoneSeverity } from '@/lib/fresa/analyze';
 import {
@@ -127,6 +134,7 @@ export function FresaCheckDialog({
   const [fixing, setFixing] = useState(false);
   const [applying, setApplying] = useState(false);
   const [mode, setMode] = useState<FresaViewMode>('original');
+  const [editing, setEditing] = useState(false);
   const [showDepth, setShowDepth] = useState(true);
 
   // Al abrir otro diseño, empezar de cero.
@@ -135,6 +143,7 @@ export function FresaCheckDialog({
     setMode('original');
     setSelected(null);
     setVisible(new Set(DEFAULT_VISIBLE));
+    setEditing(false);
   }, [svgText, open]);
 
   const active = mode !== 'original' && fix ? fix.after : report;
@@ -153,6 +162,21 @@ export function FresaCheckDialog({
   const select = (id: string | null) => {
     setSelected(id);
     if (id) setFocusNonce((n) => n + 1);
+  };
+
+  /** Termina la edición manual: el resultado queda como una corrección más. */
+  const finishEdit = async (edited: string, cambios: number) => {
+    if (!report) return;
+    setEditing(false);
+    setFixing(true);
+    try {
+      const res = await resultadoManual(edited, report, cambios);
+      setFix(res);
+      setMode('corregido');
+      setSelected(null);
+    } finally {
+      setFixing(false);
+    }
   };
 
   const runFix = async () => {
@@ -199,7 +223,9 @@ export function FresaCheckDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[92vh] w-[min(1280px,97vw)] max-w-none flex-col gap-3 overflow-y-auto p-4 sm:max-w-none md:overflow-hidden">
+      <DialogContent
+        onEscapeKeyDown={(e) => editing && e.preventDefault()}
+        className="flex h-[92vh] w-[min(1280px,97vw)] max-w-none flex-col gap-3 overflow-y-auto p-4 sm:max-w-none md:overflow-hidden">
         <DialogHeader className="shrink-0 space-y-1 pr-8">
           <DialogTitle className="text-base">Chequeo de fresa — {title}</DialogTitle>
           {report && report.status !== 'error' ? (
@@ -210,6 +236,14 @@ export function FresaCheckDialog({
           ) : null}
         </DialogHeader>
 
+        {editing && svgText && report && report.status !== 'error' ? (
+          <FresaEditor
+            svgText={fix?.svg ?? svgText}
+            report={report}
+            onDone={(edited, cambios) => void finishEdit(edited, cambios)}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
         <div className="flex flex-col gap-3 md:min-h-0 md:flex-1 md:flex-row">
           <div className="flex h-[55vh] min-w-0 flex-col gap-2 md:h-auto md:min-h-[300px] md:flex-1">
             {fix ? (
@@ -374,6 +408,12 @@ export function FresaCheckDialog({
               </p>
             ) : null}
 
+            {report && report.status !== 'error' ? (
+              <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setEditing(true)}>
+                <PencilRuler className="mr-1.5 size-4" />
+                {fix ? 'Editar a mano el corregido' : 'Editar a mano'}
+              </Button>
+            ) : null}
             <div className="shrink-0 space-y-2 border-t pt-3">
               {!fix ? (
                 <>
@@ -461,6 +501,7 @@ export function FresaCheckDialog({
             </div>
           </aside>
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );

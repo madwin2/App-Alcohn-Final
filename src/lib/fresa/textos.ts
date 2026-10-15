@@ -106,6 +106,10 @@ export function resumenOperaciones(ops: FixOperation[]): string {
   if (ojos) parts.push(`se ${ojos === 1 ? 'agrandó 1 ojo' : `agrandaron ${ojos} ojos`} de letra`);
   const ranuras = ops.filter((o) => o.kind === 'ensanchar').length;
   if (ranuras) parts.push(`se ${ranuras === 1 ? 'ensanchó 1 ranura' : `ensancharon ${ranuras} ranuras`}`);
+  const manual = ops.find((o) => o.kind === 'manual');
+  if (manual && manual.kind === 'manual') {
+    parts.push(`se ${manual.cambios === 1 ? 'hizo 1 cambio' : `hicieron ${manual.cambios} cambios`} a mano`);
+  }
   const text = parts.join(', ');
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }

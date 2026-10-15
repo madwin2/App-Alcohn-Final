@@ -484,6 +484,32 @@ function scaleUpLimit(r: FresaReport): number {
   return MAX_SCALE_UP;
 }
 
+/**
+ * Resultado de una edición manual (editor del chequeo): se re-chequea con la
+ * misma escala que el original. La medida puede cambiar si se agrandó o movió
+ * algo hacia afuera; se informa en `fabricationMm`.
+ */
+export async function resultadoManual(
+  svg: string,
+  before: FresaReport,
+  cambios: number,
+  options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
+): Promise<FresaFixResult> {
+  const after = await chequearSvg(svg, sameScaleTarget(before), options);
+  return {
+    svg,
+    removedAreaMm2: 0,
+    operations: [{ kind: 'manual', cambios }],
+    fixedZoneIds: [],
+    skippedZoneIds: [],
+    fitScale: 1,
+    fabricationMm: { widthMm: after.widthMm, heightMm: after.heightMm },
+    scaleUp: null,
+    before,
+    after,
+  };
+}
+
 /** Texto corto para chips y tooltips. */
 export function resumenFresa(r: FresaReport | null | undefined): string {
   if (!r) return 'Analizando…';

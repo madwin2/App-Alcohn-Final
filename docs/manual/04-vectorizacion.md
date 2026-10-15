@@ -74,7 +74,16 @@ Tocá el chip para abrir el **Chequeo de fresa**:
    - **No cambia la medida del sello**: si al abrir espacios el diseño quedó más ancho, achica todo parejo (ícono incluido) para que entre en la misma medida, y lo vuelve a chequear así. Abajo dice cuánto se achicó.
    - **Último recurso**: si igual quedan lugares y agrandar el sello un poco (hasta 6 %, sin pasar el tope de la planchuela) los resuelve, aparece **Agrandar a A × B mm y usar**. Cambia la medida de fabricación: usalo solo si es imprescindible.
 5. Compará con **Original**, **Corregido** y **Qué cambia** (en celeste, lo que cambió).
-6. **Usar el corregido** reemplaza el vector en revisión. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
+6. **Editar a mano** (o **Editar a mano el corregido**): abre un editor en el mismo lugar, para lo que la corrección automática no resuelve. La fresa se vuelve a chequear sola cada vez que soltás un cambio, y arriba a la derecha ves cuántos lugares quedan y la medida del dibujo.
+   - **Mover** (V): tocá una pieza (una letra, el ícono) y arrastrala, o usá las flechas (0,05 mm; con Shift 0,5 mm). También podés escribir cuántos mm moverla.
+   - **Escalar**: un porcentaje, parejo (no deforma), desde el centro de la pieza.
+   - **Offset exterior / interior**: engorda o afina la pieza en paralelo, con curvas suaves.
+   - **Nodos** (A): ves los nodos de la pieza elegida y los podés arrastrar, junto con sus manijas. **Supr** borra el nodo elegido. **Ver todos los nodos** los muestra en todo el dibujo.
+   - **Quitar nodos de más** (los naranjas): saca nodos repetidos o en medio de una recta, sin cambiar la forma. **Simplificar curvas**: deja menos nodos con un error máximo que elegís (0,005 a 0,05 mm). Si tenés una pieza elegida, se aplica solo a esa.
+   - **Borrar pieza** y **Borrar motas** (piezas sueltas de menos de 0,05 mm², restos de la vectorización).
+   - **Ctrl+Z** deshace, **Ctrl+Y** rehace. Rueda para acercar; Alt o clic derecho y arrastrar para moverte.
+   - **Listo** vuelve al chequeo con lo editado; **Cancelar** descarta. Solo funciona con vectores de rellenos negros (sin blancos ni trazos).
+7. **Usar el corregido** reemplaza el vector en revisión. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
 
 Si confirmás un vector con lugares donde la fresa no llega, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.
 
