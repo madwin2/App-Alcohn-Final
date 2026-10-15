@@ -802,6 +802,35 @@ function turnDeg(ax: number, ay: number, bx: number, by: number): number {
 
 /** Giro a partir del cual un vértice es una esquina. */
 const CORNER_DEG = 30;
+/** Vértices a menos de esto (en `tol`) se miran juntos como una esquina redondeada. */
+const CORNER_GROUP_TOL = 6;
+
+/** Recta como cúbica (controles en las puntas). */
+const lineCubic = (a: Pt, b: Pt): Cubic => [a, a, b, b];
+const isLine = (c: Cubic) => c[1] === c[0] && c[2] === c[3];
+
+/** Distancia máxima de cada punto de `qs` a la polilínea `poly`. */
+function farthest(qs: Pt[], poly: Pt[]): number {
+  let worst = 0;
+  for (const q of qs) {
+    let best = poly.length === 1 ? dist(q, poly[0]) : Infinity;
+    for (let k = 0; k + 1 < poly.length && best > worst; k++) best = Math.min(best, segmentDistance(q, poly[k], poly[k + 1]));
+    worst = Math.max(worst, best);
+  }
+  return worst;
+}
+
+/** Cuánto se separan las curvas de la polilínea original, en los dos sentidos. */
+function maxDeviation(cubics: Cubic[], poly: Pt[], tol: number): number {
+  const fp: Pt[] = [cubics[0][0]];
+  for (const c of cubics) {
+    // Muestras suficientes para que la cuerda entre dos no sume error.
+    const len = dist(c[0], c[1]) + dist(c[1], c[2]) + dist(c[2], c[3]);
+    const steps = Math.max(4, Math.min(256, Math.ceil(4 * Math.sqrt(len / Math.max(tol, 1e-12)))));
+    for (let s = 1; s <= steps; s++) fp.push(bezierPoint(c, s / steps));
+  }
+  return Math.max(farthest(fp, poly), farthest(poly, fp));
+}
 
 /**
  * Simplifica un sub-trayecto: deja la menor cantidad de nodos que pasen a
@@ -869,12 +898,12 @@ export function simplifySub(sub: ESub, tol: number): ESub | null {
     const t = (x - cum[lo]) / span;
     return { x: ext[lo].x + t * (ext[hi].x - ext[lo].x), y: ext[lo].y + t * (ext[hi].y - ext[lo].y) };
   };
-  const corners: number[] = [];
   const nv = verts.length;
+  const isCornerV = new Uint8Array(nv);
   for (let j = 0; j < nv; j++) {
     const k = verts[j];
     if (!sub.closed && (j === 0 || j === nv - 1)) {
-      corners.push(k);
+      isCornerV[j] = 1;
       continue;
     }
     const prevV = verts[(j - 1 + nv) % nv];
@@ -886,48 +915,109 @@ export function simplifySub(sub: ESub, tol: number): ESub | null {
     const p = pts[k];
     const a = at(cum[k] - win);
     const b = at(cum[k] + win);
-    if (turnDeg(p.x - a.x, p.y - a.y, b.x - p.x, b.y - p.y) >= CORNER_DEG) corners.push(k);
+    if (turnDeg(p.x - a.x, p.y - a.y, b.x - p.x, b.y - p.y) >= CORNER_DEG) isCornerV[j] = 1;
   }
+  // Esquinas redondeadas chiquitas: el giro se reparte entre varios vértices
+  // muy juntos (cada uno gira poco). Se miran como grupo: si entre todos giran
+  // una esquina, sus puntas quedan como esquina (y el redondeo, como curva).
+  const span = CORNER_GROUP_TOL * tol;
+  const linked = (j: number) =>
+    (sub.closed || j + 1 < nv) && dist(pts[verts[j]], pts[verts[(j + 1) % nv]]) <= span;
+  const start = sub.closed ? Array.from({ length: nv }, (_, j) => j).find((j) => !linked((j - 1 + nv) % nv)) : 0;
+  if (start !== undefined && nv >= 3) {
+    for (let c = 0; c < nv; ) {
+      const j0 = (start + c) % nv;
+      let len = 1;
+      while (len < nv && linked((j0 + len - 1) % nv)) len++;
+      if (len >= 2 && (sub.closed || (j0 > 0 && j0 + len - 1 < nv - 1))) {
+        const pIn = pts[verts[(j0 - 1 + nv) % nv]];
+        const g0 = pts[verts[j0]];
+        const g1 = pts[verts[(j0 + len - 1) % nv]];
+        const pOut = pts[verts[(j0 + len) % nv]];
+        if (turnDeg(g0.x - pIn.x, g0.y - pIn.y, pOut.x - g1.x, pOut.y - g1.y) >= CORNER_DEG) {
+          if (dist(g0, g1) <= tol) {
+            // Redondeo más chico que la tolerancia: una esquina viva en el medio.
+            isCornerV[(j0 + Math.floor(len / 2)) % nv] = 1;
+          } else {
+            // Las puntas del redondeo son esquinas; el redondeo queda como curva.
+            isCornerV[j0] = 1;
+            isCornerV[(j0 + len - 1) % nv] = 1;
+          }
+        }
+      }
+      c += len;
+    }
+  }
+  const corners: number[] = [];
+  for (let j = 0; j < nv; j++) if (isCornerV[j]) corners.push(verts[j]);
 
   // 4. Tramos entre esquinas.
-  const runPts = (from: number, to: number): Pt[] => {
-    const out: Pt[] = [];
+  const runIdx = (from: number, to: number): number[] => {
+    const out: number[] = [];
     for (let k = from; ; k = (k + 1) % m) {
-      out.push(pts[k]);
+      out.push(k);
       if (k === to && out.length > 1) break;
       if (out.length > m + 1) break;
     }
     return out;
   };
   const out: ENode[] = [];
-  const pushRun = (rp: Pt[]) => {
+  const pushRun = (idx: number[]) => {
+    const rp = idx.map((k) => pts[k]);
     const end = rp[rp.length - 1];
     if (rp.every((q) => segmentDistance(q, rp[0], end) <= tol)) {
       out.push({ p: { ...end } });
       return;
     }
-    for (const c of fitCubics(rp, tol)) {
-      if (isNearlyStraight(c, tol * 0.25)) {
-        out.push({ p: c[3] });
-      } else {
-        out[out.length - 1].o = c[1];
-        out.push({ p: c[3], i: c[2] });
+    const emit = (segs: Cubic[]) => {
+      for (const c of segs) {
+        if (isLine(c)) out.push({ p: c[3] });
+        else {
+          out[out.length - 1].o = c[1];
+          out.push({ p: c[3], i: c[2] });
+        }
       }
+    };
+    const curveOrLine = (c: Cubic, f: number): Cubic => (isNearlyStraight(c, tol * f) ? lineCubic(c[0], c[3]) : c);
+    const fit = fitCubics(rp, tol);
+    // Primero el intento más simple (curvas que casi no se curvan → rectas, y
+    // rectas alineadas → una sola); si se va de la forma, uno más fiel.
+    for (const [straightTol, merge] of [
+      [0.5, true],
+      [0.25, false],
+    ] as const) {
+      const segs: Cubic[] = fit.map((c) => curveOrLine(c, straightTol));
+      if (merge) {
+        for (let t = 0; t + 1 < segs.length; ) {
+          const c0 = segs[t];
+          const c1 = segs[t + 1];
+          if (isLine(c0) && isLine(c1) && segmentDistance(c0[3], c0[0], c1[3]) <= tol * 0.5) {
+            segs.splice(t, 2, lineCubic(c0[0], c1[3]));
+          } else t++;
+        }
+      }
+      // Control: lo simplificado no se puede ir de la forma original.
+      if (!segs.length || maxDeviation(segs, rp, tol) > 1.5 * tol) continue;
+      emit(segs);
+      return;
     }
+    // Último recurso: rectas por los puntos de la forma mínima (Douglas-Peucker
+    // garantiza que están a menos de `tol`).
+    for (let t = 1; t < idx.length; t++) if (keep[idx[t]] || t === idx.length - 1) out.push({ p: { ...pts[idx[t]] } });
   };
   if (!sub.closed) {
     out.push({ p: { ...pts[0] } });
-    for (let j = 0; j + 1 < corners.length; j++) pushRun(runPts(corners[j], corners[j + 1]));
+    for (let j = 0; j + 1 < corners.length; j++) pushRun(runIdx(corners[j], corners[j + 1]));
   } else if (corners.length < 2) {
     // Sin esquinas (o con una sola): se ajusta en dos mitades.
     const s0 = corners.length ? corners[0] : 0;
     const s1 = (s0 + Math.floor(m / 2)) % m;
     out.push({ p: { ...pts[s0] } });
-    pushRun(runPts(s0, s1));
-    pushRun(runPts(s1, s0));
+    pushRun(runIdx(s0, s1));
+    pushRun(runIdx(s1, s0));
   } else {
     out.push({ p: { ...pts[corners[0]] } });
-    for (let j = 0; j < corners.length; j++) pushRun(runPts(corners[j], corners[(j + 1) % corners.length]));
+    for (let j = 0; j < corners.length; j++) pushRun(runIdx(corners[j], corners[(j + 1) % corners.length]));
   }
   if (sub.closed && out.length > 1 && near(out[0].p, out[out.length - 1].p, tol * 0.01)) {
     const last = out.pop()!;

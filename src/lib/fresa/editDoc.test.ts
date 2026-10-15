@@ -5,6 +5,7 @@ import {
   buildEditDoc,
   computePieces,
   countNodes,
+  docBounds,
   deleteNode,
   moveNodePart,
   offsetPiece,
@@ -174,6 +175,29 @@ describe('editDoc', () => {
     const area = 4 * 8 + (Math.PI * 16) / 2;
     expect(areaOf(serializeEditDoc(s))).toBeCloseTo(area, 0);
     expect(s.paths[0].subs[0].nodes.some((n) => n.i || n.o)).toBe(true);
+  });
+
+  it('simplifica la G del caso FG (esquinas apenas redondeadas) sin deformarla', () => {
+    // Vector real: rectas como cúbicas y esquinas con un redondeo de ~0,02 mm
+    // repartido en 2-3 nodos. Antes la esquina no se veía y el lado salía curvo.
+    const d0 = 'M311.13 1522.65C312.3567 1523.27 313.5467 1523.97 314.7 1524.75C322.39 1529.93 330.09 1536.38 337.51 1543.15C348.49 1553.17 359.3767 1562.11 370.17 1569.97C372.47 1571.65 375.4133 1574.1833 379 1577.57C387.78 1585.86 396.39 1592.65 407 1600.92C411.0733 1604.1 417.35 1609.2867 425.83 1616.48C436.2967 1625.3667 448.3433 1635.31 461.97 1646.31C464.81 1648.59 466.82 1650.75 469.17 1653.17C469.93 1653.9493 470.9219 1654.4645 472 1654.64C474.56 1655.06 477.06 1655.2633 479.5 1655.25C509.0733 1655.0767 538.63 1655.13 568.17 1655.41C593.9833 1655.6567 613.5367 1655.67 626.83 1655.45C651.54 1655.04 674.16 1655.55 705.05 1655.51C875.3433 1655.29 976.8267 1655.2367 1009.5 1655.35C1079 1655.5833 1117.25 1655.74 1124.25 1655.82C1140.3033 1656.0067 1161.7033 1655.9067 1188.45 1655.52C1190.83 1655.48 1192.0133 1654.2233 1192 1651.75C1191.8533 1620.3433 1191.8133 1584.6367 1191.88 1544.63C1191.8869 1544.2578 1191.6051 1543.9413 1191.23 1543.9C1187.29 1543.5067 1182.88 1543.3067 1178 1543.3C1176.0333 1543.3 1161.95 1543.3667 1135.75 1543.5C1073.6033 1543.82 963.7367 1543.8633 806.15 1543.63C803.52 1543.62 801.24 1543.8 798.7 1543.06C798.3953 1542.9728 798.189 1542.6923 798.2 1542.38C800.11 1489.21 799.16 1437.04 797.75 1381C797.62 1375.95 801.29 1375.75 805.6 1375.8C829.42 1376.0533 849.2867 1376.1533 865.2 1376.1C999.32 1375.63 1160.38 1376.06 1308.25 1375.9C1329.01 1375.88 1353.7033 1375.9467 1382.33 1376.1C1382.6133 1376.1054 1382.8401 1376.3367 1382.84 1376.62L1382.84 1811.92C1382.84 1812.1826 1382.7357 1812.4344 1382.55 1812.62C1382.3644 1812.8057 1382.1126 1812.91 1381.85 1812.91L435.29 1812.91C435.0433 1812.91 434.8068 1812.812 434.6324 1812.6376C434.458 1812.4632 434.36 1812.2267 434.36 1811.98L434.36 1811.37C434.3602 1811.143 434.2534 1810.9257 434.07 1810.78C429.57 1807.2467 406.1233 1787.7433 363.73 1752.27C344.6633 1736.31 326.7567 1721.6867 310.01 1708.4C309.7586 1708.1992 309.6205 1707.8932 309.64 1707.58C309.9533 1702.04 310.13 1696.0967 310.17 1689.75C310.5967 1617.3367 310.7 1561.7733 310.48 1523.06C310.4776 1522.9031 310.5571 1522.7562 310.6899 1522.6725C310.8226 1522.5887 310.9894 1522.5802 311.13 1522.65Z';
+    const text = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="300 1370 1090 450"><path d="${d0}"/></svg>`;
+    const before = doc(text);
+    const tol = 0.455; // 0,01 mm en unidades de este archivo
+    const { doc: s, after } = simplifyDoc(before, tol);
+    expect(after).toBeLessThan(countNodes(before));
+    const b0 = docBounds(before, 0.05)!;
+    const b1 = docBounds(s, 0.05)!;
+    for (const k of ['minX', 'minY', 'maxX', 'maxY'] as const) expect(Math.abs(b1[k] - b0[k])).toBeLessThan(2 * tol);
+    const a0 = areaOf(text);
+    expect(Math.abs(areaOf(serializeEditDoc(s)) - a0) / a0).toBeLessThan(0.002);
+    // El lado derecho (x ≈ 1382,8) sigue siendo una recta.
+    const ns = s.paths[0].subs[0].nodes;
+    const k = ns.findIndex((n, j) => n.p.x > 1382 && ns[(j + 1) % ns.length].p.x > 1382);
+    expect(k).toBeGreaterThanOrEqual(0);
+    const next = ns[(k + 1) % ns.length];
+    expect(Math.abs(next.p.y - ns[k].p.y)).toBeGreaterThan(400);
+    expect(ns[k].o ?? next.i).toBeUndefined();
   });
 
   it('mueve un nodo con sus manijas y borra nodos', () => {

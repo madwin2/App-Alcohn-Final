@@ -10,6 +10,8 @@
 
 Se hace **al vectorizar**, no en Aspire: el error se ve y se corrige antes de que el sello entre a un programa, y el archivo de Aspire no se carga con capas extra (pedido del equipo: las capas de más generan errores de selección).
 
+**Límite frente a la selección del repaso (2026-10-15)**: el chequeo implementado modela la accesibilidad con punta 0,1 mm. No compara la pasada de 0,5 mm (15° laterales) contra la de 0,1 mm ni decide qué contornos seleccionar. Fede hace esa comparación manualmente y amplía la selección cuando el repaso de una parte tocaría el resto del sello (Q-PROG-017, POL-082). La [propuesta de Programas](../programas/propuesta-preparacion-y-sync.md#selección-del-perfilado-de-01-mm-criterio-confirmado) incorpora esa selección como capacidad futura; perfiles/profundidades exactos pendientes en Q-PROG-018. No se cambió el perfil del chequeo actual.
+
 ## 2. Criterio (✅ `src/lib/fresa/config.ts`)
 
 | Dato | Valor | Fuente |
@@ -102,7 +104,7 @@ Botón **Editar a mano** en el diálogo del chequeo (sobre el original o sobre e
 | **Grosor**: Afinar / Engordar | Offset interior / exterior en paralelo (Clipper), devuelto con curvas suaves (ajuste de Schneider, error 0,01 mm), sin nodos de más. |
 | **Nodos** (A) | Ver y arrastrar nodos y manijas de la pieza elegida; en un nodo suave, mover una manija gira la otra para que no quede quiebre. Si en pantalla quedan a menos de 9 px se muestran como puntos (no se pueden tocar) y la ayuda pide acercarse. Supr borra el nodo elegido. "Todos los nodos" los muestra en todo el dibujo. |
 | **Quitar nodos de más** | Saca nodos repetidos y nodos en medio de una recta. **No cambia la forma.** Los nodos de más se ven en naranja. |
-| **Simplificar** | El botón dice antes cuántos nodos quedan ("577 → 22 nodos"). Muestrea el contorno, saca la forma mínima con **Douglas-Peucker** (en una recta llena de nodos, con nodos casi encimados o con el zigzag de la vectorización, quedan solo las dos puntas) y detecta las esquinas reales midiendo el giro con un tramo a cada lado (no nodo contra nodo). Entre esquinas: recta si es recta; si no, pocas curvas (Schneider, el mismo de `simplify` en Paper.js y VectorCraft). **Error máximo elegido** (0,005–0,05 mm). |
+| **Simplificar** | El botón dice antes cuántos nodos quedan ("577 → 22 nodos"). Muestrea el contorno, saca la forma mínima con **Douglas-Peucker** (en una recta llena de nodos, con nodos casi encimados o con el zigzag de la vectorización, quedan solo las dos puntas) y detecta las esquinas reales midiendo el giro con un tramo a cada lado (no nodo contra nodo). Las esquinas apenas redondeadas (el giro repartido en 2-3 nodos muy juntos) se miran como grupo. Entre esquinas: recta si es recta; si no, pocas curvas (Schneider, el mismo de `simplify` en Paper.js y VectorCraft). **Control final**: cada tramo se compara con el original en los dos sentidos; si se va más de 1,5× el error, se usa la forma mínima (rectas), así nunca se deforma. **Error máximo elegido** (0,005–0,05 mm). |
 | **Borrar pieza / Borrar motas** | Borra la pieza elegida, o todas las piezas sueltas de menos de 0,05 mm² (restos de la vectorización). |
 | **Mano** (H), Espacio o clic derecho + arrastrar, rueda | Moverse y acercar. Tecla 0: ver todo. (En Elegir y mover, arrastrar el fondo hace un rectángulo de selección.) |
 | **Deshacer / Rehacer** | Ctrl+Z / Ctrl+Y (hasta 80 pasos). **Descartar** pide confirmación si hay cambios. |
