@@ -1008,6 +1008,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 55,
+    date: '2026-10-15',
+    title: 'Garantía al rehacer entregados',
+    version: '1.73',
+    slides: [
+      {
+        heading: 'Rehacer un pedido ya entregado crea Garantía',
+        body: 'Si el envío ya estaba Despachado o con seguimiento enviado, al rehacer nace un pedido nuevo de Garantía (no suma a las ventas del mes). El original queda intacto.',
+        icon: RefreshCw,
+      },
+      {
+        heading: 'Misma cola, foto y envío limpios',
+        body: 'El sello clonado entra prioritario como cualquier otro. Cuando subís la foto, al cliente le llega el cargo adicional o $0, y después se reenvía normal.',
+        icon: Package,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

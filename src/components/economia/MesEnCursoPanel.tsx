@@ -39,6 +39,7 @@ export type MesEnCursoRow = {
   costosVentas: number;
   costoRegalos: number;
   costoPruebas: number;
+  costoGarantias?: number;
   costosFijos: number;
   gastosExtras: number;
   publicidad: number;
@@ -123,7 +124,11 @@ export function MesEnCursoPanel({
 }: Props) {
   const [vista, setVista] = useState<Vista>('fin');
   const objetivo = config?.objetivoRentabilidad ?? 0.25;
-  const variablesHoy = (row?.costosVentas ?? 0) + (row?.costoRegalos ?? 0) + (row?.costoPruebas ?? 0);
+  const variablesHoy =
+    (row?.costosVentas ?? 0) +
+    (row?.costoRegalos ?? 0) +
+    (row?.costoPruebas ?? 0) +
+    (row?.costoGarantias ?? 0);
   const otrosHoy = (row?.gastosExtras ?? 0) + (row?.enviosManual ?? 0);
   const publicidadHoy = row?.publicidad ?? 0;
   const ventasHoy = row?.ventasBrutas ?? 0;

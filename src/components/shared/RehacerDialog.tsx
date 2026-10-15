@@ -24,6 +24,7 @@ import {
   type RehacerContexto,
   type RehacerMotivo,
 } from '@/lib/supabase/services/rehacer.service';
+import { esEnvioPostEntrega } from '@/lib/pedidos/tipoPedido';
 
 interface RehacerDialogProps {
   open: boolean;
@@ -92,13 +93,18 @@ export function RehacerDialog({ open, selloIds, onOpenChange, onConfirmed }: Reh
 
   const resumen = useMemo(() => {
     if (!contextos.length) return null;
-    const willResetShipping = contextos.some((c) => envioSeReinicia(c.envioEstado));
+    const willCreateGarantia = contextos.some((c) => esEnvioPostEntrega(c.envioEstado));
+    const willResetShipping = contextos.some(
+      (c) => envioSeReinicia(c.envioEstado) && !esEnvioPostEntrega(c.envioEstado),
+    );
     const isPartial = contextos.some((c) => {
       const inOrder = contextos.filter((x) => x.ordenId === c.ordenId).length;
       return c.cantidadItemsEnPedido > inOrder;
     });
-    const showCobro = contextos.some((c) => c.ventaEstado && c.ventaEstado !== 'Señado');
-    return { willResetShipping, isPartial, showCobro };
+    const showCobro =
+      willCreateGarantia ||
+      contextos.some((c) => c.ventaEstado && c.ventaEstado !== 'Señado');
+    return { willCreateGarantia, willResetShipping, isPartial, showCobro };
   }, [contextos]);
 
   const handleConfirm = async () => {
@@ -120,17 +126,21 @@ export function RehacerDialog({ open, selloIds, onOpenChange, onConfirmed }: Reh
     }
     setSaving(true);
     try {
-      await registrarRehacer({
+      const result = await registrarRehacer({
         selloIds,
         motivo,
         descripcion,
         cobroMonto: cobrar ? cobroMontoNum : null,
         cobroConcepto: cobrar ? cobroConcepto : null,
       });
+      const creoGarantia = result.modos.some((m) => m === 'garantia');
       toast({
-        title: 'Marcado para rehacer',
-        description:
-          selloIds.length === 1
+        title: creoGarantia ? 'Pedido de Garantía creado' : 'Marcado para rehacer',
+        description: creoGarantia
+          ? result.ordenGarantiaIds.length > 1
+            ? `Se crearon ${result.ordenGarantiaIds.length} pedidos de Garantía (no suman a ventas). El original queda intacto.`
+            : 'Se creó un pedido de Garantía (no suma a ventas). El original queda intacto.'
+          : selloIds.length === 1
             ? 'El ítem volvió a Rehacer y quedó como Prioridad.'
             : `${selloIds.length} ítems volvieron a Rehacer y quedaron como Prioridad.`,
       });
@@ -153,7 +163,8 @@ export function RehacerDialog({ open, selloIds, onOpenChange, onConfirmed }: Reh
         <DialogHeader>
           <DialogTitle>Rehacer</DialogTitle>
           <DialogDescription>
-            Se registra el motivo y se resetea lo que corresponda (foto, venta o envío) según el estado actual.
+            Se registra el motivo. Si el pedido ya fue entregado, se crea un pedido de Garantía; si no, se
+            resetea foto/venta/envío en el mismo pedido.
           </DialogDescription>
         </DialogHeader>
 
@@ -184,10 +195,17 @@ export function RehacerDialog({ open, selloIds, onOpenChange, onConfirmed }: Reh
                   Este ítem ya se rehizo {historialCount} {historialCount === 1 ? 'vez' : 'veces'} antes.
                 </p>
               ) : null}
+              {resumen?.willCreateGarantia ? (
+                <p className="text-amber-700 dark:text-amber-400">
+                  Este pedido ya fue entregado. Se va a crear un pedido nuevo de{' '}
+                  <span className="font-medium">Garantía</span> (no cuenta como venta); el original queda
+                  intacto.
+                </p>
+              ) : null}
               {resumen?.willResetShipping ? (
                 <p className="text-amber-700 dark:text-amber-400">
                   {resumen.isPartial
-                    ? 'Al menos uno de estos ítems ya estaba enviado. Se va a reiniciar el envío de todo el pedido (el seguimiento viejo queda guardado).'
+                    ? 'Al menos uno de estos ítems ya tenía envío en curso. Se va a reiniciar el envío de ese pedido (el seguimiento viejo queda guardado).'
                     : 'Este pedido ya tenía envío cargado. Se va a reiniciar a Sin envío (el seguimiento viejo queda guardado).'}
                 </p>
               ) : null}

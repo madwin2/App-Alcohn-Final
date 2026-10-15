@@ -101,9 +101,11 @@ export interface Database {
           comprobante_validado_por?: string | null;
           notas_web?: Record<string, unknown> | null;
           carrito_json?: Record<string, unknown> | null;
-          /** Venta (default) | Prueba | Regalo. No cambiar después del INSERT. */
-          tipo_pedido?: 'Venta' | 'Prueba' | 'Regalo' | null;
+          /** Venta (default) | Prueba | Regalo | Garantía. No cambiar después del INSERT. */
+          tipo_pedido?: 'Venta' | 'Prueba' | 'Regalo' | 'Garantía' | null;
           motivo_prueba?: string | null;
+          /** Pedido original cuando tipo_pedido = Garantía. */
+          orden_origen_id?: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -153,6 +155,8 @@ export interface Database {
           no_importado_motivo?: string | null;
           /** Ítem sin cargo (regalo). */
           es_regalo?: boolean | null;
+          /** Ítem original del que se clonó (pedido Garantía). */
+          sello_origen_id?: string | null;
           created_at: string | null;
           updated_at: string | null;
         };
@@ -833,6 +837,8 @@ export interface Database {
           ancho_fabricacion_mm_previo: number | null;
           largo_fabricacion_mm_previo: number | null;
           programa_id_previo: string | null;
+          sello_nuevo_id?: string | null;
+          orden_garantia_id?: string | null;
           created_by: string | null;
           created_at: string;
         };
@@ -860,6 +866,8 @@ export interface Database {
           ancho_fabricacion_mm_previo?: number | null;
           largo_fabricacion_mm_previo?: number | null;
           programa_id_previo?: string | null;
+          sello_nuevo_id?: string | null;
+          orden_garantia_id?: string | null;
           created_by?: string | null;
           created_at?: string;
         };

@@ -1,17 +1,19 @@
 import type { Order, OrderItem } from '@/lib/types/index';
 
-export type OrderType = 'VENTA' | 'PRUEBA' | 'REGALO';
+export type OrderType = 'VENTA' | 'PRUEBA' | 'REGALO' | 'GARANTIA';
 
 export const ORDER_TYPE_DB = {
   VENTA: 'Venta',
   PRUEBA: 'Prueba',
   REGALO: 'Regalo',
+  GARANTIA: 'Garantía',
 } as const satisfies Record<OrderType, string>;
 
 export const ORDER_TYPE_FROM_DB: Record<string, OrderType> = {
   Venta: 'VENTA',
   Prueba: 'PRUEBA',
   Regalo: 'REGALO',
+  Garantía: 'GARANTIA',
 };
 
 /** Cliente interno fijo para pruebas (sin WhatsApp). */
@@ -43,12 +45,19 @@ export function esOrdenSinCargo(order: Pick<Order, 'orderType'>): boolean {
   return t === 'PRUEBA' || t === 'REGALO';
 }
 
+/** Despachado / Seguimiento Enviado = ya entregado (POL-086). */
+export function esEnvioPostEntrega(estadoEnvio: string | null | undefined): boolean {
+  return estadoEnvio === 'Despachado' || estadoEnvio === 'Seguimiento Enviado';
+}
+
 export function orderTypeLabel(orderType: OrderType | undefined | null): string {
   switch (orderType) {
     case 'PRUEBA':
       return 'Prueba';
     case 'REGALO':
       return 'Regalo';
+    case 'GARANTIA':
+      return 'Garantía';
     default:
       return 'Venta';
   }

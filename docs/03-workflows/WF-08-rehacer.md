@@ -11,10 +11,13 @@
 
 1. Fabricación → **Rehacer** en Pedidos (orden entera o un ítem) o Producción.
 2. Diálogo: motivo (obligatorio), descripción, opcional **cobro adicional** (monto y concepto).
-3. ✅ RPC `registrar_rehacer` (ver [rehacer.md](../02-modules/pedidos/rehacer.md)): snapshot en `sello_rehacer_eventos` (estados, medidas, programa); sello `Rehacer` + prioridad + sin Aspire; foto borrada y venta `Foto→Señado`; orden despachada vuelve a `Sin envio` y pierde el seguimiento; el cliente copia base/vector a `rehacer-snapshots/` (ver [errores](../02-modules/errores/README.md)).
+3. ✅ RPC `registrar_rehacer` (ver [rehacer.md](../02-modules/pedidos/rehacer.md)):
+   - **Post-entrega** (`Despachado` / `Seguimiento Enviado`): orden nueva `Garantía` + ítem clonado; original intacto; no suma a ventas (POL-086).
+   - **Pre-entrega**: snapshot + sello `Rehacer` + prioridad; foto `Foto→Señado`; envío vuelve a `Sin envio`.
+   - Snapshots de archivos en `rehacer-snapshots/` (ver [errores](../02-modules/errores/README.md)).
 4. ✅ Notificaciones p2 (Producción) y v2 (Ventas); WhatsApp `sello_rehacer` al cliente.
-5. El ítem vuelve a Vectorización (si hace falta) y a Programas (elegible por estar en `Rehacer`) → WF-03/WF-04.
-6. Cargos: se muestran en Pedidos; ❓ se cobran por fuera y se marcan "cobrado".
+5. El ítem activo vuelve a Vectorización (si hace falta) y a Programas → WF-03/WF-04. En Garantía, la foto pide el cargo o $0 (WF-05).
+6. Cargos: en pre-entrega siguen en el evento (informativos); en Garantía el cargo es el `valor` del clon (restante del pedido nuevo).
 
 ## Caminos alternativos que NO registran motivo
 

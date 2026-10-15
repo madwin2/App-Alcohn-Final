@@ -349,9 +349,11 @@ export const mapOrdenToOrder = (
       const raw = (orden as { tipo_pedido?: string | null }).tipo_pedido;
       if (raw === 'Prueba') return 'PRUEBA' as const;
       if (raw === 'Regalo') return 'REGALO' as const;
+      if (raw === 'Garantía') return 'GARANTIA' as const;
       return 'VENTA' as const;
     })(),
     testReason: (orden as { motivo_prueba?: string | null }).motivo_prueba ?? null,
+    originOrderId: (orden as { orden_origen_id?: string | null }).orden_origen_id ?? null,
     takenBy: takenBy || null,
     totalValue: orden.valor_total ? Number(orden.valor_total) : 0,
     fabricationCostTotal: (orden as any).costo_fabricacion_total != null ? Number((orden as any).costo_fabricacion_total) : null,
@@ -433,7 +435,13 @@ export const mapOrderToOrden = (
 ) => {
   const orderType = order.orderType ?? 'VENTA';
   const tipoPedidoDb =
-    orderType === 'PRUEBA' ? 'Prueba' : orderType === 'REGALO' ? 'Regalo' : 'Venta';
+    orderType === 'PRUEBA'
+      ? 'Prueba'
+      : orderType === 'REGALO'
+        ? 'Regalo'
+        : orderType === 'GARANTIA'
+          ? 'Garantía'
+          : 'Venta';
 
   return {
     cliente_id: clienteId,
@@ -452,8 +460,9 @@ export const mapOrderToOrden = (
           | 'Seguimiento Enviado')
       : null,
     fecha: order.orderDate ? order.orderDate.split('T')[0] : todayArgentinaDateKey(),
-    tipo_pedido: tipoPedidoDb as 'Venta' | 'Prueba' | 'Regalo',
+    tipo_pedido: tipoPedidoDb as 'Venta' | 'Prueba' | 'Regalo' | 'Garantía',
     motivo_prueba: orderType === 'PRUEBA' ? (order.testReason || null) : null,
+    orden_origen_id: orderType === 'GARANTIA' ? (order.originOrderId || null) : null,
   };
 };
 

@@ -90,7 +90,12 @@ type SelloArchivosRow = {
 
 type RegistrarRehacerRpcRow = {
   evento_id: string;
+  /** Sello original (archivos / historial de error). */
   sello_id: string;
+  /** Sello que quedó en Rehacer (clon en Garantía, o el mismo in-place). */
+  sello_activo_id: string;
+  orden_garantia_id: string | null;
+  modo: 'garantia' | 'inplace' | string;
 };
 
 const firstJoin = <T>(value: T | T[] | null | undefined): T | null => {
@@ -249,7 +254,10 @@ async function snapshotArchivosRehacer(
   }
 }
 
-export async function registrarRehacer(input: RegistrarRehacerInput): Promise<void> {
+export async function registrarRehacer(input: RegistrarRehacerInput): Promise<{
+  modos: Array<'garantia' | 'inplace' | string>;
+  ordenGarantiaIds: string[];
+}> {
   // Leer archivos antes del RPC: la foto puede borrarse; base/vector se conservan pero
   // conviene congelar el estado exacto del momento del error.
   const archivosBySello = await fetchSelloArchivosParaSnapshot(input.selloIds);
@@ -268,26 +276,56 @@ export async function registrarRehacer(input: RegistrarRehacerInput): Promise<vo
     await snapshotArchivosRehacer(eventos, archivosBySello);
   }
 
+  const selloActivos = [
+    ...new Set(
+      eventos
+        .map((e) => e.sello_activo_id || e.sello_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const priorityIds = selloActivos.length ? selloActivos : input.selloIds;
   const { error: priorityError } = await supabase
     .from('sellos')
     .update({ es_prioritario: true })
-    .in('id', input.selloIds);
+    .in('id', priorityIds);
   if (priorityError) {
     console.warn('No se pudo marcar Prioridad al rehacer:', priorityError);
   }
+
+  // WhatsApp al cliente: ítems originales (conoce el pedido entregado).
   void notifySellosRehacer(input.selloIds);
-  void notifyRehacerInApp(input);
+  // Notificación interna: apunta a la orden activa (Garantía o la misma).
+  void notifyRehacerInApp(input, eventos);
+
+  return {
+    modos: eventos.map((e) => e.modo || 'inplace'),
+    ordenGarantiaIds: [
+      ...new Set(
+        eventos
+          .map((e) => e.orden_garantia_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ],
+  };
 }
 
-async function notifyRehacerInApp(input: RegistrarRehacerInput): Promise<void> {
+async function notifyRehacerInApp(
+  input: RegistrarRehacerInput,
+  eventos: RegistrarRehacerRpcRow[],
+): Promise<void> {
   try {
     const contextos = await fetchRehacerContexto(input.selloIds);
     if (!contextos.length) return;
+    const garantiaByOriginal = new Map<string, string>();
+    for (const e of eventos) {
+      if (e.orden_garantia_id) garantiaByOriginal.set(e.sello_id, e.orden_garantia_id);
+    }
     const byOrden = new Map<string, typeof contextos>();
     for (const ctx of contextos) {
-      const list = byOrden.get(ctx.ordenId) ?? [];
+      const ordenId = garantiaByOriginal.get(ctx.selloId) ?? ctx.ordenId;
+      const list = byOrden.get(ordenId) ?? [];
       list.push(ctx);
-      byOrden.set(ctx.ordenId, list);
+      byOrden.set(ordenId, list);
     }
     const motivoTexto = labelRehacerMotivo(input.motivo);
     for (const [ordenId, rows] of byOrden) {

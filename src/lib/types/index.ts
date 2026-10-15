@@ -103,7 +103,7 @@ export interface ReworkCharge {
   createdAt: string;
 }
 
-export type OrderType = 'VENTA' | 'PRUEBA' | 'REGALO';
+export type OrderType = 'VENTA' | 'PRUEBA' | 'REGALO' | 'GARANTIA';
 
 export interface Order {
   id: string;
@@ -116,6 +116,8 @@ export interface Order {
   orderType?: OrderType;
   /** Motivo obligatorio cuando orderType = PRUEBA. */
   testReason?: string | null;
+  /** Pedido original si este es una Garantía (rehacer post-entrega). */
+  originOrderId?: string | null;
   takenBy?: { id: string; name: string } | null;
   totalValue: number;
   fabricationCostTotal?: number | null;

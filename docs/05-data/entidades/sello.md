@@ -13,7 +13,7 @@
 | Estados | `estado_fabricacion`, `estado_fabricacion_previo`, `es_prioritario`, `estado_venta`, `estado_vectorizacion`, `estado_aspire` | Ver [06-state-machines](../../06-state-machines/README.md) |
 | Archivos | `archivo_base` (bucket `base` o URL de mockup), `archivo_base_mejorado(_at)`, `archivo_vector_preview` (URL del **vector** SVG/PDF/AI, o del **preview PNG** si es EPS), `foto_sello` (bucket `foto`) | `vectorUrlFromPreview` convierte `_preview.png` → `.eps` |
 | Programa | `programa_id`, `programa_nombre` (copia por trigger), `maquina`, `motivo_salida_programa`, `no_importado_motivo` | 1.535 ítems tienen `programa_nombre` sin `programa_id` (históricos) |
-| Otros | `fecha_limite`, `tiempo` (sin uso visible), `mockup_solicitud_id`, `error_vectorizacion_mensaje` | |
+| Otros | `fecha_limite`, `tiempo` (sin uso visible), `mockup_solicitud_id`, `error_vectorizacion_mensaje`, `sello_origen_id` (clon de Garantía) | |
 
 ## Estados en vivo (2026-09-27)
 
