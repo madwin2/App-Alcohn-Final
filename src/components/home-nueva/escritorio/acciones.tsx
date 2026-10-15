@@ -1,5 +1,6 @@
 import { useCallback, useState, type ReactNode } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
+import { ChipEstado, type TipoEstado } from '../ChipEstado'
 import { useSalida } from '../movimiento'
 import { cn } from '@/lib/utils/cn'
 import {
@@ -122,11 +123,14 @@ export function MenuEstado<T extends string>({
   onElegir,
   etiqueta,
   alerta,
+  tipo,
   className,
 }: {
   opciones: Array<{ clave: T; texto: string }>
   valor: T | null | undefined
   onElegir: (v: T) => void
+  /** Con tipo, el chip y las opciones usan los colores de estado de Pedidos. */
+  tipo?: TipoEstado
   /** Lo que dice el chip (por defecto, el texto del estado). */
   etiqueta?: ReactNode
   alerta?: boolean
@@ -135,27 +139,47 @@ export function MenuEstado<T extends string>({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          onClick={e => e.stopPropagation()}
-          onDoubleClick={e => e.stopPropagation()}
-          className={cn(
-            'flex h-6 shrink-0 items-center gap-1 rounded-full pl-2.5 pr-1.5 text-[11px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[#e06b17]/50',
-            alerta
-              ? 'bg-[#f6a33d]/15 text-[#f6a33d] hover:bg-[#f6a33d]/25'
-              : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.12] hover:text-white',
-            className
-          )}
-        >
-          <span className="truncate">
-            {etiqueta ?? textoDe(opciones, valor)}
-          </span>
-          <ChevronDown className="size-3 shrink-0 opacity-60" />
-        </button>
+        {tipo && valor ? (
+          <button
+            type="button"
+            onClick={e => e.stopPropagation()}
+            onDoubleClick={e => e.stopPropagation()}
+            className={cn(
+              'group/estado relative flex shrink-0 items-center rounded-full outline-none transition-[filter] duration-200 hover:brightness-125 focus-visible:ring-2 focus-visible:ring-[#e06b17]/50',
+              className
+            )}
+          >
+            <ChipEstado
+              tipo={tipo}
+              valor={valor}
+              texto={typeof etiqueta === 'string' ? etiqueta : undefined}
+              className="min-w-[96px] pr-5"
+            />
+            <ChevronDown className="pointer-events-none absolute right-1.5 size-3 opacity-50" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={e => e.stopPropagation()}
+            onDoubleClick={e => e.stopPropagation()}
+            className={cn(
+              'flex h-6 shrink-0 items-center gap-1 rounded-full pl-2.5 pr-1.5 text-[11px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[#e06b17]/50',
+              alerta
+                ? 'bg-[#f6a33d]/15 text-[#f6a33d] hover:bg-[#f6a33d]/25'
+                : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.12] hover:text-white',
+              className
+            )}
+          >
+            <span className="truncate">
+              {etiqueta ?? textoDe(opciones, valor)}
+            </span>
+            <ChevronDown className="size-3 shrink-0 opacity-60" />
+          </button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="min-w-[170px] rounded-xl border-white/10 bg-[#1a1412]/95 p-1 text-white shadow-[0_20px_50px_-12px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+        className="min-w-[170px] rounded-2xl border-white/10 bg-[#0b0a09]/[0.97] p-1 text-white shadow-[0_20px_50px_-12px_rgba(0,0,0,0.9)]"
         onClick={e => e.stopPropagation()}
       >
         {opciones.map(o => (
@@ -166,7 +190,15 @@ export function MenuEstado<T extends string>({
             }}
             className="flex items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-[12.5px] text-white/80 focus:bg-white/[0.08] focus:text-white"
           >
-            {o.texto}
+            {tipo ? (
+              <ChipEstado
+                tipo={tipo}
+                valor={o.clave}
+                className="min-w-[110px]"
+              />
+            ) : (
+              o.texto
+            )}
             {o.clave === valor ? (
               <Check className="size-3.5 text-[#f6a33d]" />
             ) : null}

@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { VidrioTarjeta } from './VidrioTarjeta'
 import {
   ArrowUpRight,
   ChevronDown,
@@ -42,6 +43,18 @@ import { ChromaKeyVideo } from '@/components/home/ChromaKeyVideo'
 
 /** Material de las superficies: vidrio ahumado oscuro sobre el fondo de lava. */
 const SUPERFICIE = 'bg-[#0d0b0a]/80 backdrop-blur-2xl'
+
+/**
+ * Material de la tarjeta (para comparar desde Personalizar):
+ * - `actual`: translúcida y desenfocada (la de siempre).
+ * - `negra`: como la barra lateral y el resto de los paneles.
+ * - `vidrio`: vidrio líquido como el de prueba (lo dibuja `VidrioTarjeta` detrás).
+ */
+export type MaterialTarjeta = 'actual' | 'negra' | 'vidrio'
+
+function superficie(m: MaterialTarjeta) {
+  return m === 'actual' ? SUPERFICIE : m === 'negra' ? 'border bg-card/95' : ''
+}
 const EASE = 'duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]'
 /** Cruce de dos textos: el que se va sale rápido (200 ms, desenfocado) y el que llega entra
  *  después, con la curva de siempre. */
@@ -52,13 +65,16 @@ type Vista = 'dia' | 'proyectos'
 
 export function TarjetaBienvenida({
   perfil,
+  material = 'actual',
   className,
   style,
 }: {
   perfil: PerfilEquipo
+  material?: MaterialTarjeta
   className?: string
   style?: React.CSSProperties
 }) {
+  const ref = useRef<HTMLElement>(null)
   const { datos, recargar } = useBienvenida(perfil)
   const [vista, setVista] = useState<Vista>('dia')
   const [mesAbierto, setMesAbierto] = useState(false)
@@ -67,16 +83,23 @@ export function TarjetaBienvenida({
 
   return (
     <section
+      ref={ref}
       className={cn(
         'relative flex h-full min-h-0 w-full max-w-[460px] flex-col text-white',
+        material === 'negra' && !separada && 'rounded-[28px] shadow-2xl',
         className
       )}
       style={style}
+      // Vidrio: unida es una sola placa; despegada, una por parte.
+      data-placa={material === 'vidrio' && !separada ? '' : undefined}
     >
+      {material === 'vidrio' ? <VidrioTarjeta contenedor={ref} /> : null}
       {/* ---------- Parte de arriba: bienvenida + resumen ---------- */}
       <div
+        data-placa={material === 'vidrio' && separada ? '' : undefined}
         className={cn(
-          SUPERFICIE,
+          superficie(material),
+          material === 'negra' && !separada && 'border-b-0',
           'relative flex flex-col rounded-t-[28px] transition-[border-radius]',
           EASE,
           // Con las tareas plegadas, esta parte ocupa el resto del alto (la tarjeta siempre llega abajo).
@@ -99,13 +122,19 @@ export function TarjetaBienvenida({
 
       {/* ---------- Tareas: pegadas (Mi día) o despegadas (Proyectos) ---------- */}
       <div
+        data-placa={material === 'vidrio' && separada ? '' : undefined}
         className={cn(
-          SUPERFICIE,
+          superficie(material),
+          material === 'negra' && !separada && 'border-t-0',
           'relative flex flex-col overflow-hidden transition-[margin,border-radius,background-color,box-shadow]',
           EASE,
           tareasPlegadas ? 'flex-none' : 'min-h-[132px] flex-1',
           separada
-            ? 'mt-3 rounded-[28px] bg-[#14100d]/85 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.8)]'
+            ? cn(
+                'mt-3 rounded-[28px] shadow-[0_24px_60px_-24px_rgba(0,0,0,0.8)]',
+                material === 'actual' && 'bg-[#14100d]/85',
+                material === 'vidrio' && 'shadow-none'
+              )
             : '-mt-px rounded-b-[28px] rounded-t-none'
         )}
       >

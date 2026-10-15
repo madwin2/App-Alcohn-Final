@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import type { ModoHome } from './SelectorModo'
+import type { MaterialTarjeta } from './TarjetaBienvenida'
 import {
   APPS_VISTA,
   AREAS,
@@ -33,6 +34,8 @@ export function BotonPersonalizar({
   modo,
   esDueno,
   persona,
+  tarjeta,
+  onTarjeta,
   className,
 }: {
   control: ReturnType<typeof useVistaInicio>
@@ -40,6 +43,9 @@ export function BotonPersonalizar({
   esDueno: boolean
   /** Slug de la persona de la vista previa (si se está viendo el Inicio de otro). */
   persona: string | null
+  /** Material de la tarjeta de perfil (comparación de versiones). */
+  tarjeta: MaterialTarjeta
+  onTarjeta: (m: MaterialTarjeta) => void
   className?: string
 }) {
   const [abierto, setAbierto] = useState(false)
@@ -110,6 +116,18 @@ export function BotonPersonalizar({
         </div>
 
         <div className="max-h-[min(70vh,560px)] overflow-y-auto px-2 pb-2 [scrollbar-width:thin]">
+          <Seccion titulo="Tarjeta de perfil (comparar versiones)">
+            <Segmentos
+              opciones={[
+                { clave: 'actual', texto: 'Actual' },
+                { clave: 'negra', texto: 'Negra' },
+                { clave: 'vidrio', texto: 'Vidrio' },
+              ]}
+              valor={tarjeta}
+              onCambio={onTarjeta}
+            />
+          </Seccion>
+
           <Seccion titulo="Cuadrados de sellos">
             {CUADRADOS.map(c => (
               <Interruptor
@@ -199,6 +217,48 @@ function Seccion({
       <p className="px-3 pb-1 pt-2 text-[11.5px] text-white/40">{titulo}</p>
       <div className="rounded-2xl bg-white/[0.03] p-1">{children}</div>
     </section>
+  )
+}
+
+/** Control segmentado con indicador que se desliza (como el selector de modo). */
+function Segmentos<T extends string>({
+  opciones,
+  valor,
+  onCambio,
+}: {
+  opciones: Array<{ clave: T; texto: string }>
+  valor: T
+  onCambio: (v: T) => void
+}) {
+  const i = Math.max(
+    0,
+    opciones.findIndex(o => o.clave === valor)
+  )
+  return (
+    <div className="relative flex rounded-xl p-0.5 text-[12.5px]">
+      <span
+        aria-hidden
+        className="absolute inset-y-0.5 left-0.5 rounded-[10px] bg-white transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+        style={{
+          width: `calc((100% - 4px) / ${opciones.length})`,
+          transform: `translateX(${i * 100}%)`,
+        }}
+      />
+      {opciones.map(o => (
+        <button
+          key={o.clave}
+          type="button"
+          onClick={() => onCambio(o.clave)}
+          aria-pressed={valor === o.clave}
+          className={cn(
+            'relative z-10 flex-1 rounded-[10px] py-1.5 transition-colors duration-300',
+            valor === o.clave ? 'text-black' : 'text-white/60 hover:text-white'
+          )}
+        >
+          {o.texto}
+        </button>
+      ))}
+    </div>
   )
 }
 

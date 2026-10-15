@@ -43,6 +43,8 @@ export type EtapaFlujo = {
   n: number
   alerta?: boolean
   detalle?: ReactNode
+  /** Color del estado (r,g,b), el mismo de los chips de la página: tiñe el nodo. */
+  color?: string
 }
 
 export function Flujo({
@@ -76,13 +78,21 @@ export function Flujo({
                   compacto ? 'px-2.5 py-2' : 'px-3.5 py-3',
                   e.alerta && e.n > 0 ? 'ring-1 ring-[#f6a33d]/60' : ''
                 )}
-                style={{
-                  // Fondo según cuánto hay en la etapa (un solo tono, de apagado a intenso).
-                  backgroundColor:
-                    e.alerta && e.n > 0
-                      ? 'rgba(246,163,61,0.16)'
-                      : `rgba(224,107,23,${0.05 + 0.22 * peso})`,
-                }}
+                style={
+                  e.color
+                    ? {
+                        // Color del estado, más intenso cuanto más hay.
+                        backgroundColor: `rgba(${e.color},${e.n ? 0.07 + 0.15 * peso : 0.03})`,
+                        boxShadow: `inset 0 0 0 1px rgba(${e.color},${e.n ? 0.3 + 0.35 * peso : 0.12})`,
+                      }
+                    : {
+                        // Fondo según cuánto hay en la etapa (un solo tono, de apagado a intenso).
+                        backgroundColor:
+                          e.alerta && e.n > 0
+                            ? 'rgba(246,163,61,0.16)'
+                            : `rgba(224,107,23,${0.05 + 0.22 * peso})`,
+                      }
+                }
               >
                 <p
                   className={cn(
@@ -92,8 +102,13 @@ export function Flujo({
                 >
                   {e.alerta && e.n > 0 ? (
                     <AlertTriangle className="size-3 shrink-0 text-[#f6a33d]" />
+                  ) : e.color ? (
+                    <span
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: `rgb(${e.color})` }}
+                    />
                   ) : null}
-                  {e.texto}
+                  <span className="truncate">{e.texto}</span>
                 </p>
                 <p
                   className={cn(

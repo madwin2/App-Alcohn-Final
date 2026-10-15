@@ -1,26 +1,21 @@
-import {
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import {
   Camera,
   Flame,
   PenTool,
   Sparkles,
   Truck,
-  X,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+import { ChipEstado } from './ChipEstado'
 import { useOrdersState } from '@/lib/hooks/useOrders'
 import { ordenCuentaComoVenta } from '@/lib/pedidos/tipoPedido'
 import type {
   FabricationState,
   Order,
   OrderItem,
+  SaleState,
   ShippingState,
 } from '@/lib/types'
 
@@ -58,6 +53,7 @@ type Fila = {
   thumb: string | null
   esVector: boolean
   fabricacion: FabricationState
+  venta: SaleState
   envio: ShippingState
 }
 
@@ -97,6 +93,7 @@ function aFila(order: Order, item: OrderItem): Fila {
     thumb: item.files?.vectorPreviewUrl || item.files?.baseUrl || null,
     esVector: Boolean(item.files?.vectorPreviewUrl),
     fabricacion: item.fabricationState,
+    venta: item.saleState,
     envio: item.shippingState,
   }
 }
@@ -306,15 +303,14 @@ function Cuadrado({
       {/* Resumen: en el cuadrado es todo el botón; abierto, queda a la izquierda */}
       <button
         type="button"
-        onClick={abierto ? undefined : onAbrir}
-        tabIndex={abierto ? -1 : 0}
+        onClick={abierto ? onCerrar : onAbrir}
         aria-expanded={abierto}
+        title={abierto ? 'Cerrar' : undefined}
         className={cn(
           'group flex h-full shrink-0 flex-col rounded-[28px] px-6 py-5 text-left outline-none transition-[width,background-color]',
           EASE,
-          abierto
-            ? 'w-[190px] cursor-default'
-            : 'w-full hover:bg-white/[0.025] focus-visible:bg-white/[0.04]'
+          abierto ? 'w-[190px]' : 'w-full',
+          'hover:bg-white/[0.025] focus-visible:bg-white/[0.04]'
         )}
       >
         <span className="flex w-full items-center justify-between gap-2">
@@ -374,21 +370,13 @@ function Cuadrado({
                   if (Math.abs(e.deltaY) > Math.abs(e.deltaX))
                     e.currentTarget.scrollLeft += e.deltaY
                 }}
-                className="entrada-lista flex min-w-0 flex-1 gap-2.5 overflow-x-auto py-4 pl-4 pr-14 [scrollbar-width:thin]"
+                className="entrada-lista grid min-w-0 flex-1 auto-cols-max grid-flow-col grid-rows-3 content-center gap-x-3 gap-y-1 overflow-x-auto px-3 py-3 [scrollbar-width:thin]"
               >
                 {g.filas.map(f => (
-                  <TarjetaSello key={f.id} f={f} hoy={hoy} clave={g.clave} />
+                  <FilaSello key={f.id} f={f} hoy={hoy} clave={g.clave} />
                 ))}
               </ul>
             )}
-            <button
-              type="button"
-              onClick={onCerrar}
-              aria-label="Cerrar"
-              className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-full bg-black/40 text-white/55 backdrop-blur transition-colors hover:bg-white/[0.1] hover:text-white"
-            >
-              <X className="size-4" />
-            </button>
           </>
         ) : null}
       </div>
@@ -400,24 +388,6 @@ function Cuadrado({
 /* Fila de sello                                                        */
 /* ------------------------------------------------------------------ */
 
-const FABRICACION: Record<FabricationState, string> = {
-  SIN_HACER: 'Sin hacer',
-  PROGRAMADO: 'Programado',
-  HACIENDO: 'Haciendo',
-  VERIFICAR: 'Verificar',
-  RETOCAR: 'Retocar',
-  REHACER: 'Rehacer',
-  HECHO: 'Hecho',
-}
-
-const ENVIO: Partial<Record<ShippingState, string>> = {
-  SIN_ENVIO: 'Sin envío',
-  HACER_ETIQUETA: 'Hacer etiqueta',
-  ERROR_ETIQUETA: 'Error de etiqueta',
-  ETIQUETA_LISTA: 'Etiqueta lista',
-  DESPACHADO: 'Despachado',
-}
-
 function textoLimite(
   limite: string | null,
   hoy: string
@@ -428,12 +398,12 @@ function textoLimite(
     d < 0
       ? d === -1
         ? 'Venció ayer'
-        : `Venció hace ${-d} días`
+        : `Venció hace ${-d} d`
       : d === 0
         ? 'Vence hoy'
         : d === 1
           ? 'Vence mañana'
-          : `Vence en ${d} días`
+          : `Vence en ${d} d`
   return { texto, urgente: d <= 1 }
 }
 
@@ -444,103 +414,70 @@ function fechaCorta(iso: string) {
     : d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
 }
 
-/** Un sello como tarjetita de la fila horizontal. */
-function TarjetaSello({
-  f,
-  hoy,
-  clave,
-}: {
-  f: Fila
-  hoy: string
-  clave: Clave
-}) {
+/**
+ * Fila compacta de un sello (como una fila de la tabla de Pedidos): miniatura, diseño y cliente,
+ * fecha límite (o del pedido) y el estado que importa en ese cuadrado, con los colores de Pedidos.
+ */
+function FilaSello({ f, hoy, clave }: { f: Fila; hoy: string; clave: Clave }) {
   const lim = textoLimite(f.limite, hoy)
-  // Etapa: 0 = en fabricación, 1 = hecho (por enviar), 2 = despachado (falta el seguimiento).
-  const etapa = f.envio === 'DESPACHADO' ? 2 : f.fabricacion === 'HECHO' ? 1 : 0
-  const estado: ReactNode =
-    clave === 'prioritarios' ? (
-      <>
-        <span className="truncate">
-          {etapa === 0
-            ? FABRICACION[f.fabricacion]
-            : (ENVIO[f.envio] ?? 'Hecho')}
-        </span>
-        <Etapas etapa={etapa} />
-      </>
+  // El estado que se mira en cada cuadrado.
+  const chip =
+    clave === 'enviar' ? (
+      <ChipEstado tipo="envio" valor={f.envio} />
+    ) : clave === 'foto' ? (
+      <ChipEstado tipo="venta" valor={f.venta} />
+    ) : clave === 'prioritarios' && f.fabricacion === 'HECHO' ? (
+      <ChipEstado tipo="envio" valor={f.envio} />
     ) : (
-      <span className="truncate">Pedido del {fechaCorta(f.creado)}</span>
+      <ChipEstado
+        tipo="fabricacion"
+        valor={f.fabricacion}
+        prioritario={f.prioritario}
+      />
     )
 
   return (
-    <li className="flex w-[240px] shrink-0 flex-col justify-between rounded-2xl bg-white/[0.04] p-3 transition-colors hover:bg-white/[0.07]">
-      <div className="flex min-w-0 items-center gap-3">
-        <div
-          className={cn(
-            'flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg',
-            f.esVector ? 'bg-[#F5F5F3]' : 'bg-white/[0.06]'
-          )}
-        >
-          {f.thumb ? (
-            <img
-              src={f.thumb}
-              alt=""
-              loading="lazy"
-              className="size-full object-contain p-1"
-              draggable={false}
+    <li className="flex h-[34px] w-[300px] items-center gap-2.5 rounded-xl px-2 transition-colors duration-200 hover:bg-white/[0.05]">
+      <div
+        className={cn(
+          'flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md',
+          f.esVector ? 'bg-[#F5F5F3]' : 'bg-white/[0.06]'
+        )}
+      >
+        {f.thumb ? (
+          <img
+            src={f.thumb}
+            alt=""
+            loading="lazy"
+            className="size-full object-contain p-0.5"
+            draggable={false}
+          />
+        ) : null}
+      </div>
+      <div className="min-w-0 flex-1 leading-tight">
+        <p className="flex items-center gap-1 text-[12.5px] text-white/90">
+          <span className="truncate">{f.diseno}</span>
+          {f.prioritario ? (
+            <Flame
+              className="size-3 shrink-0 text-[#e06b17]"
+              aria-label="Prioritario"
             />
-          ) : (
-            <span className="text-[11px] text-white/30">—</span>
-          )}
-        </div>
-        <div className="min-w-0">
-          <p className="flex items-center gap-1.5 text-[13px]">
-            <span className="truncate">{f.diseno}</span>
-            {f.prioritario ? (
-              <Flame
-                className="size-3 shrink-0 text-[#e06b17]"
-                aria-label="Prioritario"
-              />
-            ) : null}
-          </p>
-          <p className="truncate text-[12px] text-white/45">{f.cliente}</p>
-        </div>
+          ) : null}
+        </p>
+        <p className="truncate text-[11px] text-white/45">
+          {f.cliente}
+          {' · '}
+          <span
+            className={cn(
+              'tabular-nums',
+              lim?.urgente && 'font-semibold text-[#f6a33d]'
+            )}
+          >
+            {lim ? lim.texto : fechaCorta(f.creado)}
+          </span>
+        </p>
       </div>
-      <div className="flex items-center justify-between gap-2 text-[11px]">
-        <span
-          className={cn(
-            'shrink-0 tabular-nums',
-            lim
-              ? lim.urgente
-                ? 'font-semibold text-[#f6a33d]'
-                : 'text-white/70'
-              : 'text-white/35'
-          )}
-        >
-          {lim?.texto ?? 'Sin fecha límite'}
-        </span>
-        <span className="flex min-w-0 items-center gap-2 text-white/45">
-          {estado}
-        </span>
-      </div>
+      {chip}
     </li>
-  )
-}
-
-/** Tres rayitas: fabricación · hecho · despachado. */
-function Etapas({ etapa }: { etapa: number }) {
-  return (
-    <span className="flex items-center gap-0.5" aria-hidden>
-      {[0, 1, 2].map(i => (
-        <span
-          key={i}
-          className={cn(
-            'h-1 rounded-full',
-            i <= etapa
-              ? 'w-3 bg-gradient-to-r from-[#e06b17] to-[#f6a33d]'
-              : 'w-1.5 bg-white/15'
-          )}
-        />
-      ))}
-    </span>
   )
 }

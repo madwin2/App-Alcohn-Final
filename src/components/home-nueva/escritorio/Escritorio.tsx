@@ -8,6 +8,10 @@ import {
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowUpRight,
+  Maximize2,
+  Minimize2,
+  Minus,
+  X,
   Factory,
   Layers,
   Pin,
@@ -427,7 +431,7 @@ function VentanaPC({
     <div
       onPointerDown={onFoco}
       className={cn(
-        'ventana-abre absolute flex flex-col overflow-hidden rounded-[16px] border bg-card/95 text-white shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)]',
+        'ventana-abre absolute flex flex-col overflow-hidden rounded-[28px] border bg-card/[0.97] text-white shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)]',
         escondida && 'pointer-events-none scale-[0.2] opacity-0',
         !activo &&
           'transition-[left,top,width,height,opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]',
@@ -436,81 +440,95 @@ function VentanaPC({
       style={estilo}
       data-tapa={v.maximizada && !escondida ? '' : undefined}
     >
-      {/* Barra de título */}
+      {/* Barra de título, con el lenguaje del Inicio: ícono de la app como en el acordeón, título
+          y botones redondos (abrir completo, minimizar, maximizar, cerrar). */}
       <div
         onPointerDown={empezar('mover')}
         onDoubleClick={() => onCambio({ maximizada: !v.maximizada })}
         className={cn(
-          'flex h-10 shrink-0 select-none items-center gap-3 border-b border-white/[0.06] bg-white/[0.035] px-3.5',
+          'flex h-[60px] shrink-0 select-none items-center gap-3 px-4',
           !v.maximizada && 'cursor-grab active:cursor-grabbing'
         )}
       >
-        <div className="group/semaforo flex items-center gap-2" data-boton>
-          <button
-            type="button"
-            data-boton
-            onClick={onCerrar}
-            aria-label="Cerrar"
-            className="flex size-3 items-center justify-center rounded-full bg-[#ff5f57] text-[9px] leading-none text-black/60"
-          >
-            <span className="opacity-0 group-hover/semaforo:opacity-100">
-              ×
-            </span>
-          </button>
-          <button
-            type="button"
-            data-boton
-            onClick={() => onCambio({ minimizada: true })}
-            aria-label="Minimizar"
-            className="flex size-3 items-center justify-center rounded-full bg-[#febc2e] text-[9px] leading-none text-black/60"
-          >
-            <span className="opacity-0 group-hover/semaforo:opacity-100">
-              −
-            </span>
-          </button>
-          <button
-            type="button"
-            data-boton
-            onClick={() => onCambio({ maximizada: !v.maximizada })}
-            aria-label={v.maximizada ? 'Restaurar' : 'Maximizar'}
-            className="flex size-3 items-center justify-center rounded-full bg-[#28c840] text-[8px] leading-none text-black/60"
-          >
-            <span className="opacity-0 group-hover/semaforo:opacity-100">
-              +
-            </span>
-          </button>
-        </div>
-        <p className="flex min-w-0 flex-1 items-center justify-center gap-2 truncate text-[12.5px] text-white/75">
-          <Icono
-            className="size-3.5 shrink-0 text-[#f6a33d]"
-            strokeWidth={1.8}
-          />
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#e06b17]/20 text-[#f6a33d]">
+          <Icono className="size-4" strokeWidth={1.75} />
+        </span>
+        <p className="min-w-0 flex-1 truncate text-[14px] text-white">
           {app.titulo}
         </p>
-        <button
-          type="button"
-          data-boton
-          onClick={onCompleto}
-          className="flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11.5px] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white"
-        >
-          Abrir completo
-          <ArrowUpRight className="size-3" />
-        </button>
+        <div className="flex items-center gap-1" data-boton>
+          <BotonVentana
+            onClick={onCompleto}
+            etiqueta={`Abrir ${app.titulo} completo`}
+            ancho
+          >
+            <span className="text-[12px]">Abrir completo</span>
+            <ArrowUpRight className="size-3.5" />
+          </BotonVentana>
+          <BotonVentana
+            onClick={() => onCambio({ minimizada: true })}
+            etiqueta="Minimizar"
+          >
+            <Minus className="size-4" />
+          </BotonVentana>
+          <BotonVentana
+            onClick={() => onCambio({ maximizada: !v.maximizada })}
+            etiqueta={v.maximizada ? 'Restaurar' : 'Maximizar'}
+          >
+            {v.maximizada ? (
+              <Minimize2 className="size-3.5" />
+            ) : (
+              <Maximize2 className="size-3.5" />
+            )}
+          </BotonVentana>
+          <BotonVentana onClick={onCerrar} etiqueta="Cerrar">
+            <X className="size-4" />
+          </BotonVentana>
+        </div>
       </div>
+      <div className="mx-4 h-px shrink-0 bg-white/[0.06]" />
 
       {/* Contenido: la versión mini */}
-      <div className="min-h-0 flex-1 p-4">{children}</div>
+      <div className="min-h-0 flex-1 px-4 pb-4 pt-3">{children}</div>
 
       {/* Agrandar desde la esquina */}
       {!v.maximizada ? (
         <div
           onPointerDown={empezar('tamano')}
-          className="absolute bottom-0 right-0 size-4 cursor-nwse-resize"
+          className="absolute bottom-0 right-0 size-6 cursor-nwse-resize"
           aria-hidden
         >
-          <span className="absolute bottom-1 right-1 size-2 rounded-br-[4px] border-b-2 border-r-2 border-white/25" />
+          <span className="absolute bottom-2 right-2 size-2.5 rounded-br-[8px] border-b-2 border-r-2 border-white/20" />
         </div>
       ) : null}
     </div>
+  )
+}
+
+function BotonVentana({
+  onClick,
+  etiqueta,
+  ancho,
+  children,
+}: {
+  onClick: () => void
+  etiqueta: string
+  ancho?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      data-boton
+      onClick={onClick}
+      aria-label={etiqueta}
+      title={etiqueta}
+      className={cn(
+        'flex h-8 items-center justify-center gap-1 rounded-full text-white/50 outline-none transition-colors duration-200 hover:bg-white/[0.08] hover:text-white focus-visible:ring-2 focus-visible:ring-[#e06b17]/60',
+        ancho ? 'px-3' : 'w-8'
+      )}
+    >
+      {children}
+    </button>
   )
 }

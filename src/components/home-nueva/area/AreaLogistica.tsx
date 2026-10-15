@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react'
+import { colorEstado } from '../ChipEstado'
 import { Bloque, Fila, Lista, Vacio, hace, nombreCliente } from './areaUi'
 import { ETAPAS_ENVIO, TRANSPORTE, porTransporte, useEnvios } from './datos'
 import { Flujo } from './graficos'
@@ -22,6 +23,11 @@ export function FlujoEnvios({ compacto }: { compacto?: boolean }) {
           texto: e.texto,
           n: lista.length,
           alerta: e.clave === 'ERROR_ETIQUETA',
+          // Mismo color que el estado de envío en Pedidos ("Para enviar" = Sin envío).
+          color: colorEstado(
+            'envio',
+            e.clave === 'enviar' ? 'SIN_ENVIO' : e.clave
+          ),
           detalle: transportes.length ? (
             <span className="flex flex-col gap-0.5">
               {transportes.slice(0, 4).map(t => (

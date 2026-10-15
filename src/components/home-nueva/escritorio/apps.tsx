@@ -40,21 +40,24 @@ import {
   type GastoAutoCategoria,
 } from '@/lib/gastos/gastosAuto'
 import { emojiTipoFeedback, labelTipoFeedback } from '@/lib/equipo/feedback'
-import type { FabricationState, Order, Program, SaleState } from '@/lib/types'
+import type { FabricationState, Order, Program } from '@/lib/types'
 import { Cargando, claveDia, hace, nombreCliente, pesos } from '../area/areaUi'
 import {
   ETAPAS_ENVIO,
   ETAPAS_FABRICACION,
   DESVIOS_FABRICACION,
   TRANSPORTE,
+  useColaFabricacion,
   useEnvios,
   usePedidos,
   type EtapaEnvio,
 } from '../area/datos'
-import { BarrasH, Columnas, Flujo } from '../area/graficos'
-import { ColaFabricacion, MaquinasDeHoy } from '../area/AreaProduccion'
+import { BarrasH, Columnas } from '../area/graficos'
+import { MaquinasDeHoy } from '../area/AreaProduccion'
 import { PedidosPorDia, ResumenMes } from '../area/AreaAdministracion'
 import { PorCobrar } from '../area/AreaVentas'
+import { ChipEstado, colorEstado } from '../ChipEstado'
+import { calculateOrderFabricationState } from '@/lib/utils/format'
 import {
   BotonAccion,
   ENVIO,
@@ -153,13 +156,6 @@ function Seccion({
       {children}
     </section>
   )
-}
-
-const VENTA_TEXTO: Record<SaleState, string> = {
-  SEÑADO: 'Señado',
-  FOTO_ENVIADA: 'Foto enviada',
-  TRANSFERIDO: 'Transferido',
-  DEUDOR: 'Deudor',
 }
 
 const FABRICACION_TEXTO: Record<FabricationState, string> = {
@@ -268,6 +264,15 @@ export function MiniPedidos() {
           { clave: 'deudores', texto: 'Deudores', n: conteo.deudores.length },
         ]}
       />
+      {/* Encabezado como el de la tabla de Pedidos */}
+      <div className="grid shrink-0 grid-cols-[14px_minmax(0,1fr)_112px_104px_104px_86px] items-center gap-3 border-b border-white/[0.06] px-2.5 pb-2 text-[10.5px] uppercase tracking-wide text-white/35">
+        <span />
+        <span>Cliente · diseños</span>
+        <span className="text-center">Fabricación</span>
+        <span className="text-center">Venta</span>
+        <span className="text-center">Envío</span>
+        <span className="text-right">Valor</span>
+      </div>
       <ul
         key={filtro}
         className="entrada-lista -mx-1 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:thin]"
@@ -278,17 +283,16 @@ export function MiniPedidos() {
           </li>
         ) : null}
         {lista.map(o => {
-          const hechos = o.items.filter(
-            i => i.fabricationState === 'HECHO'
-          ).length
+          const fab = calculateOrderFabricationState(o.items)
           const venta = o.saleStateOrder ?? o.items[0]?.saleState
+          const envio = estadoEnvioDe(o) ?? o.items[0]?.shippingState
           const prio = o.items.some(i => i.isPriority)
           const esAbierto = abierto === o.id
           return (
             <li
               key={o.id}
               className={cn(
-                'rounded-xl transition-colors',
+                'rounded-xl transition-colors duration-200',
                 esAbierto ? 'bg-white/[0.045]' : ''
               )}
             >
@@ -296,16 +300,16 @@ export function MiniPedidos() {
                 type="button"
                 onClick={() => setAbierto(esAbierto ? null : o.id)}
                 aria-expanded={esAbierto}
-                className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
+                className="grid w-full grid-cols-[14px_minmax(0,1fr)_112px_104px_104px_86px] items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors duration-200 hover:bg-white/[0.05]"
               >
                 <ChevronRight
                   className={cn(
-                    'size-3.5 shrink-0 text-white/30 transition-[transform,color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]',
+                    'size-3.5 text-white/30 transition-[transform,color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]',
                     esAbierto && 'rotate-90 text-white/60'
                   )}
                 />
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-1.5 truncate text-[13px]">
+                <div className="min-w-0 leading-tight">
+                  <p className="flex items-center gap-1.5 text-[13px] text-white/90">
                     <span className="truncate">
                       {nombreCliente(o.customer)}
                     </span>
@@ -323,34 +327,20 @@ export function MiniPedidos() {
                     {hace(o.createdAt)}
                   </p>
                 </div>
-                {/* Avance de fabricación del pedido */}
-                <div
-                  className="hidden w-16 shrink-0 sm:block"
-                  title={`${hechos} de ${o.items.length} hechos`}
-                >
-                  <div className="h-1 overflow-hidden rounded-full bg-white/[0.08]">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#94300a] via-[#e06b17] to-[#f6a33d]"
-                      style={{
-                        width: `${(100 * hechos) / Math.max(1, o.items.length)}%`,
-                      }}
-                    />
-                  </div>
-                  <p className="mt-1 text-center text-[10px] tabular-nums text-white/35">
-                    {hechos}/{o.items.length}
-                  </p>
-                </div>
-                <span
-                  className={cn(
-                    'shrink-0 rounded-full px-2 py-0.5 text-[11px]',
-                    venta === 'DEUDOR'
-                      ? 'bg-[#f6a33d]/15 text-[#f6a33d]'
-                      : 'bg-white/[0.06] text-white/60'
-                  )}
-                >
-                  {venta ? VENTA_TEXTO[venta] : '—'}
+                <span className="flex justify-center">
+                  <ChipEstado
+                    tipo="fabricacion"
+                    valor={fab}
+                    prioritario={prio}
+                  />
                 </span>
-                <span className="w-[86px] shrink-0 text-right text-[12.5px] tabular-nums text-white/85">
+                <span className="flex justify-center">
+                  {venta ? <ChipEstado tipo="venta" valor={venta} /> : null}
+                </span>
+                <span className="flex justify-center">
+                  {envio ? <ChipEstado tipo="envio" valor={envio} /> : null}
+                </span>
+                <span className="text-right text-[12.5px] tabular-nums text-white/85">
                   {o.international ? 'Internac.' : pesos(o.totalValue ?? 0)}
                 </span>
               </button>
@@ -358,50 +348,62 @@ export function MiniPedidos() {
               {/* Detalle: cada sello con sus estados (se cambian como en Pedidos) */}
               <Plegable abierto={esAbierto}>
                 <div className="px-2.5 pb-3 pl-8">
-                  <ul className="space-y-1.5">
+                  <ul className="space-y-1">
                     {o.items.map(it => (
                       <li
                         key={it.id}
-                        className="flex items-center gap-2.5 rounded-lg bg-black/20 p-2"
+                        className="grid grid-cols-[minmax(0,1fr)_112px_104px_104px_86px] items-center gap-3 rounded-lg bg-black/20 py-1.5 pl-1.5 pr-0"
                       >
-                        <Miniatura
-                          url={
-                            it.files?.vectorPreviewUrl ||
-                            it.files?.baseUrl ||
-                            null
-                          }
-                          claro={Boolean(it.files?.vectorPreviewUrl)}
-                        />
-                        <p className="min-w-0 flex-1 truncate text-[12.5px]">
-                          {it.designName || 'Sin nombre'}
-                          {it.isPriority ? (
-                            <Flame className="ml-1 inline size-3 text-[#e06b17]" />
-                          ) : null}
-                        </p>
-                        <span className="flex shrink-0 items-center gap-1.5">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <Miniatura
+                            url={
+                              it.files?.vectorPreviewUrl ||
+                              it.files?.baseUrl ||
+                              null
+                            }
+                            claro={Boolean(it.files?.vectorPreviewUrl)}
+                          />
+                          <p className="min-w-0 truncate text-[12.5px]">
+                            {it.designName || 'Sin nombre'}
+                            {it.isPriority ? (
+                              <Flame className="ml-1 inline size-3 text-[#e06b17]" />
+                            ) : null}
+                          </p>
+                        </div>
+                        <span className="flex justify-center">
                           <MenuEstado
+                            tipo="fabricacion"
                             opciones={FABRICACION}
                             valor={it.fabricationState}
                             onElegir={v =>
                               void cambiar(o, 'fabricationState', v, [it.id])
                             }
                           />
+                        </span>
+                        <span className="flex justify-center">
                           <MenuEstado
+                            tipo="venta"
                             opciones={VENTA}
                             valor={it.saleState}
-                            alerta={it.saleState === 'DEUDOR'}
                             onElegir={v =>
                               void cambiar(o, 'saleState', v, [it.id])
                             }
                           />
+                        </span>
+                        <span className="flex justify-center">
                           <MenuEstado
+                            tipo="envio"
                             opciones={ENVIO}
                             valor={it.shippingState}
-                            alerta={it.shippingState === 'ERROR_ETIQUETA'}
                             onElegir={v =>
                               void cambiar(o, 'shippingState', v, [it.id])
                             }
                           />
+                        </span>
+                        <span className="pr-2.5 text-right text-[11.5px] tabular-nums text-white/50">
+                          {it.itemValue != null && !o.international
+                            ? pesos(it.itemValue)
+                            : ''}
                         </span>
                       </li>
                     ))}
@@ -491,32 +493,103 @@ function Miniatura({ url, claro }: { url: string | null; claro?: boolean }) {
 
 /* ------------------------------ Envíos ------------------------------ */
 
+/** Transportes como en la página Envíos (Correo Argentino, Andreani, Vía Cargo, Todos). */
+const TRANSPORTES: Array<{
+  clave: 'CORREO_ARGENTINO' | 'ANDREANI' | 'VIA_CARGO' | 'TODOS'
+  texto: string
+}> = [
+  { clave: 'TODOS', texto: 'Todos' },
+  { clave: 'CORREO_ARGENTINO', texto: 'Correo Argentino' },
+  { clave: 'ANDREANI', texto: 'Andreani' },
+  { clave: 'VIA_CARGO', texto: 'Vía Cargo' },
+]
+
 export function MiniEnvios() {
   const { porEtapa } = useEnvios()
   const { cambiar, dialogo } = useCambiarEstado()
+  const [transporte, setTransporte] =
+    useState<(typeof TRANSPORTES)[number]['clave']>('TODOS')
   const [etapa, setEtapa] = useState<EtapaEnvio>('enviar')
-  const lista = porEtapa.get(etapa) ?? []
+  const delTransporte = (l: Order[]) =>
+    transporte === 'TODOS'
+      ? l
+      : l.filter(o => o.shipping?.carrier === transporte)
+  const lista = delTransporte(porEtapa.get(etapa) ?? [])
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <Flujo
-        compacto
-        etapas={ETAPAS_ENVIO.map(e => ({
-          texto: e.texto,
-          n: porEtapa.get(e.clave)?.length ?? 0,
-          alerta: e.clave === 'ERROR_ETIQUETA',
-        }))}
-      />
-      <Chips
-        valor={etapa}
-        onCambio={setEtapa}
-        opciones={ETAPAS_ENVIO.map(e => ({
-          clave: e.clave,
-          texto: e.texto,
-          n: porEtapa.get(e.clave)?.length ?? 0,
-        }))}
-      />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* Transporte (como las tarjetas de la página Envíos) */}
+      <div className="relative flex shrink-0 rounded-full bg-white/[0.04] p-1 text-[12.5px]">
+        <span
+          aria-hidden
+          className="absolute inset-y-1 left-1 rounded-full bg-white/[0.1] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{
+            width: `calc((100% - 8px) / ${TRANSPORTES.length})`,
+            transform: `translateX(${TRANSPORTES.findIndex(t => t.clave === transporte) * 100}%)`,
+          }}
+        />
+        {TRANSPORTES.map(t => (
+          <button
+            key={t.clave}
+            type="button"
+            onClick={() => setTransporte(t.clave)}
+            className={cn(
+              'relative z-10 flex-1 truncate rounded-full py-1.5 transition-colors duration-300',
+              transporte === t.clave
+                ? 'text-white'
+                : 'text-white/45 hover:text-white/75'
+            )}
+          >
+            {t.texto}
+          </button>
+        ))}
+      </div>
+      {/* Etapa del envío, con los colores de estado de Pedidos */}
+      <div className="flex shrink-0 flex-wrap gap-1.5">
+        {ETAPAS_ENVIO.map(e => {
+          const n = delTransporte(porEtapa.get(e.clave) ?? []).length
+          const sel = etapa === e.clave
+          const rgb = colorEstado(
+            'envio',
+            e.clave === 'enviar' ? 'SIN_ENVIO' : e.clave
+          )
+          return (
+            <button
+              key={e.clave}
+              type="button"
+              onClick={() => setEtapa(e.clave)}
+              className={cn(
+                'flex h-7 items-center gap-2 rounded-full border px-3 text-[12px] transition-colors duration-300',
+                sel
+                  ? 'text-white'
+                  : 'border-transparent bg-white/[0.05] text-white/60 hover:bg-white/[0.09]'
+              )}
+              style={
+                sel
+                  ? {
+                      borderColor: `rgba(${rgb},0.7)`,
+                      backgroundColor: `rgba(${rgb},0.14)`,
+                    }
+                  : undefined
+              }
+            >
+              <span
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: `rgb(${rgb})` }}
+              />
+              {e.texto}
+              <span className="tabular-nums text-white/40">{n}</span>
+            </button>
+          )
+        })}
+      </div>
+      <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_110px_104px_128px] items-center gap-3 border-b border-white/[0.06] px-2.5 pb-2 text-[10.5px] uppercase tracking-wide text-white/35">
+        <span>Cliente · diseños</span>
+        <span>Transporte</span>
+        <span className="text-center">Venta</span>
+        <span className="text-center">Envío</span>
+      </div>
       <ul
-        key={etapa}
+        key={`${transporte}-${etapa}`}
         className="entrada-lista -mx-1 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:thin]"
       >
         {lista.length === 0 ? (
@@ -524,38 +597,57 @@ export function MiniEnvios() {
             No hay pedidos en esta etapa.
           </li>
         ) : null}
-        {lista.map(o => (
-          <li
-            key={o.id}
-            className="flex items-center gap-3 rounded-xl px-2.5 py-2.5 hover:bg-white/[0.05]"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px]">
-                {nombreCliente(o.customer)}
-              </p>
-              <p className="truncate text-[11.5px] text-white/40">
-                {etapa === 'ERROR_ETIQUETA'
-                  ? o.labelErrorMessage ||
-                    o.shippingLabelError ||
-                    'Error al generar la etiqueta'
-                  : o.shipping?.trackingNumber
-                    ? `Seguimiento ${o.shipping.trackingNumber}`
-                    : `${o.items.length} ${o.items.length === 1 ? 'ítem' : 'ítems'} · ${hace(o.createdAt) ?? ''}`}
-              </p>
-            </div>
-            <span className="shrink-0 text-[11px] text-white/45">
-              {TRANSPORTE[o.shipping?.carrier ?? 'SIN']}
-            </span>
-            {/* Estado de envío del pedido (todos sus sellos, como la fila del pedido en Pedidos) */}
-            <MenuEstado
-              opciones={ENVIO}
-              valor={estadoEnvioDe(o)}
-              etiqueta={estadoEnvioDe(o) ? undefined : 'Varios'}
-              alerta={etapa === 'ERROR_ETIQUETA'}
-              onElegir={v => void cambiar(o, 'shippingState', v)}
-            />
-          </li>
-        ))}
+        {lista.map(o => {
+          const venta = o.saleStateOrder ?? o.items[0]?.saleState
+          return (
+            <li
+              key={o.id}
+              className="grid grid-cols-[minmax(0,1fr)_110px_104px_128px] items-center gap-3 rounded-xl px-2.5 py-2 transition-colors duration-200 hover:bg-white/[0.05]"
+            >
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-[13px] text-white/90">
+                  {nombreCliente(o.customer)}
+                </p>
+                <p
+                  className={cn(
+                    'truncate text-[11.5px]',
+                    etapa === 'ERROR_ETIQUETA'
+                      ? 'text-[#f87171]'
+                      : 'text-white/40'
+                  )}
+                >
+                  {etapa === 'ERROR_ETIQUETA'
+                    ? o.labelErrorMessage ||
+                      o.shippingLabelError ||
+                      'Error al generar la etiqueta'
+                    : o.shipping?.trackingNumber
+                      ? `Seguimiento ${o.shipping.trackingNumber}`
+                      : o.items
+                          .map(i => i.designName)
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .join(', ') || 'Sin diseño'}
+                </p>
+              </div>
+              <span className="truncate text-[12px] text-white/55">
+                {TRANSPORTE[o.shipping?.carrier ?? 'SIN']}
+              </span>
+              <span className="flex justify-center">
+                {venta ? <ChipEstado tipo="venta" valor={venta} /> : null}
+              </span>
+              {/* Estado de envío del pedido (todos sus sellos, como la fila del pedido en Pedidos) */}
+              <span className="flex justify-center">
+                <MenuEstado
+                  tipo="envio"
+                  opciones={ENVIO}
+                  valor={estadoEnvioDe(o) ?? o.items[0]?.shippingState}
+                  etiqueta={estadoEnvioDe(o) ? undefined : 'Varios'}
+                  onElegir={v => void cambiar(o, 'shippingState', v)}
+                />
+              </span>
+            </li>
+          )
+        })}
       </ul>
       {dialogo}
     </div>
@@ -570,11 +662,24 @@ function estadoEnvioDe(o: Order) {
 
 /* ---------------------------- Producción ---------------------------- */
 
+const TIPO_SELLO: Record<string, string> = {
+  CLASICO: 'Clásico',
+  '3MM': '3mm',
+  ALIMENTO: 'Alimento',
+  LACRE: 'Lacre',
+  ABC: 'Abecedario',
+}
+
+/**
+ * Como la tabla de Producción: un sello por fila con diseño, medida, tipo, fecha límite, programa
+ * y fabricación (con los colores de Pedidos); arriba, la cola por estado.
+ */
 export function MiniProduccion() {
   const pedidos = usePedidos()
   const { cambiar, dialogo } = useCambiarEstado()
   const [estado, setEstado] = useState<FabricationState>('SIN_HACER')
   const estados = [...ETAPAS_FABRICACION, ...DESVIOS_FABRICACION]
+  const { porEstado } = useColaFabricacion()
   const sellos = useMemo(() => {
     const out: Array<{
       id: string
@@ -585,6 +690,9 @@ export function MiniProduccion() {
       limite: string | null
       thumb: string | null
       vector: boolean
+      medida: string
+      tipo: string
+      programa: string | null
     }> = []
     for (const o of pedidos)
       for (const it of o.items) {
@@ -594,6 +702,8 @@ export function MiniProduccion() {
           it.shippingState === 'SEGUIMIENTO_ENVIADO'
         )
           continue
+        const w = it.fabricationWidthMm ?? it.requestedWidthMm
+        const h = it.fabricationHeightMm ?? it.requestedHeightMm
         out.push({
           id: it.id,
           pedido: o,
@@ -603,6 +713,9 @@ export function MiniProduccion() {
           limite: o.deadlineAt ? o.deadlineAt.slice(0, 10) : null,
           thumb: it.files?.vectorPreviewUrl || it.files?.baseUrl || null,
           vector: Boolean(it.files?.vectorPreviewUrl),
+          medida: w && h ? `${Math.round(w)}×${Math.round(h)}` : '—',
+          tipo: TIPO_SELLO[it.stampType] ?? it.stampType,
+          programa: it.program || null,
         })
       }
     return out.sort(
@@ -612,77 +725,124 @@ export function MiniProduccion() {
     )
   }, [pedidos, estado])
   const hoy = claveDia(new Date())
+  const columnas =
+    'grid-cols-[minmax(0,1fr)_72px_76px_64px_minmax(0,110px)_128px]'
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <ColaFabricacion compacto />
-      <Chips
-        valor={estado}
-        onCambio={setEstado}
-        opciones={estados.map(e => ({ clave: e.clave, texto: e.texto }))}
-      />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      {/* Estados como los chips de Producción, con su color y cuántos hay */}
+      <div className="flex shrink-0 flex-wrap gap-1.5">
+        {estados.map(e => {
+          const sel = estado === e.clave
+          const rgb = colorEstado('fabricacion', e.clave)
+          return (
+            <button
+              key={e.clave}
+              type="button"
+              onClick={() => setEstado(e.clave)}
+              className={cn(
+                'flex h-7 items-center gap-2 rounded-full border px-3 text-[12px] transition-colors duration-300',
+                sel
+                  ? 'text-white'
+                  : 'border-transparent bg-white/[0.05] text-white/60 hover:bg-white/[0.09]'
+              )}
+              style={
+                sel
+                  ? {
+                      borderColor: `rgba(${rgb},0.7)`,
+                      backgroundColor: `rgba(${rgb},0.14)`,
+                    }
+                  : undefined
+              }
+            >
+              <span
+                className="size-1.5 rounded-full"
+                style={{ backgroundColor: `rgb(${rgb})` }}
+              />
+              {e.texto}
+              <span className="tabular-nums text-white/40">
+                {porEstado.get(e.clave) ?? 0}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      <div
+        className={cn(
+          'grid shrink-0 items-center gap-3 border-b border-white/[0.06] px-2.5 pb-2 text-[10.5px] uppercase tracking-wide text-white/35',
+          columnas
+        )}
+      >
+        <span>Diseño · cliente</span>
+        <span>Medida</span>
+        <span>Tipo</span>
+        <span>Límite</span>
+        <span>Programa</span>
+        <span className="text-center">Fabricación</span>
+      </div>
       <ul
         key={estado}
-        className="entrada-lista -mx-1 grid min-h-0 flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto px-1 [scrollbar-width:thin]"
+        className="entrada-lista -mx-1 min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:thin]"
       >
         {sellos.length === 0 ? (
-          <li className="col-span-2 py-8 text-center text-[13px] text-white/35">
+          <li className="py-8 text-center text-[13px] text-white/35">
             No hay sellos en {FABRICACION_TEXTO[estado].toLowerCase()}.
           </li>
         ) : null}
         {sellos.map(s => (
           <li
             key={s.id}
-            className="flex items-center gap-3 rounded-xl bg-white/[0.03] p-2.5"
+            className={cn(
+              'grid items-center gap-3 rounded-xl px-2.5 py-1.5 transition-colors duration-200 hover:bg-white/[0.05]',
+              columnas
+            )}
           >
-            <div
+            <div className="flex min-w-0 items-center gap-2.5">
+              <Miniatura url={s.thumb} claro={s.vector} />
+              <div className="min-w-0 leading-tight">
+                <p className="flex items-center gap-1 text-[12.5px] text-white/90">
+                  <span className="truncate">{s.diseno}</span>
+                  {s.prio ? (
+                    <Flame className="size-3 shrink-0 text-[#e06b17]" />
+                  ) : null}
+                </p>
+                <p className="truncate text-[11px] text-white/40">
+                  {s.cliente}
+                </p>
+              </div>
+            </div>
+            <span className="text-[12px] tabular-nums text-white/70">
+              {s.medida}
+            </span>
+            <span className="truncate text-[12px] text-white/60">{s.tipo}</span>
+            <span
               className={cn(
-                'flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg',
-                s.vector ? 'bg-[#F5F5F3]' : 'bg-white/[0.06]'
+                'text-[12px] tabular-nums',
+                s.limite && s.limite <= hoy
+                  ? 'font-semibold text-[#f6a33d]'
+                  : 'text-white/45'
               )}
             >
-              {s.thumb ? (
-                <img
-                  src={s.thumb}
-                  alt=""
-                  loading="lazy"
-                  className="size-full object-contain p-1"
-                />
-              ) : null}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-1 truncate text-[12.5px]">
-                <span className="truncate">{s.diseno}</span>
-                {s.prio ? (
-                  <Flame className="size-3 shrink-0 text-[#e06b17]" />
-                ) : null}
-              </p>
-              <p className="truncate text-[11px] text-white/40">{s.cliente}</p>
-              {s.limite ? (
-                <p
-                  className={cn(
-                    'text-[10.5px] tabular-nums',
-                    s.limite <= hoy
-                      ? 'font-semibold text-[#f6a33d]'
-                      : 'text-white/45'
-                  )}
-                >
-                  Límite{' '}
-                  {new Date(`${s.limite}T12:00:00`).toLocaleDateString(
-                    'es-AR',
-                    { day: 'numeric', month: 'short' }
-                  )}
-                </p>
-              ) : null}
-            </div>
-            {/* Pasar el sello al siguiente estado (sale de esta lista y entra en la otra) */}
-            <MenuEstado
-              opciones={FABRICACION}
-              valor={estado}
-              onElegir={v =>
-                void cambiar(s.pedido, 'fabricationState', v, [s.id])
-              }
-              className="self-start"
-            />
+              {s.limite
+                ? new Date(`${s.limite}T12:00:00`).toLocaleDateString('es-AR', {
+                    day: 'numeric',
+                    month: 'short',
+                  })
+                : '—'}
+            </span>
+            <span className="truncate text-[12px] text-white/55">
+              {s.programa ?? '—'}
+            </span>
+            {/* Pasar el sello a otro estado (sale de esta lista y entra en la otra) */}
+            <span className="flex justify-center">
+              <MenuEstado
+                tipo="fabricacion"
+                opciones={FABRICACION}
+                valor={estado}
+                onElegir={v =>
+                  void cambiar(s.pedido, 'fabricationState', v, [s.id])
+                }
+              />
+            </span>
           </li>
         ))}
       </ul>
@@ -692,14 +852,6 @@ export function MiniProduccion() {
 }
 
 /* ---------------------------- Programas ----------------------------- */
-
-const ESTADO_PROGRAMA: Record<string, string> = {
-  BORRADOR: 'Borrador',
-  LISTO: 'Listo',
-  BLOQUEADO: 'Bloqueado',
-  EN_FABRICACION: 'En fabricación',
-  FINALIZADO: 'Finalizado',
-}
 
 export function MiniProgramas() {
   const [programas, setProgramas] = useState<Program[] | null>(null)
@@ -759,16 +911,11 @@ export function MiniProgramas() {
                       })
                     : ''}
                 </p>
-                <p
-                  className={cn(
-                    'mt-0.5 text-[11px]',
-                    p.estadoPrograma === 'EN_FABRICACION'
-                      ? 'font-semibold text-[#f6a33d]'
-                      : 'text-white/55'
-                  )}
-                >
-                  {ESTADO_PROGRAMA[p.estadoPrograma] ?? p.estadoPrograma}
-                </p>
+                <ChipEstado
+                  tipo="programa"
+                  valor={p.estadoPrograma}
+                  className="mt-1"
+                />
               </div>
             </li>
           ))}

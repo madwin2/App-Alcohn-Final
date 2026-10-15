@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Flame, RotateCcw, Wrench } from 'lucide-react'
+import { Flame } from 'lucide-react'
+import { ChipEstado, colorEstado } from '../ChipEstado'
 import { cn } from '@/lib/utils/cn'
 import { todayArgentinaDateKey } from '@/lib/utils/argentinaDate'
 import { getPrograms } from '@/lib/supabase/services/programs.service'
@@ -84,6 +85,8 @@ export function ColaFabricacion({ compacto }: { compacto?: boolean }) {
         etapas={ETAPAS_FABRICACION.map(e => ({
           texto: e.texto,
           n: cola.porEstado.get(e.clave) ?? 0,
+          // Mismo color que el estado en Pedidos y Producción.
+          color: colorEstado('fabricacion', e.clave),
         }))}
       />
       <div
@@ -94,22 +97,20 @@ export function ColaFabricacion({ compacto }: { compacto?: boolean }) {
       >
         {DESVIOS_FABRICACION.map(d => {
           const n = cola.porEstado.get(d.clave) ?? 0
-          const Icono = d.clave === 'REHACER' ? RotateCcw : Wrench
           return (
             <Tip
               key={d.clave}
               texto={`${n} sellos para ${d.texto.toLowerCase()} (vuelven a la cola)`}
             >
               <span
-                className={cn(
-                  'flex items-center gap-1.5 rounded-full px-2.5 py-1',
-                  n
-                    ? 'bg-[#f6a33d]/15 text-white/85'
-                    : 'bg-white/[0.04] text-white/35'
-                )}
+                className={cn('flex items-center gap-1.5', !n && 'opacity-45')}
               >
-                <Icono className={cn('size-3', n ? 'text-[#f6a33d]' : '')} />
-                {d.texto} <b className="font-semibold tabular-nums">{n}</b>
+                <ChipEstado
+                  tipo="fabricacion"
+                  valor={d.clave}
+                  texto={`${d.texto} ${n}`}
+                  className="gap-1"
+                />
               </span>
             </Tip>
           )

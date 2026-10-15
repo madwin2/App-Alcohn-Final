@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ChipEstado } from '../ChipEstado'
 import { cn } from '@/lib/utils/cn'
 import {
   listMockupSolicitudes,
@@ -80,11 +81,14 @@ function useSeguimientos() {
 /** Una cola de cobro: monto, cantidad, barra de antigüedad y los más atrasados. */
 function ColaCobro({
   titulo,
+  estado,
   pedidos,
   compacto,
   maxFilas = 3,
 }: {
   titulo: string
+  /** Estado de venta de la cola: el título va como el chip de Pedidos. */
+  estado: 'FOTO_ENVIADA' | 'DEUDOR'
   pedidos: PedidoCobro[]
   compacto?: boolean
   maxFilas?: number
@@ -93,7 +97,7 @@ function ColaCobro({
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[12px] text-white/55">{titulo}</p>
+        <ChipEstado tipo="venta" valor={estado} texto={titulo} />
         <p className="text-[12px] text-white/40">
           {pedidos.length} {pedidos.length === 1 ? 'pedido' : 'pedidos'}
         </p>
@@ -116,7 +120,7 @@ function ColaCobro({
           }))}
         />
       </div>
-      {!compacto && pedidos.length ? (
+      {pedidos.length ? (
         <ul className="mt-3 space-y-1">
           {pedidos.slice(0, maxFilas).map(p => (
             <li key={p.id} className="flex items-center gap-2 text-[12px]">
@@ -166,10 +170,16 @@ export function PorCobrar({ compacto }: { compacto?: boolean }) {
       >
         <ColaCobro
           titulo="Esperando pago"
+          estado="FOTO_ENVIADA"
           pedidos={esperando}
           compacto={compacto}
         />
-        <ColaCobro titulo="Deudores" pedidos={deudores} compacto={compacto} />
+        <ColaCobro
+          titulo="Deudores"
+          estado="DEUDOR"
+          pedidos={deudores}
+          compacto={compacto}
+        />
       </div>
       <div className="mt-4">
         <Leyenda

@@ -25,7 +25,10 @@ import {
   SelectorModo,
   type ModoHome,
 } from '@/components/home-nueva/SelectorModo'
-import { TarjetaBienvenida } from '@/components/home-nueva/TarjetaBienvenida'
+import {
+  TarjetaBienvenida,
+  type MaterialTarjeta,
+} from '@/components/home-nueva/TarjetaBienvenida'
 import { useNotas } from '@/components/home-nueva/useNotas'
 import { VidrioLiquido } from '@/components/home-nueva/VidrioLiquido'
 import { AppMain } from '@/components/layout/AppMain'
@@ -131,6 +134,22 @@ export default function HomeNuevaSandboxPage() {
   const ordenModo = {
     '--i': cargando.current ? 6 : -0.86,
   } as React.CSSProperties
+  // Versión de la tarjeta de perfil (para comparar; se recuerda).
+  const [tarjeta, setTarjeta] = useState<MaterialTarjeta>(() => {
+    try {
+      const g = localStorage.getItem('home_nueva_tarjeta_v1')
+      return g === 'negra' || g === 'vidrio' ? g : 'actual'
+    } catch {
+      return 'actual'
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem('home_nueva_tarjeta_v1', tarjeta)
+    } catch {
+      // ignore
+    }
+  }, [tarjeta])
   const anchoColumna = { width: 'calc((100% - 48px) * 2 / 5 + 12px)' }
 
   return (
@@ -144,6 +163,7 @@ export default function HomeNuevaSandboxPage() {
           // Al cargar, cada bloque entra en cascada (ver movimiento.css).
           <TarjetaBienvenida
             perfil={perfil}
+            material={tarjeta}
             className="entrada"
             style={{ '--i': 0 } as React.CSSProperties}
           />
@@ -168,6 +188,8 @@ export default function HomeNuevaSandboxPage() {
                 modo={modo}
                 esDueno={esDueno}
                 persona={persona?.slug ?? null}
+                tarjeta={tarjeta}
+                onTarjeta={setTarjeta}
               />
             </div>
             <BarraObjetivos
