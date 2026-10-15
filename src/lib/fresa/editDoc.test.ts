@@ -131,6 +131,51 @@ describe('editDoc', () => {
     expect(after).toBeLessThan(12);
   });
 
+  it('simplifica rectas llenas de nodos, con nodos casi encimados y ruido (caso FG)', () => {
+    // Rectángulo 20×6 con un nodo cada 0,25 mm, un zigzag de 0,002 mm y, en
+    // cada esquina, un par de nodos casi encimados (como sale de la vectorización).
+    const pts: string[] = [];
+    const add = (x: number, y: number) => pts.push(`${x.toFixed(4)} ${y.toFixed(4)}`);
+    const edge = (x0: number, y0: number, x1: number, y1: number) => {
+      const steps = Math.round(Math.hypot(x1 - x0, y1 - y0) / 0.25);
+      add(x0, y0);
+      add(x0 + 0.0008, y0 + 0.0006); // casi encimado
+      for (let k = 1; k < steps; k++) {
+        const t = k / steps;
+        const j = (k % 2 ? 1 : -1) * 0.002;
+        add(x0 + t * (x1 - x0) + (y1 !== y0 ? j : 0), y0 + t * (y1 - y0) + (x1 !== x0 ? j : 0));
+      }
+    };
+    edge(1, 1, 21, 1);
+    edge(21, 1, 21, 7);
+    edge(21, 7, 1, 7);
+    edge(1, 7, 1, 1);
+    const d = doc(svg(`<path d="M${pts.join('L')}Z"/>`));
+    const { doc: s, before, after } = simplifyDoc(d, 0.01);
+    expect(before).toBeGreaterThan(200);
+    expect(after).toBe(4);
+    expect(areaOf(serializeEditDoc(s))).toBeCloseTo(120, 1);
+    for (const n of s.paths[0].subs[0].nodes) expect(n.i ?? n.o).toBeUndefined();
+  });
+
+  it('simplifica una D: rectas quedan rectas y la panza queda curva', () => {
+    const pts: string[] = ['1 1'];
+    for (let y = 1.5; y < 9; y += 0.5) pts.push(`1 ${y}`); // lomo recto con nodos
+    pts.push('1 9');
+    for (let x = 1.5; x <= 5; x += 0.5) pts.push(`${x} 9`);
+    for (let k = 1; k < 60; k++) {
+      const t = Math.PI / 2 - (k / 60) * Math.PI;
+      pts.push(`${(5 + 4 * Math.cos(t)).toFixed(4)} ${(5 + 4 * Math.sin(t)).toFixed(4)}`);
+    }
+    for (let x = 5; x > 1; x -= 0.5) pts.push(`${x} 1`);
+    const d = doc(svg(`<path d="M${pts.join('L')}Z"/>`));
+    const { doc: s, after } = simplifyDoc(d, 0.01);
+    expect(after).toBeLessThan(12);
+    const area = 4 * 8 + (Math.PI * 16) / 2;
+    expect(areaOf(serializeEditDoc(s))).toBeCloseTo(area, 0);
+    expect(s.paths[0].subs[0].nodes.some((n) => n.i || n.o)).toBe(true);
+  });
+
   it('mueve un nodo con sus manijas y borra nodos', () => {
     const d = doc(svg(`<path d="M1 1C2 0 3 0 4 1L4 4L1 4Z"/>`));
     const ref = { path: 0, sub: 0, node: 1 };

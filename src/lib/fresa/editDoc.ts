@@ -763,52 +763,150 @@ function sampleSegment(a: ENode, b: ENode, tol: number): Pt[] {
   return out;
 }
 
-/** ¿El nodo es una esquina (cambia la dirección de golpe)? */
-function isCorner(prev: ENode, n: ENode, next: ENode): boolean {
-  const inDir = n.i ? { x: n.p.x - n.i.x, y: n.p.y - n.i.y } : { x: n.p.x - (prev.o ?? prev.p).x, y: n.p.y - (prev.o ?? prev.p).y };
-  const outDir = n.o ? { x: n.o.x - n.p.x, y: n.o.y - n.p.y } : { x: (next.i ?? next.p).x - n.p.x, y: (next.i ?? next.p).y - n.p.y };
-  const la = Math.hypot(inDir.x, inDir.y);
-  const lb = Math.hypot(outDir.x, outDir.y);
-  if (!la || !lb) return true;
-  return (inDir.x * outDir.x + inDir.y * outDir.y) / (la * lb) < Math.cos((20 * Math.PI) / 180);
+/** Douglas-Peucker sobre `pts[a..b]` (abierto): marca en `keep` los puntos que hacen falta. */
+function douglasPeucker(pts: Pt[], a: number, b: number, tol: number, keep: Uint8Array): void {
+  const stack: Array<[number, number]> = [[a, b]];
+  while (stack.length) {
+    const [i, j] = stack.pop()!;
+    if (j - i < 2) continue;
+    let far = -1;
+    let best = tol;
+    for (let k = i + 1; k < j; k++) {
+      const d = segmentDistance(pts[k], pts[i], pts[j]);
+      if (d > best) {
+        best = d;
+        far = k;
+      }
+    }
+    if (far < 0) continue;
+    keep[far] = 1;
+    stack.push([i, far], [far, j]);
+  }
 }
 
+function segmentDistance(p: Pt, a: Pt, b: Pt): number {
+  const l2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
+  if (l2 < 1e-24) return dist(p, a);
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2));
+  return dist(p, { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) });
+}
+
+/** Ángulo (grados) entre dos direcciones; 0 si alguna es nula. */
+function turnDeg(ax: number, ay: number, bx: number, by: number): number {
+  const la = Math.hypot(ax, ay);
+  const lb = Math.hypot(bx, by);
+  if (!la || !lb) return 0;
+  const c = Math.max(-1, Math.min(1, (ax * bx + ay * by) / (la * lb)));
+  return (Math.acos(c) * 180) / Math.PI;
+}
+
+/** Giro a partir del cual un vértice es una esquina. */
+const CORNER_DEG = 30;
+
 /**
- * Simplifica un sub-trayecto: entre esquinas, reemplaza los nodos por la menor
- * cantidad de curvas que pasen a menos de `tol` de la forma original. Las
- * esquinas y los tramos rectos se conservan. Devuelve null si no ahorra nodos.
+ * Simplifica un sub-trayecto: deja la menor cantidad de nodos que pasen a
+ * menos de `tol` de la forma original. Devuelve null si no ahorra nodos.
+ *
+ * 1. Se muestrea todo el contorno como polilínea.
+ * 2. Douglas-Peucker con `tol` da la forma mínima: en una recta llena de nodos
+ *    (o con nodos casi encimados, o con el zigzag de la vectorización) quedan
+ *    solo sus dos puntas.
+ * 3. Las esquinas son los vértices de esa forma mínima donde la dirección gira
+ *    de verdad, medida con un tramo a cada lado (no nodo contra nodo, que con
+ *    nodos encimados da cualquier cosa).
+ * 4. Entre esquinas: si es recta, una recta; si no, curvas (Schneider), y las
+ *    curvas casi rectas pasan a rectas.
  */
 export function simplifySub(sub: ESub, tol: number): ESub | null {
   const n = sub.nodes;
-  if (n.length < 4) return null;
   const count = n.length;
-  const cornerIdx: number[] = [];
-  for (let k = 0; k < count; k++) {
-    if (!sub.closed && (k === 0 || k === count - 1)) {
-      cornerIdx.push(k);
+  if (count < (sub.closed ? 4 : 3)) return null;
+  // 1. Muestras (sin repetir puntos).
+  const raw: Pt[] = [];
+  const segs = sub.closed ? count : count - 1;
+  for (let k = 0; k < segs; k++) raw.push(...sampleSegment(n[k], n[(k + 1) % count], tol));
+  if (!sub.closed) raw.push(n[count - 1].p);
+  const pts: Pt[] = [];
+  for (const q of raw) if (!pts.length || dist(q, pts[pts.length - 1]) > tol * 1e-3) pts.push(q);
+  if (sub.closed) while (pts.length > 2 && dist(pts[0], pts[pts.length - 1]) <= tol * 1e-3) pts.pop();
+  const m = pts.length;
+  if (m < (sub.closed ? 3 : 2)) return null;
+
+  // 2. Forma mínima. Cerrado: se parte en el punto 0 y el más lejano a él.
+  const keep = new Uint8Array(m + 1);
+  const ext = sub.closed ? [...pts, pts[0]] : pts;
+  keep[0] = 1;
+  keep[ext.length - 1] = 1;
+  if (sub.closed) {
+    let far = 1;
+    for (let k = 1; k < m; k++) if (dist(pts[k], pts[0]) > dist(pts[far], pts[0])) far = k;
+    keep[far] = 1;
+    douglasPeucker(ext, 0, far, tol, keep);
+    douglasPeucker(ext, far, m, tol, keep);
+  } else {
+    douglasPeucker(ext, 0, m - 1, tol, keep);
+  }
+  const verts: number[] = [];
+  for (let k = 0; k < m; k++) if (keep[k]) verts.push(k);
+
+  // 3. Esquinas: giro medido sobre la polilínea original, a `win` de distancia.
+  const cum: number[] = [0];
+  for (let k = 1; k < ext.length; k++) cum.push(cum[k - 1] + dist(ext[k - 1], ext[k]));
+  const total = cum[ext.length - 1];
+  const at = (s: number): Pt => {
+    // Punto a distancia s (con vuelta si es cerrado) sobre la polilínea.
+    let x = s;
+    if (sub.closed) x = ((x % total) + total) % total;
+    else x = Math.max(0, Math.min(total, x));
+    let lo = 0;
+    let hi = ext.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (cum[mid] <= x) lo = mid;
+      else hi = mid;
+    }
+    const span = cum[hi] - cum[lo] || 1;
+    const t = (x - cum[lo]) / span;
+    return { x: ext[lo].x + t * (ext[hi].x - ext[lo].x), y: ext[lo].y + t * (ext[hi].y - ext[lo].y) };
+  };
+  const corners: number[] = [];
+  const nv = verts.length;
+  for (let j = 0; j < nv; j++) {
+    const k = verts[j];
+    if (!sub.closed && (j === 0 || j === nv - 1)) {
+      corners.push(k);
       continue;
     }
-    if (isCorner(n[(k - 1 + count) % count], n[k], n[(k + 1) % count])) cornerIdx.push(k);
+    const prevV = verts[(j - 1 + nv) % nv];
+    const nextV = verts[(j + 1) % nv];
+    const back = sub.closed ? (cum[k] - cum[prevV] + total) % total : cum[k] - cum[prevV];
+    const fwd = sub.closed ? (cum[nextV] - cum[k] + total) % total : cum[nextV] - cum[k];
+    const win = Math.min(4 * tol, 0.5 * back, 0.5 * fwd);
+    if (!(win > 0)) continue;
+    const p = pts[k];
+    const a = at(cum[k] - win);
+    const b = at(cum[k] + win);
+    if (turnDeg(p.x - a.x, p.y - a.y, b.x - p.x, b.y - p.y) >= CORNER_DEG) corners.push(k);
   }
-  const out: ENode[] = [];
-  const pushRun = (from: number, to: number) => {
-    // Tramo de nodos from → to (con vuelta si es cerrado).
-    const idx: number[] = [];
-    for (let k = from; ; k = (k + 1) % count) {
-      idx.push(k);
-      if (k === to && idx.length > 1) break;
-      if (idx.length > count + 1) break;
+
+  // 4. Tramos entre esquinas.
+  const runPts = (from: number, to: number): Pt[] => {
+    const out: Pt[] = [];
+    for (let k = from; ; k = (k + 1) % m) {
+      out.push(pts[k]);
+      if (k === to && out.length > 1) break;
+      if (out.length > m + 1) break;
     }
-    const pts: Pt[] = [];
-    for (let j = 0; j < idx.length - 1; j++) pts.push(...sampleSegment(n[idx[j]], n[idx[j + 1]], tol));
-    const end = n[idx[idx.length - 1]].p;
-    pts.push(end);
-    // Si todo el tramo es una recta (aunque tenga nodos en el medio), queda una recta.
-    if (pts.every((q) => pointLineDistance(q, pts[0], end) <= tol)) {
+    return out;
+  };
+  const out: ENode[] = [];
+  const pushRun = (rp: Pt[]) => {
+    const end = rp[rp.length - 1];
+    if (rp.every((q) => segmentDistance(q, rp[0], end) <= tol)) {
       out.push({ p: { ...end } });
       return;
     }
-    for (const c of fitCubics(pts, tol)) {
+    for (const c of fitCubics(rp, tol)) {
       if (isNearlyStraight(c, tol * 0.25)) {
         out.push({ p: c[3] });
       } else {
@@ -818,17 +916,18 @@ export function simplifySub(sub: ESub, tol: number): ESub | null {
     }
   };
   if (!sub.closed) {
-    out.push({ p: { ...n[0].p } });
-    for (let k = 0; k + 1 < cornerIdx.length; k++) pushRun(cornerIdx[k], cornerIdx[k + 1]);
-  } else if (!cornerIdx.length) {
-    // Todo suave: se ajusta en dos mitades partiendo en el nodo 0.
-    const half = Math.floor(count / 2);
-    out.push({ p: { ...n[0].p } });
-    pushRun(0, half);
-    pushRun(half, 0);
+    out.push({ p: { ...pts[0] } });
+    for (let j = 0; j + 1 < corners.length; j++) pushRun(runPts(corners[j], corners[j + 1]));
+  } else if (corners.length < 2) {
+    // Sin esquinas (o con una sola): se ajusta en dos mitades.
+    const s0 = corners.length ? corners[0] : 0;
+    const s1 = (s0 + Math.floor(m / 2)) % m;
+    out.push({ p: { ...pts[s0] } });
+    pushRun(runPts(s0, s1));
+    pushRun(runPts(s1, s0));
   } else {
-    out.push({ p: { ...n[cornerIdx[0]].p } });
-    for (let k = 0; k < cornerIdx.length; k++) pushRun(cornerIdx[k], cornerIdx[(k + 1) % cornerIdx.length]);
+    out.push({ p: { ...pts[corners[0]] } });
+    for (let j = 0; j < corners.length; j++) pushRun(runPts(corners[j], corners[(j + 1) % corners.length]));
   }
   if (sub.closed && out.length > 1 && near(out[0].p, out[out.length - 1].p, tol * 0.01)) {
     const last = out.pop()!;

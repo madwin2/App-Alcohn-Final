@@ -1003,7 +1003,7 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
       {
         heading: 'Nodos a la vista',
-        body: 'Ves los nodos de cada pieza y los podés arrastrar. «Quitar nodos de más» los limpia sin cambiar la forma; «Simplificar curvas» deja menos nodos con un error que elegís.',
+        body: 'Ves los nodos de cada pieza y los podés arrastrar. «Quitar nodos de más» los limpia sin cambiar la forma; «Simplificar» te dice antes cuántos nodos quedan: las rectas llenas de nodos quedan con uno por esquina y las curvas con pocos.',
         icon: Spline,
       },
     ],

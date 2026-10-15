@@ -358,6 +358,12 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     () => (shown ? redundantNodes(shown, 0.002 / k, selRefs.length ? selRefs : undefined) : []),
     [shown, selRefs, k],
   );
+  // Cuántos nodos quedarían al simplificar (para mostrarlo en el botón).
+  const simplified = useMemo(() => {
+    if (!doc) return null;
+    const tol = Math.max(0.001, Number(tolMm.replace(',', '.'))) / k;
+    return simplifyDoc(doc, tol, selRefs.length ? selRefs : undefined);
+  }, [doc, tolMm, k, selRefs]);
   const extraKeys = useMemo(() => new Set(extra.map((n) => `${n.path}:${n.sub}:${n.node}`)), [extra]);
   const totalNodes = shown ? countNodes(shown) : 0;
   const selNodes = shown && selRefs.length ? countNodes(shown, selRefs) : 0;
@@ -656,9 +662,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     commit(next, `Se sacaron ${removed} nodos de más. La forma no cambió.`);
   };
   const doSimplify = () => {
-    if (!doc) return;
-    const tol = Math.max(0.001, num(tolMm)) / k;
-    const r = simplifyDoc(doc, tol, selRefs.length ? selRefs : undefined);
+    const r = simplified;
+    if (!doc || !r) return;
     if (r.after >= r.before) {
       say('Ya está simple: con ese error no se pueden sacar más nodos.', 'ok');
       return;
@@ -1383,8 +1388,17 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             {extra.length ? <span className="text-[11px] text-orange-600">(en naranja)</span> : null}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <Button type="button" size="sm" variant="outline" className="h-7" onClick={doSimplify}>
-              Simplificar curvas
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7"
+              disabled={!simplified || simplified.after >= simplified.before}
+              onClick={doSimplify}
+            >
+              {simplified && simplified.after < simplified.before
+                ? `Simplificar: ${simplified.before.toLocaleString('es-AR')} → ${simplified.after.toLocaleString('es-AR')} nodos`
+                : 'Ya está simple'}
             </Button>
             <select
               className="h-7 rounded border bg-background px-1 text-xs"
@@ -1400,8 +1414,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             </select>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {nSel ? 'Se aplica a lo elegido.' : 'Se aplica a todo el dibujo.'} «Quitar de más» no cambia la forma;
-            «Simplificar» la cambia como mucho lo elegido.
+            {nSel ? 'Se aplica a lo elegido.' : 'Se aplica a todo el dibujo.'} «Simplificar» deja las rectas como rectas
+            y las curvas con pocos nodos, y la forma cambia como mucho lo elegido. «Quitar de más» no la cambia nada.
           </p>
         </Section>
 
