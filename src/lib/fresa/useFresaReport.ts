@@ -46,7 +46,7 @@ export function forgetSvgText(url: string): void {
 
 export function isSvgUrl(url: string | null | undefined): boolean {
   if (!url) return false;
-  return /\.svg(?:$|[?#])/i.test(url);
+  return /^data:image\/svg\+xml[;,]/i.test(url) || /\.svg(?:$|[?#])/i.test(url);
 }
 
 /** Chequeo de un vector guardado (por URL). Solo SVG; el resto devuelve null. */

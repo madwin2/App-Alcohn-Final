@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
@@ -6,13 +6,21 @@ import { useVectorizacionStore } from '@/lib/state/vectorizacion.store';
 import { saveSelloVector } from '@/lib/vectorizacion/saveVector';
 import { downloadSvg, downloadBlob, zipDownloadName, zipVectorResults } from '@/lib/vectorizacion/zipResults';
 import type { ReviewItem } from '@/lib/vectorizacion/types';
-import { Check, Download, Replace, Search, X } from 'lucide-react';
+import { Check, Download, Loader2, Replace, Search, Wand2, X } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { ReviewCompareDialog } from './ReviewCompareDialog';
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { FresaChip } from '@/components/fresa/FresaChip';
 import { FresaCheckDialog } from '@/components/fresa/FresaCheckDialog';
-import { chequearSvg, fresaCacheKey, type FresaReport, type FresaTarget } from '@/lib/fresa/chequeoFresa';
+import {
+  autoCorregir,
+  chequearSvg,
+  fresaCacheKey,
+  type FresaFixResult,
+  type FresaReport,
+  type FresaTarget,
+} from '@/lib/fresa/chequeoFresa';
+import { resumenOperaciones } from '@/lib/fresa/textos';
 
 /** La medida con la que se va a guardar: la misma lógica que "Confirmar". */
 function reviewTarget(item: ReviewItem): FresaTarget {
@@ -24,6 +32,7 @@ function reviewTarget(item: ReviewItem): FresaTarget {
       requestedWidthMm: item.requestedWidthMm,
       requestedHeightMm: item.requestedHeightMm,
       alimento: item.alimento,
+      stampType: item.stampType,
     };
   }
   return {
@@ -31,6 +40,7 @@ function reviewTarget(item: ReviewItem): FresaTarget {
     requestedWidthMm: item.requestedWidthMm,
     requestedHeightMm: item.requestedHeightMm,
     alimento: item.alimento,
+    stampType: item.stampType,
   };
 }
 
@@ -40,21 +50,129 @@ function reviewKey(item: ReviewItem): string {
 
 const fresaProblemas = (r: FresaReport | null | undefined) => (r ? r.groupCounts.alta + r.groupCounts.media : 0);
 
+/** El vector como salió de la vectorización (o el que se cargó con «Cambiar»). */
+const originalOf = (item: ReviewItem) => item.originalSvg ?? item.svg;
+
+/** Corrección automática de un ítem: null = todavía corriendo. */
+type AutoState = { report: FresaReport; fix: FresaFixResult | null } | null;
+
+function autoKey(item: ReviewItem): string {
+  return fresaCacheKey(originalOf(item), reviewTarget(item));
+}
+
+/** Botón de una versión (Original / Automático / A mano). */
+function VersionButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded px-2 py-1 text-xs transition-colors',
+        active ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Qué versión del vector se guarda. La corrección automática (corregir donde
+ * no llega la fresa + simplificar nodos sin cambiar el diseño) se hace sola al
+ * llegar el vector; acá se elige entre esa, el original o una edición a mano.
+ */
+function VersionPicker({
+  item,
+  auto,
+  onChoose,
+  onOpen,
+}: {
+  item: ReviewItem;
+  auto: AutoState;
+  onChoose: (choice: NonNullable<ReviewItem['fresaChoice']>, svg: string) => void;
+  onOpen: () => void;
+}) {
+  if (!auto) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="size-3 animate-spin" />
+        Corrigiendo y simplificando…
+      </p>
+    );
+  }
+  const fix = auto.fix;
+  if (!fix) return null;
+  const choice = item.fresaChoice ?? 'original';
+  const antes = fresaProblemas(auto.report);
+  const despues = fresaProblemas(fix.after);
+  return (
+    <div className="space-y-1 rounded-md border bg-muted/30 p-2">
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="mr-1 text-xs text-muted-foreground">Guardar:</span>
+        <div className="flex items-center gap-0.5 rounded-md border bg-muted/40 p-0.5">
+          <VersionButton active={choice === 'original'} onClick={() => onChoose('original', originalOf(item))}>
+            Original
+          </VersionButton>
+          <VersionButton active={choice === 'auto'} onClick={() => onChoose('auto', fix.svg)}>
+            <Wand2 className="mr-1 inline size-3" />
+            Automático
+          </VersionButton>
+          {choice === 'manual' ? (
+            <VersionButton active onClick={() => undefined}>
+              A mano
+            </VersionButton>
+          ) : null}
+        </div>
+        <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={onOpen}>
+          Ver / editar
+        </Button>
+      </div>
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        {antes > 0
+          ? despues === 0
+            ? `Automático resuelve los ${antes} lugares. `
+            : `Automático resuelve ${antes - despues} de ${antes} lugares. `
+          : ''}
+        {resumenOperaciones(fix.operations)}
+      </p>
+    </div>
+  );
+}
+
 function ReviewCard({
   item,
   confirming,
   fresa,
+  auto,
   onConfirm,
   onReject,
   onChangeSvg,
+  onChoose,
 }: {
   item: ReviewItem;
   confirming: boolean;
   /** Chequeo de fresa del SVG actual (null = analizando). */
   fresa: FresaReport | null;
+  /** Corrección automática del original (null = corrigiendo). */
+  auto: AutoState;
   onConfirm: () => void;
   onReject: () => void;
-  onChangeSvg: (svg: string, fabricationOverrideMm?: { widthMm: number; heightMm: number }) => void;
+  /** «Cambiar»: otro archivo, que pasa a ser el original. */
+  onChangeSvg: (svg: string) => void;
+  /** Elegir qué versión se guarda. */
+  onChoose: (
+    choice: NonNullable<ReviewItem['fresaChoice']>,
+    svg: string,
+    fabricationOverrideMm?: { widthMm: number; heightMm: number },
+  ) => void;
 }) {
   const [checker, setChecker] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
@@ -125,6 +243,7 @@ function ReviewCard({
             Damero
           </label>
         </div>
+        <VersionPicker item={item} auto={auto} onChoose={onChoose} onOpen={() => setFresaOpen(true)} />
         {item.mode !== 'production' ? (
           <p className="text-xs text-amber-600">Modo prueba: no se puede confirmar en pedidos.</p>
         ) : null}
@@ -183,11 +302,14 @@ function ReviewCard({
         open={fresaOpen}
         onOpenChange={setFresaOpen}
         title={`${item.designName} — ${item.clienteNombre}`}
-        svgText={item.svg}
+        svgText={originalOf(item)}
         target={reviewTarget(item)}
         downloadName={item.designName}
-        onApply={(svg, _fix, opts) => {
-          onChangeSvg(svg, opts.scaledUp ? opts.fabricationMm : undefined);
+        initialFix={auto?.fix ?? null}
+        onUseOriginal={() => onChoose('original', originalOf(item))}
+        onApply={(svg, fix, opts) => {
+          const manual = fix.operations.some((o) => o.kind === 'manual');
+          onChoose(manual ? 'manual' : 'auto', svg, opts.scaledUp ? opts.fabricationMm : undefined);
           toast({
             title: opts.scaledUp ? 'Vector corregido y agrandado' : 'Vector corregido',
             description: opts.scaledUp
@@ -198,7 +320,7 @@ function ReviewCard({
           });
         }}
         applyLabel="Usar el corregido"
-        applyHint="Reemplaza el vector en revisión. Se guarda en el pedido cuando apretás Confirmar."
+        applyHint="Elige esta versión para guardar (se guarda en el pedido al apretar Confirmar). El original se conserva y lo podés volver a elegir."
       />
       <ConfirmDialog
         open={guardOpen}
@@ -220,6 +342,7 @@ export function RevisionTab() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [fresaReports, setFresaReports] = useState<Record<string, FresaReport>>({});
   const [bulkGuard, setBulkGuard] = useState<{ ok: ReviewItem[]; withIssues: ReviewItem[] } | null>(null);
+  const [autos, setAutos] = useState<Record<string, { report: FresaReport; fix: FresaFixResult | null }>>({});
 
   // Clave por ítem (hash del SVG + medida): se calcula una vez por cambio de la cola.
   const fresaKeys = useMemo(
@@ -241,6 +364,28 @@ export function RevisionTab() {
     };
   }, [store.reviewQueue, fresaKeys]);
 
+  // Corrección automática de cada vector que llega (de a uno, en segundo plano).
+  // Si todavía no se eligió versión y la automática cambia algo, queda elegida.
+  const chooseReviewSvg = store.chooseReviewSvg;
+  useEffect(() => {
+    let alive = true;
+    for (const item of store.reviewQueue) {
+      const key = autoKey(item);
+      void autoCorregir(originalOf(item), reviewTarget(item)).then((res) => {
+        if (!alive) return;
+        setAutos((prev) => (prev[key] === res ? prev : { ...prev, [key]: res }));
+        const current = useVectorizacionStore.getState().reviewQueue.find((r) => r.id === item.id);
+        if (res.fix && current && !current.fresaChoice && autoKey(current) === key) {
+          chooseReviewSvg(item.id, 'auto', res.fix.svg);
+        }
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [store.reviewQueue, chooseReviewSvg]);
+
+  const autoFor = (item: ReviewItem): AutoState => autos[autoKey(item)] ?? null;
   const fresaFor = (item: ReviewItem): FresaReport | null => fresaReports[fresaKeys.get(item.id) ?? ''] ?? null;
   const fresaResumen = useMemo(() => {
     let conProblemas = 0;
@@ -379,12 +524,14 @@ export function RevisionTab() {
             item={item}
             confirming={confirmingId === item.id}
             fresa={fresaFor(item)}
+            auto={autoFor(item)}
             onConfirm={() => void confirmOne(item)}
             onReject={() => {
               store.removeReview(item.id);
               store.removeLocal(item.selloId);
             }}
-            onChangeSvg={(svg, override) => store.updateReviewSvg(item.id, svg, override)}
+            onChangeSvg={(svg) => store.updateReviewSvg(item.id, svg)}
+            onChoose={(choice, svg, override) => store.chooseReviewSvg(item.id, choice, svg, override)}
           />
         ))}
       </div>

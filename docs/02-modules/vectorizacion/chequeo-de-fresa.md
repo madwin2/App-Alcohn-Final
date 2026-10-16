@@ -1,5 +1,11 @@
 # Chequeo de fresa
 
+## Comparación de dos pasadas (implementación 2026-10-15)
+
+✅ `passes.ts` compara la principal configurada 0,6 mm / 15° por lado (final Clásico 1,7; 3MM/Alimento 3) con la fina **configurada 0,2 mm**, física 0,1 mm / 30° por lado (final 0,6 en todos; Q-PROG-020). `FRESA_ALIMENTO` usa referencia inferior 0,4 y comparación a 0,5; el 1 mm corresponde a la principal. Análisis **v6**, caché por receta/opciones. Profundidades relativas al planeado previo de 0,5 mm; las plantillas conservan ese inicio y un único Z0.
+
+✅ Se informa beneficio geométrico, rango o diseño pendiente; no se generan trayectorias ni se certifica la selección parcial. En Preparar programa se chequean los SVG al guardar y se usa repaso completo cuando falta análisis vigente. Ver [flujo implementado](../programas/preparacion-visual.md). Las políticas de bloqueo de fresa siguen en Q-VEC-009.
+
 > Lógica: `src/lib/fresa/*` (motor puro + Web Worker) · UI: `src/components/fresa/*` · Sandbox: `/dev/chequeo-fresa` (solo en desarrollo)
 > Decisión: [ADR-024](../../13-decisions/ADR-024-chequeo-de-fresa-en-vectorizacion.md) · Datos de la fresa: [Q-CNC-008](../../14-open-questions/produccion-fabricacion.md#q-cnc-008)
 > Implementado el 2026-10-14 (rama `feat/chequeo-fresa-vectorizacion`).
@@ -10,18 +16,22 @@
 
 Se hace **al vectorizar**, no en Aspire: el error se ve y se corrige antes de que el sello entre a un programa, y el archivo de Aspire no se carga con capas extra (pedido del equipo: las capas de más generan errores de selección).
 
+**Límite frente a la selección del repaso**: se compara accesibilidad de ambas herramientas configuradas, pero no se calculan trayectorias ni se certifica selección parcial sin contactos. La base C usa perfilados nativos interior/exterior y selección fina manual (Q-PROG-020); no se cambia el tipo nativo por su nombre coloquial V-carve. Fede amplía la selección si toca el resto del sello (Q-PROG-017/POL-082).
+
 ## 2. Criterio (✅ `src/lib/fresa/config.ts`)
 
 | Dato | Valor | Fuente |
 |---|---|---|
-| Fresa más fina | Cónica, punta 0,1 mm, **30° por lado (60° total)** | Q-CNC-008 |
+| Fresa más fina | Cónica, física 0,1 mm / **configurada 0,2 mm**, **30° por lado (60° total)** | Q-CNC-008, Q-PROG-020 |
 | Toolpath del detalle | **V-carve** en Aspire: donde el blanco se angosta, la fresa sube sola | Q-VEC-011 |
 | Profundidad final del detalle | 0,6 mm | Q-CNC-008 |
 | Profundidad mínima (entre letras y en ojos) | **0,3 mm** ("lo mínimo mínimo") | Q-VEC-011 |
-| Profundidad mínima en sellos **Alimento** | **≈ 1 mm** (profundidad final 3 mm) | Q-VEC-011 |
+| Perfil Alimento | Principal: referencia 1 mm, final 3 mm. Fina: referencia 0,4–0,5 mm, final 0,6 mm | Q-PROG-018, Q-VEC-011 |
 | Polaridad | Negro = relieve del sello; blanco = se saca | Q-CNC-008 |
 
-Con la punta a profundidad *d*, la fresa ocupa en la superficie un círculo de radio `r(d) = 0,05 + d · tan 30°`. A 0,3 mm: **r ≈ 0,223 mm → un canal más angosto que ≈ 0,45 mm se talla menos hondo que la mínima** (Alimento: ≈ 1,25 mm para 1 mm).
+✅ **Q-VEC-011/POL-085**: Alimento idealmente se resuelve con la primera fresa. Si requiere repaso, buscar unos 0,4–0,5 mm. No exigir 1 mm a la fina ni usar el mínimo general de 0,3 como sustitución. El corte rígido y tratamiento de avisos siguen por calibrar (Q-VEC-007/009).
+
+Con la punta configurada a profundidad *d*, el radio es `r(d) = 0,1 + d · tan 30°`. A 0,3 mm: **r ≈ 0,273 mm → canal mínimo ≈ 0,55 mm**. En Alimento a 0,4 mm: ≈ 0,66 mm; a 0,5 mm: ≈ 0,78 mm. Se modela el margen CAM deliberado, manteniendo el diámetro físico por separado.
 
 **Idea central (2026-10-14):** con V-carve la fresa nunca "deja de pasar": pierde profundidad. Un blanco angosto igual queda marcado, más arriba. Por eso no alcanza con medir distancias: importa **dónde** se pierde profundidad. Entre dos letras distintas y en los ojos de las letras tiene que llegar sí o sí a la mínima (si no, se pegan o se tapan); en rincones, ranuras y ángulos dentro de una misma pieza alcanza con que la punta marque. La versión anterior (0,4 mm y todo lo que no llegaba en gris como problema) marcaba de más: en 12 sellos reales bajó de 116 a 42 lugares.
 
@@ -92,32 +102,47 @@ Botón **Editar a mano** en el diálogo del chequeo (sobre el original o sobre e
 
 | Herramienta | Qué hace |
 |---|---|
-| **Elegir y mover** (V) | Al pasar el mouse se resalta la pieza que se va a agarrar; tocarla la elige (azul, con su medida); arrastrarla la mueve. Flechas del panel o del teclado con paso elegible (0,02–0,5 mm; Shift ×10). Doble clic acerca la vista a la pieza. |
+| **Mouse** (sin herramientas que elegir, 2026-10-15) | **Izquierdo**: clic elige (al pasar se resalta lo que se va a agarrar), arrastrar mueve, arrastrar en el fondo elige varias, **tiradores de las esquinas** escalan parejo (esquina opuesta fija; Alt: desde el centro; se ve el %), **doble clic** en una pieza edita sus nodos (acerca centrado en el clic si los nodos quedan a menos de 9 px; Esc, «Listo» o clic en el fondo terminan). **Rueda**: zoom; **apretada** + arrastrar: moverse (también Espacio + arrastrar). **Derecho**: menú contextual (pieza: nodos, acercar, ±1 %, engordar/afinar, simplificar, borrar; nodo: esquina, suave, borrar; fondo: elegir todo, ver todo, deshacer, rehacer). Se sacó la herramienta «Mano»: los tres botones movían la vista y el izquierdo tenía que cambiar de modo. Flechas del panel o del teclado con paso elegible (0,02–0,5 mm; Shift ×10). |
 | **Varias piezas** | Rectángulo en el fondo, Shift+clic (sumar/sacar), Ctrl+A. Todas las operaciones se aplican a la selección (tamaño desde el centro del conjunto; grosor pieza por pieza, calculado sobre el original). |
 | **Guías e imán** (G) | Al arrastrar, la caja de lo elegido se imanta (6 px en pantalla) a bordes y centros de las demás piezas y al centro del diseño, con guía violeta; Shift restringe a un eje; Ctrl suelta el imán. Los nodos se imantan a la x/y de los otros nodos de la pieza (`editTools.ts`). |
 | **Relieve 3D** | Simulación del V-carve (`vcarveRelief.ts`): en cada punto del blanco, profundidad = distancia al negro / tan(flanco), con tope en la profundidad final (0,6 mm; Alimento 3 mm); el negro queda arriba. Grilla de hasta 700 celdas sobre lo que se ve (más un margen del radio de la fresa), transformada de distancia exacta (Felzenszwalb) y luz rasante (hillshade, relieve exagerado ×3) en colores de bronce. Se recalcula al soltar cada cambio y al terminar de hacer zoom; mientras se arrastra se ve el dibujo normal. Es una simulación aproximada (no reemplaza la vista previa de Aspire). |
 | **Medidas** | Desplazamiento en vivo al arrastrar y cotas en mm al vecino más cercano de cada lado (cajas que se enfrentan). |
-| **Alinear / Espaciar parejo** | Con 2+: alinear bordes o centros. Con 3+: mismo espacio entre piezas, sin mover las de los extremos. |
+| **Alinear / Espaciar parejo** | Un renglón de íconos (con tooltip). Con 2+: alinear bordes o centros. Con 3+: mismo espacio entre piezas, sin mover las de los extremos. |
 | **Tamaño** | −1 % / +1 % o un porcentaje; parejo (sin deformar), desde el centro de lo elegido. |
-| **Grosor**: Afinar / Engordar | Offset interior / exterior en paralelo (Clipper), devuelto con curvas suaves (ajuste de Schneider, error 0,01 mm), sin nodos de más. |
-| **Nodos** (A) | Ver y arrastrar nodos y manijas de la pieza elegida; en un nodo suave, mover una manija gira la otra para que no quede quiebre. Si en pantalla quedan a menos de 9 px se muestran como puntos (no se pueden tocar) y la ayuda pide acercarse. Supr borra el nodo elegido. "Todos los nodos" los muestra en todo el dibujo. |
+| **Grosor**: Afinar / Engordar | Offset interior / exterior en paralelo (Clipper), devuelto con el mismo método que «Simplificar» (`fitClosedRing` → `simplifySub`: esquinas reales, curvas controladas contra el contorno exacto), error 0,01 mm. **Bug corregido (2026-10-15)**: antes las curvas se ajustaban sin control y en letras con esquinas se salían de la forma (0,3–3 mm en logos reales; la «a» se rompía al afinar). Ahora el desvío medido contra el offset exacto es ≤ 0,024 mm. |
+| **Nodos** (doble clic, botón «Editar nodos» o A) | Ver y arrastrar nodos y manijas de la pieza elegida; en un nodo suave, mover una manija gira la otra para que no quede quiebre. Si en pantalla quedan a menos de 9 px se muestran como puntos (no se pueden tocar) y la ayuda pide acercarse. **Esquina** (`setNodeCorner`: sin manijas) y **Suave** (`setNodeSmooth`: manijas alineadas de vecino a vecino, un tercio de cada tramo), en el panel y en el clic derecho. Supr borra el nodo elegido. "Todos los nodos" los muestra en todo el dibujo. |
 | **Quitar nodos de más** | Saca nodos repetidos y nodos en medio de una recta. **No cambia la forma.** Los nodos de más se ven en naranja. |
-| **Simplificar curvas** | Entre esquinas, reemplaza muchos nodos por pocas curvas (algoritmo de Schneider, el mismo de `simplify` en Paper.js y VectorCraft) con un **error máximo elegido** (0,005–0,05 mm). Las esquinas se conservan. |
-| **Borrar pieza / Borrar motas** | Borra la pieza elegida, o todas las piezas sueltas de menos de 0,05 mm² (restos de la vectorización). |
-| **Mano** (H), Espacio o clic derecho + arrastrar, rueda | Moverse y acercar. Tecla 0: ver todo. (En Elegir y mover, arrastrar el fondo hace un rectángulo de selección.) |
+| **Simplificar** | El botón dice antes cuántos nodos quedan ("577 → 22 nodos"). Muestrea el contorno, saca la forma mínima con **Douglas-Peucker** (en una recta llena de nodos, con nodos casi encimados o con el zigzag de la vectorización, quedan solo las dos puntas) y detecta las esquinas reales midiendo el giro con un tramo a cada lado (no nodo contra nodo). Las esquinas apenas redondeadas (el giro repartido en 2-3 nodos muy juntos) se miran como grupo. Entre esquinas: recta si es recta; si no, pocas curvas (Schneider, el mismo de `simplify` en Paper.js y VectorCraft). **Control final**: cada tramo se compara con el original en los dos sentidos; si se va más de 1,5× el error, se usa la forma mínima (rectas), así nunca se deforma. **Error máximo elegido** (0,005–0,05 mm). |
+| **Borrar** (tacho en el encabezado de «Pieza», Supr) **/ Borrar motas (N)** | Borra lo elegido, o todas las piezas sueltas de menos de 0,05 mm² (restos de la vectorización). |
+| **Zoom** | Control −, +, «Ver todo» y ancho en mm abajo a la izquierda del lienzo, igual al del visor del chequeo. |
+| **Ver** | Tecla 0 o botón: ver todo. Tecla F o botón: acercar a lo elegido. |
 | **Deshacer / Rehacer** | Ctrl+Z / Ctrl+Y (hasta 80 pasos). **Descartar** pide confirmación si hay cambios. |
 
 El panel muestra el estado en vivo con **Ir a: 1 2…** (acerca la vista a cada lugar), la medida del sello y avisos de cada acción; la ayuda debajo del lienzo cambia según la herramienta y lo elegido, y **Atajos** lista el teclado. El zoom se conserva al cambiar de herramienta (solo "ver todo" o la tecla 0 reencuadran).
+
+**Panel estable (2026-10-15)**: el panel tiene estructura fija para que nada se corra al tocar un botón (pedido: tocar «+1 %» dos veces seguidas sin que el botón se mueva). Todos los controles están siempre (deshabilitados si no aplican), los textos que cambian tienen alto fijo, los avisos flotan sobre el dibujo y se van solos, el estado de la fresa muestra el último resultado mientras re-chequea («actualizando»), la referencia del relieve y los atajos flotan sobre el lienzo (no lo achican), y «Terminar edición / Cancelar» quedan fijos abajo aunque el panel tenga scroll. El conteo de «Simplificar» se calcula 350 ms después del último cambio (cada clic bloquea ~12 ms en vez de ~200 ms con 776 nodos). El teclado escucha en todo el editor, no solo en el lienzo.
 
 **Terminar edición** devuelve el resultado al diálogo como una corrección más ("Se hizo N cambios a mano"), re-chequeado a la misma escala; se usa con **Usar el corregido** como siempre. Si el dibujo cambió de medida (se agrandó o movió algo hacia afuera), el editor lo avisa y al guardar se usa la medida nueva.
 
 **VectorCraft**: se tomó la idea (el método de simplificación de su `pathops` es el de Schneider), no el código: se escribió en TypeScript para no sumar Rust/WebAssembly. Su editor (Rust/egui) no se puede reusar en la app.
 
+## 4 ter. Corrección automática al vectorizar (✅ 2026-10-15, `chequeoFresa.ts`, `RevisionTab.tsx`)
+
+Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo plano, de a uno, cacheado por contenido + medida):
+
+1. Chequeo de fresa a la medida con que se va a guardar.
+2. Si hay lugares (`revisar`), `corregirSvg` (sección 4).
+3. Siempre, `simplificarSinDeformar`: modelo editable (`editDoc.ts`) → `removeRedundant` → `simplifyDoc` con error **0,02 mm**; se re-chequea a la misma escala y se acepta solo si **no cambia la medida (±0,05 mm) ni empeora el chequeo**; si no, prueba **0,01 mm**; si no, no simplifica. Pide ahorrar al menos 5 % de nodos. Queda como operación `simplificar` ("Se simplificó de N a M nodos sin cambiar el diseño").
+
+`corregirYSimplificar` es lo mismo sin el chequeo inicial; lo usa el botón **Corregir automáticamente** del diálogo en todas las pantallas (si la fresa ya llega, el botón dice **Simplificar nodos**).
+
+**Elegir versión** (Revisión): `ReviewItem.originalSvg` guarda el vector como salió (o el cargado con «Cambiar») y `ReviewItem.fresaChoice` qué versión es `svg`: `original`, `auto` o `manual`. Si la automática cambió algo y todavía no se eligió, **queda elegida**; la tarjeta muestra **Guardar: Original | Automático (| A mano)** y **Ver / editar** abre el diálogo con la corrección ya hecha (`initialFix`), con **Editar el corregido / Editar el original** y **Usar el original**. Confirmar guarda `svg`. «Cambiar» borra `originalSvg` y `fresaChoice` (el archivo nuevo es el original). La versión agrandada (último recurso) sigue siendo una decisión manual en el diálogo.
+
 ## 5. Dónde aparece en la app
 
 | Pantalla | Qué se ve | Qué se puede hacer |
 |---|---|---|
-| **Vectorización → Revisión** | Chip **Fresa OK / Fresa: N lugares** en cada tarjeta; resumen arriba ("N con lugares donde la fresa no llega") | Abrir el chequeo, **Corregir automáticamente**, comparar (Original / Corregido / Qué cambia), **Usar el corregido** (reemplaza el SVG en revisión; se guarda al Confirmar). **Confirmar** con problemas pide confirmación ("Revisar" / "Confirmar igual"); **Confirmar todos** ofrece "Confirmar solo los OK". |
+| **Vectorización → Revisión** | Chip **Fresa OK / Fresa: N lugares** en cada tarjeta; resumen arriba ("N con lugares donde la fresa no llega"); **Guardar: Original \| Automático** con la corrección ya hecha (4 ter) | Elegir versión; abrir el chequeo con la corrección hecha, comparar (Original / Corregido / Qué cambia), editar el corregido o el original, **Usar el corregido** / **Usar el original** (se guarda al Confirmar). **Confirmar** con problemas pide confirmación ("Revisar" / "Confirmar igual"); **Confirmar todos** ofrece "Confirmar solo los OK". |
 | **Vectorización → Asignar SVG** | Chip por archivo una vez asignado a un sello (antes no se sabe la medida) | Igual que Revisión; "Confirmar asignaciones" avisa si alguno tiene problemas |
 | **Pedidos / Producción** (celda Vector, clic derecho) | **Chequear fresa** en vectores SVG | Ver, corregir y **Guardar el corregido en el sello** (sube el SVG nuevo; la medida de fabricación no cambia; dispara el aviso `p1_sello_modificado` como cualquier cambio de vector) |
 | **Programas** (hoja: botón **Fresa**; tarjeta: clic derecho → **Chequear fresa**) | Lista de los sellos del programa con su estado | Abrir cada uno, corregir y guardar en el sello (sin aviso p1: escribe directo `archivo_vector_preview`) |
@@ -133,7 +158,7 @@ El panel muestra el estado en vivo con **Ir a: 1 2…** (acerca la vista a cada 
 ## 7. Límites conocidos
 
 - Solo lee **SVG** (EPS/PDF/AI no).
-- Dos perfiles: general (mínima 0,3 mm, final 0,6 mm) y Alimento (mínima ≈ 1 mm, final 3 mm; [Q-VEC-011](../../14-open-questions/vectorizacion.md#q-vec-011)).
+- Perfiles finos: general (referencia 0,3 mm, final 0,6 mm) y Alimento (referencia inferior 0,4, comparación adicional 0,5, final 0,6). La principal está separada: punta configurada 0,6 mm/15°, final 1,7/3 mm; el ≈1 mm de Alimento se usa como referencia principal. La calibración y certificación del recorte parcial siguen pendientes ([Q-VEC-011](../../14-open-questions/vectorizacion.md#q-vec-011), POL-085). AUD-PROG-005 conserva el hallazgo previo.
 - Texto en arco: se mueve entero (radial o a lo largo del arco) o, poco, letra por letra. No se achica ni se gira ninguna letra; una pieza encajada entre dos aros sin lugar de ningún lado (p. ej. las estrellas de "Rockets Butchery") queda para editar a mano.
 - No mira trazos negros demasiado finos (frágiles) ni el desbaste con la fresa grande.
 - La lista puede ser larga en diseños con muchas líneas finas (p. ej. vetas de madera): son problemas reales con este criterio.

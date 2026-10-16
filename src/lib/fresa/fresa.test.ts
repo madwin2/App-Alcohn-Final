@@ -6,7 +6,7 @@ import { analyzeBlackRegion, buildBlackRegion } from './analyze';
 import { FRESA_ALIMENTO, FRESA_FINA, cutRadiusAtDepth, depthForRadius, minGapWidthMm } from './config';
 import { planFix } from './fix';
 import { groupZones } from './engine';
-import { chequearSvg, corregirSvg } from './chequeoFresa';
+import { autoCorregir, chequearSvg, corregirSvg, corregirYSimplificar } from './chequeoFresa';
 import { bounds, components, regionArea } from './geometry';
 import { MAX_ARC_LETTER_RADIAL_MM, buildLayout } from './layout';
 
@@ -78,10 +78,10 @@ function analyzeSvgText(text: string) {
 }
 
 describe('perfil de fresa', () => {
-  it('usa 30° por lado: hueco mínimo ≈ 0,45 mm para bajar 0,3 mm (alimento: ≈ 1,25 mm para 1 mm)', () => {
-    expect(cutRadiusAtDepth(FRESA_FINA, 0.4)).toBeCloseTo(0.05 + 0.4 * Math.tan(Math.PI / 6), 6);
-    expect(minGapWidthMm(FRESA_FINA)).toBeCloseTo(0.4464, 3);
-    expect(minGapWidthMm(FRESA_ALIMENTO)).toBeCloseTo(1.2547, 3);
+  it('usa la punta configurada de 0,2 mm: hueco ≈ 0,55 para bajar 0,3 (Alimento: ≈ 0,66 para 0,4)', () => {
+    expect(cutRadiusAtDepth(FRESA_FINA, 0.4)).toBeCloseTo(0.1 + 0.4 * Math.tan(Math.PI / 6), 6);
+    expect(minGapWidthMm(FRESA_FINA)).toBeCloseTo(0.5464, 3);
+    expect(minGapWidthMm(FRESA_ALIMENTO)).toBeCloseTo(0.6619, 3);
     expect(depthForRadius(FRESA_FINA, cutRadiusAtDepth(FRESA_FINA, 0.25))).toBeCloseTo(0.25, 6);
     expect(depthForRadius(FRESA_FINA, 0.01)).toBe(0);
   });
@@ -159,15 +159,15 @@ describe('análisis', () => {
     expect(pasos[0].reachDepthMm).toBeLessThan(0.2);
   });
 
-  it('un paso de 0,40 mm no separa y uno de 0,50 mm está bien (la fresa baja más de 0,3 mm)', () => {
-    const justo = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.4, 2, 5, 5)}"/>`)).result;
+  it('un paso de 0,50 mm no separa y uno de 0,60 mm está bien con la punta configurada', () => {
+    const justo = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.5, 2, 5, 5)}"/>`)).result;
     expect(justo.zones.map((z) => [z.kind, z.severity])).toEqual([['paso_angosto', 'alta']]);
     expect(justo.zones[0].reachDepthMm).toBeGreaterThanOrEqual(0.2);
-    const ok = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.5, 2, 5, 5)}"/>`)).result;
+    const ok = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.6, 2, 5, 5)}"/>`)).result;
     expect(ok.zones.filter((z) => z.kind === 'paso_angosto')).toHaveLength(0);
   });
 
-  it('en alimento el mismo paso de 0,50 mm no separa (mínimo 1 mm)', () => {
+  it('en Alimento un paso de 0,50 mm no alcanza la referencia inferior de 0,4 mm', () => {
     const { black } = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.5, 2, 5, 5)}"/>`));
     const r = analyzeBlackRegion(black, FRESA_ALIMENTO);
     expect(r.zones.map((z) => [z.kind, z.severity])).toEqual([['paso_angosto', 'alta']]);
@@ -395,8 +395,8 @@ describe('corrección de texto en arco', () => {
 
   it('si el arco entero no tiene lugar, corre solo la letra pegada, poco', () => {
     // La letra del medio está 0,42 mm más afuera (a 0,38 mm del aro); las demás,
-    // a 0,5 mm de un aro de adentro: si baja todo el arco, se pegan a ese aro.
-    const { black, result } = analyzeSvgText(arcSvg({ gapToRing: 0.8, raise: 0.42, innerRing: 11 }));
+    // a 0,6 mm de un aro de adentro: si baja todo el arco, se pegan a ese aro.
+    const { black, result } = analyzeSvgText(arcSvg({ gapToRing: 0.8, raise: 0.42, innerRing: 10.9 }));
     expect(serious(result.zones).length).toBeGreaterThan(0);
     const fixed = planFix(black, result.zones);
     expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
@@ -439,6 +439,46 @@ describe('chequearSvg / corregirSvg', () => {
     const r = await chequearSvg(svg(body), { mode: 'pedido', requestedWidthMm: 40, requestedHeightMm: 20 });
     expect(r.widthMm).toBeCloseTo(40, 2);
     expect(r.heightMm).toBeCloseTo(20, 2);
+  });
+
+  /** Rectángulo con un nodo cada 0,2 mm en cada lado (como sale de la vectorización). */
+  const denseRectD = (x: number, y: number, w: number, h: number) => {
+    const pts: Array<[number, number]> = [];
+    const edge = (x0: number, y0: number, x1: number, y1: number) => {
+      const n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / 0.2));
+      for (let k = 0; k < n; k++) pts.push([x0 + ((x1 - x0) * k) / n, y0 + ((y1 - y0) * k) / n]);
+    };
+    edge(x, y, x + w, y);
+    edge(x + w, y, x + w, y + h);
+    edge(x + w, y + h, x, y + h);
+    edge(x, y + h, x, y);
+    return polyD(pts);
+  };
+
+  it('corrección automática: simplifica aunque la fresa ya llegue bien, sin cambiar el diseño', async () => {
+    const text = svg(`<path d="${denseRectD(2, 2, 6, 6)}${denseRectD(11, 2, 6, 6)}"/>`);
+    const before = await chequearSvg(text, { mode: 'declarado' });
+    expect(before.status).toBe('ok');
+    const res = (await corregirYSimplificar(text, before, []))!;
+    const simp = res.operations.find((o) => o.kind === 'simplificar');
+    expect(simp && simp.kind === 'simplificar' && simp.despues).toBe(8);
+    expect(res.after.status).toBe('ok');
+    expect(res.after.widthMm).toBeCloseTo(before.widthMm, 2);
+    const area = (t: string) => regionArea(buildBlackRegion(parseSvgShapes(t).shapes, 1)) / 1e6;
+    expect(area(res.svg)).toBeCloseTo(72, 2);
+  });
+
+  it('corrección automática: corrige y después simplifica', async () => {
+    // Dos bloques a 0,2 mm (la fresa no pasa), llenos de nodos.
+    const text = svg(`<path d="${denseRectD(2, 2, 6, 6)}"/><path d="${denseRectD(8.2, 2, 6, 6)}"/>`);
+    const { report, fix } = await autoCorregir(text, { mode: 'declarado' });
+    expect(report.status).toBe('revisar');
+    expect(fix).not.toBeNull();
+    const kinds = fix!.operations.map((o) => o.kind);
+    expect(kinds).toContain('simplificar');
+    expect(kinds.some((k) => k !== 'simplificar')).toBe(true);
+    const places = (r: typeof report) => r.groupCounts.alta + r.groupCounts.media;
+    expect(places(fix!.after)).toBeLessThan(places(report));
   });
 
   it('mueve letras dentro de un path compuesto sin perder las curvas', async () => {
@@ -523,9 +563,9 @@ describe('logo con bloque de texto y medida fija', () => {
   });
 
   it('si no hay forma de corregir sin romper, sugiere agrandar un poco (sin aplicarlo)', async () => {
-    // Ojo de 0,43 mm con paredes de 0,3 mm (ya más finas que el mínimo): no se
-    // pueden afinar. Agrandando ~4 % el ojo llega a 0,45 mm.
-    const text = svg(`<path d="${rectD(2, 2, 1.03, 1.03)}${rectD(2.3, 2.3, 0.43, 0.43)}" fill-rule="evenodd"/>`);
+    // Ojo de 0,53 mm con paredes de 0,3 mm (ya más finas que el mínimo): no se
+    // pueden afinar. Agrandando ~4 % el ojo llega a 0,55 mm.
+    const text = svg(`<path d="${rectD(2, 2, 1.13, 1.13)}${rectD(2.3, 2.3, 0.53, 0.53)}" fill-rule="evenodd"/>`);
     const before = await chequearSvg(text, { mode: 'declarado' });
     expect(before.status).toBe('revisar');
     const ids = before.check!.zones.filter((z) => z.severity !== 'baja').map((z) => z.id);
@@ -559,8 +599,8 @@ describe('logo con bloque de texto y medida fija', () => {
     expect(res.scaleUp).toBeNull();
   });
 
-  it('sellos Alimento: profundidad final 3 mm y mínima 1 mm', () => {
-    expect(FRESA_ALIMENTO.finalDepthMm).toBe(3);
-    expect(FRESA_ALIMENTO.minDepthMm).toBe(1);
+  it('repaso de Alimento: final 0,6 mm y referencia inferior 0,4 mm', () => {
+    expect(FRESA_ALIMENTO.finalDepthMm).toBe(0.6);
+    expect(FRESA_ALIMENTO.minDepthMm).toBe(0.4);
   });
 });

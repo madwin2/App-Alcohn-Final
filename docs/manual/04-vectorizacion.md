@@ -60,12 +60,21 @@ Cada tarjeta muestra un chip **Fresa**: la app simula el V-carve de la fresa má
 | **Fresa: N lugares** (rojo o amarillo) | Hay lugares donde no llega: letras muy juntas, ojos de letras chicos, ranuras finas |
 | **Sin chequeo** | No se pudo leer el archivo (por ejemplo, texto sin convertir a curvas) |
 
+#### Corrección automática al vectorizar
+
+Apenas un vector llega a Revisión, la app **lo corrige sola** en segundo plano (mientras tanto la tarjeta dice "Corrigiendo y simplificando…"):
+
+- Si la fresa no llega en algún lugar, aplica la **corrección automática** (ver abajo).
+- Siempre **simplifica los nodos sin cambiar el diseño**: las rectas llenas de nodos quedan con un nodo por esquina y las curvas con pocos nodos. Prueba sacar todo lo posible (la forma se mueve como mucho 0,02 mm, mucho menos de lo que marca la fresa más fina) y, si eso cambiara la medida o empeorara el chequeo de fresa, prueba con 0,01 mm; si tampoco, no simplifica.
+
+En la tarjeta aparece **Guardar: Original | Automático** (y **A mano** si lo editaste), con lo que hizo la corrección (por ejemplo, "Se simplificó de 776 a 508 nodos sin cambiar el diseño"). Si la automática cambió algo, **queda elegida**; tocá **Original** para guardar el vector tal como salió. **Ver / editar** abre el chequeo con la corrección ya hecha, donde podés compararla, **Editar el corregido** o **Editar el original** a mano, o **Usar el original**. El original nunca se pierde: lo podés volver a elegir hasta que confirmás. **Cambiar** (cargar otro SVG) lo toma como nuevo original y lo vuelve a corregir.
+
 Tocá el chip para abrir el **Chequeo de fresa**:
 
 1. A la izquierda, el diseño con los lugares marcados y numerados (rojo = **Hay que corregir**, amarillo = **Se pierde el detalle**). Rueda del mouse para acercar, arrastrá para mover, **Ver todo** para volver.
 2. A la derecha, la lista: tocá un lugar y la vista va directo ahí. Dice el ancho del hueco y a qué profundidad llega la fresa.
-3. **Ver qué tan hondo baja la fresa**: un degradé azul muestra lo que se talla menos hondo que la mínima (más oscuro = menos hondo). **Mostrar ángulos y rincones**: lugares donde la fresa sube y marca menos hondo. Están bien así; por eso están ocultos y la corrección no los toca.
-4. **Corregir automáticamente**: adapta el diseño para que entre la fresa, como se haría a mano:
+3. **Profundidad**: un degradé azul muestra lo que se talla menos hondo que la mínima (más oscuro = menos hondo). **Mostrar ángulos y rincones**: lugares donde la fresa sube y marca menos hondo. Están bien así; por eso están ocultos y la corrección no los toca.
+4. **Corregir automáticamente** (en Revisión ya viene hecho; en otras pantallas, el botón; si la fresa ya llega bien, el botón dice **Simplificar nodos**): adapta el diseño para que entre la fresa, como se haría a mano, y después simplifica los nodos sin cambiar el diseño:
    - **Letras o renglones muy juntos**: corre letras enteras sin deformarlas, respetando la alineación (si el bloque está alineado a la izquierda, corre hacia la derecha). Si casi todo el renglón está justo, abre el espaciado de todo el renglón por igual.
    - **Bloques de texto**: si ese renglón va justificado con otro (por ejemplo, el nombre y el tagline del mismo ancho), el otro también se ensancha en la misma proporción, para que sigan parejos.
    - **Texto en arco**: separa a lo largo del arco o acerca/aleja el texto del centro; si hace falta, corre una letra sola un poquito.
@@ -74,21 +83,27 @@ Tocá el chip para abrir el **Chequeo de fresa**:
    - **No cambia la medida del sello**: si al abrir espacios el diseño quedó más ancho, achica todo parejo (ícono incluido) para que entre en la misma medida, y lo vuelve a chequear así. Abajo dice cuánto se achicó.
    - **Último recurso**: si igual quedan lugares y agrandar el sello un poco (hasta 6 %, sin pasar el tope de la planchuela) los resuelve, aparece **Agrandar a A × B mm y usar**. Cambia la medida de fabricación: usalo solo si es imprescindible.
 5. Compará con **Original**, **Corregido** y **Qué cambia** (en celeste, lo que cambió).
-6. **Editar a mano** (o **Editar a mano el corregido**): abre un editor en el mismo lugar, para lo que la corrección automática no resuelve. Arriba a la derecha ves si la fresa separa todo, los lugares numerados (**Ir a: 1 2…** acerca la vista a cada uno) y la medida del sello. La fresa se vuelve a chequear sola cada vez que soltás un cambio.
-   - **Elegir y mover** (V): tocá una pieza (una letra, el ícono) para elegirla; se pinta de azul con su medida. Arrastrala, o usá las flechas del panel o del teclado (eligís cuánto: 0,02 a 0,5 mm). **Doble clic** en una pieza la acerca.
+6. **Editar a mano** (con una corrección hecha: **Editar el corregido** o **Editar el original**): abre un editor en el mismo lugar, para lo que la corrección automática no resuelve. Arriba a la derecha ves si la fresa separa todo, los lugares numerados (**Ir a: 1 2…** acerca la vista a cada uno) y la medida del sello. La fresa se vuelve a chequear sola cada vez que soltás un cambio.
+   - **El mouse, sin elegir herramientas** (como en Illustrator):
+     - **Clic izquierdo**: tocá una pieza (una letra, el ícono) para elegirla; se pinta de azul con su medida. Arrastrala para moverla, o usá las flechas del panel o del teclado (eligís cuánto: 0,02 a 0,5 mm).
+     - **Esquinas** de lo elegido (cuadraditos): arrastralas para agrandar o achicar parejo, sin deformar; mientras arrastrás ves el %. Con **Alt**, desde el centro.
+     - **Doble clic** en una pieza: editar sus nodos (si están muy juntos, acerca la vista justo lo necesario donde hiciste doble clic). Aparece **Editando nodos** arriba a la izquierda; **Esc**, **Listo** o un clic en el fondo terminan.
+     - **Clic derecho**: un menú con lo que se puede hacer ahí. En una pieza: editar nodos, acercar, agrandar/achicar 1 %, engordar/afinar, simplificar, borrar. En un nodo: **Esquina** (sin manijas), **Suave** (manijas alineadas) o borrar. En el fondo: elegir todo, ver todo, deshacer, rehacer.
+     - **Rueda**: acercar o alejar. **Rueda apretada** y arrastrar (o **Espacio** + arrastrar): moverse por el dibujo.
    - **Varias piezas**: arrastrá un rectángulo en el fondo, o **Shift+clic** para sumar o sacar; **Ctrl+A** elige todo. Mover, tamaño, grosor y borrar se aplican a todas juntas.
    - **Guías e imán** (botón del imán o tecla G): al arrastrar, lo que movés se pega a los bordes y centros de las otras piezas y al centro del diseño, y aparece una línea violeta. **Shift** mientras arrastrás: solo en horizontal o solo en vertical (no se desalinea el renglón). **Ctrl**: suelta el imán. Al mover nodos, se alinean con los otros nodos de la pieza.
    - **Relieve 3D** (casilla en la barra): muestra cómo queda tallado, con luz, como si miraras el sello de bronce. Lo de arriba (lo que marca) es bronce claro; lo tallado se oscurece cuanto más hondo, hasta la profundidad final. Si entre dos letras o en un ojo se ve claro, la fresa no bajó ahí. Se puede seguir editando encima; al soltar cada cambio se recalcula.
    - **Medidas**: mientras arrastrás ves cuánto moviste; con algo elegido ves en celeste el espacio en mm a las piezas vecinas.
-   - **Alinear** (con 2 o más piezas): bordes izquierdos, centros, derechos, de arriba, centros o de abajo (la base del renglón). **Espaciar parejo ↔ / ↕** (con 3 o más): deja el mismo espacio entre todas, sin mover las de las puntas. Sirve para emparejar el espaciado de un renglón.
+   - **Alinear y espaciar** (un renglón de íconos; pasá el mouse para ver qué hace cada uno): con 2 o más piezas, alinear bordes izquierdos, centros, derechos, de arriba, centros o de abajo (la base del renglón); con 3 o más, **espaciar parejo ↔ / ↕**: deja el mismo espacio entre todas, sin mover las de las puntas. Sirve para emparejar el espaciado de un renglón.
    - **Tamaño**: −1 % / +1 %, o un porcentaje. Parejo, sin deformar, desde el centro de la pieza.
-   - **Grosor**: **Afinar** (offset interior) o **Engordar** (offset exterior) los mm que pongas, en paralelo y con curvas suaves.
-   - **Nodos** (A): con una pieza elegida, ves sus nodos. Si están muy juntos aparecen como puntitos: acercate (doble clic o rueda) y se vuelven cuadraditos que podés arrastrar. Tocá un nodo para ver sus manijas (círculos). **Supr** borra el nodo elegido.
-   - **Quitar N de más** (los naranjas): saca nodos repetidos o en medio de una recta, sin cambiar la forma. **Simplificar curvas**: deja menos nodos; la forma cambia como mucho lo que elegís (0,005 a 0,05 mm). Con una pieza elegida se aplica solo a esa.
-   - **Borrar pieza** y **Borrar motas** (aparece si hay piezas sueltas de menos de 0,05 mm², restos de la vectorización).
-   - Para moverte: la herramienta **Mano** (H), Espacio + arrastrar o clic derecho + arrastrar (en Elegir y mover, arrastrar el fondo hace un rectángulo de selección); rueda para acercar; **0** o el botón de los cuatro lados para ver todo. **Atajos** muestra la lista.
-   - **Ctrl+Z** deshace, **Ctrl+Y** rehace. **Terminar edición** vuelve al chequeo con lo editado para compararlo y usarlo; **Descartar** pregunta antes de tirar los cambios. Solo funciona con vectores de rellenos negros (sin blancos ni trazos).
-7. **Usar el corregido** reemplaza el vector en revisión. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
+   - **Grosor**: **Afinar** (offset interior) o **Engordar** (offset exterior) los mm que pongas, en paralelo y con curvas suaves. El resultado queda a menos de 0,02 mm del offset exacto: las esquinas se conservan y la letra no se deforma.
+   - **Nodos** (doble clic en la pieza, botón **Editar nodos** o tecla **A**): ves sus nodos. Si están muy juntos aparecen como puntitos: acercate (rueda o **F**) y se vuelven cuadraditos que podés arrastrar. Tocá un nodo para ver sus manijas (círculos). En el panel: **Esquina**, **Suave** y borrar el nodo elegido (también **Supr**).
+   - **Quitar de más (N)** (los naranjas): saca nodos repetidos o en medio de una recta, sin cambiar la forma. **Simplificar**: debajo dice cuántos nodos van a quedar (por ejemplo «Quedarían 22 de 577 nodos»). Las rectas llenas de nodos quedan con un nodo en cada esquina y las curvas con pocos nodos; la forma cambia como mucho lo que elegís (0,005 a 0,05 mm). Con una pieza elegida se aplica solo a esa.
+   - **Borrar** (el tacho rojo al lado de la medida de lo elegido, o **Supr**) y **Borrar motas (N)** (piezas sueltas de menos de 0,05 mm², restos de la vectorización; si no hay, el botón está apagado).
+   - **Zoom**: abajo a la izquierda del dibujo, **−**, **+** y **Ver todo** (igual que en el chequeo), con el ancho que se ve en mm. Tecla **0**: ver todo; **F** o el botón del visor: acercar a lo elegido. **Atajos** muestra la lista.
+   - **Ctrl+Z** deshace, **Ctrl+Y** rehace. **Terminar edición** (siempre a la vista, abajo del panel) vuelve al chequeo con lo editado para compararlo y usarlo; **Cancelar** pregunta antes de tirar los cambios.
+   - **El panel no se mueve**: todos los controles están siempre en el mismo lugar (apagados cuando no se pueden usar, por ejemplo Alinear con una sola pieza) y lo que hiciste aparece en un aviso que flota arriba del dibujo y se va solo. Así podés tocar **+1 %** o una flecha varias veces seguidas sin que el botón se corra. Mientras la fresa se vuelve a chequear, se sigue viendo el último resultado con «actualizando». Los atajos de teclado (Ctrl+Z, flechas, Supr) funcionan aunque hayas tocado un botón del panel. Solo funciona con vectores de rellenos negros (sin blancos ni trazos).
+7. **Usar el corregido** elige esa versión para guardar; **Usar el original**, el vector como salió. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
 
 Si confirmás un vector con lugares donde la fresa no llega, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.
 

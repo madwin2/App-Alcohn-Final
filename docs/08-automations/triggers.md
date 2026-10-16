@@ -1,5 +1,9 @@
 # Triggers de Postgres (estado en vivo 2026-09-27)
 
+## Preparación visual: migración aplicada/verificada (2026-10-16)
+
+`validar_inicio_preparacion_programa` actúa **antes de cambiar `sellos.estado_fabricacion` a `Haciendo`**, solo para programas con preparación. Serializa con guardado/confirmación y exige revisión y archivo vigentes, informe recalculado sin errores, misma máquina y pertenencia/vector actuales. No manda mensajes ni descuenta stock. Convive con los triggers existentes de avance/stock/WhatsApp; no usa `dirty` como prueba porque el trigger legado lo cambia durante cada fila de la cascada (AUD-INC-008). La prueba local incluye esa interacción. El usuario aplicó la migración y se verificó el trigger activo mediante una consulta de esquema de solo lectura; la edge v31 se desplegó con autorización el mismo día; la instalación operativa de gadgets y la prueba conectada continúan pendientes.
+
 > Para listar el estado actual: `select event_object_table, trigger_name, action_timing, event_manipulation, action_statement from information_schema.triggers where trigger_schema='public';` Para ver el código: `select prosrc from pg_proc where proname='<función>';`
 
 ## `sellos`

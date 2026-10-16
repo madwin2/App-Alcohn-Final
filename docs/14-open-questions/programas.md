@@ -78,3 +78,104 @@
 - **Evidencia**: `fabricacion_parametros`, hardcode en edge `programa-sync`; AUD-INC-011.
 - **Impacto**: medio.
 - Respuesta: Son correctos.
+
+### Q-PROG-013
+- **Módulo**: Programas / soporte y material · **Estado**: parcial (2026-10-15)
+- **Pregunta**: ¿Cada soporte tiene posiciones y anchos de planchuela fijos, o se pueden montar distintos anchos en la misma posición? ¿Cuáles son los límites útiles, márgenes y zonas de sujeción de cada montaje? ¿Se usan tramos más cortos que el máximo nominal?
+- **Contexto**: el usuario propone representar el soporte de aluminio en la app y mover sellos entre planchuelas. Los gadgets tienen coordenadas y anchos efectivos propios; el modelo de la app calcula carga por ancho, sin posiciones físicas ni material disponible por tramo.
+- **Por qué importa**: determina dónde se puede soltar un sello y qué significa que quede fuera del material. La capacidad de la máquina no demuestra la existencia de bronce montado.
+- **Impacto**: alto. Relacionada con Q-CNC-004 y Q-CNC-007.
+- **Respuesta (2026-10-15)**: cada máquina C, G y XL tiene su soporte de fijación fijo. A veces se usa completo y a veces parcialmente.
+- **Documentado en**: POL-079 y [propuesta de preparación y sincronización](../02-modules/programas/propuesta-preparacion-y-sync.md).
+- **Aclaración (2026-10-15)**: uso parcial significa cargar menos sellos sobre una planchuela completa; ejemplo del usuario: planchuela de 400 mm con cuatro sellos de 50 mm ocupa 200 mm de diseño. No se confirmó uso de recortes ni sectores ya mecanizados. Para planificar hay que sumar también las separaciones/cortes definidos; el ejemplo no cambia BR-MAT-002.
+- **Pendiente**: geometría y márgenes físicos exactos. La respuesta no resuelve por sí sola Q-CNC-007 (cantidad de CNC físicas).
+
+### Q-PROG-014
+- **Módulo**: Programas / medida y mecanizado · **Estado**: documentada (2026-10-15; política confirmada, implementación pendiente)
+- **Pregunta**: Al agrandar un sello o elegir otro mecanizado desde Programas, ¿se actualiza la medida de fabricación del sello y su tipo comercial, o se guarda una configuración de fabricación para esa ejecución, conservando lo vendido? ¿Qué diferencias requieren revisión?
+- **Contexto**: el usuario pide cambiar tamaño y elegir 3 mm, Clásico o Alimento. Hoy el manifest usa medidas de fabricación del sello y deriva el mecanizado desde su tipo; no existe una receta independiente por ejecución.
+- **Por qué importa**: cambiar medida o tipo puede modificar costos, consumo de bronce, avisos a Producción y datos del pedido. No se debe definir esa política por una suposición técnica.
+- **Impacto**: alto.
+- **Respuesta (2026-10-15)**: conservar lo vendido y registrar aparte la fabricación.
+- **Documentado en**: POL-080 y [propuesta de preparación y sincronización](../02-modules/programas/propuesta-preparacion-y-sync.md). Los umbrales de revisión de cambios siguen pendientes de definición.
+
+### Q-PROG-015
+- **Módulo**: Programas / sincronización Aspire · **Estado**: documentada (2026-10-15; calificación de la implementación pendiente)
+- **Pregunta**: Si la misma propiedad (por ejemplo tamaño o posición) cambió tanto en Aspire como en la app desde la última sincronización, ¿qué versión se conserva? ¿Los ajustes de geometría hechos en Aspire deben volver a la app para que su representación y chequeos reflejen el resultado real?
+- **Respuesta confirmada (2026-10-15)**: el usuario pide conservar los vectores ya ajustados en Aspire y aplicar sobre ellos los cambios de organización o tamaño pedidos desde la app, evitando reinsertar el vector original.
+- **Respuesta sobre conflictos (2026-10-15)**: pedir una decisión solo cuando cambió la misma propiedad en los dos lados. Combinar automáticamente cambios compatibles de distintas propiedades.
+- **Documentado en**: POL-081 y [propuesta de preparación y sincronización](../02-modules/programas/propuesta-preparacion-y-sync.md).
+- **Implementación (2026-10-15)**: el informe devuelve SVG/caja por instancia; se muestran sin pisar el plan y se pueden adoptar medidas/posición explícitamente. Fuente reemplazada frente a geometría corregida se resuelve como conflicto de la misma propiedad. [Detalle](../02-modules/programas/preparacion-visual.md). Q-PROG-015 queda documentada; despliegue y calificación nativa pendientes.
+- **Por qué importa**: preservar un objeto sin reimportarlo no resuelve por sí solo conflictos entre dos editores; la app podría mostrar y validar una geometría anterior.
+- **Impacto**: alto.
+
+### Q-PROG-016
+- **Módulo**: Programas / trabajo manual en Aspire · **Estado**: documentada (2026-10-15)
+- **Pregunta**: En un programa típico, después de correr el gadget, ¿qué tareas hace hoy Fede a mano y cuáles son las más frecuentes? Además de separar vectores, cambiar tamaños y guardar TXT, ¿ajusta offsets, taladrado, cortes, selección de capas, herramientas o trayectorias?
+- **Contexto**: Q-CNC-008 describe correcciones del diseño; el repositorio muestra generación de elementos auxiliares y recálculo, pero no demuestra la secuencia real completa del operario.
+- **Por qué importa**: permite comprobar que la propuesta cubra el trabajo real necesario para llegar a «sincronizar y guardar TXT», y priorizar por frecuencia y tiempo.
+- **Impacto**: alto.
+- **Respuesta (2026-10-15)**: Fede ajusta los vectores, chequea medidas (aunque puede pasarle una diferencia) y decide qué mecanizar y qué no con el perfilado de 0,1 mm.
+- **Documentado en**: [propuesta de preparación y sincronización](../02-modules/programas/propuesta-preparacion-y-sync.md), [gadget Aspire](../02-modules/programas/gadget-aspire.md) y [FR-03](../10-operational-boundaries/README.md#fr-03).
+- **Seguimiento**: criterio del perfilado en Q-PROG-017; no se inventó una regla de selección.
+
+### Q-PROG-017
+- **Módulo**: Programas / selección del perfilado fino · **Estado**: documentada (2026-10-15; criterio operativo confirmado, automatización pendiente)
+- **Pregunta**: ¿«Perfilado de 0,1 mm» se refiere a la fresa de punta 0,1 mm de Q-CNC-008 o a otra operación? ¿Fede decide por sello completo o por contornos/partes? ¿Con qué criterio incluye o excluye una parte (detalle que la anterior no hizo, acabado, tiempo, fragilidad u otro)?
+- **Contexto**: Q-PROG-016 confirma que esta selección se hace a mano después del gadget. El chequeo de fresa actual estima accesibilidad del V-carve; no demuestra qué regiones necesitan una operación adicional.
+- **Por qué importa**: para automatizar la preparación completa hay que reproducir el criterio real y distinguir geometría que no se puede mecanizar de geometría que ya fue resuelta por otra herramienta. Es una regla de negocio/proceso que no se debe inferir por el nombre de la operación.
+- **Impacto**: alto.
+- **Respuesta (2026-10-15)**: sí, la herramienta fina es la de punta 0,1 mm. Fede observa cómo queda el sello tras la pasada de la fresa de 0,5 mm, con ángulo lateral de 15°, y determina qué necesita la de 0,1 mm. Puede elegir el sello entero o partes del dibujo. Si solo falta un detalle y la pasada fina sobre esa parte no entra en contacto con el resto del sello, elige solo esa parte. Si toca otras partes, amplía la selección con las partes necesarias para evitar el choque, evitando mecanizar las demás cuando puede.
+- **Documentado en**: POL-082, [propuesta de preparación y sincronización](../02-modules/programas/propuesta-preparacion-y-sync.md), [chequeo de fresa](../02-modules/vectorizacion/chequeo-de-fresa.md), WF-04 y FR-03.
+- **Seguimiento**: parámetros exactos de ambas pasadas en Q-PROG-018. La selección cualitativa confirmada no define todavía tolerancias numéricas de acabado ni un algoritmo de verificación.
+
+### Q-PROG-018
+- **Módulo**: Programas / perfiles y profundidades de las dos pasadas · **Estado**: documentada (2026-10-15; parámetros principales y repaso de Alimento confirmados)
+- **Pregunta**: ¿0,5 mm es el diámetro de la punta de la primera fresa? ¿La fina de punta 0,1 mm sigue teniendo 30° por lado, como Q-CNC-008? ¿Qué profundidades inicial/final se usan en cada pasada y cambian según Clásico, 3 mm o Alimento?
+- **Contexto**: Q-PROG-017 confirma primera herramienta de 0,5 mm con 15° laterales y repaso de punta 0,1 mm. El chequeo implementado solo modela la fina; la información previa de profundidad es 0,6 mm general y 3 mm Alimento para el detalle, sin describir la primera pasada ni todas las recetas.
+- **Por qué importa**: para comparar qué deja una herramienta y qué mejora la otra hay que considerar el perfil completo y la profundidad, incluidos contactos laterales. Una punta menor no demuestra un menor ancho del cono a todas las alturas. No se debe configurar una simulación de producción suponiendo esos datos.
+- **Impacto**: alto.
+- **Respuesta (2026-10-15)**:
+  - «0,5 mm» es el **nombre** de la primera fresa; está **configurada como 0,6 mm**. Mantiene el ángulo lateral de **15°** confirmado en Q-PROG-017. El análisis debe distinguir nombre de parámetros geométricos; no deducir 0,5 mm de su etiqueta.
+  - La primera pasada es **V-carve**: donde no puede alcanzar la profundidad final, sube hasta donde entra en esa sección.
+  - La de punta **0,1 mm sigue igual**: **30° por lado**, V-carve, profundidad final **0,6 mm** en la descripción de esta pasada.
+  - Profundidades por mecanizado: **Clásico 1,7 mm**, **3 mm a 3 mm**, **Alimento a 3 mm más corte perimetral con fresa de 6 mm**.
+- **Documentado en**: POL-083/084, [propuesta de preparación y sincronización](../02-modules/programas/propuesta-preparacion-y-sync.md), [SOP de fabricación](../11-operations-sops/fabricar-un-sello.md) y [chequeo de fresa](../02-modules/vectorizacion/chequeo-de-fresa.md).
+- **Confirmación posterior (2026-10-15)**: **también en Alimento la de punta 0,1 mm llega hasta 0,6 mm**. Esto corrige la interpretación anterior del detalle de Alimento a 3 mm; esa profundidad corresponde al mecanizado principal. AUD-PROG-005 se resolvió localmente con final fino 0,6, referencia inferior 0,4 y comparación a 0,5; se agregó la primera herramienta al análisis.
+- **Seguimiento**: Q-VEC-011 ya documenta el criterio de Alimento: ideal resolver con la primera fresa (≈1 mm como referencia de buen grabado); si requiere la fina, buscar unos 0,4–0,5 mm, con final 0,6 mm (POL-085). Calibrar el rango antes de usarlo como umbral rígido. Profundidades iniciales y demás parámetros de trayectoria deberán verificarse en las recetas de Aspire antes de implementar.
+
+### Q-PROG-019
+- **Módulo**: Programas / calificación de Aspire · **Estado**: parcial (2026-10-15)
+- **Pregunta**: ¿Qué versión de Aspire usa Fede y dónde están las bases y plantillas vigentes para probar el flujo real?
+- **Respuesta**: Aspire 10.5; base C `Archivo Base Maq C.crv3d`, facilitada localmente por el usuario. G y XL se validarán después.
+- **Comprobado**: contenedor de la base indica Aspire **10.514**; coincide con la aplicación instalada. Se trabaja con una copia en una carpeta temporal, conservando el original.
+- **Comprobado después**: selectores/herramientas de las 12 plantillas; ocho trayectorias válidas para Clásico/3MM y nueve para Alimento. Cinco sincronizaciones locales con importación, mezcla, movimiento/escala sin reimportar y detalle interior, guardado y respaldos. Informe/subida simulados sin red.
+- **Pendiente**: programas representativos y límites físicos con el operario; bases G/XL. Las muestras no certifican acabado físico ni producción.
+- **Comprobado 2026-10-16**: ocho SVG ficticios y dos revisiones descargadas desde el editor de la app, aplicadas en Aspire real con instrumento local; quince trayectorias válidas y vista previa de mecanizado. Tras corrección interna, p19 → p38 y 12×30 →16×40 conservan la huella editada y los ocho IDs, con cero reimportaciones. Informe/subida sin red; no cambia los pendientes anteriores. [Evidencia](../audits/programas-aspire-real-2026-10-16.md).
+- **Documentado en**: [preparación visual](../02-modules/programas/preparacion-visual.md), [validación](../audits/programas-preparacion-validacion-2026-10-15.md).
+
+### Q-PROG-020
+- **Módulo**: Programas / receta real de C · **Estado**: documentada (2026-10-15)
+- **Pregunta**: ¿La herramienta llamada «0,1» usa efectivamente punta de diámetro 0,2 mm como la base C, o hay que reemplazar esa configuración? ¿Los «perfilados» interior/exterior guardados (inicio 0,5; pasada fina 0,6) son las trayectorias vigentes que el equipo llama V-carve, o se cambian luego al armar el programa?
+- **Evidencia**: `InspectBase.lua` ejecutado sobre copia en Aspire 10.514 exportó 12 plantillas. Principal: herramienta de punta 0,6; repaso: nombre `Grabado (30.0°, Tip 0.2 - 3.18 mm)`, `FlatRadius(true)` ≈0,1. Plantillas de repaso: Profile Outside / Profile Inside, inicio 0,5, profundidad de pasada 0,6 y selector automático desactivado/sin capas. Principal también figura Profile Outside, profundidad 1,7 o 3 e inicio 0,5.
+- **Impacto**: el nombre comercial no equivale al diámetro; una simulación de V-carve desde superficie no describe automáticamente estas plantillas. No modificar herramienta/tipo/inicio de las recetas por inferencia. La selección automática completa/parcial necesita configurar el método vigente.
+- **Relacionado**: Q-PROG-017/018, Q-VEC-007/009. No invalida la respuesta del usuario; registra la discrepancia con el archivo facilitado.
+- **Respuesta**: la fresa física es de **0,1 mm**, configurada deliberadamente en Aspire como **0,2 mm** para dar juego favorable si está algo rota/desgastada. El perfilado fino se selecciona manualmente; los demás mecanizados usan selección automática. Inicio **0,5 mm** porque el planeado previo baja esa cantidad; se conserva un único Z0 y las profundidades de grabado se miden desde la superficie planeada.
+- **Documentado**: análisis v6 usa diámetro configurado 0,2 y conserva diámetro físico 0,1 como dato separado. Las plantillas nativas conservan inicio 0,5; no sumar/restar otra vez en el análisis geométrico relativo al planeado. No cambiar el tipo de trayectoria por su nombre coloquial.
+
+### Q-PROG-021
+- **Módulo**: Programas / selección del repaso interior y exterior · **Estado**: documentada (2026-10-15)
+- **Pregunta**: ¿Qué contornos selecciona Fede para cada uno de los dos perfilados finos de la base C (exterior e interior)? ¿Exterior para bordes externos del relieve e interior para ojos/huecos, o existe otro criterio?
+- **Contexto**: Q-PROG-020 confirma selección manual; la base guarda ambas trayectorias sin selectores automáticos. La regla de ampliar selección para evitar contactos (Q-PROG-017) no identifica cómo se distribuyen entre esas dos operaciones.
+- **Impacto**: seleccionar automáticamente los mismos vectores para ambas puede mecanizar del lado incorrecto. Hace falta confirmar la correspondencia antes de sustituir la selección manual.
+- **Respuesta**: Fede generalmente selecciona el **sello completo** para el perfilado fino habitual. El perfilado interior se reserva para un caso puntual: solo necesita repasar el interior de una letra o detalle interno, y evita el resto. No es una separación automática de todos los contornos externos e internos en cada sello.
+- **Documentado en**: [preparación visual](../02-modules/programas/preparacion-visual.md). La asignación parcial específica requiere calificación antes de generarse automáticamente.
+
+### Q-PROG-022
+- **Módulo**: Programas / receta Alimento en C · **Estado**: documentada (2026-10-15)
+- **Pregunta**: ¿Alimento usa los mismos cajeados/perfilado de 3 mm de la base C y luego `Corte Forma`? ¿Ese perímetro conserva inicio 3,5 mm y pasada 5,5 mm de la plantilla facilitada, y se realiza después del repaso fino?
+- **Evidencia**: la base C tiene operaciones automáticas para `VECTOR 3MM`, pero ninguna para `VECTOR ALIMENTO`/`Corte Alimento`. `Corte Forma` es manual, sin número de etapa; herramienta de 6 mm, Profile Outside, inicio 3,5 y pasada 5,5. Q-PROG-018 confirma profundidad principal 3 mm y perímetro con fresa de 6 mm, sin identificar esta plantilla ni sus parámetros.
+- **Por qué importa**: asociar una plantilla por su nombre no demuestra la receta vigente. Hay que confirmar trayectoria y secuencia antes de automatizar el corte perimetral. Se continúa calificando Clásico/3MM sin inventar los parámetros de Alimento.
+- **Impacto**: alto.
+- **Respuesta**: el usuario confirma los mismos mecanizados de 3 mm, seguidos de `Corte Forma` con fresa de 6 mm, inicio 3,5 mm y pasada 5,5 mm, después del repaso fino.
+- **Documentado**: POL-088 y [preparación visual](../02-modules/programas/preparacion-visual.md). Se reutilizan los bytes de las plantillas 3MM y se adaptan únicamente sus selectores a las capas de Alimento mediante el SDK; el perímetro manual recibe `Corte Alimento`. No se modifican herramienta ni profundidades del archivo.

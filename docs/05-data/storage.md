@@ -1,5 +1,7 @@
 # Storage (buckets de Supabase)
 
+**Preparación visual, migración aplicada por el usuario y verificada el 2026-10-16**: bucket privado `programas-plantillas`, máximo 5 MB por `.ToolpathTemplate`. Objetos inmutables bajo `<programa>/<receta>/<uuid>-<nombre>`; lectura/inserción autenticadas, sin reemplazo anónimo. La edge nueva, desplegada como v31 con autorización el mismo día, valida la pertenencia de la ruta y firma descargas por una hora. Los archivos anteriores de Aspire de programas preparados se conservan para recuperación. Ver [preparación visual](../02-modules/programas/preparacion-visual.md).
+
 | Bucket | Público | Qué contiene | Escribe | Path típico |
 |---|---|---|---|---|
 | `base` | sí | Archivo base del cliente, base mejorada y **snapshots de rehacer** (`rehacer-snapshots/{evento_id}/…`) | Pedidos, Vectorización, Rehacer | `generateFilePath(orden, 'base', archivo, sello)` · snapshots: `rehacer-snapshots/{evento_id}/base*.{ext}` |
@@ -17,6 +19,8 @@
 | `adjuntos` | sí | Adjuntos de Innovación | Innovación | — |
 
 ## Políticas a tener en cuenta
+
+✅ Para programas con preparación/protocolo 4, Aspire usa `<programa>/r<revision>/<evento>/<uuid>-<nombre>` dentro de `programas-aspire`. La subida firmada no habilita reemplazo y la confirmación comprueba ruta, evento, existencia y tamaño real del objeto, además de revisión/informe. Las miniaturas preparadas también usan rutas únicas por revisión/evento; una confirmación fallida no borra la miniatura vigente. Se conservan versiones anteriores. Las rutas legadas permanecen disponibles solo para programas sin preparación; no se cambiaron políticas del bucket. [Detalle](../audits/programas-conexion-validacion-2026-10-16.md).
 
 - `base`, `foto`, `vector`: política `ALL` para rol `public` (cualquiera con la anon key puede subir/borrar).
 - `programas-aspire`, `programas-preview`: INSERT/UPDATE para `anon`.

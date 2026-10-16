@@ -42,6 +42,7 @@ import {
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { ProgramContextMenu } from '@/components/programas/Grid/ProgramContextMenu';
 import { FresaProgramaDialog } from '@/components/fresa/FresaProgramaDialog';
+import { ProgramPreparationDialog } from '@/components/programas/Preparation/ProgramPreparationDialog';
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -480,6 +481,7 @@ export function ProgramCardDesign({
   const [actionBusy, setActionBusy] = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [fresaOpen, setFresaOpen] = useState(false);
+  const [preparationOpen, setPreparationOpen] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeleteEmptyDialog, setShowDeleteEmptyDialog] = useState(false);
   const [stampToRemove, setStampToRemove] = useState<ProgramStamp | null>(null);
@@ -622,6 +624,8 @@ export function ProgramCardDesign({
   };
 
   const hojaProps: HojaBodyProps = {
+    // Solo C está calificada con Aspire 10.5; G y XL quedan para después.
+    onPrepare: program.machine === 'C' ? () => setPreparationOpen(true) : undefined,
     program,
     locked,
     dateLabel,
@@ -1196,6 +1200,7 @@ export function ProgramCardDesign({
           document.body,
         )}
 
+      {program.machine !== 'ABC' ? <ProgramPreparationDialog program={program} open={preparationOpen} onOpenChange={setPreparationOpen} onRefresh={onRefresh} /> : null}
       <FresaProgramaDialog
         open={fresaOpen}
         onOpenChange={setFresaOpen}
@@ -1275,6 +1280,7 @@ export function ProgramCardDesign({
 
 
 type HojaBodyProps = {
+  onPrepare?: () => void;
   /** Abre el chequeo de fresa de los sellos del programa. */
   onCheckFresa?: () => void;
   program: Program;
@@ -1325,6 +1331,7 @@ function HojaBody({
   actionBusy = false,
   onDownload,
   onCheckFresa,
+  onPrepare,
   onToggleLock,
   onAddStampsClick,
   pickingStamps = false,
@@ -1840,6 +1847,7 @@ function HojaBody({
                 : '—'}
           </span>
           <div className="flex items-center gap-1.5">
+          {onPrepare ? <button type="button" className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs text-zinc-700 hover:bg-sky-50" onClick={(e) => { e.stopPropagation(); onPrepare(); }} title="Preparar sellos sobre el soporte">{full ? 'Preparar' : 'Armar'}</button> : null}
           {onCheckFresa ? (
             <button
               type="button"

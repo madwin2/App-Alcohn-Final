@@ -120,9 +120,17 @@ export interface ReviewItem {
   mode: import('./vectorizerPreset').VectorizeMode;
   /** Sello de alimento (chequeo de fresa más exigente). Falta en revisiones viejas guardadas. */
   alimento?: boolean;
+  stampType?: string | null;
   /**
    * Medida de fabricación elegida al agrandar el sello desde el chequeo de
    * fresa (mm). Se guarda al confirmar. Se borra si se cambia el SVG.
    */
   fabricationOverrideMm?: { widthMm: number; heightMm: number };
+  /**
+   * Vector como salió de la vectorización (o el que se cargó con «Cambiar»).
+   * `svg` es el que se va a guardar. Falta mientras no se eligió otra versión.
+   */
+  originalSvg?: string;
+  /** Qué versión es `svg`: la original, la corrección automática o una edición a mano. */
+  fresaChoice?: 'original' | 'auto' | 'manual';
 }

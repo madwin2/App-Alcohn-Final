@@ -19,14 +19,17 @@ import {
   FRESA_ANALYSIS_VERSION,
   MAX_SCALE_UP,
   fresaProfile,
+  machiningRecipe,
   type FresaAnalysisOptions,
   type FresaProfile,
 } from './config';
 import type { PaintShape } from './analyze';
 import { runCheck, runFix, type CheckOutput, type FixOutput } from './engine';
+import { runPasses, type PassesOutput } from './passes';
 import { buildCorrectedSvg, wrapFit } from './exportSvg';
 import type { FixOperation } from './fix';
 import { applyPieceMoves } from './moveSvg';
+import { buildEditDoc, countNodes, removeRedundant, serializeEditDoc, simplifyDoc } from './editDoc';
 import { parseSvgShapes, type ParsedSvg } from './svgShapes';
 import type { WorkerRequest, WorkerResponse } from './workerProtocol';
 
@@ -46,7 +49,7 @@ export type FresaTarget = (
   | { mode: 'escala'; mmPerUnit: number }
   /** Sin sello: la medida que declara el propio SVG (width/height en mm). */
   | { mode: 'declarado' }
-) & { alimento?: boolean };
+) & { alimento?: boolean; stampType?: string | null };
 
 /** ¿El tipo de sello (StampType o `sellos.tipo`) es de alimento? */
 export function esTipoAlimento(tipo: string | null | undefined): boolean {
@@ -60,6 +63,7 @@ export interface FresaReport {
   status: 'ok' | 'revisar' | 'error';
   error?: string;
   check: CheckOutput | null;
+  passes?: PassesOutput;
   /** mm por unidad del viewBox usados en el análisis. */
   mmPerUnit: number;
   /** Medida del dibujo analizado (mm). */
@@ -205,12 +209,14 @@ function getWorker(): Worker | null {
 
 type CheckReq = Omit<Extract<WorkerRequest, { type: 'check' }>, 'id'>;
 type FixReq = Omit<Extract<WorkerRequest, { type: 'fix' }>, 'id'>;
+type PassesReq = Omit<Extract<WorkerRequest, { type: 'passes' }>, 'id'>;
 
 async function inWorker(req: CheckReq): Promise<CheckOutput>;
 async function inWorker(req: FixReq): Promise<FixOutput>;
-async function inWorker(req: CheckReq | FixReq): Promise<CheckOutput | FixOutput> {
+async function inWorker(req: PassesReq): Promise<PassesOutput>;
+async function inWorker(req: CheckReq | FixReq | PassesReq): Promise<CheckOutput | FixOutput | PassesOutput> {
   const local = () =>
-    req.type === 'check'
+    req.type === 'passes' ? runPasses(req.shapes, req.mmPerUnit, req.profile, req.recipe, req.options) : req.type === 'check'
       ? runCheck(req.shapes, req.mmPerUnit, req.profile, req.options)
       : runFix(req.shapes, req.mmPerUnit, req.zoneIds, req.profile, req.options, req.maxScaleUp);
   const w = getWorker();
@@ -245,7 +251,7 @@ function hashText(s: string): string {
 }
 
 function targetKey(t: FresaTarget): string {
-  return `${t.alimento ? 'A' : ''}${sizeKey(t)}`;
+  return `${machiningRecipe(t.stampType, t.alimento) ?? 'SIN_RECETA'}:${sizeKey(t)}`;
 }
 
 function sizeKey(t: FresaTarget): string {
@@ -321,8 +327,10 @@ async function computeReport(
     return errorReport(key, 'No se pudo determinar la medida del diseño.', profile, target);
   }
   let check: CheckOutput;
+  let passes: PassesOutput;
   try {
-    check = await inWorker({ type: 'check', shapes: plainShapes(parsed), mmPerUnit, profile, options });
+    passes = await inWorker({ type: 'passes', shapes: plainShapes(parsed), mmPerUnit, profile, recipe: machiningRecipe(target.stampType, target.alimento), options });
+    check = passes.fine;
   } catch (e) {
     return errorReport(key, e instanceof Error ? e.message : 'Falló el análisis.', profile, target);
   }
@@ -342,6 +350,7 @@ async function computeReport(
     key,
     status: counts.alta + counts.media > 0 ? 'revisar' : 'ok',
     check,
+    passes,
     mmPerUnit,
     widthMm: (box.maxX - box.minX) * mmPerUnit,
     heightMm: (box.maxY - box.minY) * mmPerUnit,
@@ -362,14 +371,14 @@ export function chequearSvg(
   target: FresaTarget,
   options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
 ): Promise<FresaReport> {
-  const key = fresaCacheKey(svgText, target);
+  const key = `${fresaCacheKey(svgText, target)}:${JSON.stringify(options)}`;
   const hit = cache.get(key);
   if (hit) {
     cache.delete(key);
     cache.set(key, hit);
     return hit;
   }
-  const p = computeReport(svgText, target, key, fresaProfile(target.alimento), options);
+  const p = computeReport(svgText, target, key, fresaProfile(machiningRecipe(target.stampType, target.alimento) === 'ALIMENTO'), options);
   cache.set(key, p);
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
   p.then((r) => {
@@ -451,8 +460,122 @@ export async function corregirSvg(
  * (el dibujo corregido ya está encajado en la misma caja, así que la escala
  * coincide con la del original).
  */
+/**
+ * Errores máximos (mm) que se prueban al simplificar, del más al menos
+ * simplificador. 0,02 mm está muy por debajo de lo que marca la fresa más
+ * fina (punta de 0,1 mm) y de lo que se ve en un sello.
+ */
+export const SIMPLIFY_TOLS_MM = [0.02, 0.01] as const;
+
+const places = (r: FresaReport) => r.groupCounts.alta + r.groupCounts.media;
+
+/**
+ * Saca todos los nodos que se puedan sin cambiar el diseño: prueba los errores
+ * de `SIMPLIFY_TOLS_MM` y se queda con el primero que no cambia la medida ni
+ * empeora el chequeo de fresa. `report`: chequeo de `svgText`. Devuelve null si
+ * no se pudo leer el SVG para editar (blancos, trazos) o no ahorra nodos.
+ */
+export async function simplificarSinDeformar(
+  svgText: string,
+  report: FresaReport,
+  options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
+): Promise<{ svg: string; report: FresaReport; antes: number; despues: number; tolMm: number } | null> {
+  if (report.status === 'error') return null;
+  const built = buildEditDoc(svgText);
+  if (!built.ok) return null;
+  const antes = countNodes(built.doc);
+  for (const tolMm of SIMPLIFY_TOLS_MM) {
+    const tol = tolMm / report.mmPerUnit;
+    const clean = removeRedundant(built.doc, 0.002 / report.mmPerUnit).doc;
+    const { doc, after } = simplifyDoc(clean, tol);
+    // Que valga la pena: al menos un 5 % menos de nodos.
+    if (after > antes * 0.95) continue;
+    const svg = serializeEditDoc(doc);
+    const r = await chequearSvg(svg, sameScaleTarget(report), options);
+    const sameSize = Math.abs(r.widthMm - report.widthMm) <= 0.05 && Math.abs(r.heightMm - report.heightMm) <= 0.05;
+    if (r.status !== 'error' && sameSize && places(r) <= places(report)) {
+      return { svg, report: r, antes, despues: after, tolMm };
+    }
+  }
+  return null;
+}
+
+/**
+ * Corrección automática completa: corrige donde no llega la fresa (si hace
+ * falta) y después simplifica los nodos sin cambiar el diseño. Siempre
+ * simplifica, aunque la fresa ya llegue bien. Devuelve null si no hay nada
+ * para cambiar.
+ */
+export async function corregirYSimplificar(
+  svgText: string,
+  before: FresaReport,
+  zoneIds: string[],
+  options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
+): Promise<FresaFixResult | null> {
+  if (before.status === 'error' || !before.check) return null;
+  let fix: FresaFixResult | null = null;
+  if (before.status === 'revisar' && zoneIds.length) {
+    const f = await corregirSvg(svgText, before, zoneIds, options);
+    if (f.operations.length) fix = f;
+  }
+  const base = fix ? fix.svg : svgText;
+  const baseReport = fix ? fix.after : before;
+  const simp = await simplificarSinDeformar(base, baseReport, options);
+  if (!fix && !simp) return null;
+  const operations = [...(fix?.operations ?? [])];
+  if (simp) operations.push({ kind: 'simplificar', antes: simp.antes, despues: simp.despues, tolMm: simp.tolMm });
+  const after = simp ? simp.report : baseReport;
+  return {
+    svg: simp ? simp.svg : base,
+    removedAreaMm2: fix?.removedAreaMm2 ?? 0,
+    operations,
+    fixedZoneIds: fix?.fixedZoneIds ?? [],
+    skippedZoneIds: fix?.skippedZoneIds ?? (before.status === 'revisar' ? zoneIds : []),
+    fitScale: fix?.fitScale ?? 1,
+    fabricationMm: fix?.fabricationMm ?? { widthMm: before.widthMm, heightMm: before.heightMm },
+    scaleUp: fix?.scaleUp ?? null,
+    before,
+    after,
+  };
+}
+
+/** Zonas que la corrección automática intenta resolver (no los ángulos). */
+export function zonasCorregibles(report: FresaReport): string[] {
+  return (report.check?.zones ?? []).filter((z) => z.severity !== 'baja').map((z) => z.id);
+}
+
+const autoCache = new Map<string, Promise<{ report: FresaReport; fix: FresaFixResult | null }>>();
+let autoChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Chequeo + corrección automática de un vector recién hecho, en segundo plano.
+ * Se hacen de a uno (es pesado) y se cachean por contenido + medida.
+ */
+export function autoCorregir(
+  svgText: string,
+  target: FresaTarget,
+  options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
+): Promise<{ report: FresaReport; fix: FresaFixResult | null }> {
+  const key = `auto:${fresaCacheKey(svgText, target)}`;
+  const hit = autoCache.get(key);
+  if (hit) return hit;
+  const run = autoChain.then(async () => {
+    const report = await chequearSvg(svgText, target, options);
+    if (report.status === 'error') return { report, fix: null };
+    try {
+      return { report, fix: await corregirYSimplificar(svgText, report, zonasCorregibles(report), options) };
+    } catch {
+      return { report, fix: null };
+    }
+  });
+  autoChain = run.catch(() => undefined);
+  autoCache.set(key, run);
+  if (autoCache.size > 200) autoCache.delete(autoCache.keys().next().value as string);
+  return run;
+}
+
 function sameScaleTarget(before: FresaReport): FresaTarget {
-  return { mode: 'escala', mmPerUnit: before.mmPerUnit, alimento: before.profile.id === 'alimento' };
+  return { mode: 'escala', mmPerUnit: before.mmPerUnit, alimento: before.target.alimento, stampType: before.target.stampType };
 }
 
 /**

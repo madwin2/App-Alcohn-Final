@@ -1,0 +1,187 @@
+[
+  {
+    "execution": {
+      "columnCount": 1,
+      "rulesVersion": 1,
+      "stampCount": 2,
+      "verified": true
+    },
+    "issues": [],
+    "recalculated": true,
+    "revision": 1,
+    "stamps": [
+      {
+        "centerX": 50.176,
+        "geometryHash": "183:1315263392",
+        "heightMm": 30,
+        "instanceId": "qualification:flow-a",
+        "recipe": "CLASICO",
+        "selloId": "flow-a",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12.000000mm\" height=\"30.000000mm\" viewBox=\"0 0 12.000000 30.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.000000 0.000000L0.000000 0.000000L0.000000 30.000000L12.000000 30.000000L12.000000 0.000000Z M8.000000 10.000000L8.000000 18.000000L4.000000 18.000000L4.000000 10.000000L8.000000 10.000000Z\"/></svg>",
+        "topY": -8.958,
+        "widthMm": 12
+      },
+      {
+        "centerX": 50.176,
+        "geometryHash": "183:1315263392",
+        "heightMm": 30,
+        "instanceId": "qualification:flow-b",
+        "recipe": "3MM",
+        "selloId": "flow-b",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12.000000mm\" height=\"30.000000mm\" viewBox=\"0 0 12.000000 30.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.000000 0.000000L0.000000 0.000000L0.000000 30.000000L12.000000 30.000000L12.000000 0.000000Z M8.000000 10.000000L8.000000 18.000000L4.000000 18.000000L4.000000 10.000000L8.000000 10.000000Z\"/></svg>",
+        "topY": -65,
+        "widthMm": 12
+      }
+    ]
+  },
+  {
+    "execution": {
+      "columnCount": 2,
+      "rulesVersion": 1,
+      "stampCount": 2,
+      "verified": true
+    },
+    "issues": [],
+    "recalculated": true,
+    "revision": 2,
+    "stamps": [
+      {
+        "centerX": 235.351,
+        "geometryHash": "183:222947159",
+        "heightMm": 30,
+        "instanceId": "qualification:flow-a",
+        "recipe": "CLASICO",
+        "selloId": "flow-a",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12.000000mm\" height=\"30.000000mm\" viewBox=\"0 0 12.000000 30.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.000000 0.000000L0.000000 0.000000L0.000000 30.000000L12.000000 30.000000L12.000000 0.000000Z M8.500000 10.000000L8.500000 18.000000L4.500000 18.000000L4.500000 10.000000L8.500000 10.000000Z\"/></svg>",
+        "topY": -60,
+        "widthMm": 12
+      },
+      {
+        "centerX": 50.176,
+        "geometryHash": "183:1315263392",
+        "heightMm": 30,
+        "instanceId": "qualification:flow-b",
+        "recipe": "3MM",
+        "selloId": "flow-b",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12.000000mm\" height=\"30.000000mm\" viewBox=\"0 0 12.000000 30.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.000000 0.000000L0.000000 0.000000L0.000000 30.000000L12.000000 30.000000L12.000000 0.000000Z M8.000000 10.000000L8.000000 18.000000L4.000000 18.000000L4.000000 10.000000L8.000000 10.000000Z\"/></svg>",
+        "topY": -65,
+        "widthMm": 12
+      }
+    ]
+  },
+  {
+    "execution": {
+      "columnCount": 2,
+      "rulesVersion": 1,
+      "stampCount": 2,
+      "verified": true
+    },
+    "issues": [],
+    "recalculated": true,
+    "revision": 3,
+    "stamps": [
+      {
+        "centerX": 235.351,
+        "geometryHash": "183:222947159",
+        "heightMm": 45,
+        "instanceId": "qualification:flow-a",
+        "recipe": "CLASICO",
+        "selloId": "flow-a",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18.000000mm\" height=\"45.000000mm\" viewBox=\"0 0 18.000000 45.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.750000 15.000000L12.750000 27.000000L6.750000 27.000000L6.750000 15.000000L12.750000 15.000000Z M18.000000 0.000000L0.000000 0.000000L0.000000 45.000000L18.000000 45.000000L18.000000 0.000000Z\"/></svg>",
+        "topY": -60,
+        "widthMm": 18
+      },
+      {
+        "centerX": 50.176,
+        "geometryHash": "183:1315263392",
+        "heightMm": 30,
+        "instanceId": "qualification:flow-b",
+        "recipe": "3MM",
+        "selloId": "flow-b",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12.000000mm\" height=\"30.000000mm\" viewBox=\"0 0 12.000000 30.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.000000 0.000000L0.000000 0.000000L0.000000 30.000000L12.000000 30.000000L12.000000 0.000000Z M8.000000 10.000000L8.000000 18.000000L4.000000 18.000000L4.000000 10.000000L8.000000 10.000000Z\"/></svg>",
+        "topY": -65,
+        "widthMm": 12
+      }
+    ]
+  },
+  {
+    "execution": {
+      "columnCount": 2,
+      "rulesVersion": 1,
+      "stampCount": 2,
+      "verified": true
+    },
+    "issues": [],
+    "recalculated": true,
+    "revision": 4,
+    "stamps": [
+      {
+        "centerX": 235.351,
+        "geometryHash": "183:222947159",
+        "heightMm": 45,
+        "instanceId": "qualification:flow-a",
+        "recipe": "ALIMENTO",
+        "selloId": "flow-a",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18.000000mm\" height=\"45.000000mm\" viewBox=\"0 0 18.000000 45.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.750000 15.000000L12.750000 27.000000L6.750000 27.000000L6.750000 15.000000L12.750000 15.000000Z M18.000000 0.000000L0.000000 0.000000L0.000000 45.000000L18.000000 45.000000L18.000000 0.000000Z\"/></svg>",
+        "topY": -60,
+        "widthMm": 18
+      },
+      {
+        "centerX": 50.176,
+        "geometryHash": "183:1315263392",
+        "heightMm": 30,
+        "instanceId": "qualification:flow-b",
+        "recipe": "3MM",
+        "selloId": "flow-b",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12.000000mm\" height=\"30.000000mm\" viewBox=\"0 0 12.000000 30.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.000000 0.000000L0.000000 0.000000L0.000000 30.000000L12.000000 30.000000L12.000000 0.000000Z M8.000000 10.000000L8.000000 18.000000L4.000000 18.000000L4.000000 10.000000L8.000000 10.000000Z\"/></svg>",
+        "topY": -65,
+        "widthMm": 12
+      }
+    ]
+  },
+  {
+    "execution": {
+      "columnCount": 2,
+      "rulesVersion": 1,
+      "stampCount": 2,
+      "verified": true
+    },
+    "issues": [],
+    "recalculated": true,
+    "revision": 5,
+    "stamps": [
+      {
+        "centerX": 235.351,
+        "geometryHash": "183:222947159",
+        "heightMm": 45,
+        "instanceId": "qualification:flow-a",
+        "recipe": "ALIMENTO",
+        "selloId": "flow-a",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18.000000mm\" height=\"45.000000mm\" viewBox=\"0 0 18.000000 45.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.750000 15.000000L12.750000 27.000000L6.750000 27.000000L6.750000 15.000000L12.750000 15.000000Z M18.000000 0.000000L0.000000 0.000000L0.000000 45.000000L18.000000 45.000000L18.000000 0.000000Z\"/></svg>",
+        "topY": -60,
+        "widthMm": 18
+      },
+      {
+        "centerX": 50.176,
+        "geometryHash": "183:1315263392",
+        "heightMm": 30,
+        "instanceId": "qualification:flow-b",
+        "recipe": "3MM",
+        "selloId": "flow-b",
+        "sourceHash": "153:855094526",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12.000000mm\" height=\"30.000000mm\" viewBox=\"0 0 12.000000 30.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.000000 0.000000L0.000000 0.000000L0.000000 30.000000L12.000000 30.000000L12.000000 0.000000Z M8.000000 10.000000L8.000000 18.000000L4.000000 18.000000L4.000000 10.000000L8.000000 10.000000Z\"/></svg>",
+        "topY": -65,
+        "widthMm": 12
+      }
+    ]
+  }
+]

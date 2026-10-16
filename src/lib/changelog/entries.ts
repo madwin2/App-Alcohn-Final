@@ -34,6 +34,7 @@ import {
   ScanSearch,
   Wand2,
   PencilRuler,
+  Keyboard,
   Spline,
   type LucideIcon,
 } from 'lucide-react';
@@ -1003,7 +1004,7 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
       {
         heading: 'Nodos a la vista',
-        body: 'Ves los nodos de cada pieza y los podés arrastrar. «Quitar nodos de más» los limpia sin cambiar la forma; «Simplificar curvas» deja menos nodos con un error que elegís.',
+        body: 'Ves los nodos de cada pieza y los podés arrastrar. «Quitar nodos de más» los limpia sin cambiar la forma; «Simplificar» te dice antes cuántos nodos quedan: las rectas llenas de nodos quedan con uno por esquina y las curvas con pocos.',
         icon: Spline,
       },
     ],
@@ -1011,8 +1012,37 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   {
     id: 55,
     date: '2026-10-15',
-    title: 'Garantía al rehacer entregados',
+    title: 'Vectores corregidos solos',
     version: '1.73',
+    slides: [
+      {
+        heading: 'La corrección se hace sola',
+        body: 'Cuando un vector llega a Revisión, la app ya lo corrige donde no llega la fresa y simplifica sus nodos sin cambiar el diseño. En la tarjeta elegís qué guardar: Original o Automático.',
+        icon: Wand2,
+      },
+      {
+        heading: 'Original, automático o a mano',
+        body: '«Ver / editar» abre el chequeo con la corrección ya hecha: podés compararla, editar el corregido o el original, o quedarte con el original. El original nunca se pierde hasta que confirmás.',
+        icon: PencilRuler,
+      },
+    ],
+  },
+  {
+    id: 56,
+    date: '2026-10-15',
+    title: 'Preparación visual de programas',
+    version: '1.74',
+    slides: [
+      { heading: 'Prepará el programa sobre el soporte', body: 'Desde Preparar programa podés mover sellos, cambiar la planchuela, ajustar la medida de fabricación y elegir Clásico, 3 mm o Alimento. La venta conserva sus datos originales.', icon: PencilRuler },
+      { heading: 'Controles antes de Aspire', body: 'La app revisa apoyo, largo, separación y material, y compara la primera fresa con el repaso fino. Al guardar se chequean todos los diseños disponibles en SVG.', icon: ScanSearch },
+      { heading: 'Sincronizá conservando las correcciones', body: 'Con el gadget 3.2, los cambios se aplican sobre los dibujos existentes y se revisan cortes y taladros. Cada repaso recibe su selección antes del recálculo; Alimento suma el corte de forma. Los conflictos se consultan por propiedad. Requiere soporte y plantillas verificados.', icon: RefreshCw },
+    ],
+  },
+  {
+    id: 57,
+    date: '2026-10-15',
+    title: 'Garantía al rehacer entregados',
+    version: '1.75',
     slides: [
       {
         heading: 'Rehacer un pedido ya entregado crea Garantía',
@@ -1023,6 +1053,83 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Misma cola, foto y envío limpios',
         body: 'El sello clonado entra prioritario como cualquier otro. Cuando subís la foto, al cliente le llega el cargo adicional o $0, y después se reenvía normal.',
         icon: Package,
+      },
+    ],
+  },
+  {
+    id: 58,
+    date: '2026-10-15',
+    title: 'Editor de vectores más cómodo',
+    version: '1.76',
+    slides: [
+      {
+        heading: 'Nada se corre de lugar',
+        body: 'En el editor del chequeo de fresa, los botones quedan siempre en el mismo lugar: podés tocar +1 % o una flecha varias veces seguidas. Los avisos aparecen flotando arriba del dibujo y se van solos.',
+        icon: PencilRuler,
+      },
+      {
+        heading: 'Más rápido y con el teclado',
+        body: 'Cada cambio responde al instante, Terminar edición queda siempre a la vista y los atajos (Ctrl+Z, flechas, Supr) andan aunque hayas tocado un botón del panel.',
+        icon: Keyboard,
+      },
+    ],
+  },
+  {
+    id: 59,
+    date: '2026-10-15',
+    title: 'Editor de vectores con el mouse',
+    version: '1.77',
+    slides: [
+      {
+        heading: 'Sin elegir herramientas',
+        body: 'Clic izquierdo elige y mueve, las esquinas escalan, doble clic edita los nodos, la rueda apretada mueve la vista y el clic derecho abre las acciones de lo que tocaste (también Esquina y Suave en un nodo).',
+        icon: PencilRuler,
+      },
+      {
+        heading: 'Afinar y engordar sin romper',
+        body: 'Afinar o engordar una letra ya no la deforma: el resultado queda pegado al offset exacto, con sus esquinas.',
+        icon: Wand2,
+      },
+    ],
+  },
+  {
+    id: 60,
+    date: '2026-10-15',
+    title: 'Chequeo de fresa más ordenado',
+    version: '1.78',
+    slides: [
+      {
+        heading: 'Todo a mano, sin bajar',
+        body: 'El panel del editor entra entero en pantallas de notebook: alinear y espaciar en un solo renglón de íconos, el tacho al lado de la medida y el zoom (−, +, Ver todo) igual que en el chequeo.',
+        icon: PencilRuler,
+      },
+      {
+        heading: 'La lista de lugares se ve',
+        body: 'En el chequeo, la lista de lugares ya no queda aplastada: las explicaciones largas pasaron a los carteles que aparecen al pasar el mouse.',
+        icon: ScanSearch,
+      },
+    ],
+  },
+  {
+    id: 61,
+    date: '2026-10-16',
+    title: 'Programas: confirmar el archivo correcto',
+    version: '1.79',
+    slides: [
+      {
+        heading: 'Cada sincronización conserva su archivo',
+        body: 'Con la nueva preparación, si volvés a corregir el programa en Aspire, una subida anterior ya no puede reemplazar el resultado más reciente ni dejarlo listo por error.',
+        icon: Lock,
+      },
+      {
+        heading: 'Actualizar el gadget antes de sincronizar',
+        body: 'La nueva preparación necesita el gadget 3.2 de la máquina. Si cambia el armado o llega otra sincronización durante la subida, la app pide sincronizar otra vez antes de aprobar el archivo.',
+        icon: RefreshCw,
+      },
+      {
+        heading: 'Menos carga en cada programa',
+        body: 'Por ahora solo en la máquina C. Un programa nuevo toma el soporte y las plantillas del último preparado de la misma máquina. Si hace falta, Descartar preparación lo vuelve al armado anterior.',
+        icon: PencilRuler,
       },
     ],
   },

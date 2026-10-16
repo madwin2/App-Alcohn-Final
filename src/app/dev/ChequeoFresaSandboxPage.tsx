@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { FresaChip } from '@/components/fresa/FresaChip';
 import { FresaCheckDialog } from '@/components/fresa/FresaCheckDialog';
-import type { FresaTarget } from '@/lib/fresa/chequeoFresa';
+import { autoCorregir, type FresaFixResult, type FresaTarget } from '@/lib/fresa/chequeoFresa';
+import { resumenOperaciones } from '@/lib/fresa/textos';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
 
 /** Diseño de muestra: letras "juntas", un ojo chico y una ranura (en mm). */
@@ -21,8 +22,27 @@ export default function ChequeoFresaSandboxPage() {
   const [name, setName] = useState('Muestra');
   const [longSide, setLongSide] = useState<string>('');
   const [open, setOpen] = useState(false);
+  /** Lo que se usaría (como en Revisión): el original, la automática o una edición. */
+  const [chosen, setChosen] = useState<{ label: string; svg: string } | null>(null);
+  const [auto, setAuto] = useState<FresaFixResult | null | undefined>(undefined);
   const target: FresaTarget = Number(longSide) > 0 ? { mode: 'fabricacion', longSideMm: Number(longSide) } : { mode: 'declarado' };
   const report = useFresaReport(svg, target);
+  const targetKey = JSON.stringify(target);
+
+  // Como en Revisión: la corrección automática corre sola al cargar el vector.
+  useEffect(() => {
+    let alive = true;
+    setAuto(undefined);
+    setChosen(null);
+    void autoCorregir(svg, JSON.parse(targetKey) as FresaTarget).then((r) => {
+      if (!alive) return;
+      setAuto(r.fix);
+      if (r.fix) setChosen({ label: 'Automático', svg: r.fix.svg });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [svg, targetKey]);
 
   // ?src=<url>&largo=<mm>: cargar un SVG por URL (por ejemplo, un vector guardado).
   useEffect(() => {
@@ -82,11 +102,19 @@ export default function ChequeoFresaSandboxPage() {
             Abrir chequeo
           </button>
         </div>
+        <p className="text-sm text-muted-foreground">
+          {auto === undefined
+            ? 'Corrigiendo y simplificando…'
+            : auto
+              ? `Automático: ${resumenOperaciones(auto.operations)}`
+              : 'Automático: no hay nada para cambiar.'}{' '}
+          Se usaría: <strong>{chosen?.label ?? 'Original'}</strong>.
+        </p>
         <div className="flex h-64 items-center justify-center rounded-lg border bg-white p-4">
           <img
             alt=""
             className="max-h-full max-w-full"
-            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`}
+            src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(chosen?.svg ?? svg)}`}
           />
         </div>
       </div>
@@ -97,9 +125,13 @@ export default function ChequeoFresaSandboxPage() {
         svgText={svg}
         target={target}
         downloadName={name}
-        onApply={(next) => setSvg(next)}
+        initialFix={auto ?? null}
+        onUseOriginal={() => setChosen({ label: 'Original', svg })}
+        onApply={(next, fix) =>
+          setChosen({ label: fix.operations.some((o) => o.kind === 'manual') ? 'A mano' : 'Automático', svg: next })
+        }
         applyLabel="Usar el corregido"
-        applyHint="En el sandbox reemplaza el SVG de esta página."
+        applyHint="En el sandbox solo cambia la vista previa de esta página."
       />
     </div>
   );

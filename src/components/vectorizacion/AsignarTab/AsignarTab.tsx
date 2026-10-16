@@ -37,6 +37,7 @@ function selloTarget(
       requestedWidthMm: sello.requestedWidthMm,
       requestedHeightMm: sello.requestedHeightMm,
       alimento: esTipoAlimento(sello.tipo),
+      stampType: sello.tipo,
     };
   }
   return sello
@@ -45,6 +46,7 @@ function selloTarget(
         requestedWidthMm: sello.requestedWidthMm,
         requestedHeightMm: sello.requestedHeightMm,
         alimento: esTipoAlimento(sello.tipo),
+        stampType: sello.tipo,
       }
     : null;
 }

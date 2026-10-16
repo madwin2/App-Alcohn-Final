@@ -32,9 +32,10 @@ export function fresaTargetFor(size: FresaSizeInfo): FresaTarget | null {
       // La pedida dice la planchuela: tope si hiciera falta agrandar.
       ...(rw > 0 && rh > 0 ? { requestedWidthMm: rw, requestedHeightMm: rh } : {}),
       alimento,
+      stampType: size.stampType,
     };
   }
-  if (rw > 0 && rh > 0) return { mode: 'pedido', requestedWidthMm: rw, requestedHeightMm: rh, alimento };
+  if (rw > 0 && rh > 0) return { mode: 'pedido', requestedWidthMm: rw, requestedHeightMm: rh, alimento, stampType: size.stampType };
   return null;
 }
 
