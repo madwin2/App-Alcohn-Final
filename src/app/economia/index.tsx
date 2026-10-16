@@ -135,10 +135,14 @@ type MonthlyRow = {
   costoRegalos: number;
   /** Pruebas: costo de fabricación de pedidos de Prueba (gasto, resta de la rentabilidad). */
   costoPruebas: number;
+  /** Garantías: fabricación + envío imputado de rehaceres post-entrega (Andreani con link = 0). */
+  costoGarantias: number;
   /** Cantidad de ítems regalo del mes (informativo). */
   regalosCount: number;
   /** Cantidad de ítems de pruebas del mes (informativo). */
   pruebasCount: number;
+  /** Cantidad de ítems de garantía del mes (informativo). */
+  garantiasCount: number;
 };
 
 function totalGastosOperativos(r: MonthlyRow): number {
@@ -150,7 +154,8 @@ function totalGastosOperativos(r: MonthlyRow): number {
     r.publicidad +
     r.enviosManual +
     r.costoRegalos +
-    r.costoPruebas
+    r.costoPruebas +
+    r.costoGarantias
   );
 }
 
@@ -183,15 +188,19 @@ function sumarFilas(rows: MonthlyRow[]) {
       acc.pedidos += r.pedidos;
       acc.costoRegalos += r.costoRegalos;
       acc.costoPruebas += r.costoPruebas;
+      acc.costoGarantias += r.costoGarantias;
       acc.regalosCount += r.regalosCount;
       acc.pruebasCount += r.pruebasCount;
+      acc.garantiasCount += r.garantiasCount;
       return acc;
     },
     {
       costoRegalos: 0,
       costoPruebas: 0,
+      costoGarantias: 0,
       regalosCount: 0,
       pruebasCount: 0,
+      garantiasCount: 0,
       ventasBrutas: 0,
       costosFijos: 0,
       costosVentas: 0,
@@ -621,16 +630,18 @@ export default function EconomiaPage() {
           pedidos: 0,
           costoRegalos: 0,
           costoPruebas: 0,
+          costoGarantias: 0,
           regalosCount: 0,
           pruebasCount: 0,
+          garantiasCount: 0,
         } satisfies MonthlyRow);
 
       const esVenta = ordenCuentaComoVenta(order);
-      // Pruebas y regalos aparte no suman a pedidos.
+      // Pruebas, regalos y garantías no suman a pedidos de venta.
       if (esVenta) row.pedidos += 1;
       const fab = Number(order.fabricationCostTotal || 0);
       const envioImputadoVentas = economiaEnvioImputadoArs(order, shippingCostByOrderId);
-      // Ventas: solo pedidos Venta (el envío imputado y el valor del pedido no incluyen regalos/pruebas).
+      // Ventas: solo pedidos Venta (el envío imputado y el valor del pedido no incluyen regalos/pruebas/garantías).
       if (esVenta) row.ventasBrutas += Number(order.totalValue || 0) + envioImputadoVentas;
       if (!resumen) {
         // Costo de fabricación de ítems regalo: sale de costosVentas y va a la línea "Regalos".
@@ -642,6 +653,9 @@ export default function EconomiaPage() {
         } else if (order.orderType === 'REGALO') {
           // Regalo aparte: fabricación + envío (lo paga Alcohn).
           row.costoRegalos += fab + envioImputadoVentas;
+        } else if (order.orderType === 'GARANTIA') {
+          // Garantía: fabricación + envío (Andreani con link = 0, BR-COS-006).
+          row.costoGarantias += fab + envioImputadoVentas;
         } else {
           row.costosVentas += Math.max(0, fab - fabGiftItems);
           row.costoRegalos += fabGiftItems;
@@ -663,6 +677,8 @@ export default function EconomiaPage() {
       for (const item of order.items) {
         if (order.orderType === 'PRUEBA') {
           row.pruebasCount += 1;
+        } else if (order.orderType === 'GARANTIA') {
+          row.garantiasCount += 1;
         } else if (order.orderType === 'REGALO' || item.isGift) {
           row.regalosCount += 1;
         }
@@ -679,11 +695,11 @@ export default function EconomiaPage() {
       if (esVenta) row.transferido += envioImputadoVentas;
 
       row.pendiente = row.ventasBrutas - row.transferido;
-      // Regalos y pruebas son gasto operativo que resta de la rentabilidad.
+      // Regalos, pruebas y garantías son gasto operativo que resta de la rentabilidad.
       // En meses con cierre tipo Excel (`resumen`) los gastos reales ya los incluyen: no se vuelven a restar.
       const gastosOp =
         gastosOperativosParaEconomia(bundle, row.costosVentas, legacyFixed) +
-        (resumen ? 0 : row.costoRegalos + row.costoPruebas);
+        (resumen ? 0 : row.costoRegalos + row.costoPruebas + row.costoGarantias);
       row.rentabilidadPesos = row.ventasBrutas - gastosOp;
       row.rentabilidadUsd = usdRate > 0 ? row.rentabilidadPesos / usdRate : 0;
       row.transferidoMenosGastos = row.transferido - gastosOp;
@@ -734,8 +750,10 @@ export default function EconomiaPage() {
         pedidos: 0,
         costoRegalos: 0,
         costoPruebas: 0,
+        costoGarantias: 0,
         regalosCount: 0,
         pruebasCount: 0,
+        garantiasCount: 0,
       };
       applyResumenVentasOverride(row, bundle, usdRate, legacyFixed);
       byMonth.set(key, row);
@@ -1120,7 +1138,7 @@ export default function EconomiaPage() {
                 (tabla de costos o {formatArs(ECONOMIA_ENVIO_SIN_TIPO_ARS)} si no hay método). Andreani con link no suma envío.
               </li>
               <li>
-                <span className="text-foreground">Fabricación</span>: costo de lo vendido. Regalos y pruebas no son ventas: se restan como gasto.
+                <span className="text-foreground">Fabricación</span>: costo de lo vendido. Regalos, pruebas y garantías no son ventas: se restan como gasto.
               </li>
               <li>
                 <span className="text-foreground">Ganancia</span> = ventas − fijos − fabricación − extras − publicidad − envíos. En meses de cierre
@@ -1731,6 +1749,7 @@ export default function EconomiaPage() {
                           <th className={thCls}>Fabricación</th>
                           <th className={thCls}>Regalos</th>
                           <th className={thCls}>Pruebas</th>
+                          <th className={thCls}>Garantías</th>
                           <th className={thCls}>Extras</th>
                           <th className={thCls}>Publicidad</th>
                           <th className={thCls}>Envíos</th>
@@ -1782,7 +1801,7 @@ export default function EconomiaPage() {
                           <td className={cn(tdCls, 'font-medium')}>{formatArs(r.ventasBrutas)}</td>
                           {mensualDetalleGastos ? (
                             r.fuenteResumen ? (
-                              <td className={cn(tdCls, 'text-muted-foreground')} colSpan={7} title="Mes con cierre histórico: un solo gasto real (incluye publicidad)">
+                              <td className={cn(tdCls, 'text-muted-foreground')} colSpan={8} title="Mes con cierre histórico: un solo gasto real (incluye publicidad)">
                                 Cierre histórico: {formatArs(r.gastosReales)}
                               </td>
                             ) : (
@@ -1796,6 +1815,10 @@ export default function EconomiaPage() {
                                 <td className={cn(tdCls, 'text-muted-foreground')}>
                                   {formatArs(r.costoPruebas)}
                                   {r.pruebasCount > 0 ? <span className="ml-1 text-[11px]">({r.pruebasCount})</span> : null}
+                                </td>
+                                <td className={cn(tdCls, 'text-muted-foreground')}>
+                                  {formatArs(r.costoGarantias)}
+                                  {r.garantiasCount > 0 ? <span className="ml-1 text-[11px]">({r.garantiasCount})</span> : null}
                                 </td>
                                 <td className={cn(tdCls, 'text-muted-foreground')}>{formatArs(r.gastosExtras)}</td>
                                 <td className={cn(tdCls, 'text-muted-foreground')}>{formatArs(r.publicidad)}</td>
@@ -1836,6 +1859,7 @@ export default function EconomiaPage() {
                           <td className={tdCls}>{formatArs(totalsRango.costosVentas)}</td>
                           <td className={tdCls}>{formatArs(totalsRango.costoRegalos)}</td>
                           <td className={tdCls}>{formatArs(totalsRango.costoPruebas)}</td>
+                          <td className={tdCls}>{formatArs(totalsRango.costoGarantias)}</td>
                           <td className={tdCls}>{formatArs(totalsRango.gastosExtras)}</td>
                           <td className={tdCls}>{formatArs(totalsRango.publicidad)}</td>
                           <td className={tdCls}>{formatArs(totalsRango.enviosManual)}</td>

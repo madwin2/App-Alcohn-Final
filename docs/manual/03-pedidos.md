@@ -277,13 +277,12 @@ Cuando un sello hay que fabricarlo de nuevo (salió mal en la máquina, error de
 5. Confirmá.
 
 🤖 Qué pasa:
-- El sello vuelve a **Rehacer** y queda **prioritario**.
-- Si ya tenía foto, se borra y la venta vuelve a **Señado**.
-- Si el pedido ya tenía envío, vuelve a **Sin Envío** (el seguimiento viejo queda guardado en el historial).
+- Si el pedido **ya estaba entregado** (Despachado o Seguimiento enviado): se crea un pedido nuevo de tipo **Garantía** (no cuenta como venta del mes) con el sello clonado en **Rehacer** + prioritario. El pedido original **no se toca**.
+- Si todavía **no** se había entregado: el sello vuelve a **Rehacer** y queda **prioritario** en el mismo pedido. Si ya tenía foto, se borra y la venta vuelve a **Señado**. Si tenía envío en curso, vuelve a **Sin Envío** (el seguimiento viejo queda guardado).
 - Producción y Ventas reciben un aviso.
 - Al cliente le llega un WhatsApp avisando que se va a rehacer. Es a propósito: el cliente sabe que hubo un error y que va a demorar.
 
-El cobro adicional aparece en la columna de cargos como **Cobro adicional pendiente**. Cuando lo cobrás, marcalo **Cobrado**. ⚠️ Este cobro **no se suma** al restante del pedido: hay que pedírselo al cliente aparte.
+En **Garantía**, el cobro adicional (si hay) queda como valor del pedido nuevo y se pide al mandar la foto; si no hay cobro, la foto va con **$0**. En rehaceres del mismo pedido (antes de entregar), el cobro adicional aparece en la columna de cargos como **Cobro adicional pendiente** y **no se suma** al restante: hay que pedírselo aparte.
 
 ## Prioridad y fecha límite
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  esEnvioPostEntrega,
   esOrdenSinCargo,
   esPruebaCerrada,
   itemCuentaComoVenta,
@@ -50,11 +51,12 @@ describe('itemCuentaComoVenta', () => {
     expect(itemCuentaComoVenta(baseOrder(), baseItem({ isGift: true }))).toBe(false);
   });
 
-  it('no cuenta nada de prueba ni regalo aparte', () => {
+  it('no cuenta nada de prueba, regalo ni garantía', () => {
     expect(itemCuentaComoVenta(baseOrder({ orderType: 'PRUEBA' }), baseItem())).toBe(false);
     expect(itemCuentaComoVenta(baseOrder({ orderType: 'REGALO' }), baseItem({ isGift: true }))).toBe(
       false,
     );
+    expect(itemCuentaComoVenta(baseOrder({ orderType: 'GARANTIA' }), baseItem())).toBe(false);
   });
 
   it('trata orderType ausente como Venta', () => {
@@ -67,6 +69,7 @@ describe('ordenCuentaComoVenta', () => {
     expect(ordenCuentaComoVenta(baseOrder())).toBe(true);
     expect(ordenCuentaComoVenta(baseOrder({ orderType: 'PRUEBA' }))).toBe(false);
     expect(ordenCuentaComoVenta(baseOrder({ orderType: 'REGALO' }))).toBe(false);
+    expect(ordenCuentaComoVenta(baseOrder({ orderType: 'GARANTIA' }))).toBe(false);
   });
 });
 
@@ -106,5 +109,16 @@ describe('esOrdenSinCargo / orderTypeLabel', () => {
     expect(orderTypeLabel('VENTA')).toBe('Venta');
     expect(orderTypeLabel('PRUEBA')).toBe('Prueba');
     expect(orderTypeLabel('REGALO')).toBe('Regalo');
+    expect(orderTypeLabel('GARANTIA')).toBe('Garantía');
+  });
+});
+
+describe('esEnvioPostEntrega', () => {
+  it('solo Despachado y Seguimiento Enviado', () => {
+    expect(esEnvioPostEntrega('Despachado')).toBe(true);
+    expect(esEnvioPostEntrega('Seguimiento Enviado')).toBe(true);
+    expect(esEnvioPostEntrega('Etiqueta Lista')).toBe(false);
+    expect(esEnvioPostEntrega('Sin envio')).toBe(false);
+    expect(esEnvioPostEntrega(null)).toBe(false);
   });
 });

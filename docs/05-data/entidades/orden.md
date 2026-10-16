@@ -7,8 +7,8 @@
 | Grupo | Campos | Notas |
 |---|---|---|
 | Identidad | `id`, `cliente_id`, `fecha` (fecha de negocio), `created_at`, `taken_by` (usuario que la cargó) | `fecha` default `CURRENT_DATE` (UTC); la app manda la fecha argentina |
-| Tipo | `tipo_pedido` (`Venta` default, `Prueba`, `Regalo`), `motivo_prueba` | Inmutable después del INSERT. Prueba/Regalo no cuentan como venta. |
-| Totales (trigger) | `cantidad_sellos`, `senia_total`, `valor_total`, `restante` (incluye costo de envío **salvo** en `Regalo`, donde restante no suma envío), `costo_fabricacion_total`, `margen_fabricacion_total` | No editar a mano: los recalculan triggers |
+| Tipo | `tipo_pedido` (`Venta` default, `Prueba`, `Regalo`, `Garantía`), `motivo_prueba`, `orden_origen_id` | Inmutable después del INSERT. Prueba/Regalo/Garantía no cuentan como venta. `orden_origen_id` solo en Garantía. |
+| Totales (trigger) | `cantidad_sellos`, `senia_total`, `valor_total`, `restante` (incluye costo de envío **salvo** en `Regalo` y `Garantía`, donde restante no suma envío), `costo_fabricacion_total`, `margen_fabricacion_total` | No editar a mano: los recalculan triggers |
 | Venta | `estado_orden` | Valores: `Señado`, `Foto`, `Transferido`, `Deudor` (+ legados `Hecho`, `Hacer Etiqueta`, `Etiqueta Lista`, `Despachado`, `Seguimiento Enviado`). ⚠️ 2.048 filas históricas tienen `Seguimiento Enviado` acá. |
 | Envío | `empresa_envio` (`Andreani`, `Correo Argentino`, `Via Cargo`, `Retiro`, `Retiro en Persona`), `tipo_envio` (`Domicilio`, `Sucursal`, `Retiro`), `direccion_id`, `seguimiento`, `estado_envio`, `seguimiento_enviado_at` | `estado_envio`: `Sin envio`, `Hacer Etiqueta`, `Error de Etiqueta`, `Etiqueta Lista`, `Despachado`, `Seguimiento Enviado` |
 | Auditoría de envío | `envio_datos_cargado_por`, `envio_datos_cargado_at`, `envio_datos_editado` | |
@@ -30,7 +30,7 @@ Ver [00-overview/ciclo-de-vida-del-pedido.md](../../00-overview/ciclo-de-vida-de
 | `webhook-bot`, cron | `Seguimiento Enviado` |
 | andreani-worker | `seguimiento`, `Etiqueta Lista`, `Despachado` |
 | Triggers | totales, `restante`, `seguimiento_enviado_at`, historial |
-| `registrar_rehacer` | vuelve a `Sin envio` |
+| `registrar_rehacer` | pre-entrega: vuelve a `Sin envio`; post-entrega: crea orden `Garantía` (origen intacto) |
 
 ## Automatizaciones asociadas
 

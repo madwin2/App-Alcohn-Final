@@ -149,7 +149,14 @@ const orderWebhookItems = (order: Order): Record<string, unknown>[] =>
 const orderWebhookDatos = (order: Order): Record<string, unknown> => {
   const datos: Record<string, unknown> = {
     numero_pedido: order.id,
-    tipo_pedido: order.orderType === 'PRUEBA' ? 'Prueba' : order.orderType === 'REGALO' ? 'Regalo' : 'Venta',
+    tipo_pedido:
+      order.orderType === 'PRUEBA'
+        ? 'Prueba'
+        : order.orderType === 'REGALO'
+          ? 'Regalo'
+          : order.orderType === 'GARANTIA'
+            ? 'Garantía'
+            : 'Venta',
     senia_total: Number(order.depositValueOrder ?? 0),
     items: orderWebhookItems(order),
   };

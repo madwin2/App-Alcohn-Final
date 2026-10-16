@@ -38,6 +38,7 @@ Surgido de la auditoría (2026-09-27) y de las respuestas del equipo (2026-09-28
 | B-20 | Automatizar la bajada del PDF de etiquetas de MiCorreo (hoy manual, no urgente) | Q-COR-003 | M |
 | B-21 | Usar tiempo de mecanizado y material real que reporta el gadget | Q-PROG-008 | M |
 | B-22 | Stock mínimo por insumo con alertas | Q-STK-004 | S |
+| B-31 | **Rehacer post-entrega → orden `Garantía`**: ítem clonado, no suma a ventas; foto con cargo o $0; Economía = fabricación + envío (salvo Andreani pagado por el cliente) | POL-086, Q-PED-006, ADR-025 | L | Hecho (migración aplicada) |
 
 ## D. Limpieza de producto
 

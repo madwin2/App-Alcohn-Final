@@ -31,12 +31,15 @@ export function OrderTypeBadge({ orderType, isGift, showVenta = false, className
             ? type === 'VENTA'
               ? 'Ítem regalo (sin cargo) dentro de una venta'
               : 'Pedido de regalo: sin cargo, el envío lo paga Alcohn'
-            : undefined
+            : effective === 'GARANTIA'
+              ? 'Rehacer post-entrega: no cuenta como venta del mes'
+              : undefined
       }
       className={cn(
         'px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide leading-4 shrink-0',
         effective === 'PRUEBA' && 'border-violet-500/50 bg-violet-500/10 text-violet-300',
         effective === 'REGALO' && 'border-pink-500/50 bg-pink-500/10 text-pink-300',
+        effective === 'GARANTIA' && 'border-amber-500/50 bg-amber-500/10 text-amber-300',
         effective === 'VENTA' && 'border-white/20 text-muted-foreground',
         className,
       )}

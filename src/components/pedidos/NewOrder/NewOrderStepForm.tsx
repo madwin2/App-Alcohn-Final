@@ -15,6 +15,9 @@ import {
   CLIENTE_PRUEBAS_NOMBRE,
   type OrderType,
 } from '@/lib/pedidos/tipoPedido';
+
+/** Tipos que se pueden cargar a mano (Garantía solo nace al rehacer post-entrega). */
+type CreatableOrderType = Exclude<OrderType, 'GARANTIA'>;
 import { AbecedarioFields } from '@/components/pedidos/abecedario/AbecedarioFields';
 import {
   writeAbecedarioFields,
@@ -160,7 +163,7 @@ const isOpenSaleOrder = (o: Order) =>
   o.items.length > 0 &&
   o.items.some((i) => i.shippingState !== 'DESPACHADO' && i.shippingState !== 'SEGUIMIENTO_ENVIADO');
 
-const orderTypeOptions: { value: OrderType; label: string; hint: string }[] = [
+const orderTypeOptions: { value: CreatableOrderType; label: string; hint: string }[] = [
   { value: 'VENTA', label: 'Venta', hint: 'Pedido normal con cobro.' },
   { value: 'REGALO', label: 'Regalo', hint: 'Sin cargo para el cliente; el envío lo paga Alcohn.' },
   { value: 'PRUEBA', label: 'Prueba interna', hint: 'Se fabrica pero no es venta ni se envía.' },
@@ -168,7 +171,10 @@ const orderTypeOptions: { value: OrderType; label: string; hint: string }[] = [
 
 const DEFAULT_DEPOSIT_ARS = 20000;
 
-const buildEmptyDesignFormValues = (pais: PaisInternacional | null, orderType: OrderType = 'VENTA') => ({
+const buildEmptyDesignFormValues = (
+  pais: PaisInternacional | null,
+  orderType: CreatableOrderType = 'VENTA',
+) => ({
   order: {
     itemType: 'SELLO' as ItemType,
     stampType: 'CLASICO' as StampType,
@@ -275,7 +281,11 @@ export function NewOrderStepForm({
   }, [initialData.internationalCountryIso2]);
 
   const emptyDesignFormValues = useMemo(
-    () => buildEmptyDesignFormValues(paisInternacional, initialData.orderType ?? 'VENTA'),
+    () =>
+      buildEmptyDesignFormValues(
+        paisInternacional,
+        initialData.orderType === 'GARANTIA' ? 'VENTA' : (initialData.orderType ?? 'VENTA'),
+      ),
     [paisInternacional, initialData.orderType],
   );
 
@@ -289,7 +299,7 @@ export function NewOrderStepForm({
   const customerForm = useForm<CustomerFormData>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
-      orderType: initialData.orderType ?? 'VENTA',
+      orderType: (initialData.orderType === 'GARANTIA' ? 'VENTA' : initialData.orderType) ?? 'VENTA',
       testReason: initialData.testReason ?? '',
       attachGiftToOrderId: initialData.attachGiftToOrderId ?? null,
       customer: {
@@ -307,7 +317,8 @@ export function NewOrderStepForm({
   const isPrueba = formOrderType === 'PRUEBA';
   const isRegaloType = formOrderType === 'REGALO';
   /** Tipo ya confirmado en el paso 1 (se usa en los pasos 2 y 3). */
-  const orderType: OrderType = initialData.orderType ?? 'VENTA';
+  const orderType: CreatableOrderType =
+    initialData.orderType === 'GARANTIA' ? 'VENTA' : (initialData.orderType ?? 'VENTA');
   const isPruebaOrder = orderType === 'PRUEBA';
   const isRegaloOrder = orderType === 'REGALO';
   const isSinCargoOrder = isPruebaOrder || isRegaloOrder;
@@ -317,7 +328,7 @@ export function NewOrderStepForm({
     [orders, attachGiftToOrderId],
   );
 
-  const handleOrderTypeChange = (next: OrderType) => {
+  const handleOrderTypeChange = (next: CreatableOrderType) => {
     customerForm.setValue('orderType', next, { shouldDirty: true });
     if (next !== 'PRUEBA') {
       // Al salir de Prueba, no arrastrar los datos del cliente interno al formulario.
@@ -346,7 +357,7 @@ export function NewOrderStepForm({
     prevStepRef.current = currentStep;
     if (prev === 2 && currentStep === 1 && initialData.customer) {
       customerForm.reset({
-        orderType: initialData.orderType ?? 'VENTA',
+        orderType: (initialData.orderType === 'GARANTIA' ? 'VENTA' : initialData.orderType) ?? 'VENTA',
         testReason: initialData.testReason ?? '',
         attachGiftToOrderId: initialData.attachGiftToOrderId ?? null,
         customer: {

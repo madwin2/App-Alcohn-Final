@@ -66,7 +66,7 @@ const filtersSchema = z.object({
     .array(z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'WEB'] as any))
     .optional(),
   uploaders: z.array(z.string()).optional(),
-  orderTypes: z.array(z.enum(['VENTA', 'REGALO', 'PRUEBA'])).optional(),
+  orderTypes: z.array(z.enum(['VENTA', 'REGALO', 'PRUEBA', 'GARANTIA'])).optional(),
 });
 
 type FiltersFormData = z.infer<typeof filtersSchema>;
@@ -119,10 +119,14 @@ const channelOptions = [
   { value: 'WEB', label: 'Web' },
 ];
 
-const orderTypeFilterOptions: { value: 'VENTA' | 'REGALO' | 'PRUEBA'; label: string }[] = [
+const orderTypeFilterOptions: {
+  value: 'VENTA' | 'REGALO' | 'PRUEBA' | 'GARANTIA';
+  label: string;
+}[] = [
   { value: 'VENTA', label: 'Venta' },
   { value: 'REGALO', label: 'Regalo' },
   { value: 'PRUEBA', label: 'Prueba' },
+  { value: 'GARANTIA', label: 'Garantía' },
 ];
 
 // uploaderOptions se obtendrá dinámicamente desde la BD
