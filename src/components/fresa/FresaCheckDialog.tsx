@@ -31,6 +31,8 @@ import {
 } from '@/lib/fresa/textos';
 import { downloadSvg } from '@/lib/vectorizacion/zipResults';
 import { FresaViewer, type FresaViewMode } from './FresaViewer';
+import { FresaPassesPanel } from './FresaPassesPanel';
+import { reportForPass, type PassView } from '@/lib/fresa/passReport';
 
 /** Cómo se aplica la corrección. */
 export interface FresaApplyOptions {
@@ -147,6 +149,7 @@ export function FresaCheckDialog({
   /** Editor abierto, y sobre qué versión. */
   const [editing, setEditing] = useState<false | 'original' | 'corregido'>(false);
   const [showDepth, setShowDepth] = useState(true);
+  const [passView, setPassView] = useState<PassView>('fine');
 
   // Al abrir otro diseño, empezar de cero (o de la corrección ya hecha).
   useEffect(() => {
@@ -162,10 +165,12 @@ export function FresaCheckDialog({
     setSelected(null);
     setVisible(new Set(DEFAULT_VISIBLE));
     setEditing(false);
+    setPassView('fine');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al abrir o cambiar de diseño
   }, [svgText, open]);
 
-  const active = mode !== 'original' && fix ? fix.after : report;
+  const activeSource = mode !== 'original' && fix ? fix.after : report;
+  const active = useMemo(() => activeSource ? reportForPass(activeSource, passView) : null, [activeSource, passView]);
   const groups = useMemo(
     () => (active?.check?.groups ?? []).filter((g) => visible.has(g.severity)),
     [active, visible],
@@ -266,6 +271,7 @@ export function FresaCheckDialog({
         ) : (
         <div className="flex flex-col gap-3 md:min-h-0 md:flex-1 md:flex-row">
           <div className="flex h-[55vh] min-w-0 flex-col gap-2 md:h-auto md:min-h-[300px] md:flex-1">
+            {activeSource && activeSource.status !== 'error' ? <FresaPassesPanel report={activeSource} view={passView} onView={(view) => { setPassView(view); setSelected(null); }} /> : null}
             {fix ? (
               <div className="flex shrink-0 items-center gap-1 self-start rounded-md border bg-muted/40 p-0.5 text-xs">
                 {(

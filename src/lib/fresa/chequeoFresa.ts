@@ -19,11 +19,13 @@ import {
   FRESA_ANALYSIS_VERSION,
   MAX_SCALE_UP,
   fresaProfile,
+  machiningRecipe,
   type FresaAnalysisOptions,
   type FresaProfile,
 } from './config';
 import type { PaintShape } from './analyze';
 import { runCheck, runFix, type CheckOutput, type FixOutput } from './engine';
+import { runPasses, type PassesOutput } from './passes';
 import { buildCorrectedSvg, wrapFit } from './exportSvg';
 import type { FixOperation } from './fix';
 import { applyPieceMoves } from './moveSvg';
@@ -47,7 +49,7 @@ export type FresaTarget = (
   | { mode: 'escala'; mmPerUnit: number }
   /** Sin sello: la medida que declara el propio SVG (width/height en mm). */
   | { mode: 'declarado' }
-) & { alimento?: boolean };
+) & { alimento?: boolean; stampType?: string | null };
 
 /** ¿El tipo de sello (StampType o `sellos.tipo`) es de alimento? */
 export function esTipoAlimento(tipo: string | null | undefined): boolean {
@@ -61,6 +63,7 @@ export interface FresaReport {
   status: 'ok' | 'revisar' | 'error';
   error?: string;
   check: CheckOutput | null;
+  passes?: PassesOutput;
   /** mm por unidad del viewBox usados en el análisis. */
   mmPerUnit: number;
   /** Medida del dibujo analizado (mm). */
@@ -206,12 +209,14 @@ function getWorker(): Worker | null {
 
 type CheckReq = Omit<Extract<WorkerRequest, { type: 'check' }>, 'id'>;
 type FixReq = Omit<Extract<WorkerRequest, { type: 'fix' }>, 'id'>;
+type PassesReq = Omit<Extract<WorkerRequest, { type: 'passes' }>, 'id'>;
 
 async function inWorker(req: CheckReq): Promise<CheckOutput>;
 async function inWorker(req: FixReq): Promise<FixOutput>;
-async function inWorker(req: CheckReq | FixReq): Promise<CheckOutput | FixOutput> {
+async function inWorker(req: PassesReq): Promise<PassesOutput>;
+async function inWorker(req: CheckReq | FixReq | PassesReq): Promise<CheckOutput | FixOutput | PassesOutput> {
   const local = () =>
-    req.type === 'check'
+    req.type === 'passes' ? runPasses(req.shapes, req.mmPerUnit, req.profile, req.recipe, req.options) : req.type === 'check'
       ? runCheck(req.shapes, req.mmPerUnit, req.profile, req.options)
       : runFix(req.shapes, req.mmPerUnit, req.zoneIds, req.profile, req.options, req.maxScaleUp);
   const w = getWorker();
@@ -246,7 +251,7 @@ function hashText(s: string): string {
 }
 
 function targetKey(t: FresaTarget): string {
-  return `${t.alimento ? 'A' : ''}${sizeKey(t)}`;
+  return `${machiningRecipe(t.stampType, t.alimento) ?? 'SIN_RECETA'}:${sizeKey(t)}`;
 }
 
 function sizeKey(t: FresaTarget): string {
@@ -322,8 +327,10 @@ async function computeReport(
     return errorReport(key, 'No se pudo determinar la medida del diseño.', profile, target);
   }
   let check: CheckOutput;
+  let passes: PassesOutput;
   try {
-    check = await inWorker({ type: 'check', shapes: plainShapes(parsed), mmPerUnit, profile, options });
+    passes = await inWorker({ type: 'passes', shapes: plainShapes(parsed), mmPerUnit, profile, recipe: machiningRecipe(target.stampType, target.alimento), options });
+    check = passes.fine;
   } catch (e) {
     return errorReport(key, e instanceof Error ? e.message : 'Falló el análisis.', profile, target);
   }
@@ -343,6 +350,7 @@ async function computeReport(
     key,
     status: counts.alta + counts.media > 0 ? 'revisar' : 'ok',
     check,
+    passes,
     mmPerUnit,
     widthMm: (box.maxX - box.minX) * mmPerUnit,
     heightMm: (box.maxY - box.minY) * mmPerUnit,
@@ -363,14 +371,14 @@ export function chequearSvg(
   target: FresaTarget,
   options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
 ): Promise<FresaReport> {
-  const key = fresaCacheKey(svgText, target);
+  const key = `${fresaCacheKey(svgText, target)}:${JSON.stringify(options)}`;
   const hit = cache.get(key);
   if (hit) {
     cache.delete(key);
     cache.set(key, hit);
     return hit;
   }
-  const p = computeReport(svgText, target, key, fresaProfile(target.alimento), options);
+  const p = computeReport(svgText, target, key, fresaProfile(machiningRecipe(target.stampType, target.alimento) === 'ALIMENTO'), options);
   cache.set(key, p);
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
   p.then((r) => {
@@ -567,7 +575,7 @@ export function autoCorregir(
 }
 
 function sameScaleTarget(before: FresaReport): FresaTarget {
-  return { mode: 'escala', mmPerUnit: before.mmPerUnit, alimento: before.profile.id === 'alimento' };
+  return { mode: 'escala', mmPerUnit: before.mmPerUnit, alimento: before.target.alimento, stampType: before.target.stampType };
 }
 
 /**

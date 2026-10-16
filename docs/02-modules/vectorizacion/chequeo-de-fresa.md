@@ -1,5 +1,11 @@
 # Chequeo de fresa
 
+## Comparación de dos pasadas (implementación 2026-10-15)
+
+✅ `passes.ts` compara la principal configurada 0,6 mm / 15° por lado (final Clásico 1,7; 3MM/Alimento 3) con la fina **configurada 0,2 mm**, física 0,1 mm / 30° por lado (final 0,6 en todos; Q-PROG-020). `FRESA_ALIMENTO` usa referencia inferior 0,4 y comparación a 0,5; el 1 mm corresponde a la principal. Análisis **v6**, caché por receta/opciones. Profundidades relativas al planeado previo de 0,5 mm; las plantillas conservan ese inicio y un único Z0.
+
+✅ Se informa beneficio geométrico, rango o diseño pendiente; no se generan trayectorias ni se certifica la selección parcial. En Preparar programa se chequean los SVG al guardar y se usa repaso completo cuando falta análisis vigente. Ver [flujo implementado](../programas/preparacion-visual.md). Las políticas de bloqueo de fresa siguen en Q-VEC-009.
+
 > Lógica: `src/lib/fresa/*` (motor puro + Web Worker) · UI: `src/components/fresa/*` · Sandbox: `/dev/chequeo-fresa` (solo en desarrollo)
 > Decisión: [ADR-024](../../13-decisions/ADR-024-chequeo-de-fresa-en-vectorizacion.md) · Datos de la fresa: [Q-CNC-008](../../14-open-questions/produccion-fabricacion.md#q-cnc-008)
 > Implementado el 2026-10-14 (rama `feat/chequeo-fresa-vectorizacion`).
@@ -10,20 +16,22 @@
 
 Se hace **al vectorizar**, no en Aspire: el error se ve y se corrige antes de que el sello entre a un programa, y el archivo de Aspire no se carga con capas extra (pedido del equipo: las capas de más generan errores de selección).
 
-**Límite frente a la selección del repaso (2026-10-15)**: el chequeo implementado modela la accesibilidad con punta 0,1 mm. No compara la pasada de 0,5 mm (15° laterales) contra la de 0,1 mm ni decide qué contornos seleccionar. Fede hace esa comparación manualmente y amplía la selección cuando el repaso de una parte tocaría el resto del sello (Q-PROG-017, POL-082). La [propuesta de Programas](../programas/propuesta-preparacion-y-sync.md#selección-del-perfilado-de-01-mm-criterio-confirmado) incorpora esa selección como capacidad futura; perfiles/profundidades exactos pendientes en Q-PROG-018. No se cambió el perfil del chequeo actual.
+**Límite frente a la selección del repaso**: se compara accesibilidad de ambas herramientas configuradas, pero no se calculan trayectorias ni se certifica selección parcial sin contactos. La base C usa perfilados nativos interior/exterior y selección fina manual (Q-PROG-020); no se cambia el tipo nativo por su nombre coloquial V-carve. Fede amplía la selección si toca el resto del sello (Q-PROG-017/POL-082).
 
 ## 2. Criterio (✅ `src/lib/fresa/config.ts`)
 
 | Dato | Valor | Fuente |
 |---|---|---|
-| Fresa más fina | Cónica, punta 0,1 mm, **30° por lado (60° total)** | Q-CNC-008 |
+| Fresa más fina | Cónica, física 0,1 mm / **configurada 0,2 mm**, **30° por lado (60° total)** | Q-CNC-008, Q-PROG-020 |
 | Toolpath del detalle | **V-carve** en Aspire: donde el blanco se angosta, la fresa sube sola | Q-VEC-011 |
 | Profundidad final del detalle | 0,6 mm | Q-CNC-008 |
 | Profundidad mínima (entre letras y en ojos) | **0,3 mm** ("lo mínimo mínimo") | Q-VEC-011 |
-| Profundidad mínima en sellos **Alimento** | **≈ 1 mm** (profundidad final 3 mm) | Q-VEC-011 |
+| Perfil Alimento | Principal: referencia 1 mm, final 3 mm. Fina: referencia 0,4–0,5 mm, final 0,6 mm | Q-PROG-018, Q-VEC-011 |
 | Polaridad | Negro = relieve del sello; blanco = se saca | Q-CNC-008 |
 
-Con la punta a profundidad *d*, la fresa ocupa en la superficie un círculo de radio `r(d) = 0,05 + d · tan 30°`. A 0,3 mm: **r ≈ 0,223 mm → un canal más angosto que ≈ 0,45 mm se talla menos hondo que la mínima** (Alimento: ≈ 1,25 mm para 1 mm).
+✅ **Q-VEC-011/POL-085**: Alimento idealmente se resuelve con la primera fresa. Si requiere repaso, buscar unos 0,4–0,5 mm. No exigir 1 mm a la fina ni usar el mínimo general de 0,3 como sustitución. El corte rígido y tratamiento de avisos siguen por calibrar (Q-VEC-007/009).
+
+Con la punta configurada a profundidad *d*, el radio es `r(d) = 0,1 + d · tan 30°`. A 0,3 mm: **r ≈ 0,273 mm → canal mínimo ≈ 0,55 mm**. En Alimento a 0,4 mm: ≈ 0,66 mm; a 0,5 mm: ≈ 0,78 mm. Se modela el margen CAM deliberado, manteniendo el diámetro físico por separado.
 
 **Idea central (2026-10-14):** con V-carve la fresa nunca "deja de pasar": pierde profundidad. Un blanco angosto igual queda marcado, más arriba. Por eso no alcanza con medir distancias: importa **dónde** se pierde profundidad. Entre dos letras distintas y en los ojos de las letras tiene que llegar sí o sí a la mínima (si no, se pegan o se tapan); en rincones, ranuras y ángulos dentro de una misma pieza alcanza con que la punta marque. La versión anterior (0,4 mm y todo lo que no llegaba en gris como problema) marcaba de más: en 12 sellos reales bajó de 116 a 42 lugares.
 
@@ -150,7 +158,7 @@ Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo p
 ## 7. Límites conocidos
 
 - Solo lee **SVG** (EPS/PDF/AI no).
-- Dos perfiles: general (mínima 0,3 mm, final 0,6 mm) y Alimento (mínima ≈ 1 mm, final 3 mm; [Q-VEC-011](../../14-open-questions/vectorizacion.md#q-vec-011)).
+- Perfiles finos: general (referencia 0,3 mm, final 0,6 mm) y Alimento (referencia inferior 0,4, comparación adicional 0,5, final 0,6). La principal está separada: punta configurada 0,6 mm/15°, final 1,7/3 mm; el ≈1 mm de Alimento se usa como referencia principal. La calibración y certificación del recorte parcial siguen pendientes ([Q-VEC-011](../../14-open-questions/vectorizacion.md#q-vec-011), POL-085). AUD-PROG-005 conserva el hallazgo previo.
 - Texto en arco: se mueve entero (radial o a lo largo del arco) o, poco, letra por letra. No se achica ni se gira ninguna letra; una pieza encajada entre dos aros sin lugar de ningún lado (p. ej. las estrellas de "Rockets Butchery") queda para editar a mano.
 - No mira trazos negros demasiado finos (frágiles) ni el desbaste con la fresa grande.
 - La lista puede ser larga en diseños con muchas líneas finas (p. ej. vetas de madera): son problemas reales con este criterio.

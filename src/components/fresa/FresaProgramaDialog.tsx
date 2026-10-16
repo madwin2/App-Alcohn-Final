@@ -91,8 +91,8 @@ export function FresaProgramaDialog({ open, onOpenChange, programName, stamps, o
           <DialogHeader>
             <DialogTitle>Chequeo de fresa — {programName}</DialogTitle>
             <DialogDescription>
-              Antes de armar el programa en Aspire: dónde no llega la fresa más fina en cada sello, a su medida de
-              fabricación.
+              Compará la primera pasada con el repaso fino a la medida de fabricación. Las sugerencias de zonas
+              requieren comprobar la selección y las trayectorias en Aspire.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-0.5 text-sm">

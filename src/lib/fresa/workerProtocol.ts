@@ -1,8 +1,11 @@
 import type { FresaAnalysisOptions, FresaProfile } from './config';
 import type { PaintShape } from './analyze';
 import type { CheckOutput, FixOutput } from './engine';
+import type { MachiningRecipe } from './config';
+import type { PassesOutput } from './passes';
 
 export type WorkerRequest =
+  | { id: number; type: 'passes'; shapes: PaintShape[]; mmPerUnit: number; profile: FresaProfile; recipe: MachiningRecipe | null; options: FresaAnalysisOptions }
   | {
       id: number;
       type: 'check';
@@ -24,6 +27,7 @@ export type WorkerRequest =
     };
 
 export type WorkerResponse =
+  | { id: number; ok: true; type: 'passes'; result: PassesOutput }
   | { id: number; ok: true; type: 'check'; result: CheckOutput }
   | { id: number; ok: true; type: 'fix'; result: FixOutput }
   | { id: number; ok: false; error: string };

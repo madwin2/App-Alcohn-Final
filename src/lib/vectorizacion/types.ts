@@ -120,6 +120,7 @@ export interface ReviewItem {
   mode: import('./vectorizerPreset').VectorizeMode;
   /** Sello de alimento (chequeo de fresa más exigente). Falta en revisiones viejas guardadas. */
   alimento?: boolean;
+  stampType?: string | null;
   /**
    * Medida de fabricación elegida al agrandar el sello desde el chequeo de
    * fresa (mm). Se guarda al confirmar. Se borra si se cambia el SVG.

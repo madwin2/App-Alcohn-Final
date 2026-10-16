@@ -206,8 +206,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   // Chequeo en vivo (solo de lo confirmado, no mientras se arrastra).
   const docSvg = useMemo(() => (doc ? serializeEditDoc(doc) : null), [doc]);
   const target = useMemo(
-    () => ({ mode: 'escala' as const, mmPerUnit: k, alimento: report.profile.id === 'alimento' }),
-    [k, report.profile.id],
+    () => ({ mode: 'escala' as const, mmPerUnit: k, alimento: report.target.alimento, stampType: report.target.stampType }),
+    [k, report.target.alimento, report.target.stampType],
   );
   const fresh = useFresaReport(docSvg, target);
   // Mientras se re-chequea se sigue mostrando el último resultado (sin

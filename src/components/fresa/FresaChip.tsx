@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, ScanSearch } from 'lucide-react';
 import type { FresaReport } from '@/lib/fresa/chequeoFresa';
 import { cn } from '@/lib/utils/cn';
+import { PASS_OUTCOME_LABEL } from '@/lib/fresa/passes';
 
 interface Props {
   report: FresaReport | null;
@@ -52,11 +53,20 @@ export function FresaChip({ report, idle = false, onClick, size = 'sm', classNam
       </>
     );
     title = `No se pudo analizar: ${report.error ?? ''}`;
+  } else if (report.status === 'ok' && report.passes?.outcome === 'repaso_sugerido') {
+    // El repaso es parte normal de la fabricación: no es un problema del vector.
+    tone = 'border-sky-300 bg-sky-50 text-sky-800 dark:bg-sky-950/40 dark:text-sky-200';
+    content = <><CheckCircle2 className={icon} />{PASS_OUTCOME_LABEL.repaso_sugerido}</>;
+    title = 'El vector está bien; la primera fresa no llega a todo y conviene el repaso fino. Clic para ver las zonas.';
+  } else if (report.status === 'ok' && report.passes && report.passes.outcome !== 'sin_repaso' && report.passes.outcome !== 'sin_receta') {
+    tone = 'border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200';
+    content = <><AlertTriangle className={icon} />{PASS_OUTCOME_LABEL[report.passes.outcome]}</>;
+    title = 'Comparación geométrica de las dos pasadas. Clic para revisar las zonas; no aprueba trayectorias de Aspire.';
   } else if (report.status === 'ok') {
     tone = 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300';
     content = (
       <>
-        <CheckCircle2 className={icon} /> Fresa OK
+        <CheckCircle2 className={icon} /> {report.passes?.outcome === 'sin_repaso' ? 'Sin repaso sugerido' : 'Fresa OK'}
       </>
     );
     title = 'La fresa llega a la profundidad mínima en todo el diseño. Clic para ver.';

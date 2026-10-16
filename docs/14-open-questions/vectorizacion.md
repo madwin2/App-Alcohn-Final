@@ -70,14 +70,17 @@
 - **Documentado en**: [chequeo-de-fresa §4](../02-modules/vectorizacion/chequeo-de-fresa.md#4-cómo-corrige--fixts-layoutts-movesvgts-exportsvgts), [ADR-024](../13-decisions/ADR-024-chequeo-de-fresa-en-vectorizacion.md).
 
 ### Q-VEC-011
-- **Módulo**: Vectorización / chequeo de fresa · **Estado**: documentada (respondida 2026-10-14), con subpreguntas pendientes
+- **Módulo**: Vectorización / chequeo de fresa · **Estado**: documentada (2026-10-15: criterio de las dos pasadas de Alimento aclarado; calibración de umbrales pendiente en Q-VEC-007)
 - **Pregunta**: ¿El detalle se hace con V-carve (la fresa sube donde no entra)? ¿Cuál es la profundidad mínima para que algo se separe? ¿Cambia por tipo de sello? ¿Qué zonas tienen que llegar sí o sí?
 - **Respuesta**:
   - **V-carve**.
   - **0,3 mm** es lo mínimo mínimo.
   - **Alimento** necesita más: **1 mm**.
   - Zonas: entre letras distintas y en ojos de letras tiene que llegar a la mínima; en ángulos, ranuras y rincones alcanza con que marque (tabla aprobada).
-- **Respuesta (2026-10-15)**: en Alimento la profundidad final es **3 mm**; hay que simular que llegue a **≈ 1 mm** (se aplica igual que el 0,3 mm general: entre letras y en los ojos).
+- **Interpretación anterior (2026-10-15, superada en cuanto a profundidad fina)**: Alimento con final 3 mm y mínima ≈1 mm se había aplicado también al chequeo de la herramienta fina.
+- **Aclaración definitiva de profundidad (2026-10-15, Q-PROG-018)**: la primera fresa se llama «0,5», está configurada como 0,6 mm y tiene 15° laterales. El repaso usa punta 0,1 mm, 30° laterales y profundidad final **0,6 mm también en Alimento**. Alimento tiene mecanizado principal a **3 mm** más corte perimetral con fresa de **6 mm**.
+- **Respuesta sobre calidad (2026-10-15)**: el milímetro indicado para Alimento era una referencia de verificación para que quede buen grabado con la **primera fresa, llamada «0,5»**. El objetivo ideal es que los sellos de Alimento **no necesiten la de 0,1 mm**. Si necesitan repaso fino, se busca que esa pasada alcance **al menos unos 0,4–0,5 mm**, dentro de su máximo de 0,6 mm. No exigir 1 mm a la fina ni sustituir ese criterio por el mínimo general de 0,3 mm.
+- **Alcance de la respuesta**: se confirmó una preferencia y un rango operativo; no se eligió entre 0,4 y 0,5 mm como corte rígido de aprobación. Calibrar con casos reales en Q-VEC-007 y definir el tratamiento de advertencias en Q-VEC-009 antes de imponer bloqueos. Análisis v6: `FRESA_ALIMENTO` (repaso) quedó con final 0,6 mm y referencia inferior 0,4 mm (0,5 como preferida); la primera fresa se compara aparte con `primaryProfile` (Alimento 3 mm, referencia 1 mm). Cierra la diferencia de AUD-PROG-005.
 - **Documentado en**: [chequeo-de-fresa §2–3](../02-modules/vectorizacion/chequeo-de-fresa.md), [ADR-024](../13-decisions/ADR-024-chequeo-de-fresa-en-vectorizacion.md).
 
 ### Q-VEC-012

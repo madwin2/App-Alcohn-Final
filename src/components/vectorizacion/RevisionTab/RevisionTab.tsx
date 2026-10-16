@@ -32,6 +32,7 @@ function reviewTarget(item: ReviewItem): FresaTarget {
       requestedWidthMm: item.requestedWidthMm,
       requestedHeightMm: item.requestedHeightMm,
       alimento: item.alimento,
+      stampType: item.stampType,
     };
   }
   return {
@@ -39,6 +40,7 @@ function reviewTarget(item: ReviewItem): FresaTarget {
     requestedWidthMm: item.requestedWidthMm,
     requestedHeightMm: item.requestedHeightMm,
     alimento: item.alimento,
+    stampType: item.stampType,
   };
 }
 

@@ -179,6 +179,7 @@ export function usePendientesRun() {
           requestedHeightMm: sello.requestedHeightMm,
           mode: store.mode,
           alimento: esTipoAlimento(sello.tipo),
+          stampType: sello.tipo,
         });
       }
       if (reviews.length) {
