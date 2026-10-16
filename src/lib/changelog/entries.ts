@@ -1063,6 +1063,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 60,
+    date: '2026-10-15',
+    title: 'Chequeo de fresa más ordenado',
+    version: '1.78',
+    slides: [
+      {
+        heading: 'Todo a mano, sin bajar',
+        body: 'El panel del editor entra entero en pantallas de notebook: alinear y espaciar en un solo renglón de íconos, el tacho al lado de la medida y el zoom (−, +, Ver todo) igual que en el chequeo.',
+        icon: PencilRuler,
+      },
+      {
+        heading: 'La lista de lugares se ve',
+        body: 'En el chequeo, la lista de lugares ya no queda aplastada: las explicaciones largas pasaron a los carteles que aparecen al pasar el mouse.',
+        icon: ScanSearch,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

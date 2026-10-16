@@ -301,6 +301,13 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       return { x: cx - v.w / 2, y: cy - h / 2, w: v.w, h };
     });
   }, [aspect, fitAll]);
+  /** Acercar (f < 1) o alejar (f > 1) desde el centro de lo que se ve. */
+  const zoomBy = (f: number) =>
+    setView((v) => {
+      const w = Math.min(base.w * 4, Math.max(0.8 / k, v.w * f));
+      const h = w / aspect;
+      return { x: v.x + v.w / 2 - w / 2, y: v.y + v.h / 2 - h / 2, w, h };
+    });
   const zoomTo = (b: DocBox, padMm = 1.5) => {
     const pad = padMm / k;
     const w = Math.max(b.maxX - b.minX + 2 * pad, 4 / k);
@@ -1059,6 +1066,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             {tool === 'nodos' ? <MousePointer2 className="size-3.5" /> : <Spline className="size-3.5" />}
             {tool === 'nodos' ? 'Terminar nodos' : 'Editar nodos'}
           </button>
+          <span className="h-5 border-l" aria-hidden />
           <div className="flex items-center gap-0.5">
             <button type="button" className={iconBtn} disabled={idx === 0} onClick={undo} title="Deshacer (Ctrl+Z)">
               <Undo2 className="size-3.5" />
@@ -1088,6 +1096,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               <Magnet className="size-3.5" />
             </button>
           </div>
+          <span className="h-5 border-l" aria-hidden />
           <label className="flex items-center gap-1 text-xs text-muted-foreground" title="Simula cómo talla la fresa (V-carve) y lo muestra con luz, como relieve">
             <Checkbox checked={showRelief} onCheckedChange={(v) => setShowRelief(Boolean(v))} />
             Relieve 3D
@@ -1178,8 +1187,9 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                     ))
                   : null}
                 <text
-                  x={shownSelBox.minX - 3 * u}
-                  y={shownSelBox.minY - 6 * u}
+                  // Siempre dentro de lo que se ve (con todo elegido, la caja llena el lienzo).
+                  x={Math.max(shownSelBox.minX - 3 * u, view.x + 6 * u)}
+                  y={Math.max(shownSelBox.minY - 6 * u, view.y + 16 * u)}
                   fontSize={11 * u}
                   fill="#2563eb"
                   fontWeight={600}
@@ -1323,8 +1333,22 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               />
             ) : null}
           </svg>
-          <div className="pointer-events-none absolute bottom-2 left-2 rounded bg-background/90 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground shadow-sm">
-            {mm(view.w * k, view.w * k < 10 ? 1 : 0)} mm de ancho en pantalla
+          {/* Zoom: el mismo control que en el visor del chequeo. */}
+          <div
+            className="absolute bottom-2 left-2 flex items-center gap-0.5 rounded-md border bg-background/90 p-0.5 text-xs shadow-sm"
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
+            <button type="button" className="rounded px-2 py-0.5 hover:bg-muted" onClick={() => zoomBy(1.5)} title="Alejar (rueda)">
+              −
+            </button>
+            <button type="button" className="rounded px-2 py-0.5 hover:bg-muted" onClick={() => zoomBy(1 / 1.5)} title="Acercar (rueda)">
+              +
+            </button>
+            <button type="button" className="rounded px-2 py-0.5 font-medium hover:bg-muted" onClick={fitAll} title="Ver todo el dibujo (tecla 0)">
+              Ver todo
+            </button>
+            <span className="px-1.5 tabular-nums text-muted-foreground">{mm(view.w * k, view.w * k < 10 ? 1 : 0)} mm de ancho</span>
           </div>
           {tool === 'nodos' ? (
             <div className="absolute left-2 top-2 flex items-center gap-2 rounded-md bg-blue-600 px-2.5 py-1 text-xs text-white shadow-md">
@@ -1392,7 +1416,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                   disabled={opts.disabled}
                   className={cn(
                     'flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent',
-                    opts.danger && 'text-destructive',
+                    opts.danger && 'text-red-600 dark:text-red-400',
                   )}
                   onClick={() => {
                     setMenu(null);
@@ -1564,15 +1588,27 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
         <Section
           title={nSel > 1 ? `${nSel} piezas elegidas` : nSel ? 'Pieza elegida' : 'Pieza'}
           extra={
-            <span className="tabular-nums">
-              {selBox ? `${mm((selBox.maxX - selBox.minX) * k)} × ${mm((selBox.maxY - selBox.minY) * k)} mm` : 'ninguna elegida'}
+            <span className="flex items-center gap-1.5">
+              <span className="tabular-nums">
+                {selBox ? `${mm((selBox.maxX - selBox.minX) * k)} × ${mm((selBox.maxY - selBox.minY) * k)} mm` : 'ninguna elegida'}
+              </span>
+              <button
+                type="button"
+                className="inline-flex size-6 items-center justify-center rounded text-red-600 hover:bg-red-500/10 dark:text-red-400 disabled:opacity-30 disabled:hover:bg-transparent"
+                disabled={!nSel}
+                onClick={doDeleteSelection}
+                title={nSel > 1 ? `Borrar las ${nSel} piezas (Supr)` : 'Borrar lo elegido (Supr)'}
+                aria-label="Borrar lo elegido"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
             </span>
           }
         >
           <p className="h-4 truncate text-[11px] text-muted-foreground">
             {nSel ? 'Shift+clic en el dibujo suma o saca piezas.' : 'Tocá una pieza, o arrastrá un rectángulo en el fondo.'}
           </p>
-          <fieldset disabled={!nSel} className="space-y-2 disabled:opacity-50">
+          <fieldset disabled={!nSel} className="space-y-2">
             <Row label="Mover">
               <button type="button" className={iconBtn} onClick={() => nudge(-step, 0)} title="Izquierda (flecha ←)">
                 <ArrowLeft className="size-3.5" />
@@ -1637,7 +1673,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               />
               <span className="text-xs text-muted-foreground">mm</span>
             </Row>
-            <Row label="Alinear">
+            {/* Alinear (2+) y espaciar parejo (3+), en un solo renglón de íconos. */}
+            <div className="flex items-center gap-1" role="group" aria-label="Alinear y espaciar">
               {(
                 [
                   ['left', AlignStartVertical, 'Bordes izquierdos'],
@@ -1654,42 +1691,31 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                   className={iconBtn}
                   disabled={nSel < 2}
                   onClick={() => doAlign(mode)}
-                  title={nSel < 2 ? 'Para alinear, elegí 2 piezas o más' : `Alinear: ${label}`}
+                  title={nSel < 2 ? `Alinear (${label.toLowerCase()}): elegí 2 piezas o más` : `Alinear: ${label}`}
                 >
                   <Icon className="size-3.5" />
                 </button>
               ))}
-            </Row>
-            <Row label="Espaciar">
-              <Button
+              <span className="mx-1 h-5 border-l" aria-hidden />
+              <button
                 type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2"
+                className={iconBtn}
                 disabled={nSel < 3}
                 onClick={() => doDistribute('x')}
-                title={nSel < 3 ? 'Para espaciar parejo, elegí 3 piezas o más' : 'Mismo espacio entre las piezas, de izquierda a derecha (las de los extremos no se mueven)'}
+                title={nSel < 3 ? 'Espaciar parejo ↔: elegí 3 piezas o más' : 'Espaciar parejo ↔: mismo espacio entre las piezas, de izquierda a derecha (las de los extremos no se mueven)'}
               >
-                <AlignHorizontalDistributeCenter className="mr-1 size-3.5" />
-                Parejo ↔
-              </Button>
-              <Button
+                <AlignHorizontalDistributeCenter className="size-3.5" />
+              </button>
+              <button
                 type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2"
+                className={iconBtn}
                 disabled={nSel < 3}
                 onClick={() => doDistribute('y')}
-                title={nSel < 3 ? 'Para espaciar parejo, elegí 3 piezas o más' : 'Mismo espacio entre las piezas, de arriba a abajo (las de los extremos no se mueven)'}
+                title={nSel < 3 ? 'Espaciar parejo ↕: elegí 3 piezas o más' : 'Espaciar parejo ↕: mismo espacio entre las piezas, de arriba a abajo (las de los extremos no se mueven)'}
               >
-                <AlignVerticalDistributeCenter className="mr-1 size-3.5" />
-                Parejo ↕
-              </Button>
-            </Row>
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive" onClick={doDeleteSelection} title="Supr">
-              <Trash2 className="mr-1 size-3.5" />
-              Borrar lo elegido
-            </Button>
+                <AlignVerticalDistributeCenter className="size-3.5" />
+              </button>
+            </div>
           </fieldset>
         </Section>
 
@@ -1730,7 +1756,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                   <Button type="button" size="sm" variant="outline" className="h-7 px-2" disabled={!selNodeData} onClick={doNodeSmooth} title="Suave: manijas alineadas">
                     Suave
                   </Button>
-                  <button type="button" className={cn(iconBtn, 'text-destructive')} disabled={!selNodeData} onClick={doDeleteNode} title="Borrar el nodo (Supr)">
+                  <button type="button" className={cn(iconBtn, 'text-red-600 dark:text-red-400')} disabled={!selNodeData} onClick={doDeleteNode} title="Borrar el nodo (Supr)">
                     <Trash2 className="size-3.5" />
                   </button>
                 </span>
@@ -1766,8 +1792,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             {simplified == null
               ? 'Calculando cuántos nodos se pueden sacar…'
               : simplified.after < simplified.before
-                ? `Quedarían ${simplified.after.toLocaleString('es-AR')} de ${simplified.before.toLocaleString('es-AR')} nodos.`
-                : 'Ya está simple con ese error.'}
+                ? `Quedarían ${simplified.after.toLocaleString('es-AR')} de ${simplified.before.toLocaleString('es-AR')} nodos ${nSel ? 'en lo elegido' : 'en todo el dibujo'}.`
+                : `Ya está simple con ese error (${nSel ? 'lo elegido' : 'todo el dibujo'}).`}
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
             <Button
@@ -1795,9 +1821,6 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               Borrar motas ({motas.length})
             </Button>
           </div>
-          <p className="h-4 truncate text-[11px] text-muted-foreground">
-            {nSel ? 'Se aplica a lo elegido.' : 'Se aplica a todo el dibujo.'}
-          </p>
         </Section>
 
         </div>

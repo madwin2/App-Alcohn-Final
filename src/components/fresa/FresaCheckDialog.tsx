@@ -323,7 +323,7 @@ export function FresaCheckDialog({
             </p>
           </div>
 
-          <aside className="flex w-full shrink-0 flex-col gap-3 md:w-[340px] md:overflow-hidden">
+          <aside className="flex w-full shrink-0 flex-col gap-3 md:w-[340px] md:overflow-y-auto md:pr-1">
             <StatusSummary report={active ?? null} />
 
             {active?.warnings.length ? (
@@ -336,12 +336,12 @@ export function FresaCheckDialog({
 
             {active?.check?.depthBands?.length ? (
               <div className="space-y-1.5">
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground" title="Pinta en azul dónde la fresa talla menos hondo que la mínima (más oscuro = menos hondo)">
                   <Checkbox checked={showDepth} onCheckedChange={(v) => setShowDepth(v === true)} />
-                  Ver qué tan hondo baja la fresa (menos de {mm(active.profile.minDepthMm, 1)} mm)
+                  Profundidad (menos de {mm(active.profile.minDepthMm, 1)} mm)
                 </label>
                 {showDepth ? (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-[11px] text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-6 text-[10px] text-muted-foreground">
                     {active.check.depthBands.map((b, i) => (
                       <span key={i} className="inline-flex items-center gap-1">
                         <span
@@ -357,7 +357,10 @@ export function FresaCheckDialog({
             ) : null}
 
             {lowCount ? (
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <label
+                className="flex items-center gap-2 text-xs text-muted-foreground"
+                title="Lugares donde la fresa sube y los marca menos hondo. Están bien así: la corrección no los toca."
+              >
                 <Checkbox
                   checked={visible.has('baja')}
                   onCheckedChange={(v) => {
@@ -369,11 +372,11 @@ export function FresaCheckDialog({
                     });
                   }}
                 />
-                Mostrar ángulos y rincones ({lowCount}) — la fresa sube y los marca menos hondo, están bien así
+                Mostrar ángulos y rincones ({lowCount}, están bien así)
               </label>
             ) : null}
 
-            <div className="max-h-[40vh] overflow-y-auto rounded-md border md:max-h-none md:min-h-0 md:flex-1">
+            <div className="max-h-[40vh] min-h-[132px] overflow-y-auto rounded-md border md:max-h-none md:flex-1">
               {groups.length === 0 ? (
                 <p className="p-3 text-xs text-muted-foreground">
                   {active ? 'Nada para revisar con este filtro.' : '…'}
@@ -432,24 +435,20 @@ export function FresaCheckDialog({
               <div className="shrink-0 space-y-1">
                 {fix ? (
                   <div className="flex gap-2">
-                    <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditing('corregido')}>
+                    <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditing('corregido')} title="Editar a mano partiendo de la corrección: mover, escalar, afinar, nodos. La fresa se re-chequea con cada cambio.">
                       <PencilRuler className="mr-1.5 size-4" />
                       Editar el corregido
                     </Button>
-                    <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditing('original')}>
+                    <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditing('original')} title="Editar a mano partiendo del vector original, sin la corrección automática.">
                       Editar el original
                     </Button>
                   </div>
                 ) : (
-                  <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setEditing('original')}>
+                  <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setEditing('original')} title="Mover, escalar, afinar o engordar letras, editar nodos y simplificar. La fresa se re-chequea con cada cambio.">
                     <PencilRuler className="mr-1.5 size-4" />
                     Editar a mano
                   </Button>
                 )}
-                <p className="text-[11px] leading-snug text-muted-foreground">
-                  Mover o agrandar una letra, afinarla o engordarla, mover nodos y simplificar. La fresa se vuelve a
-                  chequear con cada cambio.
-                </p>
               </div>
             ) : null}
             <div className="shrink-0 space-y-2 border-t pt-3">
