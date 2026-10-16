@@ -1,5 +1,9 @@
 # Programas
 
+## Preparación visual (código local 2026-10-15)
+
+El editor del soporte y la sincronización incremental por revisión están implementados; la migración ya fue aplicada por el usuario y la edge v31 desplegada con autorización el 2026-10-16. Falta instalar el gadget operativo 3.2 y probar el recorrido remoto completo. Ver [alcance implementado, limitaciones y puesta en marcha](preparacion-visual.md). El flujo legado descrito más abajo sigue aplicando a programas sin preparación. C tiene pruebas nativas locales, incluida la importación de ocho sellos exportados desde el editor y su segunda sincronización (2026-10-16). Siguen pendientes la validación operativa con programas representativos, G/XL y la selección parcial automática sin contactos.
+
 > Ruta: `/programas` · Página: `src/app/programas/index.tsx` · Servicio: `src/lib/supabase/services/programs.service.ts`
 > Reglas puras: `src/lib/programas/*` (material, elegibilidad, ciclo de vida, nombre, paquete, parser `.crv3d`)
 > Integración con Aspire: [gadget-aspire.md](gadget-aspire.md) · Estados: [06-state-machines/programa.md](../../06-state-machines/programa.md) · Workflow: [WF-04](../../03-workflows/WF-04-programa-y-fabricacion-cnc.md)
@@ -155,6 +159,12 @@ Detalle con IDs en [04-business-rules/programas-y-material.md](../../04-business
 ## Preguntas abiertas
 
 [Q-PROG-001 … Q-PROG-012](../../14-open-questions/programas.md) y [Q-CNC-*](../../14-open-questions/produccion-fabricacion.md).
+
+## Diseño en discusión (2026-10-15)
+
+[Preparación visual y sincronización con Aspire](propuesta-preparacion-y-sync.md): diseño del flujo completo. Editor, controles, comparación de pasadas y sincronización incremental implementados localmente; ver [alcance y pendientes](preparacion-visual.md). Políticas confirmadas: POL-079…085. Preguntas: Q-PROG-013…018 y Q-VEC-011. Migración/edge publicadas; instalación del gadget, calificación remota/operativa y certificación automática de selecciones parciales pendientes.
+
+La [revisión de código](../../audits/programas-automatizacion-2026-10-15.md) precisa límites actuales: anchos útiles distintos, Alimento sin rama específica del gadget, identificación parcial por Corte y LISTO sin validación completa de la revisión final.
 
 ## Implementación relacionada
 

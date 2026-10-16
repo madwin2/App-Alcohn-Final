@@ -11,6 +11,8 @@ import {
 } from '@/lib/supabase/services/programs.service';
 import { vectorUrlFromPreview } from '@/lib/utils/vectorUrlFromPreview';
 import type { Program, ProgramStamp } from '@/lib/types/index';
+import { getProgramPreparation } from '@/lib/supabase/services/programPreparation.service';
+import { PREPARATION_RULES } from './preparation';
 
 function slugifyProgramName(name: string): string {
   return name
@@ -118,6 +120,29 @@ function triggerBrowserDownload(blob: Blob, filename: string) {
  * La conversión a DXF/SVG hace falta para que el gadget importe sin intervención manual.
  */
 export async function generateAndDownloadProgramPackage(programId: string): Promise<Program> {
+  // Una preparación nueva necesita el manifest del servidor y sus plantillas.
+  // Descargar sus archivos nunca equivale a validar el mecanizado.
+  const prepared = await getProgramPreparation(programId).catch((error) => {
+    if (error.message.includes('migración pendiente')) return null;
+    throw error;
+  });
+  if (prepared) {
+    const current = await getProgramById(programId);
+    if (!current) throw new ProgramServiceError('Programa no encontrado');
+    const { data, error } = await supabase.functions.invoke(`programa-sync?accion=paquete&gadget_protocol=${PREPARATION_RULES.protocol}&programa_id=${encodeURIComponent(programId)}`, { method: 'GET' });
+    if (error || !data?.manifest_lua || !Array.isArray(data.vectores)) throw new ProgramServiceError('No se pudo preparar el paquete. Revisá los controles y las plantillas en Preparar programa.');
+    const zip = new JSZip();
+    zip.file('manifest.lua', data.manifest_lua);
+    for (const file of data.vectores as { archivo: string; url: string }[]) {
+      if (!/^(vectores|plantillas)\/[\w ./-]+$/.test(file.archivo) || file.archivo.includes('..')) throw new ProgramServiceError('Ruta de paquete inválida.');
+      zip.file(file.archivo, await fetchBinary(file.url));
+    }
+    const baseUrl = current.archivoAspireUrl || await getBaseFileUrl(current.machine);
+    if (baseUrl) zip.file(`${safeDownloadBasename(current.name)}.crv3d`, await fetchBinary(baseUrl));
+    zip.file('LEEME.txt', 'Abrí el archivo de Aspire y ejecutá el gadget 3.2 de esta máquina. El programa queda listo después de sincronizar, recalcular y confirmar el archivo del mismo resultado.\n');
+    triggerBrowserDownload(await zip.generateAsync({ type: 'blob' }), `${safeDownloadBasename(current.name)}.zip`);
+    return current;
+  }
   const program = await getProgramById(programId);
   if (!program) throw new ProgramServiceError('Programa no encontrado');
 

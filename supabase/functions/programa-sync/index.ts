@@ -2,11 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import * as CFB from "npm:cfb@1.2.2";
 import { unzipSync } from "npm:fflate@0.8.2";
+import { checkedPreparation, missingPreparationLayers, toLua, validateObservation } from '../_shared/preparationProtocol.ts';
+import type { PreparationDocument, PreparationObservation } from '../_shared/programPreparation.ts';
+import { PREPARATION_RULES, buildExecutionPlan } from '../_shared/executionPlan.ts';
+import { foodSelectorLayers, inspectNativeTemplate, type NativeSelector, type NativeTemplatePurpose } from '../_shared/nativeTemplate.ts';
+import { isPreparationUploadPath, preparationUploadPrefix } from '../_shared/preparationUpload.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-programa-sync-key, x-programa-id, x-programa-token, x-filename",
+    "authorization, x-client-info, apikey, content-type, x-programa-sync-key, x-programa-id, x-programa-token, x-filename, x-preparation-revision, x-preparation-event-id",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
@@ -19,6 +24,7 @@ const LARGO_MAXIMO_MM: Record<string, number> = {
 const SYNC_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 type SyncReport = {
+  preparation?: PreparationObservation;
   version?: number;
   gadget_version?: string;
   programa_id?: string;
@@ -39,6 +45,8 @@ type SyncReport = {
 };
 
 type UploadRequest = {
+  preparation_revision?: number;
+  preparation_event_id?: string;
   accion?: string;
   programa_id?: string;
   token?: string;
@@ -195,6 +203,7 @@ async function handleListar(
 async function handlePaquete(
   supabase: SupabaseClient,
   programId: string,
+  protocol = 0,
 ): Promise<Response> {
   if (!programId) {
     return jsonResponse({ error: "Falta programa_id" }, 400);
@@ -202,7 +211,7 @@ async function handlePaquete(
 
   const { data: programa, error: progErr } = await supabase
     .from("programa")
-    .select("id, nombre, maquina, fecha, cantidad_sellos, estado_programa")
+    .select("id, nombre, maquina, fecha, cantidad_sellos, estado_programa, bloqueado")
     .eq("id", programId)
     .maybeSingle();
 
@@ -226,6 +235,21 @@ async function handlePaquete(
     return jsonResponse({ error: "No se pudieron leer los sellos" }, 500);
   }
 
+  const { data: prepRow, error: prepError } = await supabase.from('programa_preparacion').select('*').eq('programa_id', programId).maybeSingle();
+  if (prepError && !['42P01', 'PGRST205'].includes(prepError.code)) return jsonResponse({ error: 'No se pudo leer la preparación.' }, 500);
+  let preparation: PreparationDocument | null = null;
+  if (prepRow) {
+    if (programa.bloqueado || ['EN_FABRICACION', 'FINALIZADO'].includes(programa.estado_programa)) return jsonResponse({ error: 'El programa está bloqueado o en fabricación.' }, 409);
+    if (protocol < PREPARATION_RULES.protocol) return jsonResponse({ error: 'Este programa necesita el gadget 3.2 o posterior.' }, 409);
+    try {
+      preparation = checkedPreparation(prepRow.documento, (sellos ?? []).map((s) => ({
+        id: s.id, designName: s.diseno ?? '', stampType: s.tipo ?? '', vectorPreviewUrl: s.archivo_vector_preview ?? '',
+        widthMm: Number(s.ancho_fabricacion_mm ?? Number(s.ancho_real) * 10), heightMm: Number(s.largo_fabricacion_mm ?? Number(s.largo_real) * 10),
+      })));
+    } catch (error) { return jsonResponse({ error: error instanceof Error ? error.message : 'Preparación inválida.' }, 409); }
+    if (preparation.programId !== programId || preparation.machine !== programa.maquina) return jsonResponse({ error: 'La preparación no corresponde a este programa o máquina.' }, 409);
+  }
+
   const token = await ensureSyncToken(supabase, programId);
   const maquina = asString(programa.maquina) || "C";
   const largoMax = LARGO_MAXIMO_MM[maquina] ?? null;
@@ -233,9 +257,16 @@ async function handlePaquete(
   const sellosJson: Array<Record<string, unknown>> = [];
   const vectores: Array<{ archivo: string; url: string }> = [];
   const sellosLua: string[] = [];
+  let observationPlan: PreparationDocument | null = preparation;
+  if (preparation && prepRow.observacion?.revision && prepRow.observacion.revision !== prepRow.revision) {
+    const { data } = await supabase.from('programa_preparacion_revisiones').select('documento').eq('programa_id', programId).eq('revision', prepRow.observacion.revision).maybeSingle();
+    observationPlan = data?.documento ?? null;
+  }
 
   let orden = 0;
   for (const s of sellos ?? []) {
+    const placement = preparation?.stamps.find((item) => item.selloId === s.id);
+    if (placement?.excluded) continue;
     const preview = asString(s.archivo_vector_preview);
     if (!preview) continue;
     orden += 1;
@@ -251,7 +282,7 @@ async function handlePaquete(
     const largoCm = s.largo_real != null ? Number(s.largo_real) : null;
     const anchoMm = anchoFab ?? (anchoCm != null ? anchoCm * 10 : 50);
     const largoMm = largoFab ?? (largoCm != null ? largoCm * 10 : 30);
-    const tipo = mapStampType(s.tipo);
+    const tipo = placement?.recipe ?? mapStampType(s.tipo);
     const diseno = asString(s.diseno) || "Sin diseño";
     const tipoPlanchuela = s.tipo_planchuela ?? null;
     const templates = [
@@ -259,7 +290,13 @@ async function handlePaquete(
       `profile_${tipo.toLowerCase()}.ToolpathTemplate`,
     ];
 
+    const priorObserved = prepRow?.observacion?.stamps?.find((actual: { instanceId: string }) => actual.instanceId === placement?.instanceId);
+    const seed = priorObserved?.svg;
+    const seedPlan = observationPlan?.stamps.find((stamp) => stamp.instanceId === placement?.instanceId);
+    const seedReference = seed && seedPlan ? { centerX: priorObserved.centerX, topY: priorObserved.topY, recipe: priorObserved.recipe,
+      planX: seedPlan.centerX, planY: seedPlan.topY, planW: seedPlan.widthMm, planH: seedPlan.heightMm, planRecipe: seedPlan.recipe } : null;
     sellosJson.push({
+      ...(seed ? { seed_svg: seed, seed_source_hash: priorObserved.sourceHash, seed_reference: seedReference } : {}),
       orden,
       sello_id: s.id,
       diseno,
@@ -276,6 +313,7 @@ async function handlePaquete(
 
     const templatesLua = templates.map((t) => `"${t}"`).join(", ");
     sellosLua.push(`    {
+      ${seed ? `seed_svg = ${toLua(seed)}, seed_source_hash = ${toLua(priorObserved.sourceHash)}, seed_reference = ${toLua(seedReference)},` : ''}
       orden = ${orden},
       sello_id = "${s.id}",
       diseno = "${luaEscape(diseno)}",
@@ -290,6 +328,51 @@ async function handlePaquete(
   }
 
   const nombre = asString(programa.nombre) || programId;
+  const templateFiles: Record<string, string[]> = {};
+  const templateProofs: Record<string, { fingerprint: string; toolpathCount: number; selectors: NativeSelector[]; selectionLayers?: string[]; selectorLayers?: string[]; stage: number; subOrder: number }> = {};
+  if (preparation) {
+    const used = new Set(preparation.stamps.filter((s) => !s.excluded).map((s) => s.recipe));
+    for (const recipe of used) {
+      const paths = preparation.recipes[recipe].templatePaths;
+      if (!paths?.length || paths.some((path) => !path.startsWith(`${programId}/${recipe}/`) || path.includes('..'))) return jsonResponse({ error: `Faltan las plantillas subidas para ${recipe}.` }, 409);
+      templateFiles[recipe] = [];
+      const entries: { path: string; purpose: NativeTemplatePurpose; selectionLayers?: string[] }[] = paths.map((path) => ({ path, purpose: 'automatic' }));
+      for (const kind of ['full', 'internal'] as const) {
+        const file = preparation.recipes[recipe].fineTemplates?.[kind];
+        if (!file) continue;
+        const purpose = kind === 'full' ? 'fine_full' : 'fine_internal';
+        if (!file.path.startsWith(`${programId}/${recipe}/${purpose}/`) || file.path.includes('..')) return jsonResponse({ error: 'Ruta de plantilla fina inválida.' }, 409);
+        entries.push({ path: file.path, purpose, selectionLayers: [kind === 'full' ? PREPARATION_RULES.recipes[recipe].fineLayer : PREPARATION_RULES.recipes[recipe].fineInteriorLayer] });
+      }
+      if (recipe === 'ALIMENTO') {
+        const file = preparation.recipes.ALIMENTO.perimeterTemplate;
+        if (!file || !file.path.startsWith(`${programId}/ALIMENTO/food_perimeter/`) || file.path.includes('..')) return jsonResponse({ error: 'Falta la plantilla de corte perimetral de Alimento.' }, 409);
+        entries.push({ path: file.path, purpose: 'food_perimeter', selectionLayers: ['Corte Alimento'] });
+      }
+      for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index];
+        const native = await supabase.storage.from('programas-plantillas').download(entry.path);
+        if (native.error || !native.data || native.data.size > 5 * 1024 * 1024) return jsonResponse({ error: `No se pudo comprobar la plantilla ${recipe}.` }, 409);
+        const bytes = new Uint8Array(await native.data.arrayBuffer());
+        const inspection = inspectNativeTemplate(bytes, entry.purpose);
+        if (inspection.issues.length) return jsonResponse({ error: `${recipe}: ${inspection.issues.join(' ')}` }, 409);
+        const selectorLayers = recipe === 'ALIMENTO' && entry.purpose === 'automatic' ? foodSelectorLayers(inspection) : undefined;
+        const { data, error } = await supabase.storage.from('programas-plantillas').createSignedUrl(entry.path, 3600);
+        if (error || !data?.signedUrl) return jsonResponse({ error: `No se pudo preparar la plantilla ${recipe}.` }, 500);
+        const archivo = `plantillas/${recipe}/${index + 1}.ToolpathTemplate`;
+        // Latin1 no sirve aquí: la huella debe ser de los bytes, sin recodificación UTF-8.
+        let hash = 7; for (const byte of bytes) hash = (hash * 31 + byte) % 2147483647;
+        templateProofs[archivo] = { fingerprint: `${bytes.length}:${hash}`, toolpathCount: inspection.selectors.length, stage: inspection.stage!,
+          subOrder: inspection.subOrder!,
+          selectors: inspection.selectors, ...(selectorLayers ? { selectorLayers } : {}), ...(entry.selectionLayers ? { selectionLayers: entry.selectionLayers } : {}) };
+        templateFiles[recipe].push(archivo); vectores.push({ archivo, url: data.signedUrl });
+      }
+    }
+  }
+  if (preparation) {
+    const missing = missingPreparationLayers(preparation, Object.values(templateProofs));
+    if (missing.length) return jsonResponse({ error: `Faltan trayectorias para estas capas del armado: ${missing.join(', ')}. Revisá las plantillas de la preparación.` }, 409);
+  }
   const manifest = {
     programa_id: programId,
     token,
@@ -297,14 +380,17 @@ async function handlePaquete(
     maquina,
     largo_maximo_mm: largoMax,
     sellos: sellosJson,
+    ...(preparation ? { preparation: { revision: prepRow.revision, rules_version: PREPARATION_RULES.version,
+      document: preparation, execution: buildExecutionPlan(preparation), template_files: templateFiles, template_proofs: templateProofs } } : {}),
   };
 
-  const manifest_lua = `return {
+  const manifest_lua = preparation ? `return ${toLua(manifest)}\n` : `return {
   programa_id = "${programId}",
   token = "${token}",
   programa_nombre = "${luaEscape(nombre)}",
   maquina = "${maquina}",
   largo_maximo_mm = ${largoMax ?? "nil"},
+  ${preparation ? `preparation = ${toLua({ revision: prepRow.revision, document: preparation, template_files: templateFiles })},` : ''}
   sellos = {
 ${sellosLua.join(",\n")}
   },
@@ -514,6 +600,24 @@ async function handlePostReport(
     return jsonResponse({ ok: true, duplicate: true });
   }
 
+  const { data: prep, error: prepReadError } = await supabase.from('programa_preparacion').select('revision').eq('programa_id', programId).maybeSingle();
+  if (prepReadError && !['42P01', 'PGRST205'].includes(prepReadError.code)) return jsonResponse({ error: 'No se pudo leer la revisión.' }, 500);
+  if (prep && !payload.preparation) return jsonResponse({ error: 'El programa requiere un informe del gadget actualizado.' }, 409);
+  if (payload.preparation) {
+    const revision = payload.preparation.revision;
+    if (!Number.isSafeInteger(revision) || revision < 1) return jsonResponse({ error: 'Revisión inválida.' }, 400);
+    const { data: snapshot } = await supabase.from('programa_preparacion_revisiones').select('documento').eq('programa_id', programId).eq('revision', revision).maybeSingle();
+    if (!snapshot) return jsonResponse({ error: 'No existe esa revisión.' }, 409);
+    try {
+      payload.preparation = validateObservation(payload.preparation, snapshot.documento, revision);
+      const { data: registered, error } = await supabase.rpc('registrar_programa_preparacion_resultado', {
+        p_programa_id: programId, p_revision: revision, p_observacion: payload.preparation, p_evento_id: eventoId,
+      });
+      if (error) return jsonResponse({ error: 'No se pudo registrar el resultado de preparación.' }, 500);
+      if (registered?.current === false) return jsonResponse({ ok: true, historical: true, message: 'Informe conservado en su revisión; no actualiza el programa vigente.' });
+    } catch (error) { return jsonResponse({ error: error instanceof Error ? error.message : 'Informe inválido.' }, 400); }
+  }
+
   const now = new Date().toISOString();
   let maquinadoMinutos: number | null = null;
   if (payload.maquinado_segundos !== null && payload.maquinado_segundos !== undefined) {
@@ -677,7 +781,7 @@ function extractPreviewGif(bytes: Uint8Array): Uint8Array | null {
     for (const candidate of candidates) {
       const entry = CFB.find(cfb, candidate);
       if (!entry?.content || !(entry.size > 0)) continue;
-      const content = entry.content;
+      const content: unknown = entry.content;
       if (content instanceof Uint8Array) return content;
       if (Array.isArray(content)) return new Uint8Array(content as number[]);
       if (content instanceof ArrayBuffer) return new Uint8Array(content);
@@ -688,6 +792,32 @@ function extractPreviewGif(bytes: Uint8Array): Uint8Array | null {
   return null;
 }
 
+async function checkPreparationUpload(supabase: SupabaseClient, payload: UploadRequest): Promise<{
+  prepared: { revision: number; revision_sincronizada: number | null; observacion: PreparationObservation | null } | null;
+  prefix?: string; error?: Response;
+}> {
+  const programId = asString(payload.programa_id);
+  const { data: prepared, error } = await supabase.from('programa_preparacion').select('revision, revision_sincronizada, observacion').eq('programa_id', programId).maybeSingle();
+  if (error && !['42P01', 'PGRST205'].includes(error.code)) return { prepared: null, error: jsonResponse({ error: 'No se pudo comprobar la preparación.' }, 500) };
+  if (!prepared) return payload.preparation_revision !== undefined || payload.preparation_event_id !== undefined
+    ? { prepared: null, error: jsonResponse({ error: 'El programa ya no tiene esa preparación. No se confirmó como un programa legado.' }, 409) }
+    : { prepared: null };
+  const observation = prepared.observacion as PreparationObservation | null;
+  if (payload.preparation_revision !== prepared.revision || prepared.revision_sincronizada !== prepared.revision
+    || !observation || observation.revision !== prepared.revision || observation.recalculated !== true
+    || observation.execution?.verified !== true || observation.execution.rulesVersion !== PREPARATION_RULES.version
+    || !Array.isArray(observation.issues) || observation.issues.some((issue) => issue.severity === 'error'))
+    return { prepared, error: jsonResponse({ error: 'La preparación cambió o tiene controles pendientes. Volvé a sincronizar antes de subir.' }, 409) };
+  let prefix: string;
+  try { prefix = preparationUploadPrefix(programId, payload.preparation_revision, payload.preparation_event_id); }
+  catch (error) { return { prepared, error: jsonResponse({ error: (error as Error).message }, 409) }; }
+  const { data: revision, error: readError } = await supabase.from('programa_preparacion_revisiones').select('evento_id').eq('programa_id', programId).eq('revision', prepared.revision).maybeSingle();
+  if (readError) return { prepared, error: jsonResponse({ error: 'No se pudo comprobar el resultado de Aspire.' }, 500) };
+  if (!revision?.evento_id || revision.evento_id !== payload.preparation_event_id)
+    return { prepared, error: jsonResponse({ error: 'Hay un resultado de Aspire más nuevo. Este archivo no lo puede reemplazar.' }, 409) };
+  return { prepared, prefix };
+}
+
 async function handlePedirUpload(
   supabase: SupabaseClient,
   payload: UploadRequest,
@@ -696,6 +826,9 @@ async function handlePedirUpload(
   const token = asString(payload.token);
   const authErr = await assertProgramToken(supabase, programId, token);
   if (authErr) return authErr;
+
+  const binding = await checkPreparationUpload(supabase, payload);
+  if (binding.error) return binding.error;
 
   const { data: programa, error: progErr } = await supabase
     .from("programa")
@@ -710,11 +843,11 @@ async function handlePedirUpload(
   const filename = safeAspireFilename(
     asString(payload.filename) || `${asString(programa.nombre) || "programa"}.crv3d`,
   );
-  const path = `${programId}/${Date.now()}-${filename}`;
+  const path = `${binding.prefix ?? `${programId}/`}${crypto.randomUUID()}-${filename}`;
 
   const { data, error } = await supabase.storage
     .from("programas-aspire")
-    .createSignedUploadUrl(path, { upsert: true });
+    .createSignedUploadUrl(path, { upsert: !binding.prepared });
 
   if (error || !data?.signedUrl) {
     console.error("[programa-sync] createSignedUploadUrl:", error);
@@ -739,13 +872,27 @@ async function handleConfirmarUpload(
   const storagePath = asString(payload.path);
   const filename = safeAspireFilename(asString(payload.filename) || "programa.crv3d");
   const sizeHint = Number(payload.size);
-  const knownSize = Number.isFinite(sizeHint) && sizeHint > 0 ? sizeHint : 0;
+  let knownSize = Number.isFinite(sizeHint) && sizeHint > 0 ? sizeHint : 0;
 
   const authErr = await assertProgramToken(supabase, programId, token);
   if (authErr) return authErr;
 
+  const binding = await checkPreparationUpload(supabase, payload);
+  if (binding.error) return binding.error;
+  const prepared = binding.prepared;
+
   if (!storagePath || !storagePath.startsWith(`${programId}/`)) {
     return jsonResponse({ error: "path inválido" }, 400);
+  }
+  if (binding.prefix && !isPreparationUploadPath(storagePath, binding.prefix))
+    return jsonResponse({ error: 'El archivo pertenece a otro resultado de Aspire. Volvé a sincronizar y subir.' }, 409);
+  if (prepared) {
+    const slash = storagePath.lastIndexOf('/');
+    const { data: stored, error } = await supabase.storage.from('programas-aspire').list(storagePath.slice(0, slash), { search: storagePath.slice(slash + 1), limit: 100 });
+    const file = stored?.find((item) => item.name === storagePath.slice(slash + 1));
+    const actualSize = Number(file?.metadata?.size);
+    if (error || !file || !Number.isFinite(actualSize) || actualSize <= 0) return jsonResponse({ error: 'El archivo Aspire todavía no está subido.' }, 409);
+    knownSize = actualSize;
   }
 
   const { data: programa, error: progErr } = await supabase
@@ -796,7 +943,7 @@ async function handleConfirmarUpload(
           const resolved = resolveCrv3dBytes(uploadedBytes, filename);
           const previewGif = extractPreviewGif(resolved.bytes);
           if (previewGif && previewGif.length > 0) {
-            const previewPath = `${programId}/${Date.now()}-preview.gif`;
+            const previewPath = `${binding.prefix ?? `${programId}/`}${crypto.randomUUID()}-preview.gif`;
             const previewCopy = new Uint8Array(previewGif.byteLength);
             previewCopy.set(previewGif);
             const { error: previewUpErr } = await supabase.storage
@@ -812,7 +959,7 @@ async function handleConfirmarUpload(
               const oldPreview = previewUrl;
               previewUrl = previewPublic.publicUrl;
               previewOk = true;
-              if (oldPreview) {
+              if (oldPreview && !prepared) {
                 try {
                   const m = oldPreview.match(/programas-preview\/(.+)$/);
                   if (m?.[1]) {
@@ -837,7 +984,7 @@ async function handleConfirmarUpload(
   }
 
   const oldAspire = (programa as { archivo_aspire_url?: string | null }).archivo_aspire_url;
-  if (oldAspire) {
+  if (oldAspire && !prepared) {
     try {
       const m = oldAspire.match(/programas-aspire\/(.+)$/);
       if (m?.[1]) {
@@ -867,14 +1014,14 @@ async function handleConfirmarUpload(
     programPatch.estado_programa = "LISTO";
   }
 
-  const { error: updErr } = await supabase
-    .from("programa")
-    .update(programPatch)
-    .eq("id", programId);
+  const { error: updErr } = prepared
+    ? await supabase.rpc('confirmar_programa_preparacion_archivo', { p_programa_id: programId, p_revision: payload.preparation_revision,
+      p_archivo_url: archivoUrl, p_nombre: displayName, p_preview_url: previewUrl, p_evento_id: payload.preparation_event_id })
+    : await supabase.from('programa').update(programPatch).eq('id', programId);
 
   if (updErr) {
     console.error("[programa-sync] update archivo aspire:", updErr);
-    return jsonResponse({ error: "No se pudo guardar el archivo en el programa" }, 500);
+    return jsonResponse({ error: prepared ? 'El resultado o el programa cambió durante la subida. Volvé a sincronizar; este archivo no habilitó fabricación.' : 'No se pudo guardar el archivo en el programa' }, prepared ? 409 : 500);
   }
 
   await supabase.from("programa_eventos").insert({
@@ -918,6 +1065,11 @@ async function handleSubirArchivo(
   const authErr = await assertProgramToken(supabase, programId, token);
   if (authErr) return authErr;
 
+  const uploadBinding = { programa_id: programId, preparation_revision: Number(req.headers.get('x-preparation-revision')) || undefined,
+    preparation_event_id: req.headers.get('x-preparation-event-id') || undefined };
+  const binding = await checkPreparationUpload(supabase, uploadBinding);
+  if (binding.error) return binding.error;
+
   const { data: programa, error: progErr } = await supabase
     .from("programa")
     .select("id, nombre, archivo_aspire_url, preview_url")
@@ -939,12 +1091,12 @@ async function handleSubirArchivo(
     }, 413);
   }
 
-  const storagePath = `${programId}/${Date.now()}-${filename}`;
+  const storagePath = `${binding.prefix ?? `${programId}/`}${crypto.randomUUID()}-${filename}`;
   const { error: upErr } = await supabase.storage
     .from("programas-aspire")
     .upload(storagePath, bytes, {
       contentType: "application/octet-stream",
-      upsert: true,
+      upsert: !binding.prepared,
     });
 
   if (upErr) {
@@ -955,10 +1107,10 @@ async function handleSubirArchivo(
   // Reusa la confirmación (preview + columnas programa).
   return handleConfirmarUpload(supabase, {
     accion: "confirmar-upload",
-    programa_id: programId,
     token,
     path: storagePath,
     filename,
+    ...uploadBinding,
   });
 }
 
@@ -979,13 +1131,18 @@ Deno.serve(async (req) => {
 
   if (req.method === "GET") {
     const authErr = assertInstallKey(req);
-    if (authErr) return authErr;
+    if (authErr) {
+      // El navegador usa su sesión; la clave de instalación solo vive en Aspire.
+      const bearer = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
+      const { data, error } = bearer ? await supabase.auth.getUser(bearer) : { data: null, error: true };
+      if (error || !data?.user) return authErr;
+    }
 
     if (accion === "listar") {
       return handleListar(supabase, asString(url.searchParams.get("maquina")));
     }
     if (accion === "paquete") {
-      return handlePaquete(supabase, asString(url.searchParams.get("programa_id")));
+      return handlePaquete(supabase, asString(url.searchParams.get("programa_id")), Number(url.searchParams.get('gadget_protocol')) || 0);
     }
     return jsonResponse({ error: "accion desconocida (listar|paquete)" }, 400);
   }

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Program, ProgramLifecycleState, ProgramStamp, FabricationState } from '@/lib/types/index';
 import { StampsSelectionDialog } from '../StampsSelection/StampsSelectionDialog';
+import { ProgramPreparationDialog } from '../Preparation/ProgramPreparationDialog';
 import { RemoveStampDialog, RemoveStampChoice } from '../RemoveStamp/RemoveStampDialog';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { DoneReviewDialog } from '../DoneReview/DoneReviewDialog';
@@ -195,6 +196,7 @@ export function ProgramCard({
   onSetStampFabricationStates,
 }: ProgramCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [preparationOpen, setPreparationOpen] = useState(false);
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [showStampsDialog, setShowStampsDialog] = useState(false);
   const [stampToRemove, setStampToRemove] = useState<ProgramStamp | null>(null);
@@ -415,6 +417,7 @@ export function ProgramCard({
       }}
     >
       <CardHeader className="pb-3">
+        {program.machine === 'C' ? <div onClick={(e) => e.stopPropagation()}><Button size="sm" variant="outline" onClick={() => setPreparationOpen(true)}>Preparar programa</Button><ProgramPreparationDialog program={program} open={preparationOpen} onOpenChange={setPreparationOpen} onRefresh={onRefresh} /></div> : null}
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div

@@ -1,7 +1,13 @@
 # Gadget de Aspire y sincronización (`programa-sync`)
 
-> Archivos: `aspire-gadgets/ArmarPrograma_Chica.lua` (C), `ArmarPrograma_Grande.lua` (G), `ArmarPrograma_XL.lua` (XL) — v2.1.6 los tres; `aspire-gadgets/TestAlcohnSync.lua` (sonda de pruebas).
-> Edge Function: `supabase/functions/programa-sync/index.ts` (desplegada, versión 22, `verify_jwt=false`).
+## Gadget 3.2 / protocolo 4 (pendiente de instalación)
+
+Los tres gadgets incluyen `preparation/SyncPreparation.lua`, generado con `scripts/build-preparation-gadgets.mjs`. El manifest `preparation` activa identidad por objeto, actualización sobre geometría existente, conflictos por propiedad, respaldo, plantillas nativas y observación SVG. Se conserva el flujo 2.x para manifests sin preparación. El servidor rechaza gadgets anteriores cuando existe una preparación. Detalle y calificación requerida: [preparación visual](preparacion-visual.md).
+
+> Archivos locales: `aspire-gadgets/ArmarPrograma_Chica.lua` (C), `ArmarPrograma_Grande.lua` (G), `ArmarPrograma_XL.lua` (XL) — v3.2.0 los tres, aún sin instalar como gadget operativo; `aspire-gadgets/TestAlcohnSync.lua` (sonda de pruebas). La descripción de modos legados que sigue corresponde al flujo sin preparación.
+
+✅ Protocolo 4 vincula informe y archivo por **evento de resultado**, además de revisión del plan. `PreparationSync.run` genera un UUID, lo guarda en el informe y lo pasa a `uploadAspireFile`; pedir/confirmar subida incluyen `preparation_event_id`. Las rutas preparadas incluyen revisión/evento y son inmutables. Si llega otro resultado antes o durante la subida, el anterior no aprueba el programa. No se modificaron los parámetros CAM. [Prueba de conexión local](../../audits/programas-conexion-validacion-2026-10-16.md).
+> Edge Function: `supabase/functions/programa-sync/index.ts`. Versión remota **31**, activa y `verify_jwt=false`, desplegada con autorización y comprobada el 2026-10-16. Incluye preparación/protocolo 4. Versión anterior 30 respaldada antes de desplegar; gadget operativo y recorrido remoto completo todavía pendientes.
 > Contexto de diseño: `PLAN_PROGRAMAS_FASE_3.md` (hallazgos verificados empíricamente sobre Aspire 10.514).
 
 ## 1. Qué es
@@ -44,6 +50,19 @@ Puntos clave:
 - **Modo Actualizar** no toca lo que ya estaba (conserva correcciones manuales). **Rehacer desde cero** borra las capas generadas por el gadget.
 - Si Aspire lo ubica en otra columna que la planificada, se reporta como `sellos_en_otra_planchuela`.
 - Sellos excluidos a propósito (sin material) se recuerdan en el job para no volver a preguntar.
+
+### Precisiones verificadas en código local (2026-10-15)
+
+- `runTypeAutomation` distingue **3MM** y una rama general para los demás tipos; el manifest puede indicar **ALIMENTO**, pero el gadget no tiene una rama específica para aplicar su receta. El recálculo usa las trayectorias de la base. El resultado de Alimento debe verificarse contra las bases reales antes de garantizar selección automática por tipo.
+- La comprobación de escala al importar compara el **lado mayor**, con tolerancia relativa del **2 %**. Actualizar omite los sellos reconocidos, por lo que no vuelve a medirlos ni aplica sobre ellos cambios de tamaño o posición de la app.
+- El tag en la marca de Corte permite reconocer presencia, pero no identifica por sí solo todos los contornos y auxiliares que habría que mover conservando correcciones.
+- La subida de un archivo y el estado LISTO actual no acreditan que una revisión final haya pasado controles completos de medida, material y trayectoria.
+
+Evidencia y límites previos: [auditoría de automatización](../../audits/programas-automatizacion-2026-10-15.md). [Preparación visual y sincronización](preparacion-visual.md): migración y edge publicadas el 2026-10-16; gadget operativo y calificación remota pendientes. El alcance parcial automático sigue en la propuesta.
+
+**Operación confirmada (Q-PROG-016/017, 2026-10-15)**: después del gadget, Fede ajusta vectores, chequea medidas y revisa el resultado de la fresa de 0,5 mm (15° laterales) para elegir qué repasar con la de punta 0,1 mm. Elige partes si la pasada no toca el resto del sello; si toca, amplía la selección hasta evitar choques, pudiendo elegir el sello completo. Este criterio manual no está cubierto por el simple recálculo ni por el chequeo de fresa actual. Perfiles/profundidades exactos: Q-PROG-018.
+
+**Parámetros confirmados (Q-PROG-018)**: «0,5» es el nombre; su configuración es **0,6 mm**, con 15° laterales. Profundidad principal: Clásico 1,7 mm; 3 mm/Alimento a 3 mm. Alimento agrega corte perimetral con fresa de 6 mm. La fina usa punta 0,1 mm/30° laterales y V-carve hasta **0,6 mm también en Alimento**. El motor local ya separa las dos herramientas; los gadgets 3.1 requieren plantillas nativas verificadas para estos parámetros.
 
 ## 3. API `programa-sync` (✅)
 

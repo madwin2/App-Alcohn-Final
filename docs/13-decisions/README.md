@@ -32,4 +32,6 @@ Decisiones de producto/arquitectura **reconstruidas** a partir de los planes en 
 
 ## Cómo registrar una nueva decisión
 
+[ADR-026 · Preparación de programas por revisión](ADR-026-preparacion-programas-por-revision.md): documento de fabricación independiente, sincronización por identidad y propiedad, aprobación de archivo vigente, plantillas nativas verificadas y repaso conservador. Implementada localmente; despliegue/calificación pendientes (2026-10-15).
+
 1. Contexto (qué problema), 2. Decisión, 3. Alternativas descartadas, 4. Consecuencias (qué módulos cambian), 5. Fuente (issue, plan, conversación), 6. Fecha. Actualizar módulos, reglas y estados afectados.

@@ -40,7 +40,7 @@ Distribución real: 3.765 sellos, 51 soldadores, 26 bases, 16 abecedarios, 15 ma
 | `Clasico` | Desbaste con fresa recta de 6 mm + grabado cónico de **1,7 mm** de profundidad. El estándar. |
 | `3mm` | Desbaste con fresa recta de 6 mm a **3 mm** de profundidad + grabado cónico de 3 mm. Pedidos especiales. |
 | `Lacre` | Sello para lacre: lleva un **cabezal torneado especial** (cabezal de lacre). Diferencia de uso. |
-| `Alimento` | 3 mm de profundidad y además **cortado con la forma del diseño**, para que la base no marque la superficie. |
+| `Alimento` | 3 mm de profundidad y además **cortado con la forma del diseño**, para que la base no marque la superficie. Corte perimetral con **fresa de 6 mm** (Q-PROG-018, 2026-10-15). |
 | `ABC` | Abecedario (no es un sello). |
 
 El tipo determina la plantilla de trayectorias en Aspire (`roughing_<tipo>`, `profile_<tipo>`) y la capa (`VECTOR` vs `VECTOR 3MM`).

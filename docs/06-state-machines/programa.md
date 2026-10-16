@@ -1,5 +1,7 @@
 # Máquina de estados — Programa (`programa.estado_programa`)
 
+**Variante de preparación visual (migración aplicada/verificada el 2026-10-16, edge v31 publicada, gadget/prueba conectada pendientes):** guardar una revisión y recibir un informe nuevo dejan `dirty=true` y `LISTO → BORRADOR`. El informe recalculado sin errores actualiza `revision_sincronizada`; confirmar un archivo existente de esa misma revisión y del último evento de resultado fija `archivo_revision`, limpia `dirty` y habilita `LISTO`. Descargar el ZIP no cambia el estado. El inicio `Haciendo` se controla en DB mediante revisión/archivo/informe y contenido vigente, sin depender del `dirty` legado que se modifica durante la cascada de estados. Ver [detalle](../02-modules/programas/preparacion-visual.md).
+
 Valores (CHECK): `BORRADOR`, `LISTO`, `BLOQUEADO`, `EN_FABRICACION`, `FINALIZADO`. Flags: `bloqueado`, `dirty`, `verificado`.
 
 ```mermaid
@@ -31,9 +33,13 @@ stateDiagram-v2
 
 ## `dirty`
 
+✅ Control local 2026-10-16: para `BORRADOR → LISTO` se exige el evento del último resultado nativo, no solo la revisión. Otro informe con la misma revisión invalida el archivo; una confirmación atrasada se rechaza en la RPC bajo el mismo bloqueo que registrar/guardar. Un reintento de evento ya procesado no revierte un resultado nuevo ni limpia `dirty`. El trigger de inicio sigue exigiendo revisión/archivo/informe vigentes.
+
 "Desactualizado desde la última descarga": `true` al crear, editar o desbloquear; `false` al generar el paquete o recibir el `.crv3d` del gadget. La alerta se muestra solo si además hay ZIP generado.
 
 ## Interacciones peligrosas
+
+En programas con preparación, la comprobación de auxiliares (`execution.verified` y versión vigente) se exige junto con recálculo sin errores, archivo de la revisión y contenido actual antes de iniciar. Un informe antiguo que solo declare recálculo no habilita fabricación.
 
 - El trigger `mark_programa_dirty_on_sello_relevant_update` marca `dirty` y devuelve `LISTO → BORRADOR` ante **cualquier** UPDATE de un sello que sigue en el programa, incluido pasarlo a `Haciendo`/`Hecho`. En la práctica el estado derivado lo tapa, pero `estado_programa` guardado y `dirty` quedan en valores que no reflejan "cambió el contenido". → [AUD-INC-008](../audits/inconsistencias.md#aud-inc-008).
 - Un sello sacado a `Sin Hacer` desde Producción sigue con `programa_id` y el programa no se entera por la vía normal.

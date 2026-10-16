@@ -1028,6 +1028,17 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
     ],
   },
   {
+    id: 56,
+    date: '2026-10-15',
+    title: 'Preparación visual de programas',
+    version: '1.74',
+    slides: [
+      { heading: 'Prepará el programa sobre el soporte', body: 'Desde Preparar programa podés mover sellos, cambiar la planchuela, ajustar la medida de fabricación y elegir Clásico, 3 mm o Alimento. La venta conserva sus datos originales.', icon: PencilRuler },
+      { heading: 'Controles antes de Aspire', body: 'La app revisa apoyo, largo, separación y material, y compara la primera fresa con el repaso fino. Al guardar se chequean todos los diseños disponibles en SVG.', icon: ScanSearch },
+      { heading: 'Sincronizá conservando las correcciones', body: 'Con el gadget 3.2, los cambios se aplican sobre los dibujos existentes y se revisan cortes y taladros. Cada repaso recibe su selección antes del recálculo; Alimento suma el corte de forma. Los conflictos se consultan por propiedad. Requiere soporte y plantillas verificados.', icon: RefreshCw },
+    ],
+  },
+  {
     id: 58,
     date: '2026-10-15',
     title: 'Editor de vectores más cómodo',
@@ -1078,6 +1089,29 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'La lista de lugares se ve',
         body: 'En el chequeo, la lista de lugares ya no queda aplastada: las explicaciones largas pasaron a los carteles que aparecen al pasar el mouse.',
         icon: ScanSearch,
+      },
+    ],
+  },
+  {
+    id: 61,
+    date: '2026-10-16',
+    title: 'Programas: confirmar el archivo correcto',
+    version: '1.79',
+    slides: [
+      {
+        heading: 'Cada sincronización conserva su archivo',
+        body: 'Con la nueva preparación, si volvés a corregir el programa en Aspire, una subida anterior ya no puede reemplazar el resultado más reciente ni dejarlo listo por error.',
+        icon: Lock,
+      },
+      {
+        heading: 'Actualizar el gadget antes de sincronizar',
+        body: 'La nueva preparación necesita el gadget 3.2 de la máquina. Si cambia el armado o llega otra sincronización durante la subida, la app pide sincronizar otra vez antes de aprobar el archivo.',
+        icon: RefreshCw,
+      },
+      {
+        heading: 'Menos carga en cada programa',
+        body: 'Por ahora solo en la máquina C. Un programa nuevo toma el soporte y las plantillas del último preparado de la misma máquina. Si hace falta, Descartar preparación lo vuelve al armado anterior.',
+        icon: PencilRuler,
       },
     ],
   },

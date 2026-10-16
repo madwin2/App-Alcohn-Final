@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "protocol": 4,
+  "fineAnalysisVersion": 6,
+  "coordinateToleranceMm": 0.01,
+  "mergeToleranceMm": 0.02,
+  "minimumGapMm": 8,
+  "offsetsMm": [4, -3.5, 1.5],
+  "offsetToleranceMm": 0.01,
+  "cutExtraWidthMm": 8,
+  "cutBelowDesignMm": 4,
+  "drillRadiusMm": 3,
+  "rectangleBelowCutMm": 3,
+  "planeExtraWidthMm": 6,
+  "exteriorExtraWidthMm": 14,
+  "rectangleTopY": 0,
+  "foodToolEnvelopeMm": 6.5,
+  "recipes": {
+    "CLASICO": {"vectorLayer": "VECTOR", "offsetLayer": "Offset exterior vector", "fineLayer": "REPASO CLASICO", "fineInteriorLayer": "REPASO INTERIOR CLASICO", "mainDepthMm": 1.7},
+    "3MM": {"vectorLayer": "VECTOR 3MM", "offsetLayer": "Offset exterior vector 3mm", "fineLayer": "REPASO 3MM", "fineInteriorLayer": "REPASO INTERIOR 3MM", "mainDepthMm": 3},
+    "ALIMENTO": {"vectorLayer": "VECTOR ALIMENTO", "offsetLayer": "Offset exterior vector alimento", "fineLayer": "REPASO ALIMENTO", "fineInteriorLayer": "REPASO INTERIOR ALIMENTO", "mainDepthMm": 3}
+  }
+}

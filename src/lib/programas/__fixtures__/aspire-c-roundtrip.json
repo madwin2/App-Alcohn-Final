@@ -1,0 +1,552 @@
+{
+  "document": {
+    "version": 2,
+    "programId": "simulation-C-1",
+    "machine": "C",
+    "supportVerified": true,
+    "gapMm": 8,
+    "columns": [
+      {
+        "id": "p25",
+        "nominalMm": 25,
+        "usableMm": 24,
+        "centerX": 50.176,
+        "topY": -8.958,
+        "bottomY": -400,
+        "toolEnvelopeMm": 39,
+        "available": true
+      },
+      {
+        "id": "p12",
+        "nominalMm": 12,
+        "usableMm": 11.5,
+        "centerX": 87.776,
+        "topY": -8.958,
+        "bottomY": -400,
+        "toolEnvelopeMm": 26,
+        "available": true
+      },
+      {
+        "id": "p19",
+        "nominalMm": 19,
+        "usableMm": 18,
+        "centerX": 187.776,
+        "topY": -8.958,
+        "bottomY": -400,
+        "toolEnvelopeMm": 33,
+        "available": true
+      },
+      {
+        "id": "p38",
+        "nominalMm": 38,
+        "usableMm": 36.5,
+        "centerX": 235.351,
+        "topY": -8.958,
+        "bottomY": -400,
+        "toolEnvelopeMm": 52,
+        "available": true
+      }
+    ],
+    "stamps": [
+      {
+        "instanceId": "simulation-C-1:sim-0",
+        "selloId": "sim-0",
+        "name": "Marca A",
+        "columnId": "p38",
+        "centerX": 235.351,
+        "topY": -240,
+        "widthMm": 16,
+        "heightMm": 40,
+        "rotationDeg": 0,
+        "recipe": "CLASICO",
+        "pinned": false,
+        "excluded": false,
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212mm%22%20height%3D%2230mm%22%20viewBox%3D%220%200%2012%2030%22%3E%3Cg%20transform%3D%22scale(1%201)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%2020L6%207L9%2020H7L6%2015L5%2020Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "sourceWidthMm": 12,
+        "sourceHeightMm": 30,
+        "fine": {
+          "mode": "auto",
+          "scope": "full",
+          "widthMm": 16,
+          "heightMm": 40,
+          "recipe": "CLASICO",
+          "analysisVersion": 6,
+          "needsFine": true,
+          "inputHash": "496:227648556",
+          "geometryHash": "311:1553294648",
+          "outcome": "repaso_sugerido"
+        }
+      },
+      {
+        "instanceId": "simulation-C-1:sim-1",
+        "selloId": "sim-1",
+        "name": "Taller B",
+        "columnId": "p19",
+        "centerX": 187.776,
+        "topY": -62.958,
+        "widthMm": 14,
+        "heightMm": 35,
+        "rotationDeg": 0,
+        "recipe": "3MM",
+        "pinned": false,
+        "excluded": false,
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214mm%22%20height%3D%2235mm%22%20viewBox%3D%220%200%2014%2035%22%3E%3Cg%20transform%3D%22scale(1.1666666666666667%201.1666666666666667)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%208H9V11H6V14H9V21H3V18H6V17H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "sourceWidthMm": 14,
+        "sourceHeightMm": 35,
+        "fine": {
+          "mode": "auto",
+          "scope": "full",
+          "widthMm": 14,
+          "heightMm": 35,
+          "recipe": "3MM",
+          "analysisVersion": 6,
+          "needsFine": false,
+          "inputHash": "610:645623696",
+          "geometryHash": "419:605399703",
+          "outcome": "sin_repaso"
+        }
+      },
+      {
+        "instanceId": "simulation-C-1:sim-2",
+        "selloId": "sim-2",
+        "name": "Panadería C",
+        "columnId": "p25",
+        "centerX": 50.176,
+        "topY": -8.958,
+        "widthMm": 22,
+        "heightMm": 45,
+        "rotationDeg": 0,
+        "recipe": "ALIMENTO",
+        "pinned": false,
+        "excluded": false,
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2222mm%22%20height%3D%2245mm%22%20viewBox%3D%220%200%2022%2045%22%3E%3Cg%20transform%3D%22scale(1.8333333333333333%201.5)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%2010L6%207L9%2010V20H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "sourceWidthMm": 22,
+        "sourceHeightMm": 45,
+        "fine": {
+          "mode": "auto",
+          "scope": "full",
+          "widthMm": 22,
+          "heightMm": 45,
+          "recipe": "ALIMENTO",
+          "analysisVersion": 6,
+          "needsFine": false,
+          "inputHash": "479:1165074691",
+          "geometryHash": "293:426934969",
+          "outcome": "sin_repaso"
+        }
+      },
+      {
+        "instanceId": "simulation-C-1:sim-3",
+        "selloId": "sim-3",
+        "name": "Cuero D",
+        "columnId": "p25",
+        "centerX": 50.176,
+        "topY": -61.958,
+        "widthMm": 20,
+        "heightMm": 40,
+        "rotationDeg": 0,
+        "recipe": "CLASICO",
+        "pinned": false,
+        "excluded": false,
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220mm%22%20height%3D%2240mm%22%20viewBox%3D%220%200%2020%2040%22%3E%3Cg%20transform%3D%22scale(1.6666666666666667%201.3333333333333333)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M2%2015L6%208L10%2015L6%2022Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "sourceWidthMm": 20,
+        "sourceHeightMm": 40,
+        "fine": {
+          "mode": "auto",
+          "scope": "full",
+          "widthMm": 20,
+          "heightMm": 40,
+          "recipe": "CLASICO",
+          "analysisVersion": 6,
+          "needsFine": false,
+          "inputHash": "460:100950982",
+          "geometryHash": "275:1759799942",
+          "outcome": "sin_repaso"
+        }
+      },
+      {
+        "instanceId": "simulation-C-1:sim-4",
+        "selloId": "sim-4",
+        "name": "Marca E",
+        "columnId": "p12",
+        "centerX": 87.776,
+        "topY": -8.958,
+        "widthMm": 8,
+        "heightMm": 25,
+        "rotationDeg": 0,
+        "recipe": "CLASICO",
+        "pinned": false,
+        "excluded": false,
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%228mm%22%20height%3D%2225mm%22%20viewBox%3D%220%200%208%2025%22%3E%3Cg%20transform%3D%22scale(0.6666666666666666%200.8333333333333334)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%208H5V17H9V20H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "sourceWidthMm": 8,
+        "sourceHeightMm": 25,
+        "fine": {
+          "mode": "auto",
+          "scope": "full",
+          "widthMm": 8,
+          "heightMm": 25,
+          "recipe": "CLASICO",
+          "analysisVersion": 6,
+          "needsFine": false,
+          "inputHash": "483:1277261895",
+          "geometryHash": "311:341215499",
+          "outcome": "sin_repaso"
+        }
+      },
+      {
+        "instanceId": "simulation-C-1:sim-5",
+        "selloId": "sim-5",
+        "name": "Taller F",
+        "columnId": "p12",
+        "centerX": 87.776,
+        "topY": -41.958,
+        "widthMm": 9,
+        "heightMm": 30,
+        "rotationDeg": 0,
+        "recipe": "3MM",
+        "pinned": false,
+        "excluded": false,
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%229mm%22%20height%3D%2230mm%22%20viewBox%3D%220%200%209%2030%22%3E%3Cg%20transform%3D%22scale(0.75%201)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%2010H9V13H7V20H5V13H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "sourceWidthMm": 9,
+        "sourceHeightMm": 30,
+        "fine": {
+          "mode": "auto",
+          "scope": "full",
+          "widthMm": 9,
+          "heightMm": 30,
+          "recipe": "3MM",
+          "analysisVersion": 6,
+          "needsFine": false,
+          "inputHash": "524:1638474026",
+          "geometryHash": "347:560357773",
+          "outcome": "sin_repaso"
+        }
+      },
+      {
+        "instanceId": "simulation-C-1:sim-6",
+        "selloId": "sim-6",
+        "name": "Alimento G",
+        "columnId": "p38",
+        "centerX": 235.351,
+        "topY": -8.958,
+        "widthMm": 32,
+        "heightMm": 50,
+        "rotationDeg": 0,
+        "recipe": "ALIMENTO",
+        "pinned": false,
+        "excluded": false,
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2232mm%22%20height%3D%2250mm%22%20viewBox%3D%220%200%2032%2050%22%3E%3Cg%20transform%3D%22scale(2.6666666666666665%201.6666666666666667)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%209H9V12H6V14H9V20H3V17H6V16H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "sourceWidthMm": 32,
+        "sourceHeightMm": 50,
+        "fine": {
+          "mode": "auto",
+          "scope": "full",
+          "widthMm": 32,
+          "heightMm": 50,
+          "recipe": "ALIMENTO",
+          "analysisVersion": 6,
+          "needsFine": false,
+          "inputHash": "617:1120340821",
+          "geometryHash": "419:875678876",
+          "outcome": "sin_repaso"
+        }
+      },
+      {
+        "instanceId": "simulation-C-1:sim-7",
+        "selloId": "sim-7",
+        "name": "Marca H",
+        "columnId": "p38",
+        "centerX": 235.351,
+        "topY": -66.958,
+        "widthMm": 30,
+        "heightMm": 45,
+        "rotationDeg": 0,
+        "recipe": "CLASICO",
+        "pinned": false,
+        "excluded": false,
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2230mm%22%20height%3D%2245mm%22%20viewBox%3D%220%200%2030%2045%22%3E%3Cg%20transform%3D%22scale(2.5%201.5)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%208L6%2012L9%208V20H7V14L6%2016L5%2014V20H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "sourceWidthMm": 30,
+        "sourceHeightMm": 45,
+        "fine": {
+          "mode": "auto",
+          "scope": "full",
+          "widthMm": 30,
+          "heightMm": 45,
+          "recipe": "CLASICO",
+          "analysisVersion": 6,
+          "needsFine": true,
+          "inputHash": "579:1351739945",
+          "geometryHash": "383:1815656788",
+          "outcome": "repaso_sugerido"
+        }
+      }
+    ],
+    "recipes": {
+      "CLASICO": {
+        "templates": [
+          "clasico.ToolpathTemplate"
+        ],
+        "verified": true
+      },
+      "3MM": {
+        "templates": [
+          "3mm.ToolpathTemplate"
+        ],
+        "verified": true
+      },
+      "ALIMENTO": {
+        "templates": [
+          "alimento.ToolpathTemplate"
+        ],
+        "verified": true,
+        "perimeterTemplate": {
+          "name": "Corte Forma.ToolpathTemplate",
+          "path": "simulation-C-1/ALIMENTO/food_perimeter/simulado.ToolpathTemplate"
+        }
+      }
+    }
+  },
+  "observation": {
+    "execution": {
+      "columnCount": 4,
+      "rulesVersion": 1,
+      "stampCount": 8,
+      "verified": true
+    },
+    "issues": [],
+    "recalculated": true,
+    "revision": 3,
+    "stamps": [
+      {
+        "centerX": 235.351,
+        "geometryHash": "311:1553294648",
+        "heightMm": 40,
+        "instanceId": "simulation-C-1:sim-0",
+        "recipe": "CLASICO",
+        "selloId": "sim-0",
+        "sourceHash": "258:1290221993",
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212mm%22%20height%3D%2230mm%22%20viewBox%3D%220%200%2012%2030%22%3E%3Cg%20transform%3D%22scale(1%201)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%2020L6%207L9%2020H7L6%2015L5%2020Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16.000000mm\" height=\"40.000000mm\" viewBox=\"0 0 16.000000 40.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M12.666667 26.666667L8.666667 9.333333L4.666667 26.666667L7.333333 26.666667L8.666667 20.000000L10.000000 26.666667L12.666667 26.666667Z M14.666667 1.333333L14.666667 38.666667L1.333333 38.666667L1.333333 1.333333L14.666667 1.333333Z M16.000000 0.000000L0.000000 0.000000L0.000000 40.000000L16.000000 40.000000L16.000000 0.000000Z\"/></svg>",
+        "topY": -240,
+        "widthMm": 16
+      },
+      {
+        "centerX": 187.776,
+        "geometryHash": "419:605399703",
+        "heightMm": 35,
+        "instanceId": "simulation-C-1:sim-1",
+        "recipe": "3MM",
+        "selloId": "sim-1",
+        "sourceHash": "297:969409056",
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2214mm%22%20height%3D%2235mm%22%20viewBox%3D%220%200%2014%2035%22%3E%3Cg%20transform%3D%22scale(1.1666666666666667%201.1666666666666667)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%208H9V11H6V14H9V21H3V18H6V17H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14.000000mm\" height=\"35.000000mm\" viewBox=\"0 0 14.000000 35.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M10.500000 9.333333L3.500000 9.333333L3.500000 12.833333L7.000000 12.833333L7.000000 16.333333L3.500000 16.333333L3.500000 24.500000L10.500000 24.500000L10.500000 21.000000L7.000000 21.000000L7.000000 19.833333L10.500000 19.833333L10.500000 9.333333Z M12.833333 1.166667L12.833333 33.833333L1.166667 33.833333L1.166667 1.166667L12.833333 1.166667Z M14.000000 0.000000L0.000000 0.000000L0.000000 35.000000L14.000000 35.000000L14.000000 0.000000Z\"/></svg>",
+        "topY": -62.958,
+        "widthMm": 14
+      },
+      {
+        "centerX": 50.176,
+        "geometryHash": "293:426934969",
+        "heightMm": 45,
+        "instanceId": "simulation-C-1:sim-2",
+        "recipe": "ALIMENTO",
+        "selloId": "sim-2",
+        "sourceHash": "270:286594511",
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2222mm%22%20height%3D%2245mm%22%20viewBox%3D%220%200%2022%2045%22%3E%3Cg%20transform%3D%22scale(1.8333333333333333%201.5)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%2010L6%207L9%2010V20H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"22.000000mm\" height=\"45.000000mm\" viewBox=\"0 0 22.000000 45.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M16.500000 15.000000L11.000000 10.500000L5.500000 15.000000L5.500000 30.000000L16.500000 30.000000L16.500000 15.000000Z M20.166667 1.500000L20.166667 43.500000L1.833333 43.500000L1.833333 1.500000L20.166667 1.500000Z M22.000000 0.000000L0.000000 0.000000L0.000000 45.000000L22.000000 45.000000L22.000000 0.000000Z\"/></svg>",
+        "topY": -8.958,
+        "widthMm": 22
+      },
+      {
+        "centerX": 50.176,
+        "geometryHash": "275:1759799942",
+        "heightMm": 40,
+        "instanceId": "simulation-C-1:sim-3",
+        "recipe": "CLASICO",
+        "selloId": "sim-3",
+        "sourceHash": "286:640680862",
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220mm%22%20height%3D%2240mm%22%20viewBox%3D%220%200%2020%2040%22%3E%3Cg%20transform%3D%22scale(1.6666666666666667%201.3333333333333333)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M2%2015L6%208L10%2015L6%2022Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20.000000mm\" height=\"40.000000mm\" viewBox=\"0 0 20.000000 40.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M16.666667 20.000000L10.000000 10.666667L3.333333 20.000000L10.000000 29.333333L16.666667 20.000000Z M18.333333 1.333333L18.333333 38.666667L1.666667 38.666667L1.666667 1.333333L18.333333 1.333333Z M20.000000 0.000000L0.000000 0.000000L0.000000 40.000000L20.000000 40.000000L20.000000 0.000000Z\"/></svg>",
+        "topY": -61.958,
+        "widthMm": 20
+      },
+      {
+        "centerX": 87.776,
+        "geometryHash": "311:341215499",
+        "heightMm": 25,
+        "instanceId": "simulation-C-1:sim-4",
+        "recipe": "CLASICO",
+        "selloId": "sim-4",
+        "sourceHash": "280:1814115501",
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%228mm%22%20height%3D%2225mm%22%20viewBox%3D%220%200%208%2025%22%3E%3Cg%20transform%3D%22scale(0.6666666666666666%200.8333333333333334)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%208H5V17H9V20H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8.000000mm\" height=\"25.000000mm\" viewBox=\"0 0 8.000000 25.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M6.000000 6.666667L4.666667 6.666667L4.666667 14.166667L2.000000 14.166667L2.000000 16.666667L6.000000 16.666667L6.000000 6.666667Z M7.333333 0.833333L7.333333 24.166667L0.666667 24.166667L0.666667 0.833333L7.333333 0.833333Z M8.000000 0.000000L0.000000 0.000000L0.000000 25.000000L8.000000 25.000000L8.000000 0.000000Z\"/></svg>",
+        "topY": -8.958,
+        "widthMm": 8
+      },
+      {
+        "centerX": 87.776,
+        "geometryHash": "347:560357773",
+        "heightMm": 30,
+        "instanceId": "simulation-C-1:sim-5",
+        "recipe": "3MM",
+        "selloId": "sim-5",
+        "sourceHash": "255:1063573034",
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%229mm%22%20height%3D%2230mm%22%20viewBox%3D%220%200%209%2030%22%3E%3Cg%20transform%3D%22scale(0.75%201)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%2010H9V13H7V20H5V13H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"9.000000mm\" height=\"30.000000mm\" viewBox=\"0 0 9.000000 30.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M6.750000 10.000000L2.250000 10.000000L2.250000 13.000000L3.750000 13.000000L3.750000 20.000000L5.250000 20.000000L5.250000 13.000000L6.750000 13.000000L6.750000 10.000000Z M8.250000 1.000000L8.250000 29.000000L0.750000 29.000000L0.750000 1.000000L8.250000 1.000000Z M9.000000 0.000000L0.000000 0.000000L0.000000 30.000000L9.000000 30.000000L9.000000 0.000000Z\"/></svg>",
+        "topY": -41.958,
+        "widthMm": 9
+      },
+      {
+        "centerX": 235.351,
+        "geometryHash": "419:875678876",
+        "heightMm": 50,
+        "instanceId": "simulation-C-1:sim-6",
+        "recipe": "ALIMENTO",
+        "selloId": "sim-6",
+        "sourceHash": "297:1667639735",
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2232mm%22%20height%3D%2250mm%22%20viewBox%3D%220%200%2032%2050%22%3E%3Cg%20transform%3D%22scale(2.6666666666666665%201.6666666666666667)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%209H9V12H6V14H9V20H3V17H6V16H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32.000000mm\" height=\"50.000000mm\" viewBox=\"0 0 32.000000 50.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M24.000000 15.000000L8.000000 15.000000L8.000000 20.000000L16.000000 20.000000L16.000000 23.333333L8.000000 23.333333L8.000000 33.333333L24.000000 33.333333L24.000000 28.333333L16.000000 28.333333L16.000000 26.666667L24.000000 26.666667L24.000000 15.000000Z M29.333333 1.666667L29.333333 48.333333L2.666667 48.333333L2.666667 1.666667L29.333333 1.666667Z M32.000000 0.000000L0.000000 0.000000L0.000000 50.000000L32.000000 50.000000L32.000000 0.000000Z\"/></svg>",
+        "topY": -8.958,
+        "widthMm": 32
+      },
+      {
+        "centerX": 235.351,
+        "geometryHash": "383:1815656788",
+        "heightMm": 45,
+        "instanceId": "simulation-C-1:sim-7",
+        "recipe": "CLASICO",
+        "selloId": "sim-7",
+        "sourceHash": "272:2074180195",
+        "sourceUrl": "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2230mm%22%20height%3D%2245mm%22%20viewBox%3D%220%200%2030%2045%22%3E%3Cg%20transform%3D%22scale(2.5%201.5)%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M0%200H12V30H0Z%20M1%201V29H11V1Z%22%2F%3E%3Cg%20data-simulation-detail%3D%22true%22%3E%3Cpath%20d%3D%22M3%208L6%2012L9%208V20H7V14L6%2016L5%2014V20H3Z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E",
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"30.000000mm\" height=\"45.000000mm\" viewBox=\"0 0 30.000000 45.000000\"><path fill=\"black\" fill-rule=\"evenodd\" d=\"M22.500000 12.000000L15.000000 18.000000L7.500000 12.000000L7.500000 30.000000L12.500000 30.000000L12.500000 21.000000L15.000000 24.000000L17.500000 21.000000L17.500000 30.000000L22.500000 30.000000L22.500000 12.000000Z M27.500000 1.500000L27.500000 43.500000L2.500000 43.500000L2.500000 1.500000L27.500000 1.500000Z M30.000000 0.000000L0.000000 0.000000L0.000000 45.000000L30.000000 45.000000L30.000000 0.000000Z\"/></svg>",
+        "topY": -66.958,
+        "widthMm": 30
+      }
+    ]
+  },
+  "summary": {
+    "imports": 0,
+    "revision": 3,
+    "stamps": [
+      {
+        "instanceId": "simulation-C-1:sim-0",
+        "objectId": "5f40d0a8-12d4-45e2-9c3e-35c9283f9053",
+        "preserved": true
+      },
+      {
+        "instanceId": "simulation-C-1:sim-1",
+        "objectId": "55217b3d-ebb3-4926-8617-4e4ed26e1e12",
+        "preserved": true
+      },
+      {
+        "instanceId": "simulation-C-1:sim-2",
+        "objectId": "38361593-bcde-43ef-88c8-038347b88959",
+        "preserved": true
+      },
+      {
+        "instanceId": "simulation-C-1:sim-3",
+        "objectId": "569f0701-69c4-4e4a-8e6b-2de23c30ae7b",
+        "preserved": true
+      },
+      {
+        "instanceId": "simulation-C-1:sim-4",
+        "objectId": "f61e17bf-afa3-4d95-ae7d-cb81561b7295",
+        "preserved": true
+      },
+      {
+        "instanceId": "simulation-C-1:sim-5",
+        "objectId": "954d23e1-b9a7-4b69-bd5b-cae1390541c9",
+        "preserved": true
+      },
+      {
+        "instanceId": "simulation-C-1:sim-6",
+        "objectId": "fb29d862-b693-4899-b086-eb46c57a2989",
+        "preserved": true
+      },
+      {
+        "instanceId": "simulation-C-1:sim-7",
+        "objectId": "3eb1bb03-e894-4565-be39-bfcfefd8acd4",
+        "preserved": true
+      }
+    ],
+    "toolpaths": [
+      {
+        "feedLength": 0,
+        "name": "0 Taladrado",
+        "plungeLength": 348,
+        "valid": true
+      },
+      {
+        "feedLength": 807.3961696988,
+        "name": "0 Roscado",
+        "plungeLength": 0,
+        "valid": true
+      },
+      {
+        "feedLength": 19591.472635269,
+        "name": "1 Planeado 6MM",
+        "plungeLength": 167.84000015259,
+        "valid": true
+      },
+      {
+        "feedLength": 69966.313674878,
+        "name": "1 Cajeado 6MM",
+        "plungeLength": 3195.0000143051,
+        "valid": true
+      },
+      {
+        "feedLength": 11399.220862113,
+        "name": "2 Cajeado 1MM",
+        "plungeLength": 1508,
+        "valid": true
+      },
+      {
+        "feedLength": 3071.4220364392,
+        "name": "2 Cajeado 1MM 3mm",
+        "plungeLength": 1171.5000052452,
+        "valid": true
+      },
+      {
+        "feedLength": 6657.2081992775,
+        "name": "2 Cajeado 1MM 3mm",
+        "plungeLength": 1491.0000066757,
+        "valid": true
+      },
+      {
+        "feedLength": 19171.168562688,
+        "name": "3 Perfilado 0.5MM",
+        "plungeLength": 86.40164065361,
+        "valid": true
+      },
+      {
+        "feedLength": 14628.099604979,
+        "name": "3 Perfilado 0.5MM 3mm",
+        "plungeLength": 51.001452684402,
+        "valid": true
+      },
+      {
+        "feedLength": 23278.553277552,
+        "name": "3 Perfilado 0.5MM 3mm",
+        "plungeLength": 51.001452684402,
+        "valid": true
+      },
+      {
+        "feedLength": 19783.179296114,
+        "name": "4 Perfilado 0.1MM",
+        "plungeLength": 36.600830197334,
+        "valid": true
+      },
+      {
+        "feedLength": 7588.0014953613,
+        "name": "5 Corte 6MM",
+        "plungeLength": 112.00000190735,
+        "valid": true
+      },
+      {
+        "feedLength": 14652.311466306,
+        "name": "Corte Forma",
+        "plungeLength": 1906.5,
+        "valid": true
+      }
+    ]
+  }
+}

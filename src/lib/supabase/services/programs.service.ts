@@ -39,6 +39,12 @@ export class ProgramServiceError extends Error {
   }
 }
 
+async function assertLegacyPreparationFlow(programId: string): Promise<void> {
+  const { data, error } = await supabase.from('programa_preparacion').select('programa_id').eq('programa_id', programId).maybeSingle();
+  if (error && !['42P01', 'PGRST205'].includes(error.code)) throw error;
+  if (data) throw new ProgramServiceError('Este programa usa preparación visual. Sincronizalo desde el gadget actualizado de Aspire para validar su revisión y subir el archivo.');
+}
+
 const mapFabricationState = (estado: string | null | undefined): FabricationState => {
   const mapping: Record<string, FabricationState> = {
     'Sin Hacer': 'SIN_HACER',
@@ -1470,6 +1476,7 @@ export const syncProgramFromAspireFile = async (
   programId: string,
   file: File,
 ): Promise<SyncProgramFromFileResult> => {
+  await assertLegacyPreparationFlow(programId);
   const program = await getProgramById(programId);
   if (!program) throw new ProgramServiceError('Programa no encontrado');
 
@@ -1670,6 +1677,7 @@ export const uploadVerifiedAspire = async (
   file: File,
   userId?: string,
 ): Promise<Program> => {
+  await assertLegacyPreparationFlow(programId);
   const program = await getProgramById(programId);
   if (!program) throw new ProgramServiceError('Programa no encontrado');
 
@@ -1959,6 +1967,7 @@ export const markProgramPackageReady = async (
   programId: string,
   zipUrl: string,
 ): Promise<Program> => {
+  await assertLegacyPreparationFlow(programId);
   const { error } = await supabase
     .from('programa')
     .update({

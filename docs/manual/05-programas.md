@@ -1,5 +1,21 @@
 # 5. Programas
 
+## Preparar sobre el soporte (nuevo flujo, requiere puesta en marcha)
+
+En la hoja o tarjeta de un programa de la máquina C (G y XL todavía no), abrí **Preparar programa**. Elegí un sello o arrastralo a otra planchuela; podés cambiar medida proporcional, mecanizado, posición, fijarlo o usar **Llevar al final**. **Reacomodar libres** conserva las posiciones fijas. **Deshacer/Rehacer** permite volver atrás. Las medidas vendidas no cambian.
+
+En **Soporte y material**, verificá las posiciones y áreas útiles reales e indicá dónde hay material. En **Plantillas por mecanizado**, subí las plantillas nativas de Aspire y verificá sus herramientas, profundidades y selección automática por capas. Repaso: capas `REPASO CLASICO`, `REPASO 3MM` y `REPASO ALIMENTO`. Estos preparativos deben calificarse con Fede antes del primer uso productivo.
+
+**Guardar preparación** chequea todos los SVG de la ejecución y crea una revisión. El repaso automático decide entre no repasar o incluir todo el sello. También podés elegir sello completo, sin repaso o conservar una selección parcial ajustada en Aspire. Si cambió la geometría o falta análisis, se usa el sello completo y se deja advertencia. La selección parcial sin contactos todavía se verifica en Aspire.
+
+Las observaciones permiten guardar borradores; deben resolverse antes de sincronizar. Si un sello queda fuera por falta de material, usá **Sacar del programa y devolver a pendientes**, después guardá de nuevo. Así no se marca como fabricado junto con los demás.
+
+Abrí Aspire y ejecutá el gadget **3.1** de la máquina → **Sincronizar y recalcular**. Conserva las correcciones del dibujo y consulta cambios incompatibles de la misma propiedad. Para un archivo anterior: **Preparar base** hace respaldo y conserva dibujos; **Vincular el diseño seleccionado** identifica cada sello antes del primer sync. Ante un problema se conserva un respaldo junto al archivo, con extensión `.bak` (para recuperación, copiar y renombrar como `.crv3d`).
+
+De vuelta en la app, **Actualizar informe de Aspire** muestra el resultado sin pisar cambios sin guardar. **Tomar medidas y posición de Aspire** adopta esos valores para el próximo plan. Un programa queda listo después del informe recalculado sin errores y de subir su archivo de la revisión vigente; bajar el ZIP no lo aprueba. Revisá las trayectorias y guardá los TXT como hasta ahora.
+
+El nuevo flujo requiere migración, servidor y gadgets actualizados. Los programas sin preparación conservan el flujo legado que sigue abajo. [Alcance y limitaciones](../02-modules/programas/preparacion-visual.md).
+
 [← Volver al índice](README.md)
 
 Un **programa** es un grupo de sellos que se fabrican juntos en una CNC, en una misma corrida de Aspire. En esta pantalla se arman los programas, se controla que entren en las planchuelas y se sigue su avance. Se llega desde **Programas** en el menú.
@@ -171,3 +187,41 @@ Clic en la carpeta **Terminados** abre el fichero de programas finalizados, con 
 ## Archivos base de cada máquina
 
 Arriba de la pantalla, **Máquina C**, **Máquina G** y **Máquina XL** muestran el archivo base de Aspire (**Aspire .crv3d**) y el gadget de cada una. Se reemplazan subiendo uno nuevo. Solo hay que tocarlos cuando cambia la plantilla de la máquina.
+
+### Controles del nuevo flujo (implementación local pendiente de habilitar)
+
+Usá el gadget **3.2** de la máquina con la nueva preparación. Si volvés a corregir o recalcular en Aspire, la app exige el archivo de ese último resultado, aunque no hayas cambiado el plan en la app. Si aparece que el resultado cambió durante la subida, volvé a sincronizar y subir desde la copia actual. Una descarga de ZIP o una subida anterior no dejan listo ese resultado nuevo. La activación del servidor y la instalación del gadget forman parte de la puesta en marcha pendiente.
+
+**Reacomodar libres** busca lugar en otras planchuelas disponibles cuando una se llena y respeta los sellos fijados. Al cambiar de planchuela, el gadget rehace el corte con el ancho correspondiente. Al agrandar el diseño conserva su borde superior y el tamaño del taladro.
+
+**Tomar medidas y posición de Aspire** reconoce también la planchuela real. Si la pieza quedó entre posiciones o fuera del soporte, hay que corregirla antes de adoptar. La sincronización exige comprobar los auxiliares y recalcular antes de aprobar el archivo. La primera prueba real se realiza con la máquina C y Aspire 10.5; G y XL se validarán después.
+
+En **Plantillas por mecanizado**, cargá una trayectoria por archivo. Las principales conservan su número de etapa y sus capas automáticas. **Plantilla de repaso habitual · sello completo** recibe el perfilado exterior manual de la base; **Plantilla de repaso interior · detalle puntual** recibe el interior. Para conservar una selección de Aspire, elegí también si corresponde al perfilado habitual o a **Solo detalle interior**. No se repasan ambos lados automáticamente.
+
+En **Alimento**, cargá las mismas principales de **3 mm** y, en **Corte perimetral**, la plantilla **Corte Forma**. La sincronización adapta las capas de las principales y selecciona el perímetro correspondiente; conserva inicio 3,5 mm y pasada 5,5 mm. El repaso precede al corte, y el planeado precede al cajeado. Si falta una trayectoria o el recálculo no produce mecanizado válido, la revisión queda pendiente con el motivo.
+
+Las pruebas locales en Aspire 10.514 cubrieron importar dos sellos, combinar recetas, conservar una corrección interna al mover/agrandar, cambiar a Alimento y conservar un solo detalle para repaso interior. Falta habilitar el servidor con autorización y revisar programas representativos con el operario. La selección parcial automática sin contactos todavía no está disponible; el automático usa sin repaso o sello completo.
+
+### Probar sin pedidos reales (solo versión de desarrollo)
+
+Abrí `/dev/preparacion-programas`. Hay ocho sellos ficticios y cuatro casos: programa combinado, falta de material, un sello fuera del ancho y dos sellos demasiado juntos.
+
+La pantalla abre en **Aspire real · archivos locales**. Para continuar una prueba descargada:
+
+1. Usá **Restaurar armado de prueba** con el JSON del armado. Recupera el plan y su revisión; no aprueba fabricación ni adopta un informe guardado dentro del archivo.
+2. Usá **Leer informe de Aspire** con el `app-report-rN.json` producido por el instrumento local. Solo acepta el programa y la revisión abiertos. Verás los dibujos, medidas y mecanizados leídos de Aspire, y sus advertencias si las hay.
+3. Abrí **Preparar el programa de prueba**. El editor y el chequeo al guardar usan el dibujo corregido del informe; los datos vendidos se conservan. **Tomar medidas y posición de Aspire** sigue siendo explícito.
+4. Guardá, descargá el armado nuevo, ejecutá la sincronización local en la copia C y leé su informe nuevo. Mientras tanto, la pantalla conserva el resultado anterior e indica que falta sincronizar. Leer un archivo viejo no lo presenta como resultado de la revisión nueva.
+
+Las líneas rojas y taladros celestes que aparecen en la app se derivan del armado; la vista previa del mecanizado sigue revisándose en Aspire. Estos controles leen archivos locales en el navegador y no los suben a producción. Recargar reinicia la memoria; restaurá el armado y volvé a leer el informe para continuar.
+
+Para usar el ensayo auxiliar de lógica, elegí **Prueba lógica sin Aspire**:
+
+1. Tocá **Simular envío a Aspire** para ver ambos armados.
+2. Tocá **Corregir detalle en Aspire simulado**. Abrí **Preparar el programa de prueba**, mové Marca A a una posición libre y **Guardá preparación**. Volvé a simular: el dibujo corregido se conserva.
+3. Tocá **Agrandar sello 1 en Aspire +10 %** y cambiá también su medida en el editor. Guardá y simulá: aparecen **Resolver conflicto: usar app** y **Resolver conflicto: conservar Aspire**.
+4. Cerrá el editor para comparar los armados y leer el registro. Los cortes del plan aparecen rojos y los taladros celestes. Cambiar de caso o recargar reinicia todo.
+
+El ejemplo guarda únicamente en memoria. No abre Aspire, no calcula trayectorias ni verifica contactos de la fresa; no modifica pedidos, material ni estados reales.
+
+**Prueba con Aspire real:** **Descargar armado para prueba real** guarda un JSON del plan que tenés guardado, con los dibujos ficticios. Si el armado tiene errores, bloquea la descarga. Ese archivo se utiliza con el instrumento local de calificación y las plantillas reales de C; no abre Aspire por sí solo ni es un botón de sincronización de producción. El ensayo del 16/10/2026 importó ocho sellos, calculó quince trayectorias y conservó una corrección al mover/agrandar desde la app. Se guardó una copia independiente y se ejecutó su vista previa de mecanizado. [Resultado y límites](../audits/programas-aspire-real-2026-10-16.md).

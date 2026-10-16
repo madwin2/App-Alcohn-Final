@@ -38,6 +38,9 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 | [Q-VEC-007](vectorizacion.md#q-vec-007) | Chequeo de fresa: ¿los umbrales coinciden con lo que se corrige en Aspire? | Probarlo con Fede |
 | [Q-VEC-008](vectorizacion.md#q-vec-008) | ¿Misma fresa fina para todos los tipos de sello? | Respuesta del equipo |
 | [Q-VEC-009](vectorizacion.md#q-vec-009) | ¿Confirmar con problemas de fresa debe bloquearse? | Decisión del dueño |
+| [Q-PROG-013](programas.md#q-prog-013) | Soportes fijos y uso parcial aclarados; faltan geometría útil y márgenes | Respuesta de operación (parcial, 2026-10-15) |
+| [Q-PROG-019](programas.md#q-prog-019) | Base C y Aspire 10.514 identificados; calificar recetas y después G/XL | Prueba nativa local |
+| [Q-PROG-015](programas.md#q-prog-015) | Conservar ajustes y preguntar solo por conflictos de la misma propiedad; implementado el retorno SVG y conflicto de fuente/geometría | Documentada; pendiente calificación en Aspire (2026-10-15) |
 
 ## Archivos por área
 
