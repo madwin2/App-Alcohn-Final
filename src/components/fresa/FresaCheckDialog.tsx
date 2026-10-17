@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Download, Loader2, PencilRuler, Wand2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, Info, Loader2, PencilRuler, Wand2, XCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -75,7 +75,7 @@ interface Props {
 
 const DEFAULT_VISIBLE: ZoneSeverity[] = ['alta', 'media'];
 
-function StatusSummary({ report }: { report: FresaReport | null }) {
+function StatusSummary({ report, resolvedByRepaso = false }: { report: FresaReport | null; resolvedByRepaso?: boolean }) {
   if (!report) {
     return (
       <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-3 text-sm">
@@ -105,6 +105,14 @@ function StatusSummary({ report }: { report: FresaReport | null }) {
     );
   }
   const n = g.alta + g.media;
+  if (resolvedByRepaso) {
+    return (
+      <div className="flex items-start gap-2 rounded-md border border-teal-300 bg-teal-50 p-3 text-sm text-teal-900 dark:bg-teal-950/40 dark:text-teal-100">
+        <Info className="mt-0.5 size-4 shrink-0" />
+        <span><strong>{n} lugar{n === 1 ? '' : 'es'} que la 0,6 sola no saca</strong> · los resuelve el repaso 0,2</span>
+      </div>
+    );
+  }
   return (
     <div className="flex items-start gap-2 rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 dark:bg-rose-950/40 dark:text-rose-100">
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -169,7 +177,27 @@ export function FresaCheckDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al abrir o cambiar de diseño
   }, [svgText, open]);
 
+  // Con repaso, lo útil es ver qué deja la 0,6 y qué saca la 0,2: se abre ahí.
+  useEffect(() => {
+    const p = report?.passes;
+    if (p?.primary && p.outcome !== 'sin_repaso' && p.outcome !== 'sin_receta') setPassView('primary');
+  }, [report?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const activeSource = mode !== 'original' && fix ? fix.after : report;
+  const passes = activeSource?.passes;
+  /** Zonas de la 0,6 que saca el repaso (se tocan con un lugar de repaso y la 0,2 no falla ahí). */
+  const resolvedZones = useMemo(() => {
+    const out = new Set<string>();
+    if (!passes?.primary) return out;
+    const overlap = (a: { minX: number; minY: number; maxX: number; maxY: number }, b: typeof a, pad = 0.05) =>
+      a.minX - pad <= b.maxX && b.minX - pad <= a.maxX && a.minY - pad <= b.maxY && b.minY - pad <= a.maxY;
+    const fineBad = passes.fine.zones.filter((z) => z.severity !== 'baja');
+    for (const z of passes.primary.zones) {
+      if (passes.repaso.zones.some((r) => overlap(z.bounds, r.bounds)) && !fineBad.some((f) => overlap(z.bounds, f.bounds, 0))) out.add(z.id);
+    }
+    return out;
+  }, [passes]);
+  const allResolved = passView === 'primary' && !!passes && (passes.outcome === 'repaso_sugerido');
   const active = useMemo(() => activeSource ? reportForPass(activeSource, passView) : null, [activeSource, passView]);
   const groups = useMemo(
     () => (active?.check?.groups ?? []).filter((g) => visible.has(g.severity)),
@@ -313,6 +341,7 @@ export function FresaCheckDialog({
                 mode={mode}
                 visibleSeverities={visible}
                 showDepth={showDepth}
+                repasoZones={passView === 'primary' ? passes?.repaso.zones : undefined}
                 selectedGroupId={selected}
                 hoveredGroupId={hovered}
                 onSelectGroup={select}
@@ -330,7 +359,7 @@ export function FresaCheckDialog({
           </div>
 
           <aside className="flex w-full shrink-0 flex-col gap-3 md:w-[340px] md:overflow-y-auto md:pr-1">
-            <StatusSummary report={active ?? null} />
+            <StatusSummary report={active ?? null} resolvedByRepaso={allResolved} />
 
             {active?.warnings.length ? (
               <ul className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
@@ -422,6 +451,11 @@ export function FresaCheckDialog({
                             <span className="block text-xs text-muted-foreground">
                               {groupDetail(g, active?.profile.minDepthMm ?? 0.4)}
                             </span>
+                            {passView === 'primary' && passes?.repaso.zones.length && g.severity !== 'baja' ? (
+                              g.zoneIds.every((id) => resolvedZones.has(id))
+                                ? <span className="block text-xs text-teal-600 dark:text-teal-300">La saca el repaso 0,2</span>
+                                : <span className="block text-xs text-rose-600 dark:text-rose-300">El repaso 0,2 no la resuelve</span>
+                            ) : null}
                           </span>
                         </button>
                       </li>

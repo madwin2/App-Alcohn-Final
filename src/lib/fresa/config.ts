@@ -143,4 +143,15 @@ export const MIN_BLACK_WIDTH_MM = 0.4;
 export const MAX_SCALE_UP = 1.06;
 
 /** Versión del algoritmo: cambia → se invalida la caché de resultados. */
+/**
+ * Repaso fino: se selecciona donde la fresa de 0,2 talla al menos esto más
+ * hondo que la primera (0,6), hasta la profundidad final del repaso (0,6 mm).
+ * Mide la diferencia real entre herramientas: un vértice abierto o un borde
+ * recto dan poca ganancia y no entran; una ranura o un ángulo cerrado, sí.
+ * Probado con Magui Lucero: 0,10 y 0,15 eligen las mismas piezas (2026-10-17).
+ */
+export const REPASO_MIN_GAIN_MM = 0.1;
+/** Paso entre profundidades al buscar la ganancia (mm). */
+export const REPASO_DEPTH_STEP_MM = 0.05;
+
 export const FRESA_ANALYSIS_VERSION = 6;

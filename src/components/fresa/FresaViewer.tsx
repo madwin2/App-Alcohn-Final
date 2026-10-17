@@ -31,6 +31,8 @@ interface Props {
   onSelectGroup: (id: string | null) => void;
   /** Cambia cuando hay que encuadrar el grupo elegido. */
   focusNonce: number;
+  /** Lugares que saca el repaso 0,2 (mm), dibujados en verde agua. */
+  repasoZones?: { id: string; rings: { x: number; y: number }[][] }[];
   className?: string;
 }
 
@@ -69,6 +71,7 @@ export function FresaViewer({
   hoveredGroupId,
   onSelectGroup,
   focusNonce,
+  repasoZones,
   className,
 }: Props) {
   const filterId = useId().replace(/:/g, '');
@@ -305,6 +308,14 @@ export function FresaViewer({
                 fillOpacity={0.9}
                 fillRule="nonzero"
               />
+            ))}
+          </g>
+        ) : null}
+        {showZones && repasoZones?.length ? (
+          <g transform={`scale(${1 / k})`} style={{ pointerEvents: 'none' }}>
+            {repasoZones.map((z) => (
+              <path key={z.id} d={zonePath(z.rings)} fill="#2dd4bf" fillOpacity={0.6} stroke="#0d9488" strokeWidth={1}
+                vectorEffect="non-scaling-stroke" fillRule="nonzero" />
             ))}
           </g>
         ) : null}

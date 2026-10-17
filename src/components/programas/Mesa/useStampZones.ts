@@ -2,20 +2,29 @@ import { useEffect, useState } from 'react';
 import { chequearSvg, type FresaReport } from '@/lib/fresa/chequeoFresa';
 import { fetchSvgText } from '@/lib/fresa/useFresaReport';
 import { parseSvgShapes } from '@/lib/fresa/svgShapes';
-import { buildBlackRegion, type FresaZone } from '@/lib/fresa/analyze';
+import { buildBlackRegion, type ZoneSeverity } from '@/lib/fresa/analyze';
+import type { Pt } from '@/lib/fresa/pathData';
 import { bounds, UM } from '@/lib/fresa/geometry';
 import type { StampPlacement } from '@/lib/programas/preparation';
 
-/** Zonas del chequeo de fresa de un sello, en unidades del SVG, más las cajas para ubicarlas. */
+/** `repaso`: lo que la 0,6 deja y saca la 0,2. El resto, lo que sigue sin resolverse. */
+export type ZoneTone = ZoneSeverity | 'repaso';
+export interface DisplayZone { id: string; rings: Pt[][]; center: { x: number; y: number }; severity: ZoneTone }
+
+/**
+ * Zonas de fresa de un sello para la mesa (mm), más las cajas para ubicarlas.
+ * Con repaso: lo que saca la 0,2 (verde agua) y lo que ni la 0,2 resuelve. Sin
+ * repaso: todo lo que deja la 0,6.
+ */
 export interface StampZones {
-  zones: FresaZone[];
+  zones: DisplayZone[];
   /** mm por unidad del SVG con que se analizó (las zonas vienen en mm). */
   mmPerUnit: number;
   /** Dónde cae el SVG completo (lo que dibuja la vista 2D), en unidades. */
   imageBox: FresaReport['imageBox'];
   /** Caja del relieve (lo negro), en unidades: la que usa la simulación 3D. */
   blackBox: { x: number; y: number; w: number; h: number };
-  counts: FresaReport['counts'];
+  counts: Record<ZoneTone, number>;
   status: FresaReport['status'];
 }
 
@@ -29,15 +38,24 @@ async function compute(stamp: StampPlacement): Promise<StampZones> {
   });
   const box = bounds(buildBlackRegion(parseSvgShapes(svg).shapes, 1));
   if (!box) throw new Error('Sin geometría.');
+  const p = report.passes;
+  const show = (z: { id: string; rings: Pt[][]; center: { x: number; y: number } }, severity: ZoneTone): DisplayZone => ({ id: z.id, rings: z.rings, center: z.center, severity });
+  const zones: DisplayZone[] = p?.primary
+    ? stamp.fine?.mode === 'none'
+      ? p.primary.zones.map((z) => show(z, z.severity))
+      : [...p.repaso.zones.map((z) => show(z, 'repaso')), ...p.fine.zones.map((z) => show(z, z.severity))]
+    : (report.check?.zones ?? []).map((z) => show(z, z.severity));
+  const counts: Record<ZoneTone, number> = { alta: 0, media: 0, baja: 0, repaso: 0 };
+  zones.forEach((z) => { counts[z.severity] += 1; });
   return {
-    zones: report.check?.zones ?? [], mmPerUnit: report.mmPerUnit, imageBox: report.imageBox, counts: report.counts, status: report.status,
+    zones, mmPerUnit: report.mmPerUnit, imageBox: report.imageBox, counts, status: report.status,
     blackBox: { x: box.minX / UM, y: box.minY / UM, w: (box.maxX - box.minX) / UM, h: (box.maxY - box.minY) / UM },
   };
 }
 
 /** Chequeo de fresa para dibujar sus zonas sobre la mesa. Solo calcula si `enabled`. */
 export function useStampZones(stamp: StampPlacement, enabled: boolean): StampZones | null {
-  const key = JSON.stringify([stamp.vectorSvg ?? stamp.sourceUrl, stamp.widthMm, stamp.heightMm, stamp.recipe]);
+  const key = JSON.stringify([stamp.vectorSvg ?? stamp.sourceUrl, stamp.widthMm, stamp.heightMm, stamp.recipe, stamp.fine?.mode === 'none']);
   const [state, setState] = useState<{ key: string; zones: StampZones | null }>({ key: '', zones: null });
   useEffect(() => {
     if (!enabled) return;

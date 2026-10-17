@@ -7,9 +7,8 @@ import { useArtwork } from '@/components/programas/Preparation/StampArtwork';
 import baseC from '@/assets/programas/base-fijacion-c.svg?url';
 import { cn } from '@/lib/utils/cn';
 import { useStampRelief, type ReliefPad } from './useStampRelief';
-import { useStampZones, type StampZones } from './useStampZones';
+import { useStampZones, type StampZones, type ZoneTone } from './useStampZones';
 import { SEVERITY_FILL, SEVERITY_LABEL } from '@/lib/fresa/textos';
-import type { ZoneSeverity } from '@/lib/fresa/analyze';
 import { barSegments, FACE_OPS, MESA_CAMERA, type BarSegment } from '@/lib/programas/mesaRelief';
 import { MACHINED_COLORS } from '@/lib/programas/mesaReliefRender';
 import { PILL_GHOST } from './mesaUi';
@@ -100,7 +99,9 @@ function BarSolid({ b, segments, view, sideClass }: {
 }
 
 const ringsPath = (rings: { x: number; y: number }[][]) => rings.map((r) => `M${r.map((q) => `${q.x} ${q.y}`).join('L')}Z`).join('');
-const SEVERITY_ORDER: ZoneSeverity[] = ['baja', 'media', 'alta'];
+const SEVERITY_ORDER: ZoneTone[] = ['baja', 'repaso', 'media', 'alta'];
+const ZONE_FILL: Record<ZoneTone, string> = { ...SEVERITY_FILL, repaso: '#2dd4bf' };
+const ZONE_LABEL: Record<ZoneTone, string> = { alta: SEVERITY_LABEL.alta, media: SEVERITY_LABEL.media, repaso: 'Lo saca el repaso 0,2', baja: SEVERITY_LABEL.baja };
 
 /**
  * Zonas del chequeo de fresa sobre el sello. En 2D se alinean con el dibujo
@@ -115,9 +116,9 @@ function ZoneOverlay({ data, view, landscape, alreadyMachined, w, h, pad, unit }
   /** Las zonas suelen medir décimas de mm: un aro de tamaño fijo en pantalla las señala a cualquier zoom. */
   const shapes = (pxPerMm: number) => SEVERITY_ORDER.flatMap((sev) => data.zones.filter((z) => z.severity === sev).map((z) => (
     <g key={z.id}>
-      <path d={ringsPath(z.rings)} fill={sev === 'baja' ? 'none' : SEVERITY_FILL[sev]} fillOpacity={0.7}
-        stroke={SEVERITY_FILL[sev]} strokeOpacity={sev === 'baja' ? 0.7 : 1} strokeWidth={1} vectorEffect="non-scaling-stroke" />
-      {sev !== 'baja' ? <circle cx={z.center.x} cy={z.center.y} r={6 * unit / pxPerMm} fill="none" stroke={SEVERITY_FILL[sev]} strokeWidth={1.5} vectorEffect="non-scaling-stroke" /> : null}
+      <path d={ringsPath(z.rings)} fill={sev === 'baja' ? 'none' : ZONE_FILL[sev]} fillOpacity={0.7}
+        stroke={ZONE_FILL[sev]} strokeOpacity={sev === 'baja' ? 0.7 : 1} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+      {sev !== 'baja' ? <circle cx={z.center.x} cy={z.center.y} r={6 * unit / pxPerMm} fill="none" stroke={ZONE_FILL[sev]} strokeWidth={1.5} vectorEffect="non-scaling-stroke" /> : null}
     </g>
   )));
   if (view === '2d') {
@@ -195,13 +196,13 @@ function StampFace({ stamp, view, fixture, selected, bad, warn, isNew, reliefPad
         style={{ outlineWidth: (selected || bad || isNew ? 2 : 1) * Math.min(1, unit), outlineOffset: selected ? unit : 0 }} />
       {showZones && zones ? <ZoneOverlay data={zones} view={view} landscape={landscape} alreadyMachined={!!stamp.vectorSvg && !!stamp.vectorAlreadyMachined}
         w={w} h={h} pad={pad} unit={unit} /> : null}
-      {showZones && zones && (zones.counts.alta || zones.counts.media) ? (
+      {showZones && zones && (zones.counts.alta || zones.counts.media || zones.counts.repaso) ? (
         // Cantidad de zonas, de tamaño fijo en pantalla: se ve aunque la vista esté lejos.
         <span className="absolute flex items-center justify-center rounded-full font-semibold tabular-nums text-white"
-          title={`${zones.counts.alta} para corregir · ${zones.counts.media} pierden detalle`}
+          title={zones.counts.alta || zones.counts.media ? `${zones.counts.alta} para corregir · ${zones.counts.media} pierden detalle` : `El repaso 0,2 pasa por ${zones.counts.repaso} ${zones.counts.repaso === 1 ? 'lugar' : 'lugares'}`}
           style={{ left: -6 * unit, top: -6 * unit, minWidth: 16 * unit, height: 16 * unit, padding: `0 ${4 * unit}px`, fontSize: 10 * unit,
-            background: SEVERITY_FILL[zones.counts.alta ? 'alta' : 'media'], boxShadow: `0 0 0 ${2 * unit}px black` }}>
-          {zones.counts.alta || zones.counts.media}
+            background: ZONE_FILL[zones.counts.alta ? 'alta' : zones.counts.media ? 'media' : 'repaso'], boxShadow: `0 0 0 ${2 * unit}px black` }}>
+          {zones.counts.alta || zones.counts.media || zones.counts.repaso}
         </span>
       ) : null}
       {warn ? <span className="absolute rounded-full bg-amber-300" title="Revisar la fresa"
@@ -392,7 +393,8 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
     void zoneTick;
     const v = [...zoneMap.current.values()];
     const done = v.filter((x): x is StampZones['counts'] => x !== 'pending');
-    return { total: v.length, ready: done.length, alta: done.filter((c) => c.alta).length, media: done.filter((c) => !c.alta && c.media).length };
+    return { total: v.length, ready: done.length, alta: done.filter((c) => c.alta).length, media: done.filter((c) => !c.alta && c.media).length,
+      repaso: done.filter((c) => !c.alta && !c.media && c.repaso).length };
   }, [zoneTick]);
 
   // IntersectionObserver no ve a través de preserve-3d: se mide la caja proyectada
@@ -635,15 +637,16 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
       {showZones ? (
         <div className="pointer-events-none absolute bottom-3 right-3 max-w-[58%] space-y-0.5 rounded-xl bg-zinc-950/90 px-3 py-1.5 text-[12px] text-zinc-300" role="status">
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {(['alta', 'media', 'baja'] as ZoneSeverity[]).map((sev) => (
+            {(['alta', 'media', 'repaso', 'baja'] as ZoneTone[]).map((sev) => (
               <span key={sev} className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-sm" style={sev === 'baja' ? { boxShadow: `inset 0 0 0 1.5px ${SEVERITY_FILL[sev]}` } : { background: SEVERITY_FILL[sev] }} />{SEVERITY_LABEL[sev]}
+                <span className="size-2.5 rounded-sm" style={sev === 'baja' ? { boxShadow: `inset 0 0 0 1.5px ${ZONE_FILL[sev]}` } : { background: ZONE_FILL[sev] }} />{ZONE_LABEL[sev]}
               </span>
             ))}
           </p>
           <p className="flex items-center gap-1.5 text-zinc-400">
             {zoneStats.ready < zoneStats.total ? <><Loader2 className="size-3 animate-spin" />Analizando la fresa · {zoneStats.ready} de {zoneStats.total}</>
-              : zoneStats.alta || zoneStats.media ? <>{zoneStats.alta ? `${zoneStats.alta} ${zoneStats.alta === 1 ? 'sello' : 'sellos'} para corregir` : ''}{zoneStats.alta && zoneStats.media ? ' · ' : ''}{zoneStats.media ? `${zoneStats.media} pierden detalle` : ''} · elegí uno y «Ver fresa»</>
+              : zoneStats.alta || zoneStats.media ? <>{zoneStats.alta ? `${zoneStats.alta} ${zoneStats.alta === 1 ? 'sello' : 'sellos'} para corregir` : ''}{zoneStats.alta && zoneStats.media ? ' · ' : ''}{zoneStats.media ? `${zoneStats.media} pierden detalle` : ''}{zoneStats.repaso ? ` · ${zoneStats.repaso} con repaso 0,2` : ''} · elegí uno y «Ver fresa»</>
+                : zoneStats.repaso ? `Nada para corregir · ${zoneStats.repaso} ${zoneStats.repaso === 1 ? 'sello lleva' : 'sellos llevan'} repaso 0,2 donde la 0,6 no llega`
                 : zoneStats.total ? 'Ningún sello visible tiene zonas para corregir' : 'Acercá la vista a los sellos'}
           </p>
         </div>

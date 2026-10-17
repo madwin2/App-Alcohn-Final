@@ -1,5 +1,15 @@
 # Chequeo de fresa
 
+## Selección del repaso 0,2 por ganancia (2026-10-17, POL-090)
+
+✅ `passes.ts` (`fineGainRegion`, `repasoSelection`): la 0,2 se elige **donde talla al menos `REPASO_MIN_GAIN_MM` (0,10 mm) más hondo que la 0,6**, para cualquier profundidad hasta el final del repaso (0,6 mm), y en zonas de al menos 0,03 mm². No depende del tipo de zona: entran ranuras, pasos entre letras, ojos y ángulos cerrados; un vértice abierto, un borde recto o un cuadrado sólido dan poca o ninguna ganancia y no entran. Se seleccionan las **piezas negras que bordean** cada zona (las dos, si es entre letras).
+
+- Reemplaza el criterio anterior, que solo tomaba zonas «alta/media» de la primera fresa: en Magui Lucero dejaba afuera la ranura baja de la E (0,64 mm, la 0,6 llegaba a 0,05 y la clasificaba «baja»). Con la ganancia entran las dos ranuras; la 0,2 pasa por 9 de 16 piezas (no I, L, la primera U, la I grande ni las patas). Probado en `passes.test.ts` con el vector real (`__fixtures__/magui-lucero.svg`).
+- 0,10 y 0,15 mm eligen las mismas piezas en ese caso; 0,05 elige casi todo y 0,30 deja afuera pasos reales (U–C, R–O).
+- Chequeo individual: un veredicto único («Con el repaso 0,2 se separa todo · pasa por N de M piezas»); se abre en «Qué deja la 0,6» con lo que saca el repaso en verde agua y, en cada lugar, si lo resuelve el repaso.
+- Mesa: con «Fresa» activado, cada sello muestra lo que saca la 0,2 (verde agua) y lo que ni la 0,2 resuelve (rojo/ámbar); con repaso «Sin repaso», todo lo que deja la 0,6.
+- 🔶 Pendiente: el gadget todavía copia el sello **entero** a la capa REPASO cuando hace falta repaso. Pasar solo las piezas elegidas necesita cambiar el gadget y probarlo en Aspire (hasta ahora el equipo seleccionaba a mano en la capa VECTOR; la capa REPASO no se probó).
+
 ## Comparación de dos pasadas (implementación 2026-10-15)
 
 ✅ `passes.ts` compara la principal configurada 0,6 mm / 15° por lado (final Clásico 1,7; 3MM/Alimento 3) con la fina **configurada 0,2 mm**, física 0,1 mm / 30° por lado (final 0,6 en todos; Q-PROG-020). `FRESA_ALIMENTO` usa referencia inferior 0,4 y comparación a 0,5; el 1 mm corresponde a la principal. Análisis **v6**, caché por receta/opciones. Profundidades relativas al planeado previo de 0,5 mm; las plantillas conservan ese inicio y un único Z0.
