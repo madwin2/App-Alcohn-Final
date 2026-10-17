@@ -171,11 +171,13 @@ function StampFace({ stamp, view, fixture, selected, bad, warn, isNew, reliefPad
   const w = stamp.widthMm * S, h = stamp.heightMm * S;
   // Sobre la planchuela el lado largo va a lo largo (vertical): un dibujo acostado se gira.
   const landscape = !!art?.landscape;
-  const pad = Math.max(1.5, Math.min(w, h) * 0.07);
+  // La caja es la medida de fabricación del vector: el dibujo va de borde a borde, sin margen.
+  const pad = 0;
   return (
     <div className="absolute" style={{ left: x0 * S, top: y0 * S, width: w, height: h }}>
       {view === '2d' && art ? (
-        <img src={art.uri} alt="" draggable={false} className="pointer-events-none absolute left-1/2 top-1/2 object-contain"
+        // max-w-none: el max-width:100% de Tailwind achicaba los dibujos apaisados antes de girarlos.
+        <img src={art.uri} alt="" draggable={false} className="pointer-events-none absolute left-1/2 top-1/2 max-w-none object-contain"
           style={{
             width: (landscape ? h : w) - pad * 2, height: (landscape ? w : h) - pad * 2,
             transform: `translate(-50%, -50%)${landscape ? ' rotate(90deg)' : ''}`,
