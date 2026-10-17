@@ -3,7 +3,7 @@ import { fetchSvgText, isSvgUrl } from '@/lib/fresa/useFresaReport';
 import { parseSvgShapes } from '@/lib/fresa/svgShapes';
 import type { StampPlacement } from '@/lib/programas/preparation';
 
-interface Artwork { uri: string; landscape: boolean }
+export interface Artwork { uri: string; landscape: boolean }
 const cache = new Map<string, Promise<Artwork>>();
 function artwork(key: string, inline?: string): Promise<Artwork> {
   const hit = cache.get(key);
@@ -41,4 +41,16 @@ export function StampArtwork({ stamp, observedSvg }: { stamp: StampPlacement; ob
   return <g transform={`translate(${stamp.centerX},${-stamp.topY + stamp.heightMm / 2}) rotate(${rotate ? -90 : 0}) scale(${machined ? 1 : -1},1)`} style={{ pointerEvents: 'none' }}>
     <image href={image.uri} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="none" />
   </g>;
+}
+
+/** Dibujo recortado a su geometría, para mostrarlo fuera del soporte SVG. */
+export function useArtwork(source: string | undefined, inline?: string): Artwork | null {
+  const [image, setImage] = useState<Artwork | null>(null);
+  const key = inline ?? source ?? '';
+  useEffect(() => {
+    setImage(null); let alive = true;
+    if (inline || isSvgUrl(key)) void artwork(key, inline).then((a) => { if (alive) setImage(a); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [key, inline]);
+  return image;
 }

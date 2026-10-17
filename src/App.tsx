@@ -30,6 +30,7 @@ import CorchoSandboxPage from './app/dev/CorchoSandboxPage'
 import PerfilTourSandboxPage from './app/dev/PerfilTourSandboxPage'
 import ChequeoFresaSandboxPage from './app/dev/ChequeoFresaSandboxPage'
 import ProgramPreparationSandboxPage from './app/dev/ProgramPreparationSandboxPage'
+import ProgramasMesaSandboxPage from './app/dev/ProgramasMesaSandboxPage'
 import StockPendienteSandboxPage from './app/stock-pendiente/index'
 import CentroPage from './app/centro/index'
 import PerfilPage from './app/perfil/index'
@@ -93,6 +94,7 @@ function App() {
               <Route path="/dev/control-gastos" element={<ControlGastosSandboxPage />} />
               <Route path="/dev/chequeo-fresa" element={<ChequeoFresaSandboxPage />} />
               <Route path="/dev/preparacion-programas" element={<ProgramPreparationSandboxPage />} />
+              <Route path="/dev/mesa-programas" element={<ProgramasMesaSandboxPage />} />
             </>
           ) : null}
         </Routes>
