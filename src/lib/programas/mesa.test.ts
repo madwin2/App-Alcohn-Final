@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addStamp, columnStamps, columnUsage, compareQueue, daysToDeadline, emptyDocument, fillFromQueue, mesaChecks, mesaProgress, moveStamp, moveToNeighbor, neighborColumn, placementOptions, queueSection, reflowMesa, removeStamp, resizeStamp, sendToEnd, shiftStamp, updateStampGeometry, type MesaSource } from './mesa';
+import { addStamp, columnStamps, columnUsage, compareQueue, daysToDeadline, emptyDocument, fillFromQueue, mesaChecks, placeSources, reconcileMesa, mesaProgress, moveStamp, moveToNeighbor, neighborColumn, placementOptions, queueSection, reflowMesa, removeStamp, resizeStamp, sendToEnd, shiftStamp, updateStampGeometry, type MesaSource } from './mesa';
 import { PREPARATION_RULES, buildExecutionPlan, validatePreparation, type PreparationDocument } from './preparation';
 
 const src = (id: string, w: number, h: number, extra: Partial<MesaSource> = {}): MesaSource => ({
@@ -251,5 +251,67 @@ describe('mesa: ayudas de la pantalla', () => {
       expectPacked(moved.doc);
     }
     expect(neighborColumn(doc, cols[0].id, -1)).toBeNull();
+  });
+});
+
+describe('mesa con datos reales: reconciliar con los sellos asignados', () => {
+  it('ubica los sellos del programa en orden y conserva la separación', () => {
+    const doc = placeSources(ready(), [src('a', 10, 30, { tipoPlanchuela: 25 }), src('b', 12, 20, { tipoPlanchuela: 25 })]);
+    expect(doc.stamps.map((s) => s.selloId)).toEqual(['a', 'b']);
+    expectPacked(doc);
+  });
+
+  it('no cambia nada si el programa tiene los mismos sellos (misma referencia)', () => {
+    const list = [src('a', 10, 30, { tipoPlanchuela: 25 })];
+    const doc = placeSources(ready(), list);
+    expect(reconcileMesa(doc, list)).toBe(doc);
+  });
+
+  it('suma lo asignado en otra PC al final y quita lo que se sacó, sin mover el resto', () => {
+    const doc = placeSources(ready(), ['a', 'b', 'c'].map((id) => src(id, 10, 30, { tipoPlanchuela: 25 })));
+    const moved = moveStamp(doc, doc.stamps.find((s) => s.selloId === 'c')!.instanceId, doc.stamps[0].columnId, 1e9);
+    expect(moved.added).toBe(true);
+    const order = (d: PreparationDocument) => columnStamps(d, d.stamps[0].columnId).map((s) => s.selloId);
+    expect(order(moved.doc)).toEqual(['c', 'a', 'b']);
+    const next = reconcileMesa(moved.doc, ['c', 'b', 'd'].map((id) => src(id, 10, 30, { tipoPlanchuela: 25 })));
+    expect(order(next)).toEqual(['c', 'b', 'd']);
+    expectPacked(next);
+  });
+
+  it('no pisa lo que se está sumando o quitando en el servidor', () => {
+    const doc = placeSources(ready(), ['a', 'b'].map((id) => src(id, 10, 30, { tipoPlanchuela: 25 })));
+    // El servidor todavía no tiene «b» (se está sumando) y todavía tiene «x» (se está quitando).
+    const server = ['a', 'x'].map((id) => src(id, 10, 30, { tipoPlanchuela: 25 }));
+    const next = reconcileMesa(doc, server, { adding: new Set(['b']), removing: new Set(['x']) });
+    expect(next.stamps.map((s) => s.selloId).sort()).toEqual(['a', 'b']);
+  });
+
+  it('un sello que no entra igual aparece, para que los controles lo marquen', () => {
+    const doc = placeSources(ready(), [src('ancho', 45, 60)]);
+    expect(doc.stamps.map((s) => s.selloId)).toEqual(['ancho']);
+    expect(validatePreparation(doc).some((i) => i.severity === 'error')).toBe(true);
+  });
+});
+
+describe('mesa: programas con el gadget anterior', () => {
+  it('no exige soporte ni plantillas de la preparación y puede llegar a Aspire', () => {
+    const doc = placeSources(emptyDocument('p1', 'G'), [src('a', 10, 30)]);
+    expect(mesaChecks(doc).some((g) => g.id === 'maquina' && g.state === 'error')).toBe(true);
+    expect(mesaChecks(doc, undefined, { legacy: true }).some((g) => g.id === 'maquina')).toBe(false);
+    const checked = { ...doc, stamps: doc.stamps.map((s) => ({ ...s, fine: { mode: 'auto' as const, needsFine: false, inputHash: 'x', widthMm: s.widthMm, heightMm: s.heightMm, recipe: s.recipe, outcome: 'sin_repaso', analysisVersion: 1 } })) };
+    const state = { savedRevision: 1, dirty: false, syncedRevision: null, fileRevision: null };
+    expect(mesaProgress(checked, state).step).toBe('revisar');
+    expect(mesaProgress(checked, state, undefined, { legacy: true }).step).toBe('aspire');
+  });
+});
+
+describe('mesa: gadget anterior ya sincronizado', () => {
+  it('no vuelve a pedir el chequeo de fresa si ya está en Aspire', () => {
+    const doc = placeSources(emptyDocument('p1', 'G'), [src('a', 10, 30)]);
+    const pending = mesaProgress(doc, { savedRevision: 1, dirty: false, syncedRevision: null, fileRevision: null }, undefined, { legacy: true });
+    expect(pending.step).toBe('revisar');
+    expect(pending.blocking).toMatch(/Chequeá la fresa/);
+    const synced = mesaProgress(doc, { savedRevision: 1, dirty: false, syncedRevision: 1, fileRevision: 1 }, undefined, { legacy: true });
+    expect(synced.done.fabricar).toBe(true);
   });
 });

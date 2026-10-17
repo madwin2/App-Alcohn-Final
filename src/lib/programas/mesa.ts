@@ -244,6 +244,29 @@ export function fillFromQueue(doc: PreparationDocument, queue: MesaSource[]): { 
   return { doc: next, added };
 }
 
+/** Ordena y ubica los sellos del programa sobre el soporte, en el orden en que llegaron. */
+export function placeSources(base: PreparationDocument, stamps: MesaSource[]): PreparationDocument {
+  let doc = base;
+  for (const s of stamps) {
+    if (doc.stamps.some((x) => x.selloId === s.id)) continue;
+    const r = addStamp(doc, s);
+    // Si no entra se agrega igual: los controles lo marcan y no se pierde de vista.
+    doc = r.added ? r.doc : reflowMesa({ ...doc, stamps: [...doc.stamps, ...createPreparation(doc.programId, doc.machine, [s]).stamps] });
+  }
+  return doc;
+}
+
+/** Sellos que se están sumando o quitando en el servidor: la recarga no los pisa. */
+export interface MesaPending { adding: Set<string>; removing: Set<string> }
+
+/** Mantiene el borrador al día con los sellos asignados (otra PC, tablero, realtime). */
+export function reconcileMesa(doc: PreparationDocument, stamps: MesaSource[], pending?: MesaPending): PreparationDocument {
+  const ids = new Set(stamps.map((s) => s.id));
+  const kept = doc.stamps.filter((s) => ids.has(s.selloId) || pending?.adding.has(s.selloId));
+  const next = kept.length === doc.stamps.length ? doc : reflowMesa({ ...doc, stamps: kept });
+  return placeSources(next, pending ? stamps.filter((s) => !pending.removing.has(s.id)) : stamps);
+}
+
 export interface ColumnUsage { columnId: string; nominalMm: number; usedMm: number; freeMm: number; totalMm: number; count: number }
 
 /** Ocupación de cada planchuela (sello + separación de corte). */
@@ -269,10 +292,14 @@ const GROUPS: { id: string; label: string; codes: string[] }[] = [
   { id: 'maquina', label: 'Máquina configurada', codes: ['SUPPORT', 'RECIPE', 'PERIMETER_TEMPLATE', 'INVALID'] },
 ];
 
-/** Controles agrupados en lenguaje del taller, más el estado del repaso fino. */
-export function mesaChecks(doc: PreparationDocument, sources?: PreparationSource[]): CheckGroup[] {
+/**
+ * Controles agrupados en lenguaje del taller, más el estado del repaso fino.
+ * `legacy`: el programa va con el gadget anterior, que no usa el soporte ni las
+ * plantillas de la preparación; esos controles no aplican.
+ */
+export function mesaChecks(doc: PreparationDocument, sources?: PreparationSource[], opts: { legacy?: boolean } = {}): CheckGroup[] {
   const issues = validatePreparation(doc, sources);
-  const groups: CheckGroup[] = GROUPS.map((g) => {
+  const groups: CheckGroup[] = GROUPS.filter((g) => !(opts.legacy && g.id === 'maquina')).map((g) => {
     const items = issues.filter((i) => g.codes.includes(i.code));
     return { id: g.id, label: g.label, items, state: items.some((i) => i.severity === 'error') ? 'error' : items.length ? 'warning' : 'ok' };
   });
@@ -303,11 +330,13 @@ export interface MesaProgress { step: MesaStep; done: Record<MesaStep, boolean>;
  * chequeado, sin errores), aspire (Aspire devolvió la revisión vigente) y
  * fabricar (archivo de esa revisión confirmado).
  */
-export function mesaProgress(doc: PreparationDocument, state: { savedRevision: number | null; dirty: boolean; syncedRevision: number | null; fileRevision: number | null }, sources?: PreparationSource[]): MesaProgress {
-  const checks = mesaChecks(doc, sources);
+export function mesaProgress(doc: PreparationDocument, state: { savedRevision: number | null; dirty: boolean; syncedRevision: number | null; fileRevision: number | null }, sources?: PreparationSource[], opts: { legacy?: boolean } = {}): MesaProgress {
+  const checks = mesaChecks(doc, sources, opts);
   const hasStamps = active(doc).length > 0;
   const layoutOk = hasStamps && checks.filter((g) => ['entra', 'separacion', 'material', 'vectores'].includes(g.id)).every((g) => g.state !== 'error');
-  const ready = layoutOk && checks.every((g) => g.state !== 'error' && g.state !== 'pending') && !state.dirty && state.savedRevision !== null;
+  // Con el gadget anterior, un programa que ya sincronizó no espera un chequeo nuevo de fresa: no cambia lo hecho en Aspire.
+  const alreadyInAspire = !!opts.legacy && state.savedRevision !== null && state.syncedRevision === state.savedRevision;
+  const ready = layoutOk && checks.every((g) => g.state !== 'error' && (g.state !== 'pending' || alreadyInAspire)) && !state.dirty && state.savedRevision !== null;
   const synced = ready && state.syncedRevision === state.savedRevision;
   const filed = synced && state.fileRevision === state.savedRevision;
   const done = { armado: layoutOk, revisar: ready, aspire: synced, fabricar: filed };
@@ -316,6 +345,7 @@ export function mesaProgress(doc: PreparationDocument, state: { savedRevision: n
   const blocking = !hasStamps ? 'Sumá sellos desde la cola.'
     : firstError ? firstError.message
       : state.dirty || state.savedRevision === null ? 'Guardá para chequear la fresa y fijar la revisión.'
+        : !ready ? 'Chequeá la fresa de los sellos antes de Aspire.'
         : !synced ? 'Abrí Aspire y sincronizá con el gadget.' : !filed ? 'Falta subir el archivo de Aspire.' : null;
   return { step, done, blocking };
 }

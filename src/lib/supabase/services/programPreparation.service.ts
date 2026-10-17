@@ -98,3 +98,22 @@ export async function inheritMachineSetup(programId: string, machine: Preparatio
     return null;
   }
 }
+
+/**
+ * Soporte y plantillas de la última preparación de la máquina, solo para
+ * mostrar (no copia plantillas). Al guardar por primera vez se usa
+ * `inheritMachineSetup`, que sí las copia a la carpeta del programa.
+ */
+export async function peekMachineSetup(machine: PreparationDocument['machine']): Promise<MachineSetup | null> {
+  const { data, error } = await supabase.from('programa_preparacion')
+    .select('programa_id, documento, programa!inner(nombre, maquina)')
+    .eq('programa.maquina', machine)
+    .order('updated_at', { ascending: false }).limit(5);
+  if (error) return null;
+  const row = (data ?? []).find((r) => isPreparationDocument(r.documento) && r.documento.machine === machine);
+  if (!row) return null;
+  const source = row.documento as PreparationDocument;
+  const nombre = (row.programa as unknown as { nombre?: string } | null)?.nombre ?? 'otro programa';
+  return { columns: source.columns.map((c) => ({ ...c, available: true })), gapMm: source.gapMm,
+    supportVerified: source.supportVerified, recipes: source.recipes, fromProgramName: nombre };
+}
