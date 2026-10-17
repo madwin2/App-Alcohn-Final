@@ -1,5 +1,9 @@
 # WF-04 · Programa y fabricación CNC
 
+## Mesa de armado (prototipo local, 2026-10-17)
+
+✅ En `/dev/mesa-programas`, Fede puede ensayar: sumar/arrastrar sellos → elegir planchuela y orden → ajustar largo proporcional → revisar. Cada modificación mantiene la fila centrada con **8 mm exactos entre diseños** y reacomoda los siguientes. Subir/Bajar cambia un puesto; Al final coloca debajo del último. Quitar o trasladar cierra el hueco de origen. Si no entra de ancho/largo o falta material en destino, se conserva el armado y se muestra el motivo. Deshacer/Rehacer restaura toda la operación. No hay Fijar/Soltar ni ajuste de espaciado. Son datos de ejemplo en memoria, sin transiciones de fabricación ni automatizaciones; Aspire sigue simulado. [Decisión y alcance](../13-decisions/ADR-027-mesa-de-armado.md).
+
 ## Variante con preparación visual (DB/edge publicadas; gadget y prueba conectada pendientes)
 
 Armar programa → **Preparar programa** → verificar soporte/material y plantillas → mover, dimensionar y elegir receta por ejecución → **Guardar preparación** (chequeo de todos los SVG y revisión nueva) → gadget 3.2 **Sincronizar y recalcular** → resolver solo conflictos de la misma propiedad → comprobar geometría real y auxiliares → informe recalculado + archivo del mismo resultado/revisión → revisar trayectorias y guardar TXT → Haciendo. Si falta material, devolver el sello a pendientes y guardar antes del sync. Informe/archivo viejos no aprueban un plan nuevo; tampoco aprueban otro resultado de la misma revisión. Principales con capas automáticas; perfilados finos y perímetro manuales admitidos solo en sus campos específicos, con selección antes de cada recálculo individual. Se mantienen los parámetros nativos confirmados de C (Q-PROG-020/022). [Alcance y controles](../02-modules/programas/preparacion-visual.md).

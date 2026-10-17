@@ -1,5 +1,10 @@
 # Auditorías
 
+- [Mesa: usabilidad y UI, 2026-10-17](mesa-usabilidad-ui-2026-10-17.md): problemas verificados, arquitectura propuesta de la pantalla, mejoras por zona, preguntas abiertas y orden de trabajo.
+- [Mesa: relieve lineal y bronce, 2026-10-17](mesa-relieve-validacion-2026-10-17.md): geometría compartida, perfiles de fresa, verificación visual y alcance de la estimación.
+
+- [Mesa de armado: separación exacta, 2026-10-17](mesa-imantado-validacion-2026-10-17.md): pruebas de reacomodo, orden, cortes, interacción en navegador y limitaciones de checks globales.
+
 - [Prueba remota C en producción, 2026-10-16](programas-prueba-remota-c-2026-10-16.md): programa de prueba, gadget 3.2, 15 trayectorias, archivo ligado al evento y programa LISTO; limpieza y hallazgos (base de Descargas no limpia, Preparar base antes de importar).
 - [Conexión y confirmación app/Aspire, 2026-10-16](programas-conexion-validacion-2026-10-16.md): prueba HTTP del handler real y SQL en memoria; archivo ligado al resultado nativo, bloqueo de subidas/reintentos atrasados y protocolo 4 pendiente de activar.
 

@@ -1,5 +1,21 @@
 # 5. Programas
 
+## Probar la mesa de armado
+
+En `/dev/mesa-programas` podés probar la nueva mesa con datos de ejemplo; Aspire está simulado. El **imantado está siempre activo**: cada sello queda centrado y separado exactamente **8 mm** del siguiente.
+
+- Arrastrá un sello para ubicarlo antes o después de otro, o cambiarlo de planchuela. Los demás se acomodan y la vista previa muestra cómo quedarán.
+- Al cambiar el **largo de fabricación**, el diseño conserva su proporción y los sellos de abajo bajan o suben automáticamente. Lo vendido no cambia.
+- **Subir** y **Bajar** cambian un puesto. **Al final** lo coloca justo debajo del último sello de esa planchuela.
+- **Quitar** cierra el hueco. **Deshacer/Rehacer** permite recuperar todo el acomodo anterior.
+- Si no entra o la planchuela está sin material, aparece un aviso y se conserva el armado anterior. Elegí otra medida o planchuela.
+
+No hace falta Ordenar, Fijar ni Soltar: el acomodo es automático y la separación no se modifica.
+
+La vista **2D** oculta las trabas de fijación y muestra las ranuras redondeadas con líneas finas y tenues para destacar los sellos. En **3D/Mecanizado** siguen visibles las trabas.
+
+**3D** muestra toda la mesa en líneas y el relieve estimado de los sellos, con los fondos y pendientes de las fresas configuradas. **Mecanizado** muestra ese mismo relieve con acabado de bronce. Acercá con la rueda para ver los detalles; pasá el cursor sobre un sello para saber si muestra solo la principal o también el repaso completo. El automático necesita un chequeo vigente. El repaso parcial se revisa en Aspire: esta vista no reproduce sus trayectorias.
+
 ## Preparar sobre el soporte (nuevo flujo, requiere puesta en marcha)
 
 En la hoja o tarjeta de un programa de la máquina C (G y XL todavía no), abrí **Preparar programa**. Elegí un sello o arrastralo a otra planchuela; podés cambiar medida proporcional, mecanizado, posición, fijarlo o usar **Llevar al final**. **Reacomodar libres** conserva las posiciones fijas. **Deshacer/Rehacer** permite volver atrás. Las medidas vendidas no cambian.
