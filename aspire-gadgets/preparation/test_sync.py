@@ -190,6 +190,63 @@ class SyncTests(unittest.TestCase):
           assert(sync.fineSelection(ctx,s,entries,'source-hash')~=nil); assert(count==2)
         ''')
 
+    PARTIAL = r'''
+      -- Tres piezas en un sello de 30 x 10 ubicado: izquierda (8), centro (8) y derecha (6, asimetrico).
+      function design(grouped, symmetric)
+        local a,b,c=rectangle(0,0,8,10),rectangle(11,0,8,10),symmetric and rectangle(22,0,8,10) or rectangle(24,0,6,10)
+        local entries
+        if grouped then
+          local g=params(); g.ClassName='vcCadObjectGroup'; g.items={a,b,c}
+          function g:GetBoundingBox() return {MinX=0,MaxX=30,MinY=0,MaxY=10} end
+          function g:Clone() return g end
+          entries={{object=g,role='design',layer={Name='VECTOR'}}}
+        else
+          entries={{object=a,role='design',layer={Name='VECTOR'}},{object=b,role='design',layer={Name='VECTOR'}},{object=c,role='design',layer={Name='VECTOR'}}}
+        end
+        return entries
+      end
+      function CastCadObjectToCadObjectGroup(g)
+        return {GetHeadPosition=function() return 1 end,GetNext=function(_,i) return g.items[i], g.items[i+1] and i+1 or nil end}
+      end
+      function run(entries,pieces)
+        local added={}
+        local ctx={job={JobParameters=params(),LayerManager={GetLayerWithName=function() return {AddObject=function(_,o) added[#added+1]=o end} end}}}
+        local _,hash=sync.svg(entries,true)
+        local s={instanceId='p:s',selloId='s',name='Sello',recipe='CLASICO',fine={mode='auto',needsFine=true,inputHash='',geometryHash=hash,
+          widthMm=30,heightMm=10,recipe='CLASICO',analysisVersion=EXECUTION_RULES.fineAnalysisVersion,pieces=pieces}}
+        local warning=sync.fineSelection(ctx,s,entries,'source')
+        return added,warning
+      end
+    '''
+
+    def test_fine_only_on_the_chosen_pieces(self):
+        self.run_lua(self.PARTIAL + '''
+          local added,warning=run(design(false),{{x0=11/30,x1=19/30,y0=0,y1=1}})
+          assert(warning==nil); assert(#added==1); assert(added[1].x==11)
+        ''')
+
+    def test_fine_pieces_inside_a_group_and_turned(self):
+        # El diseño viene agrupado (como lo importa el gadget) y la app lo mandó girado 180°.
+        self.run_lua(self.PARTIAL + '''
+          local added,warning=run(design(true),{{x0=22/30,x1=1,y0=0,y1=1}})
+          assert(warning==nil); assert(#added==1); assert(added[1].x==0)
+          -- Si el diseno es simetrico no se sabe cual es: se repasan las dos, nunca menos.
+          added,warning=run(design(true,true),{{x0=22/30,x1=1,y0=0,y1=1}})
+          assert(warning==nil); assert(#added==2)
+        ''')
+
+    def test_fine_falls_back_to_whole_stamp_when_pieces_do_not_match(self):
+        self.run_lua(self.PARTIAL + '''
+          local added,warning=run(design(false),{{x0=0.1,x1=0.5,y0=0.2,y1=0.7}})
+          assert(warning~=nil); assert(#added==3)
+        ''')
+
+    def test_fine_without_pieces_keeps_whole_stamp(self):
+        self.run_lua(self.PARTIAL + '''
+          local added,warning=run(design(false),nil)
+          assert(warning==nil); assert(#added==3)
+        ''')
+
     def test_partial_selection_is_never_silently_created(self):
         self.run_lua('''
           local ctx,s,entries=setup(); s.fine={mode='aspire'}

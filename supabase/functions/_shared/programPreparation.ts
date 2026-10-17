@@ -7,6 +7,11 @@ export interface SupportColumn {
   id: string; nominalMm: number; usableMm: number; centerX: number; topY: number; bottomY: number;
   toolEnvelopeMm: number; available: boolean;
 }
+/**
+ * Pieza a repasar con la 0,2, normalizada a la caja del diseño ya ubicado
+ * (0 a 1, origen arriba a la izquierda). Ver `placedRepasoPieces`.
+ */
+export interface FinePiece { x0: number; y0: number; x1: number; y1: number }
 export interface StampPlacement {
   instanceId: string; selloId: string; name: string; columnId: string;
   centerX: number; topY: number; widthMm: number; heightMm: number; rotationDeg: number;
@@ -15,7 +20,9 @@ export interface StampPlacement {
   vectorSvg?: string;
   vectorAlreadyMachined?: boolean;
   fine?: { mode: 'auto' | 'whole' | 'none' | 'aspire'; scope?: 'full' | 'internal'; needsFine: boolean; inputHash: string; geometryHash?: string; analysisVersion?: number;
-    widthMm: number; heightMm: number; recipe: Recipe; outcome: string };
+    widthMm: number; heightMm: number; recipe: Recipe; outcome: string;
+    /** Automático: solo estas piezas van a la capa de repaso (vacío o ausente = sello completo). */
+    pieces?: FinePiece[] };
 }
 export interface PreparationDocument {
   version: 2; programId: string; machine: PreparationMachine; supportVerified: boolean;
@@ -114,7 +121,9 @@ export function isPreparationDocument(value: unknown): value is PreparationDocum
         && typeof s.fine.needsFine === 'boolean' && typeof s.fine.inputHash === 'string'
         && (s.fine.analysisVersion === undefined || Number.isInteger(s.fine.analysisVersion) && s.fine.analysisVersion > 0)
         && finite(s.fine.widthMm) && finite(s.fine.heightMm) && ['CLASICO', '3MM', 'ALIMENTO'].includes(s.fine.recipe) && typeof s.fine.outcome === 'string'
-        && (s.fine.geometryHash === undefined || typeof s.fine.geometryHash === 'string'))
+        && (s.fine.geometryHash === undefined || typeof s.fine.geometryHash === 'string')
+        && (s.fine.pieces === undefined || Array.isArray(s.fine.pieces) && s.fine.pieces.length <= 500 && s.fine.pieces.every((p) => p
+          && [p.x0, p.y0, p.x1, p.y1].every((n) => finite(n) && n >= -0.01 && n <= 1.01) && p.x0 < p.x1 && p.y0 < p.y1)))
       && (s.vectorSvg === undefined || typeof s.vectorSvg === 'string' && s.vectorSvg.length <= 500_000 && !/<script|<foreignObject|<!DOCTYPE|<!ENTITY/i.test(s.vectorSvg)))
     && !!v.recipes && (['CLASICO', '3MM', 'ALIMENTO'] as const).every((r) => {
       const recipe = v.recipes[r];

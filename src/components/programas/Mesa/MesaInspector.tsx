@@ -104,7 +104,10 @@ export function MesaInspector({ doc, stamp, sold, readOnly, grow, shrink, onReci
         <Label>repaso fino 0,2</Label>
         <Segmented className="w-full" value={(stamp.fine?.mode === 'aspire' ? 'auto' : stamp.fine?.mode) ?? 'auto'} onChange={onFine} disabled={readOnly}
           options={[{ id: 'auto', label: 'Automático' }, { id: 'whole', label: 'Completo' }, { id: 'none', label: 'Sin repaso' }]} />
-        {stamp.fine?.mode === 'aspire' ? <p className="text-[12px] text-zinc-400">Selección hecha en Aspire.</p> : null}
+        {stamp.fine?.mode === 'aspire' ? <p className="text-[12px] text-zinc-400">Selección hecha en Aspire.</p>
+          : (stamp.fine?.mode ?? 'auto') === 'auto' && stamp.fine?.analysisVersion
+            ? <p className="text-[12px] text-zinc-400">{stamp.fine.pieces?.length ? `La 0,2 pasa solo por ${stamp.fine.pieces.length} ${stamp.fine.pieces.length === 1 ? 'pieza' : 'piezas'}, donde la 0,6 no llega.` : stamp.fine.needsFine ? 'La 0,2 pasa por todo el sello.' : 'La 0,6 alcanza: sin repaso.'}</p>
+            : null}
       </div>
 
       <div className="space-y-2">
