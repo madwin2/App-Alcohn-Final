@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { AppMain } from '@/components/layout/AppMain';
 import { ProgramsHeader } from '@/components/programas/Header/ProgramsHeader';
 import { ProgramsGrid } from '@/components/programas/Grid/ProgramsGrid';
@@ -10,8 +11,23 @@ import { usePrograms } from '@/lib/hooks/usePrograms';
 import { useProgramsStore } from '@/lib/state/programs.store';
 import { RemoveStampChoice } from '@/components/programas/RemoveStamp/RemoveStampDialog';
 import { ProgramBaseFilesUpload } from '@/components/programas/BaseFiles/ProgramBaseFilesUpload';
+import { MesaProgramas } from '@/components/programas/Mesa/MesaProgramas';
+import { Button } from '@/components/ui/button';
 
+type Vista = 'mesa' | 'todos';
+const VISTA_KEY = 'programas-vista';
+
+/**
+ * Programas: la mesa de armado es la vista principal (ADR-027). «Todos los
+ * programas» abre el tablero de siempre para ABC, terminados, papelera,
+ * bloqueo, historial y sincronizar archivos, hasta que pasen a la mesa.
+ */
 export default function ProgramasPage() {
+  const [vista, setVista] = useState<Vista>(() => {
+    try { return window.localStorage.getItem(VISTA_KEY) === 'todos' ? 'todos' : 'mesa'; } catch { return 'mesa'; }
+  });
+  useEffect(() => { try { window.localStorage.setItem(VISTA_KEY, vista); } catch { /* sin almacenamiento */ } }, [vista]);
+  const programsApi = usePrograms();
   const {
     programs,
     loading,
@@ -29,7 +45,7 @@ export default function ProgramasPage() {
     syncProgramFromAspireFile,
     applyProgramReconciliation,
     downloadPackage,
-  } = usePrograms();
+  } = programsApi;
   const [showNewProgram, setShowNewProgram] = useState(false);
   const { showFilters, showSorter, setShowFilters, setShowSorter } = useProgramsStore();
 
@@ -38,9 +54,23 @@ export default function ProgramasPage() {
     newFabricationState: choice.mode === 'NEW' ? choice.state : undefined,
   });
 
+  if (vista === 'mesa') {
+    return (
+      <AppMain className="bg-black">
+        <div className="flex h-screen min-h-[680px] flex-col p-4">
+          <MesaProgramas programs={programsApi} onOpenBoard={() => setVista('todos')} />
+        </div>
+        <Toaster />
+      </AppMain>
+    );
+  }
+
   return (
     <AppMain className="flex flex-col">
       <div className="border-b bg-background p-6 space-y-4">
+        <Button variant="ghost" size="sm" className="-ml-2" onClick={() => setVista('mesa')}>
+          <ArrowLeft className="mr-1 size-4" />Mesa de armado
+        </Button>
         <ProgramsHeader
           onNewProgram={() => setShowNewProgram(true)}
           onFilters={() => setShowFilters(true)}

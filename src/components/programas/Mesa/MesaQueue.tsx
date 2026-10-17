@@ -87,7 +87,7 @@ export function MesaQueue({ queue, misfits, today, disabled, fillPreview, onDrag
   const hidePreview = () => { window.clearTimeout(hoverTimer.current); setPreview(null); };
 
   return (
-    <Panel label="Sellos para programar" className="flex min-h-0 flex-col gap-3">
+    <Panel label="Sellos para programar" className="flex min-h-0 flex-col gap-3 max-lg:h-[420px]">
       <div className="flex items-baseline justify-between px-1">
         <h2 className="text-[15px] font-medium">Para programar</h2>
         <span className="text-[13px] tabular-nums text-zinc-400">{queue.length}</span>

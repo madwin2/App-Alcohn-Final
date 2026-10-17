@@ -24,7 +24,7 @@ function elapsed(since: number, now: number) {
  */
 export function MesaActionBar({
   progress, groups, checking, dirty, savedRevision, hasStamps, readOnly, locked, legacyAspire, waitingSince, fabricated,
-  onSave, onAspire, onFabricated, onPick,
+  onSave, onAspire, onFabricated, onPick, onSetup,
 }: {
   progress: MesaProgress;
   groups: CheckGroup[];
@@ -42,6 +42,7 @@ export function MesaActionBar({
   onAspire: () => void;
   onFabricated: () => void;
   onPick: (instanceId: string) => void;
+  onSetup: () => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -66,7 +67,7 @@ export function MesaActionBar({
       <button type="button" className={cn(PILL_PRIMARY, 'min-w-[13rem] py-2.5')} disabled={checking || readOnly || !hasStamps} onClick={onSave}
         title="Guardar y chequear (Ctrl+S)">
         {checking ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-        {checking ? 'Chequeando la fresa…' : 'Guardar y chequear'}
+        {checking ? 'Chequeando la fresa…' : legacyAspire ? 'Chequear la fresa' : 'Guardar y chequear'}
       </button>
     );
   } else if (progress.step === 'aspire') {
@@ -80,7 +81,7 @@ export function MesaActionBar({
       );
       action = <button type="button" className={PILL_GHOST} onClick={onAspire}><RotateCw className="size-4" />{legacyAspire ? 'Bajar de nuevo' : 'Mandar de nuevo'}</button>;
     } else {
-      status = legacyAspire ? 'Esta máquina usa el gadget anterior: bajá el ZIP y abrilo en Aspire.' : progress.blocking;
+      status = legacyAspire ? 'Va con el gadget anterior: bajá el ZIP y abrilo en Aspire.' : progress.blocking;
       action = (
         <button type="button" className={cn(PILL_PRIMARY, 'min-w-[13rem] py-2.5')} onClick={onAspire}>
           <Download className="size-4" />{legacyAspire ? 'Bajar ZIP para Aspire' : 'Llevar a Aspire'}
@@ -107,10 +108,10 @@ export function MesaActionBar({
         </PopoverTrigger>
         <PopoverContent side="top" align="start" className="w-[380px] rounded-2xl border-white/10 bg-zinc-950 p-4">
           <h3 className="mb-3 text-[14px] font-medium">Antes de Aspire</h3>
-          <MesaChecklist groups={groups} checking={checking} onPick={(id) => { setOpen(false); onPick(id); }} />
+          <MesaChecklist groups={groups} checking={checking} onPick={(id) => { setOpen(false); onPick(id); }} onSetup={() => { setOpen(false); onSetup(); }} />
         </PopoverContent>
       </Popover>
-      <p className="min-w-0 flex-1 text-[13px] text-zinc-300" aria-live="polite">{status}</p>
+      <p className="min-w-[14rem] flex-1 text-[13px] text-zinc-300" aria-live="polite">{status}</p>
       {mustSave && !fabricated && !locked ? <span className="hidden items-center gap-1 text-[12px] text-zinc-400 xl:flex"><Kbd>Ctrl</Kbd><Kbd>S</Kbd></span> : null}
       {action}
     </footer>

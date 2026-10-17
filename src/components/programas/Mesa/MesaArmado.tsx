@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, Keyboard, Lock, Magnet, Plus, Redo2, ScanSearch, SlidersHorizontal, Undo2 } from 'lucide-react';
+import { ChevronDown, Keyboard, LayoutGrid, Lock, Magnet, Plus, Redo2, ScanSearch, SlidersHorizontal, Undo2 } from 'lucide-react';
 import { FresaCheckDialog } from '@/components/fresa/FresaCheckDialog';
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { DoneReviewDialog } from '@/components/programas/DoneReview/DoneReviewDialog';
@@ -34,6 +34,8 @@ export interface MesaProgram {
   syncedRevision: number | null;
   fileRevision: number | null;
   locked?: boolean;
+  /** Va con el gadget anterior (G/XL, o una Chica que ya fue a Aspire sin preparación). */
+  legacy?: boolean;
   /** Marcado como fabricado (queda en solo lectura). */
   fabricated?: FabricationRecord | null;
 }
@@ -52,7 +54,7 @@ const isDirty = (p: MesaProgram) => JSON.stringify(p.doc) !== JSON.stringify(p.s
  */
 export function MesaArmado({
   machine, onMachine, programs, programId, onProgram, onNewProgram, queue, soldSizes, today, machinesFor,
-  legacyAspire, checking, onChange, onSave, onAspire, onFabricated, onSetup,
+  legacyAspire, checking, onChange, onSave, onAspire, onFabricated, onSetup, onOpenBoard,
 }: {
   machine: PreparationMachine;
   onMachine: (m: PreparationMachine) => void;
@@ -75,6 +77,8 @@ export function MesaArmado({
   onAspire: (programId: string) => void;
   onFabricated: (programId: string, states: { instanceId: string; state: FabricationState }[]) => void;
   onSetup: () => void;
+  /** Abre el tablero con todos los programas (ABC, terminados, papelera…). */
+  onOpenBoard?: () => void;
 }) {
   // Mensajes en la pantalla (los toasts tapaban el botón principal).
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -131,8 +135,9 @@ export function MesaArmado({
     }));
   }, [queue, doc, machinesFor, machine]);
   const dirty = !!program && isDirty(program);
-  const groups = useMemo(() => doc ? mesaChecks(doc) : [], [doc]);
-  const progress = useMemo(() => doc && program ? mesaProgress(doc, { savedRevision: program.savedRevision, dirty, syncedRevision: program.syncedRevision, fileRevision: program.fileRevision }) : null, [doc, program, dirty]);
+  const legacy = program?.legacy ?? legacyAspire;
+  const groups = useMemo(() => doc ? mesaChecks(doc, undefined, { legacy }) : [], [doc, legacy]);
+  const progress = useMemo(() => doc && program ? mesaProgress(doc, { savedRevision: program.savedRevision, dirty, syncedRevision: program.syncedRevision, fileRevision: program.fileRevision }, undefined, { legacy }) : null, [doc, program, dirty, legacy]);
   const warnings = useMemo(() => new Set(groups.flatMap((g) => g.id === 'fresa' ? g.items.map((i) => i.instanceId ?? '') : [])), [groups]);
   const selected = doc?.stamps.find((s) => s.instanceId === selectedId) ?? null;
   const waitingSince = program ? waiting[program.id] ?? null : null;
@@ -147,7 +152,8 @@ export function MesaArmado({
 
   // Con cambios sin guardar, avisar antes de salir de la página.
   useEffect(() => {
-    if (!programs.some(isDirty)) return;
+    // Solo cambios sobre una revisión guardada: la asignación de sellos ya se guarda al instante.
+    if (!programs.some((p) => p.savedDoc !== null && !p.legacy && isDirty(p))) return;
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
@@ -196,7 +202,7 @@ export function MesaArmado({
     if (!program || checking || readOnly || !doc?.stamps.length) return;
     const n = (program.savedRevision ?? 0) + 1;
     void onSave(program.id).then(
-      () => setNotice({ text: `Revisión ${n} guardada · se chequeó la fresa de todos los sellos`, tone: 'ok' }),
+      () => setNotice({ text: legacy ? 'Se chequeó la fresa de todos los sellos' : `Revisión ${n} guardada · se chequeó la fresa de todos los sellos`, tone: 'ok' }),
       (e) => setNotice({ text: e instanceof Error ? e.message : 'No se pudo guardar', tone: 'error' }));
   };
   const toAspire = () => {
@@ -297,7 +303,7 @@ export function MesaArmado({
 
   const stageOf = (p: MesaProgram) => {
     if (p.fabricated) return STEP_LABEL.fabricado;
-    const pr = mesaProgress(p.doc, { savedRevision: p.savedRevision, dirty: isDirty(p), syncedRevision: p.syncedRevision, fileRevision: p.fileRevision });
+    const pr = mesaProgress(p.doc, { savedRevision: p.savedRevision, dirty: isDirty(p), syncedRevision: p.syncedRevision, fileRevision: p.fileRevision }, undefined, { legacy: p.legacy ?? legacyAspire });
     // La última etapa cumplida («Armando» mientras no hay ninguna).
     const last = (['fabricar', 'aspire', 'revisar'] as const).find((s) => pr.done[s]);
     return last ? STEP_LABEL[last] : 'Armando';
@@ -337,6 +343,7 @@ export function MesaArmado({
         </DropdownMenu>
         <div className="ml-auto flex items-center gap-1">
           <button type="button" className={cn(PILL_GHOST, 'px-2')} onClick={() => setShortcuts(true)} aria-label="Atajos de teclado" title="Atajos de teclado (?)"><Keyboard className="size-4" /></button>
+          {onOpenBoard ? <button type="button" className={PILL_GHOST} onClick={onOpenBoard} title="Tablero con todos los programas: ABC, terminados, papelera, bloqueo e historial"><LayoutGrid className="size-4" />Todos los programas</button> : null}
           <button type="button" className={PILL_GHOST} onClick={onSetup} title="Soporte y plantillas de la máquina"><SlidersHorizontal className="size-4" />Máquina {MACHINE_LABEL[machine]}</button>
         </div>
       </header>
@@ -415,9 +422,9 @@ export function MesaArmado({
           </div>
 
           <MesaActionBar progress={progress} groups={groups} checking={checking} dirty={dirty} savedRevision={program.savedRevision}
-            hasStamps={doc.stamps.length > 0} readOnly={readOnly} locked={!!program.locked} legacyAspire={legacyAspire}
+            hasStamps={doc.stamps.length > 0} readOnly={readOnly} locked={!!program.locked} legacyAspire={legacy}
             waitingSince={waitingSince} fabricated={program.fabricated ?? null}
-            onSave={save} onAspire={toAspire} onFabricated={() => setFabAsk(true)} onPick={pick} />
+            onSave={save} onAspire={toAspire} onFabricated={() => setFabAsk(true)} onPick={pick} onSetup={onSetup} />
         </>
       )}
 
