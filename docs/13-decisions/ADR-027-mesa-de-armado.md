@@ -1,6 +1,6 @@
 # ADR-027 · Mesa de armado reemplaza el tablero de Programas
 
-Fecha: 2026-10-17. Estado: **prototipo** en `/dev/mesa-programas` con datos de ejemplo; todavía no conectado a la base ni publicado.
+Fecha: 2026-10-17. Estado: **integrada en `/programas`** (2026-10-17) con los datos reales; el prototipo sigue en `/dev/mesa-programas` con datos de ejemplo.
 
 ## Problema
 
@@ -41,6 +41,18 @@ Armar un programa pasaba por tres capas: el tablero de bolsillos (soltar sellos)
 - **Pantalla:** barra de acción fija abajo (etapas, controles resumidos, motivo del bloqueo y un único botón primario), encuadre a la zona de trabajo, rótulos de planchuela siempre legibles, cola por secciones con selección múltiple, «Llenar solo» con vista previa, teclado completo en la mesa. Detalle en `docs/audits/mesa-usabilidad-ui-2026-10-17.md`.
 
 - **Zonas de fresa en la mesa (pedido del usuario, 2026-10-17):** botón «Fresa» (tecla Z) que muestra sobre cada sello las zonas del mismo chequeo que la ventana de la fresa (`chequearSvg`, misma medida y receta, caché compartida): rojo «hay que corregir», ámbar «se pierde el detalle», contorno gris «marca menos hondo · OK». En 2D van sobre el dibujo derecho; en 3D y Mecanizado, espejadas y acostadas igual que el relieve. Cada zona importante lleva un aro de tamaño fijo y cada sello un contador, porque las zonas suelen medir décimas de mm. Solo se analizan los sellos visibles. Es orientativo: corregir se hace en «Ver fresa».
+
+## Integración en /programas (respuestas del usuario, 2026-10-17)
+
+- **La mesa es la vista de entrada** de Programas. «Todos los programas» abre el tablero de siempre (ABC, terminados, papelera, bloqueo, historial, sincronizar archivo, archivos base) hasta pasarlos a la mesa. La vista elegida se recuerda en el navegador.
+- **Asignación al instante**, como el tablero: sumar un sello en la mesa llama a `addStampsToProgram` y quitarlo a `removeStampFromProgram` con `restoreMode: PREVIOUS` (igual que «Preparar programa»). Deshacer hace la operación inversa. Si el servidor rechaza, la mesa vuelve a lo que tiene el programa.
+- **Chica**: el armado es la preparación (`programa_preparacion`); «Guardar y chequear» chequea la fresa y guarda una revisión (`guardar_programa_preparacion`). Al abrir un programa sin preparación se muestra el soporte de la última preparación de la máquina sin copiar nada; al guardar por primera vez se usa `inheritMachineSetup`, que copia las plantillas. «Llevar a Aspire» baja el paquete actual (`downloadPackage`) y la mesa relee la preparación hasta ver la revisión sincronizada. El archivo vale para la revisión si se subió después de guardarla.
+- **Grande y XL**: la mesa guarda solo qué sellos van (respuesta del usuario). El orden en pantalla no se guarda y se reacomoda al recargar; Aspire los ubica con el gadget anterior. La fresa se chequea en memoria («Chequear la fresa») antes de «Bajar ZIP». Aspire queda hecho cuando el gadget sincronizó y el programa no cambió después.
+- **Fabricado**: si todo salió bien, `setFabricationStateForProgram(HECHO)`; si no, `setStampFabricationStates` por sello. Un programa con todos sus sellos en Hecho / Verificar / Retocar / Rehacer se muestra como fabricado y queda en la mesa dos días; después se ve en «Todos».
+- **Cada programa sigue en su flujo** (hallado al revisar con datos reales, 2026-10-17): una Chica que ya fue a Aspire con el gadget anterior (sin preparación, con sync, archivo o ZIP) se trata como G/XL. La mesa no le ofrece guardar una preparación, porque la pasaría al gadget 3.2 y vencería lo hecho en Aspire. Con el gadget anterior no aplican los controles de soporte y plantillas, y un programa ya sincronizado no vuelve a pedir el chequeo de fresa.
+- Los avisos repetidos por sello («falta verificar las plantillas de CLASICO») se agrupan en una línea con la cantidad y la acción «Configurar».
+- **Solo lectura** si el programa está bloqueado o en fabricación, igual que «Preparar programa».
+- Reconciliación con realtime y otras PCs: `reconcileMesa` suma al final lo asignado afuera y quita lo que se sacó, sin pisar las operaciones en curso (probado en `mesa.test.ts`).
 
 ## Alternativas descartadas
 

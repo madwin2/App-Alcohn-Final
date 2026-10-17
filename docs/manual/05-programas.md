@@ -241,3 +241,12 @@ Para usar el ensayo auxiliar de lógica, elegí **Prueba lógica sin Aspire**:
 El ejemplo guarda únicamente en memoria. No abre Aspire, no calcula trayectorias ni verifica contactos de la fresa; no modifica pedidos, material ni estados reales.
 
 **Prueba con Aspire real:** **Descargar armado para prueba real** guarda un JSON del plan que tenés guardado, con los dibujos ficticios. Si el armado tiene errores, bloquea la descarga. Ese archivo se utiliza con el instrumento local de calificación y las plantillas reales de C; no abre Aspire por sí solo ni es un botón de sincronización de producción. El ensayo del 16/10/2026 importó ocho sellos, calculó quince trayectorias y conservó una corrección al mover/agrandar desde la app. Se guardó una copia independiente y se ejecutó su vista previa de mecanizado. [Resultado y límites](../audits/programas-aspire-real-2026-10-16.md).
+
+## Mesa de armado (vista principal)
+
+Al entrar a Programas se abre la **mesa de armado**: elegís la máquina (Chica, Grande, XL) y el programa del día, y arrastrás sellos de la cola a las planchuelas. Sumar o quitar un sello lo asigna al programa en el momento, como en el tablero.
+
+- **Chica**: «Guardar y chequear» guarda el armado y chequea la fresa; después «Llevar a Aspire» baja el paquete para el gadget 3.2.
+- **Grande y XL**: la mesa elige los sellos y chequea la fresa; «Bajar ZIP para Aspire» usa el gadget de siempre, que ubica los sellos.
+- Al terminar, **Marcar fabricado** pregunta si algún sello salió mal, como siempre.
+- Para ABC, terminados, papelera, bloqueo o historial usá **Todos los programas** (arriba a la derecha).
