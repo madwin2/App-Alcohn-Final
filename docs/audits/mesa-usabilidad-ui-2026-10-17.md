@@ -161,9 +161,9 @@ Antes de cerrar algunas propuestas falta información del negocio:
 1. Sí, un programa puede mezclar recetas → la cola se agrupa por urgencia, no por receta.
 2. Por lo general uno por día para la Chica y uno para la Grande; a veces dos para la misma máquina → selector como menú corto.
 3. Se marca como fabricado con el modal actual (¿salió todo bien? → revisión por sello).
-4. 0,2 mm («creo»): se rotula 0,2 y queda a confirmar contra la plantilla.
+4. 0,2 mm, confirmado.
 5. No condiciona el diseño.
-6. Sin respuesta: Q-PROG-024 sigue abierta.
+6. Q-PROG-024 respondida: taladrado por atrás; planchuela de 10 mm con 0,5 de planeado y corte de 9 (quedan unidos 0,5 mm).
 
 ## 11. Orden de trabajo sugerido
 

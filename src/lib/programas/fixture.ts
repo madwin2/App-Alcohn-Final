@@ -19,7 +19,8 @@ export const FIXTURE = {
   channelWidthMm: 19,
   channelDepthMm: 7.64,
   slotWidthMm: 7,
-  barHeightMm: 11.13,
+  /** Espesor de la planchuela en bruto (confirmado por el usuario, 2026-10-17). */
+  barHeightMm: 10,
   /** Alto de la traba sobre la cara de la base (las trabas no llegan a la cara del bronce). */
   clampHeightMm: 6.5,
   /** Margen de la base alrededor de los canales extremos. */

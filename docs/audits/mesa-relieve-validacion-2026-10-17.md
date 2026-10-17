@@ -22,7 +22,7 @@ La superficie es una estimación geométrica discretizada según los perfiles co
 - ✅ Leídas las 12 plantillas nativas de C: capas seleccionadas, profundidades y herramientas (el cajeado es Grabado 15° con punta 1,1 mm, no 1 mm).
 - ✅ `stampIsland`, `faceDepth` y `barSegments` (14 pruebas del relieve): isla cerrada +0,5 mm, offset exterior +2 mm, desbaste a 3 mm afuera, cajeado a la profundidad de la receta adentro, ranuras de corte de 6 mm a −9 y resto en bruto.
 - ✅ Navegador: planchuela con sellos rebajada, islas en relieve, fondo del cajeado y escalón del corte; la planchuela sin sellos queda en bruto. `npm test`: 58 archivos, 545 pruebas.
-- ❓ Q-PROG-024: lado del taladrado/roscado y espesor real de la planchuela frente al corte a −9 mm.
+- ✅ Q-PROG-024 respondida: taladrado por atrás; planchuela de 10 mm, corte que deja 0,5 mm de unión. Antes: lado del taladrado/roscado y espesor real de la planchuela frente al corte a −9 mm.
 
 ## Corrección visual del 3D (2026-10-17)
 

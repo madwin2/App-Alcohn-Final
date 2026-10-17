@@ -133,6 +133,10 @@ export const FACE_OPS = {
   planeMm: 0.5,
   /** Desbaste exterior, medido desde la superficie planeada. */
   exteriorDepthMm: 3,
+  /**
+   * Corte, medido desde la superficie planeada: 9 mm sobre una planchuela de
+   * 10 con 0,5 de planeado deja 0,5 mm uniendo los sellos (confirmado, Q-PROG-024).
+   */
   cutBottomMm: 9,
   cutToolDiameterMm: 6,
 };
@@ -163,7 +167,7 @@ export function barSegments(col: { topY: number; bottomY: number }, stamps: { to
   const push = (y1: number, depthMm: number, kind: BarSegment['kind']) => { if (y1 > y + 1e-6) out.push({ y0: y, y1, depthMm, kind }); y = Math.max(y, y1); };
   for (const c of cuts) {
     push(Math.min(machinedEnd, c - half), FACE_OPS.planeMm + FACE_OPS.exteriorDepthMm, 'mecanizado');
-    push(Math.min(end, c + half), FACE_OPS.cutBottomMm, 'corte');
+    push(Math.min(end, c + half), FACE_OPS.planeMm + FACE_OPS.cutBottomMm, 'corte');
   }
   push(machinedEnd, FACE_OPS.planeMm + FACE_OPS.exteriorDepthMm, 'mecanizado');
   push(end, 0, 'bruto');

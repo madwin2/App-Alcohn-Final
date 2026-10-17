@@ -190,7 +190,8 @@
 - **Documentado**: POL-088 y [preparación visual](../02-modules/programas/preparacion-visual.md). Se reutilizan los bytes de las plantillas 3MM y se adaptan únicamente sus selectores a las capas de Alimento mediante el SDK; el perímetro manual recibe `Corte Alimento`. No se modifican herramienta ni profundidades del archivo.
 
 ### Q-PROG-024
-- **Módulo**: Programas / simulación del mecanizado en la mesa · **Estado**: abierta (2026-10-17)
+- **Módulo**: Programas / simulación del mecanizado en la mesa · **Estado**: respondida (2026-10-17)
+- **Respuesta (usuario, 2026-10-17)**: (a) sí, taladrado y roscado se hacen previamente del lado de atrás; está bien que la vista no los muestre. (b) la planchuela tiene **10 mm**; se planea 0,5 mm y el corte baja 9 mm desde la cara planeada, así que los sellos quedan unidos por **0,5 mm**. Aplicado en `FIXTURE.barHeightMm = 10` y en la profundidad del corte (`barSegments`).
 - **Pregunta**: (a) ¿«0 Taladrado» (broca Ø5 a 6,5 mm) y «0 Roscado» (Ø4,8 a 5 mm), en el centro de cada sello, se hacen del lado de atrás, antes de dar vuelta la planchuela? (b) ¿Cuánto mide de espesor la planchuela en bruto? El perfil del SVG de la base la dibuja de 11,13 mm y el «5 Corte 6MM» baja a 9 mm: ¿deja ~2 mm sin cortar a propósito (los sellos se separan después) o la planchuela es más fina?
 - **Evidencia**: plantillas nativas de la base C (`Native-001`…`012`): capa «Taladrado» = círculo de 6 mm en el centro del diseño; Zmin del taladrado −6,5 y del roscado −5; corte «Profile On» sobre la línea «Corte», inicio 3,5 y pasada 5,5 (Zmin −9).
 - **Por qué importa**: la simulación de la mesa no muestra el taladrado (si fuera del frente atravesaría el diseño) y dibuja el corte como ranura hasta −9 mm sobre una planchuela de 11,13 mm. Sin la respuesta, la vista puede mostrar un material o una separación que no es la real.

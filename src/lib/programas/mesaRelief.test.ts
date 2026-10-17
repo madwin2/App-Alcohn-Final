@@ -173,12 +173,20 @@ describe('operaciones del frente', () => {
     expect(seg[0]).toMatchObject({ kind: 'mecanizado', depthMm: 3.5 });
     const cuts = seg.filter((g) => g.kind === 'corte');
     expect(cuts).toHaveLength(2);
-    cuts.forEach((c) => { expect(c.y1 - c.y0).toBeCloseTo(6, 6); expect(c.depthMm).toBe(9); });
+    cuts.forEach((c) => { expect(c.y1 - c.y0).toBeCloseTo(6, 6); expect(c.depthMm).toBe(9.5); });
     expect(cuts[0].y0).toBeCloseTo(8.958 + 30 + 4 - 3, 6);
     const last = seg[seg.length - 1];
     expect(last).toMatchObject({ kind: 'bruto', depthMm: 0 });
     expect(last.y0).toBeCloseTo(50.958 + 20 + 4 + 3, 6);
     expect(barSegments(col, [])).toEqual([{ y0: 8.958, y1: 400, depthMm: 0, kind: 'bruto' }]);
     for (let i = 1; i < seg.length; i++) expect(seg[i].y0).toBeCloseTo(seg[i - 1].y1, 6);
+  });
+});
+
+describe('planchuela real', () => {
+  it('el corte deja 0,5 mm uniendo los sellos (10 mm − 0,5 de planeado − 9 de corte)', async () => {
+    const { FIXTURE } = await import('./fixture');
+    expect(FIXTURE.barHeightMm).toBe(10);
+    expect(FIXTURE.barHeightMm - (FACE_OPS.planeMm + FACE_OPS.cutBottomMm)).toBeCloseTo(0.5, 10);
   });
 });
