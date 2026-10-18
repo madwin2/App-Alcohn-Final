@@ -170,6 +170,61 @@ export function distributeShifts(boxes: Box[], axis: 'x' | 'y'): Array<{ dx: num
   return out;
 }
 
+export type SpreadAnchor = 'start' | 'center' | 'end';
+
+/**
+ * Grupos que se mueven juntos al distanciar, en orden sobre el eje. Lo que se
+ * pisa sobre el eje va junto (el punto de la «i», un acento). Con `byWords`,
+ * además, las letras de una palabra: se corta solo donde el espacio es
+ * claramente más grande que el de entre letras (más del doble del espacio
+ * típico y al menos `minWordGap` más).
+ */
+export function spreadGroups(boxes: Box[], axis: 'x' | 'y', byWords = false, minWordGap = 0): number[][] {
+  const lo = (b: Box) => (axis === 'x' ? b.minX : b.minY);
+  const hi = (b: Box) => (axis === 'x' ? b.maxX : b.maxY);
+  const order = boxes.map((_, i) => i).sort((a, z) => lo(boxes[a]) - lo(boxes[z]));
+  const groups: { ids: number[]; lo: number; hi: number }[] = [];
+  for (const i of order) {
+    const g = groups[groups.length - 1];
+    if (g && lo(boxes[i]) < g.hi) {
+      g.ids.push(i);
+      g.hi = Math.max(g.hi, hi(boxes[i]));
+    } else groups.push({ ids: [i], lo: lo(boxes[i]), hi: hi(boxes[i]) });
+  }
+  if (!byWords || groups.length < 3) return groups.map((g) => g.ids);
+  const gaps = groups.slice(1).map((g, i) => g.lo - groups[i].hi);
+  const typical = [...gaps].sort((a, b) => a - b)[Math.floor((gaps.length - 1) / 2)];
+  const words: number[][] = [[...groups[0].ids]];
+  gaps.forEach((gap, i) => {
+    if (gap > 2 * typical && gap - typical >= minWordGap) words.push([...groups[i + 1].ids]);
+    else words[words.length - 1].push(...groups[i + 1].ids);
+  });
+  return words;
+}
+
+/**
+ * Distanciar: suma `amount` a cada espacio entre grupos consecutivos (negativo
+ * junta). `start` deja fijo el primero (izquierda / arriba), `end` el último y
+ * `center` reparte hacia los dos lados.
+ */
+export function spreadShifts(boxes: Box[], groups: number[][], axis: 'x' | 'y', amount: number, anchor: SpreadAnchor): Array<{ dx: number; dy: number }> {
+  const out = boxes.map(() => ({ dx: 0, dy: 0 }));
+  const n = groups.length;
+  groups.forEach((ids, j) => {
+    const steps = anchor === 'start' ? j : anchor === 'end' ? j - (n - 1) : j - (n - 1) / 2;
+    const d = steps * amount;
+    for (const i of ids) out[i] = axis === 'x' ? { dx: d, dy: 0 } : { dx: 0, dy: d };
+  });
+  return out;
+}
+
+/** Eje en que están puestas las piezas (el de más recorrido entre sus centros). */
+export function spreadAxis(boxes: Box[]): 'x' | 'y' {
+  const cx = boxes.map((b) => (b.minX + b.maxX) / 2);
+  const cy = boxes.map((b) => (b.minY + b.maxY) / 2);
+  return Math.max(...cx) - Math.min(...cx) >= Math.max(...cy) - Math.min(...cy) ? 'x' : 'y';
+}
+
 /** Espacio (entre cajas) a la pieza más cercana a cada lado, si hay alguna enfrente. */
 export function neighborGaps(sel: Box, others: Box[]): { left?: number; right?: number; up?: number; down?: number } {
   const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.min(a1, b1) - Math.max(a0, b0);

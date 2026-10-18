@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignShifts, constrainAxis, distributeShifts, neighborGaps, snapMove, unionBox } from './editTools';
+import { alignShifts, constrainAxis, distributeShifts, neighborGaps, snapMove, spreadAxis, spreadGroups, spreadShifts, unionBox } from './editTools';
 
 const box = (minX: number, minY: number, maxX: number, maxY: number) => ({ minX, minY, maxX, maxY });
 
@@ -52,5 +52,29 @@ describe('editTools', () => {
     expect(g.down).toBeCloseTo(2, 9);
     expect(g.up).toBeUndefined();
     expect(unionBox([])).toBeNull();
+  });
+});
+
+describe('distanciar', () => {
+  // «EL SOL»: E, L (0,3 entre letras), 1,5 de espacio, S, O, L; la O con un acento encima.
+  const boxes = [box(0, 0, 1, 2), box(1.3, 0, 2.3, 2), box(3.8, 0, 4.8, 2), box(5.1, 0, 6.1, 2), box(5.3, -0.8, 5.9, -0.3), box(6.4, 0, 7.4, 2)];
+
+  it('lo que se pisa sobre el eje va junto (el acento con su letra)', () => {
+    expect(spreadAxis(boxes)).toBe('x');
+    expect(spreadGroups(boxes, 'x')).toEqual([[0], [1], [2], [3, 4], [5]]);
+  });
+
+  it('por palabras: corta solo en el espacio grande', () => {
+    expect(spreadGroups(boxes, 'x', true, 0.2)).toEqual([[0, 1], [2, 3, 4, 5]]);
+  });
+
+  it('desde la izquierda, la derecha o el centro', () => {
+    const words = spreadGroups(boxes, 'x', true, 0.2);
+    expect(spreadShifts(boxes, words, 'x', 0.5, 'start').map((s) => s.dx)).toEqual([0, 0, 0.5, 0.5, 0.5, 0.5]);
+    expect(spreadShifts(boxes, words, 'x', 0.5, 'end').map((s) => s.dx)).toEqual([-0.5, -0.5, 0, 0, 0, 0]);
+    expect(spreadShifts(boxes, words, 'x', 0.5, 'center').map((s) => s.dx)).toEqual([-0.25, -0.25, 0.25, 0.25, 0.25, 0.25]);
+    // Pieza por pieza: cada espacio crece lo mismo.
+    const each = spreadShifts(boxes, spreadGroups(boxes, 'x'), 'x', 0.2, 'start').map((s) => +s.dx.toFixed(6));
+    expect(each).toEqual([0, 0.2, 0.4, 0.6, 0.6, 0.8]);
   });
 });

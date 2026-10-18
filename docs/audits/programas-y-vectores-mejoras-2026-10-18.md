@@ -59,6 +59,13 @@ Pruebas: `editCorners.test.ts` (arco exacto, radio máximo, vértices internos d
 - **«Necesita 0,2» = hay alguna zona que la justifique**. Antes, si quedaba un problema que la 0,2 tampoco resuelve, el sello iba con repaso completo; ahora no (repasarlo entero no arregla un problema del diseño).
 - La versión del análisis sigue en 6: el formato no cambia y el gadget instalado sigue sirviendo. Los programas ya chequeados mantienen su selección anterior hasta el próximo «Guardar y chequear».
 
+## 2 sexies. «Editar vector» desde la mesa y distanciar (2026-10-18)
+
+- **Clic derecho en un sello → «Editar vector»**: abre el chequeo de fresa directo en el editor (además de «Ver fresa»). Desactivado en programas de solo lectura.
+- **Distanciar** (editor, con 2 piezas o más elegidas): agranda (Separar) o achica (Juntar) cada espacio la misma cantidad de mm. Desde la izquierda (queda fija la primera), la derecha o el centro (se abre hacia los dos lados); si las piezas están en columna, arriba / centro / abajo.
+  - **Por palabras** (prendido de entrada): las letras de cada palabra se mueven juntas y solo crece el espacio entre palabras. Se corta donde el espacio es más del doble del típico entre letras y al menos 0,2 mm más; se muestra cuántas palabras encontró.
+  - Lo que se pisa sobre el eje va junto (el punto de la «i», los acentos).
+
 ## 3. Propuestas para Programas (valor en el día a día)
 
 Ordenadas por impacto. Ninguna inventa reglas de negocio: donde hace falta una definición, está marcada.

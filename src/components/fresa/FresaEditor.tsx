@@ -78,6 +78,10 @@ import {
   boxesTouch,
   constrainAxis,
   distributeShifts,
+  spreadAxis,
+  spreadGroups,
+  spreadShifts,
+  type SpreadAnchor,
   neighborGaps,
   shiftBox,
   snapMove,
@@ -214,6 +218,10 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   /** Radio para redondear vértices (mm) y el que se ve mientras se arrastra el círculo. */
   const [roundMm, setRoundMm] = useState('0.2');
   const [angleDeg, setAngleDeg] = useState('90');
+  /** Distanciar: cuánto (mm), desde dónde y si las letras de una palabra van juntas. */
+  const [spreadMm, setSpreadMm] = useState('0.5');
+  const [spreadAnchor, setSpreadAnchor] = useState<SpreadAnchor>('start');
+  const [spreadWords, setSpreadWords] = useState(true);
   const [roundInfo, setRoundInfo] = useState<number | null>(null);
   /** Marcar los vértices internos de lo elegido (al pasar por el botón). */
   const [showInner, setShowInner] = useState(false);
@@ -979,6 +987,29 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       if (shifts[i].dx || shifts[i].dy) next = translateRefs(next, p.refs, shifts[i].dx, shifts[i].dy);
     });
     commit(next, `${nSel} piezas con el mismo espacio entre sí.`);
+  };
+  /** Qué se movería al distanciar: el eje y los grupos (palabras o piezas). */
+  const spread = useMemo(() => {
+    if (selection.length < 2) return null;
+    const boxes = selection.map((p) => p.bounds);
+    const axis = spreadAxis(boxes);
+    return { boxes, axis, groups: spreadGroups(boxes, axis, spreadWords, 0.2 / k) };
+  }, [selection, spreadWords, k]);
+  const doSpread = (sign: 1 | -1) => {
+    if (!doc || !spread) return;
+    if (spread.groups.length < 2) {
+      say(spreadWords ? 'No se distinguen palabras en lo elegido: sacá «por palabras» para separar pieza por pieza.' : 'Elegí piezas que estén una al lado de la otra.');
+      return;
+    }
+    const d = Math.abs(num(spreadMm));
+    if (!d) return;
+    const shifts = spreadShifts(spread.boxes, spread.groups, spread.axis, (sign * d) / k, spreadAnchor);
+    let next = doc;
+    selection.forEach((p, i) => {
+      if (shifts[i].dx || shifts[i].dy) next = translateRefs(next, p.refs, shifts[i].dx, shifts[i].dy);
+    });
+    const n = spread.groups.length;
+    commit(next, `${n} ${spreadWords ? 'palabras' : 'piezas'} ${sign > 0 ? 'separadas' : 'juntadas'} ${mm(d)} mm entre sí.`);
   };
   const doDeleteSelection = () => {
     if (!nSel || !doc) return;
@@ -1997,6 +2028,47 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                 Girar
               </Button>
             </Row>
+            <Row label="Distanciar">
+              <input
+                className="h-7 w-12 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
+                inputMode="decimal"
+                value={spreadMm}
+                onChange={(e) => setSpreadMm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') doSpread(1);
+                }}
+                title="Cuánto se agranda (o achica) cada espacio. Enter para separar"
+              />
+              <span className="text-xs text-muted-foreground">mm</span>
+              <Button type="button" size="sm" variant="outline" className="h-7 px-2" disabled={!spread} onClick={() => doSpread(1)}
+                title={spread ? 'Agranda cada espacio lo mismo' : 'Elegí 2 piezas o más (por ejemplo, todas las letras del renglón)'}>
+                Separar
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-7 px-2" disabled={!spread} onClick={() => doSpread(-1)} title="Achica cada espacio lo mismo">
+                Juntar
+              </Button>
+            </Row>
+            <div className="flex flex-wrap items-center gap-1.5 pl-[3.375rem]">
+              <div className="flex rounded border" role="group" aria-label="Desde dónde se distancia">
+                {(
+                  [
+                    ['start', spread?.axis === 'y' ? 'Arriba' : 'Izq.', spread?.axis === 'y' ? 'Queda fijo lo de arriba' : 'Queda fijo lo de la izquierda'],
+                    ['center', 'Centro', 'Se abre hacia los dos lados; el centro queda en su lugar'],
+                    ['end', spread?.axis === 'y' ? 'Abajo' : 'Der.', spread?.axis === 'y' ? 'Queda fijo lo de abajo' : 'Queda fijo lo de la derecha'],
+                  ] as const
+                ).map(([id, label, help]) => (
+                  <button key={id} type="button" aria-pressed={spreadAnchor === id} onClick={() => setSpreadAnchor(id)} title={help}
+                    className={cn('h-7 px-2 text-xs', spreadAnchor === id ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-muted/60')}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                title="Las letras de cada palabra se mueven juntas: solo crece el espacio entre palabras. Sin esto, crece el espacio entre todas las piezas.">
+                <Checkbox checked={spreadWords} onCheckedChange={(v) => setSpreadWords(v === true)} />
+                Por palabras{spread && spreadWords ? ` (${spread.groups.length})` : ''}
+              </label>
+            </div>
             {/* Alinear (2+) y espaciar parejo (3+), en un solo renglón de íconos. */}
             <div className="flex items-center gap-1" role="group" aria-label="Alinear y espaciar">
               {(
