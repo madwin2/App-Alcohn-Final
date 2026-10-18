@@ -35,6 +35,30 @@ Pruebas: `editCorners.test.ts` (arco exacto, radio máximo, vértices internos d
 - **Zonas de fresa**: ya no se dibuja lo que saca la 0,2 (manchas verde agua por todos lados, también en espacios vacíos: eran pasos angostos entre letras donde la 0,2 talla un poco más, correctos pero inútiles de ver). Solo queda lo que **ni con la 0,2** sale (rojo/ámbar, con el número) y una etiqueta **«sin 0,2»** en los sellos donde la 0,6 alcanza. Lo mismo en la ventana de la fresa: sin manchas, con el veredicto y la nota por lugar.
 - **Automático vs. completo en la simulación**: «Automático» sin chequeo vigente dibujaba solo la 0,6 (se veía mal), pero el gadget en ese caso repasa **el sello completo**. Ahora la simulación hace lo mismo que el gadget: completo y automático sin chequear → repaso en todo el sello; automático chequeado → repaso solo en las piezas elegidas (y la 0,6 en el resto); automático chequeado sin necesidad → sin repaso.
 
+## 2 quater. Pedido del usuario: varios nodos y chequeo sin recuadros (2026-10-18)
+
+- **Varios nodos**: editando nodos, **Shift+clic** suma o saca nodos; arrastrar un rectángulo (en el fondo o sobre la pieza) elige los de adentro; Ctrl+A elige todos los de la pieza. Arrastrar uno de los elegidos mueve todos; Supr los borra.
+- **Flechas con nodos elegidos**: mueven esos nodos (Shift: ×10), no la pieza entera. Sin nodos elegidos siguen moviendo la pieza.
+- **Chequeo sin recuadros ni números fijos**: en el visor del chequeo solo quedan pintados los lugares. Al pasar el mouse o tocar uno (o pasar por la lista) aparece su recuadro con el número y el **hueco en mm** («2 · hueco 0,30 mm»), que es lo que dice qué fresa entra.
+
+## 2 quinquies. Elegir en 3D y repaso según el tamaño de la letra (2026-10-18)
+
+- **Elegir un sello en 3D / Mecanizado con un clic**: antes el clic lo elegía y, al soltar, el lienzo (que mueve la vista) lo soltaba. Ahora un clic sin arrastrar elige el sello tocado; arrastrar sigue moviendo la vista (el aviso «para mover sellos volvé a 2D» sale solo si se arrastra un sello).
+- **Repaso 0,2 relativo al tamaño** (`REPASO_MIN_RELATIVE` = 8 %, elegido por el usuario): una zona que saca la 0,2 cuenta solo si su tamaño es al menos el 8 % del de la letra más chica que toca. Medido en «15 OCT x15 C»:
+
+  | Sello | Letra | Zona mayor | Proporción | Resultado |
+  |---|---|---|---|---|
+  | 4708 | 21 mm | 0,69 mm | 3,4 % | sin 0,2 |
+  | G-T 8/12/26 | 7,4 mm | 0,55 mm | 7,4 % | sin 0,2 |
+  | Matungo | 8,4 mm | 0,99 mm | 11,9 % | repaso en 7 rincones |
+  | ese | 9,3 mm | 1,95 mm | 21 % | repaso en 2 zonas |
+  | Alcornoque | 12 mm | 3,45 mm | 28,6 % | repaso |
+  | letras chicas (Madrina, Magui, DW, Rockets…) | 0,3–4 mm | — | 35 % a >100 % | repaso |
+
+  El tamaño absoluto no separa (4708 y Madrina tienen zonas de 0,4–0,7 mm); la proporción sí.
+- **«Necesita 0,2» = hay alguna zona que la justifique**. Antes, si quedaba un problema que la 0,2 tampoco resuelve, el sello iba con repaso completo; ahora no (repasarlo entero no arregla un problema del diseño).
+- La versión del análisis sigue en 6: el formato no cambia y el gadget instalado sigue sirviendo. Los programas ya chequeados mantienen su selección anterior hasta el próximo «Guardar y chequear».
+
 ## 3. Propuestas para Programas (valor en el día a día)
 
 Ordenadas por impacto. Ninguna inventa reglas de negocio: donde hace falta una definición, está marcada.

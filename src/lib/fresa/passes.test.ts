@@ -90,3 +90,19 @@ describe('selección del repaso: formas simples', () => {
     expect(r.repaso.pieces.every((p) => p.selected)).toBe(true);
   });
 });
+
+describe('el repaso pesa según el tamaño de la letra (caso real: 4708)', () => {
+  // Números de 21 mm (68,55 mm de largo): la 0,2 solo afina rincones de ~0,5 mm.
+  const svg = readFileSync('src/lib/fresa/__fixtures__/4708.svg', 'utf8');
+  const shapes = parseSvgShapes(svg).shapes;
+  const at = (longMm: number) => runPasses(shapes, longMm / 194.33, FRESA_FINA, 'CLASICO', DEFAULT_ANALYSIS_OPTIONS);
+
+  it('en números grandes no elige repaso', () => {
+    const r = at(68.55);
+    expect(r.repaso.zones).toHaveLength(0);
+    expect(r.repaso.pieces.some((p) => p.selected)).toBe(false);
+  });
+  it('el mismo diseño chico sí lo necesita', () => {
+    expect(at(12).repaso.zones.length).toBeGreaterThan(0);
+  });
+});

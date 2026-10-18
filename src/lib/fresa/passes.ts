@@ -1,7 +1,7 @@
 /** Comparación geométrica orientativa; no calcula la selección CAM de Aspire. */
 import { analyzeBlackRegion, buildBlackRegion, type PaintShape, type FresaZone } from './analyze';
 import { groupZones, type CheckOutput } from './engine';
-import { REPASO_DEPTH_STEP_MM, REPASO_MIN_GAIN_MM, cutRadiusAtDepth, primaryProfile, type FresaAnalysisOptions, type FresaProfile, type MachiningRecipe } from './config';
+import { REPASO_DEPTH_STEP_MM, REPASO_MIN_GAIN_MM, REPASO_MIN_RELATIVE, cutRadiusAtDepth, primaryProfile, type FresaAnalysisOptions, type FresaProfile, type MachiningRecipe } from './config';
 import { UM, bounds, components, difference, intersect, offset, opening, rect, regionArea, toPath64, union, type Paths64 } from './geometry';
 import type { Pt } from './pathData';
 
@@ -81,8 +81,11 @@ export function repasoSelection(black: Paths64, white: Paths64, primary: FresaPr
     // La zona toca la pared que talla: alcanza con un margen chico para encontrarla.
     const probe = offset(comp.paths, Math.round(0.15 * UM));
     const pieceIds = pieces.flatMap((p, i) => intersect(p.paths, probe).length ? [i] : []);
-    pieceIds.forEach((i) => selected.add(i));
     const b = boundsMm(comp.paths);
+    // Chica para el tamaño de la letra que toca (la más chica, si son varias): no se nota.
+    const size = Math.min(...pieceIds.map((i) => { const pb = boundsMm(pieces[i].paths); return Math.max(pb.maxX - pb.minX, pb.maxY - pb.minY); }));
+    if (Math.max(b.maxX - b.minX, b.maxY - b.minY) < REPASO_MIN_RELATIVE * size) continue;
+    pieceIds.forEach((i) => selected.add(i));
     zones.push({ id: `r${zones.length + 1}`, rings: toMm(comp.paths), areaMm2: area / (UM * UM), bounds: b,
       center: { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 }, pieceIds });
   }

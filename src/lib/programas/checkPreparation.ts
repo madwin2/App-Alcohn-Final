@@ -22,7 +22,10 @@ export async function checkPreparation(document: PreparationDocument, observatio
       // (el observado de Aspire ya viene espejado y girado).
       const machined = s.vectorSvg ? !!s.vectorAlreadyMachined : !!observedSvg;
       const pieces = placedRepasoPieces(report.passes.repaso.pieces, machined);
-      stamps.push({ ...s, fine: { ...base, needsFine: report.passes.outcome !== 'sin_repaso', inputHash: preparationFingerprint(svg),
+      // La 0,2 hace falta solo si saca algo que se note. Lo que tampoco ella
+      // resuelve es del diseño: repasar el sello entero no lo arregla.
+      const needsFine = report.passes.outcome === 'sin_receta' || report.passes.repaso.zones.length > 0;
+      stamps.push({ ...s, fine: { ...base, needsFine, inputHash: preparationFingerprint(svg),
         geometryHash: observedSvg ? actual?.geometryHash : undefined, outcome: report.passes.outcome, ...(pieces.length ? { pieces } : {}) } });
     } catch {
       stamps.push({ ...s, fine: { ...base, needsFine: true, inputHash: '', outcome: 'sin_analisis' } });
