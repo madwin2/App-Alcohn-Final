@@ -316,7 +316,15 @@ async function computeReport(
 ): Promise<FresaReport> {
   let parsed: ParsedSvg;
   try {
-    parsed = parseSvgShapes(svgText, options.flattenTolMm);
+    // Aplanar a la tolerancia de la medida REAL: la declarada en el SVG suele ser
+    // 10 veces más grande y multiplicaba los puntos (y la memoria) del análisis.
+    // Primero una lectura gruesa para saber la escala, después la definitiva.
+    const rough = parseSvgShapes(svgText, options.flattenTolMm * 25);
+    const roughBox = geometryBox(rough);
+    const roughScale = roughBox ? resolveScale(rough, roughBox, target).mmPerUnit : 0;
+    parsed = roughScale > 0 && Number.isFinite(roughScale)
+      ? parseSvgShapes(svgText, options.flattenTolMm, options.flattenTolMm / roughScale)
+      : parseSvgShapes(svgText, options.flattenTolMm);
   } catch (e) {
     return errorReport(key, e instanceof Error ? e.message : 'No se pudo leer el SVG.', profile, target);
   }
@@ -395,7 +403,9 @@ export async function corregirSvg(
   options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
 ): Promise<FresaFixResult> {
   if (before.status === 'error' || !before.check) throw new Error('No hay análisis para corregir.');
-  const parsed = parseSvgShapes(svgText, options.flattenTolMm);
+  // Misma tolerancia real que el análisis: las zonas y la corrección ven la misma geometría.
+  const tolUnits = options.flattenTolMm / before.mmPerUnit;
+  const parsed = parseSvgShapes(svgText, options.flattenTolMm, tolUnits);
   const maxScaleUp = scaleUpLimit(before);
   const fix = await inWorker({
     type: 'fix',
@@ -411,7 +421,7 @@ export async function corregirSvg(
   let base = parsed;
   if (fix.moves.length) {
     applyPieceMoves(parsed, planMmPerUnit, fix.moves);
-    base = parseSvgShapes(new XMLSerializer().serializeToString(parsed.doc.documentElement), options.flattenTolMm);
+    base = parseSvgShapes(new XMLSerializer().serializeToString(parsed.doc.documentElement), options.flattenTolMm, tolUnits);
   }
   const svg = wrapFit(buildCorrectedSvg(base, planMmPerUnit, fix.removed, fix.newBlack), fix.fit);
   // Se re-chequea el archivo final (no el resultado intermedio) con la misma

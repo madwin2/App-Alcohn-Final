@@ -317,8 +317,10 @@ const SKIP_TAGS = new Set([
 /**
  * Lee el SVG y devuelve las figuras en orden de pintura.
  * @param tolMm tolerancia de aplanado deseada en mm (se convierte a unidades del viewBox).
+ * @param tolUnits tolerancia ya en unidades del viewBox: se usa cuando se sabe la medida
+ *   real de fabricación (la declarada suele ser mucho más grande y aplanaría de más).
  */
-export function parseSvgShapes(svgText: string, tolMm = 0.004): ParsedSvg {
+export function parseSvgShapes(svgText: string, tolMm = 0.004, tolUnits?: number): ParsedSvg {
   const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
   const root = doc.documentElement;
   const warnings: string[] = [];
@@ -346,8 +348,8 @@ export function parseSvgShapes(svgText: string, tolMm = 0.004): ParsedSvg {
 
   // Tolerancia en unidades del viewBox. Si no sabemos la escala física, una
   // fracción del tamaño del dibujo.
-  const baseTolUnits =
-    declaredMmPerUnit && declaredMmPerUnit > 0
+  const baseTolUnits = tolUnits && tolUnits > 0 ? tolUnits
+    : declaredMmPerUnit && declaredMmPerUnit > 0
       ? tolMm / declaredMmPerUnit
       : viewBox
         ? Math.max(viewBox.w, viewBox.h) / 20000

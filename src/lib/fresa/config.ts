@@ -151,7 +151,7 @@ export const MAX_SCALE_UP = 1.06;
  * Probado con Magui Lucero: 0,10 y 0,15 eligen las mismas piezas (2026-10-17).
  */
 export const REPASO_MIN_GAIN_MM = 0.1;
-/** Paso entre profundidades al buscar la ganancia (mm). */
-export const REPASO_DEPTH_STEP_MM = 0.05;
+/** Paso entre profundidades al buscar la ganancia (mm). 0,10 elige las mismas piezas que 0,05 en Magui Lucero a la mitad de costo. */
+export const REPASO_DEPTH_STEP_MM = 0.1;
 
 export const FRESA_ANALYSIS_VERSION = 6;
