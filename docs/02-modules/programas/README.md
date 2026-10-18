@@ -174,3 +174,11 @@ La [revisión de código](../../audits/programas-automatizacion-2026-10-15.md) p
 - Reglas: `src/lib/programas/material.ts`, `eligibility.ts`, `lifecycle.ts`, `programName.ts`, `fabricationSize.ts`, `packageZip.ts`, `crv3d.ts` (+ tests `*.test.ts`).
 - Edge: `supabase/functions/programa-sync/index.ts`.
 - Planes de diseño: `PLAN_PROGRAMAS.md`, `PLAN_PROGRAMAS_FASE_2.md`, `PLAN_PROGRAMAS_FASE_3.md`, `programas-correcciones.md`, `programas-mejoras.md` (raíz del repo).
+
+🔶 **Rediseño en prototipo (2026-10-17):** la [mesa de armado](../../13-decisions/ADR-027-mesa-de-armado.md) reemplazará el tablero, la hoja y «Preparar programa». Probala en `/dev/mesa-programas`.
+
+✅ Vista superior simplificada: `FixtureScene` omite las trabas en 2D y conserva las ranuras redondeadas con líneas más finas y menor opacidad. Las vistas 3D/Mecanizado mantienen las trabas; el cambio es visual.
+
+✅ En el prototipo, **3D** muestra fijación, planchuelas y relieve en líneas; **Mecanizado** usa la misma superficie con acabado de bronce. `mesaRelief`/`mesaReliefRender` estiman pendientes y fondos con los perfiles configurados de principal y repaso completo. El automático requiere chequeo vigente; el repaso parcial no se inventa. La vista indica «Relieve estimado» y cada sello detalla qué pasadas representa. No sustituye la revisión de trayectorias en Aspire ni modifica datos o estados de producción. Ver [ADR-027](../../13-decisions/ADR-027-mesa-de-armado.md).
+
+✅ En esa mesa, el imantado es obligatorio: centrado en la planchuela y **8 mm exactos entre diseños**, conservando el inicio del soporte y los cortes actuales. Agrandar/achicar, corregir medidas desde Fresa, insertar, quitar o cambiar de planchuela reacomoda la fila. Arrastrar elige el orden; Subir/Bajar intercambia vecinos y Al final coloca debajo del último sello. Ya no hay Fijar/Soltar ni Ordenar manual. Una operación que exceda ancho/largo o vaya a una planchuela sin material se rechaza con aviso y conserva el armado. Datos en memoria, Aspire simulado y sin escrituras de negocio; el editor previo conserva su comportamiento. Regla confirmada en Q-PROG-023; implementación `mesa.ts`, `MesaArmado`, `MesaInspector` y `FixtureScene`.

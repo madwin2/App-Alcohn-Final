@@ -2,6 +2,7 @@ import { chequearSvg } from '@/lib/fresa/chequeoFresa';
 import { fetchSvgText, isSvgUrl } from '@/lib/fresa/useFresaReport';
 import { observedSvgForStamp, preparationFingerprint, type PreparationDocument, type PreparationObservation } from './preparation';
 import { FRESA_ANALYSIS_VERSION } from '@/lib/fresa/config';
+import { placedRepasoPieces } from './repasoPieces';
 
 /** Chequeo previo completo; nunca toca el vector comercial ni presume leer EPS. */
 export async function checkPreparation(document: PreparationDocument, observation?: PreparationObservation | null): Promise<PreparationDocument> {
@@ -17,8 +18,15 @@ export async function checkPreparation(document: PreparationDocument, observatio
       if (!svg) throw new Error('Sin SVG');
       const report = await chequearSvg(svg, { mode: 'fabricacion', longSideMm: Math.max(s.widthMm, s.heightMm), stampType: s.recipe });
       if (!report.passes || report.status === 'error') throw new Error('Sin análisis');
-      stamps.push({ ...s, fine: { ...base, needsFine: report.passes.outcome !== 'sin_repaso', inputHash: preparationFingerprint(svg),
-        geometryHash: observedSvg ? actual?.geometryHash : undefined, outcome: report.passes.outcome } });
+      // Piezas que necesitan la 0,2, en el marco donde el gadget ubica el diseño
+      // (el observado de Aspire ya viene espejado y girado).
+      const machined = s.vectorSvg ? !!s.vectorAlreadyMachined : !!observedSvg;
+      const pieces = placedRepasoPieces(report.passes.repaso.pieces, machined);
+      // La 0,2 hace falta solo si saca algo que se note. Lo que tampoco ella
+      // resuelve es del diseño: repasar el sello entero no lo arregla.
+      const needsFine = report.passes.outcome === 'sin_receta' || report.passes.repaso.zones.length > 0;
+      stamps.push({ ...s, fine: { ...base, needsFine, inputHash: preparationFingerprint(svg),
+        geometryHash: observedSvg ? actual?.geometryHash : undefined, outcome: report.passes.outcome, ...(pieces.length ? { pieces } : {}) } });
     } catch {
       stamps.push({ ...s, fine: { ...base, needsFine: true, inputHash: '', outcome: 'sin_analisis' } });
     }

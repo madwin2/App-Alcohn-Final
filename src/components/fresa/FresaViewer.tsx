@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FresaReport } from '@/lib/fresa/chequeoFresa';
 import type { FresaGroup } from '@/lib/fresa/engine';
 import type { ZoneSeverity } from '@/lib/fresa/analyze';
-import { DEPTH_BAND_FILL, SEVERITY_FILL } from '@/lib/fresa/textos';
+import { DEPTH_BAND_FILL, SEVERITY_FILL, mm } from '@/lib/fresa/textos';
 import { cn } from '@/lib/utils/cn';
 
 export type FresaViewMode = 'original' | 'corregido' | 'diferencias';
@@ -31,6 +31,8 @@ interface Props {
   onSelectGroup: (id: string | null) => void;
   /** Cambia cuando hay que encuadrar el grupo elegido. */
   focusNonce: number;
+  /** Lugares que saca el repaso 0,2 (mm), dibujados en verde agua. */
+  repasoZones?: { id: string; rings: { x: number; y: number }[][] }[];
   className?: string;
 }
 
@@ -69,6 +71,7 @@ export function FresaViewer({
   hoveredGroupId,
   onSelectGroup,
   focusNonce,
+  repasoZones,
   className,
 }: Props) {
   const filterId = useId().replace(/:/g, '');
@@ -77,6 +80,8 @@ export function FresaViewer({
   const [aspect, setAspect] = useState(1.4);
   const [view, setView] = useState<Box>(report.viewBox);
   const drag = useRef<{ x: number; y: number; view: Box; moved: boolean } | null>(null);
+  /** Lugar bajo el mouse en el dibujo (además del que se señala en la lista). */
+  const [pointed, setPointed] = useState<string | null>(null);
 
   const original = useMemo(() => svgDataUrl(svgText), [svgText]);
   const corrected = useMemo(() => (correctedSvg ? svgDataUrl(correctedSvg) : null), [correctedSvg]);
@@ -171,47 +176,57 @@ export function FresaViewer({
   const strokeW = 1.6 / pxPerUnit; // ~1,6 px en pantalla
   const showZones = mode !== 'diferencias';
 
+  /** Lugar en un punto del dibujo: el de caja más chica que lo contiene (con un margen para tocar fácil). */
+  const groupAt = (p: { x: number; y: number } | null): FresaGroup | null => {
+    if (!p) return null;
+    const xm = p.x * k;
+    const ym = p.y * k;
+    const pad = Math.max(0.35, 6 / pxPerUnit * k);
+    let best: FresaGroup | null = null;
+    let bestArea = Infinity;
+    for (const g of groups) {
+      const b = g.bounds;
+      if (xm < b.minX - pad || xm > b.maxX + pad || ym < b.minY - pad || ym > b.maxY + pad) continue;
+      const area = (b.maxX - b.minX) * (b.maxY - b.minY);
+      if (area < bestArea) {
+        best = g;
+        bestArea = area;
+      }
+    }
+    return best;
+  };
+
+  // Sin recuadros ni números fijos (cargaban la vista): el recuadro y la medida
+  // aparecen solo en el lugar elegido o señalado.
   const renderGroupFrame = (g: FresaGroup, idx: number) => {
     const sel = g.id === selectedGroupId;
-    const hov = g.id === hoveredGroupId;
+    const hov = g.id === hoveredGroupId || g.id === pointed;
+    if (!sel && !hov) return null;
     const padMm = 0.35;
     const x = (g.bounds.minX - padMm) / k;
     const y = (g.bounds.minY - padMm) / k;
     const w = (g.bounds.maxX - g.bounds.minX + 2 * padMm) / k;
     const h = (g.bounds.maxY - g.bounds.minY + 2 * padMm) / k;
     const color = SEVERITY_FILL[g.severity];
-    const label = 11 / pxPerUnit;
+    const fs = 11 / pxPerUnit;
+    const text = `${idx + 1} · hueco ${mm(g.gapWidthMm)} mm`;
+    const tw = text.length * fs * 0.56 + fs;
     return (
-      <g
-        key={g.id}
-        className="cursor-pointer"
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelectGroup(g.id);
-        }}
-      >
+      <g key={g.id} style={{ pointerEvents: 'none' }}>
         <rect
           x={x}
           y={y}
           width={w}
           height={h}
           rx={Math.min(w, h) * 0.2}
-          fill={sel || hov ? `${color}22` : 'transparent'}
+          fill={`${color}18`}
           stroke={color}
-          strokeWidth={sel ? strokeW * 1.8 : strokeW}
-          strokeDasharray={sel ? undefined : `${strokeW * 3} ${strokeW * 2}`}
+          strokeWidth={sel ? strokeW * 1.6 : strokeW}
         />
-        <g transform={`translate(${x + w} ${y})`}>
-          <circle r={label * 0.85} fill={color} />
-          <text
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize={label}
-            fontWeight={700}
-            fill="#fff"
-            style={{ pointerEvents: 'none' }}
-          >
-            {idx + 1}
+        <g transform={`translate(${x} ${y - fs * 1.7})`}>
+          <rect width={tw} height={fs * 1.5} rx={fs * 0.75} fill={color} />
+          <text x={tw / 2} y={fs * 0.78} textAnchor="middle" dominantBaseline="central" fontSize={fs} fontWeight={600} fill="#fff">
+            {text}
           </text>
         </g>
       </g>
@@ -235,22 +250,27 @@ export function FresaViewer({
       }}
       onPointerMove={(e) => {
         const d = drag.current;
-        if (!d) return;
+        if (!d) {
+          const g = showZones ? groupAt(toUser(e.clientX, e.clientY)) : null;
+          if ((g?.id ?? null) !== pointed) setPointed(g?.id ?? null);
+          return;
+        }
         const dx = e.clientX - d.x;
         const dy = e.clientY - d.y;
         if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
         const ppu = (hostRef.current?.getBoundingClientRect().width ?? 600) / d.view.w;
         setView({ ...d.view, x: d.view.x - dx / ppu, y: d.view.y - dy / ppu });
       }}
-      onPointerUp={() => {
+      onPointerUp={(e) => {
         const d = drag.current;
         drag.current = null;
-        if (d && !d.moved) onSelectGroup(null);
+        if (d && !d.moved) onSelectGroup(showZones ? groupAt(toUser(e.clientX, e.clientY))?.id ?? null : null);
       }}
       onPointerCancel={() => {
         drag.current = null;
       }}
-      style={{ cursor: drag.current ? 'grabbing' : 'grab' }}
+      onPointerLeave={() => setPointed(null)}
+      style={{ cursor: drag.current ? 'grabbing' : pointed ? 'pointer' : 'grab' }}
     >
       <svg
         ref={svgRef}
@@ -308,6 +328,14 @@ export function FresaViewer({
             ))}
           </g>
         ) : null}
+        {showZones && repasoZones?.length ? (
+          <g transform={`scale(${1 / k})`} style={{ pointerEvents: 'none' }}>
+            {repasoZones.map((z) => (
+              <path key={z.id} d={zonePath(z.rings)} fill="#2dd4bf" fillOpacity={0.6} stroke="#0d9488" strokeWidth={1}
+                vectorEffect="non-scaling-stroke" fillRule="nonzero" />
+            ))}
+          </g>
+        ) : null}
         {showZones ? (
           <g transform={`scale(${1 / k})`} style={{ pointerEvents: 'none' }}>
             {groups.flatMap((g) =>
@@ -319,7 +347,7 @@ export function FresaViewer({
                     key={`${g.id}-${zid}`}
                     d={zonePath(z.rings)}
                     fill={SEVERITY_FILL[z.severity]}
-                    fillOpacity={g.id === selectedGroupId || g.id === hoveredGroupId ? 0.95 : 0.78}
+                    fillOpacity={g.id === selectedGroupId || g.id === hoveredGroupId || g.id === pointed ? 0.95 : 0.78}
                     fillRule="nonzero"
                   />
                 );
@@ -327,7 +355,7 @@ export function FresaViewer({
             )}
           </g>
         ) : null}
-        {groups.map((g) => renderGroupFrame(g, groupIndex.get(g.id) ?? 0))}
+        {showZones ? groups.map((g) => renderGroupFrame(g, groupIndex.get(g.id) ?? 0)) : null}
       </svg>
 
       <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md border bg-background/90 p-1 text-xs shadow-sm">

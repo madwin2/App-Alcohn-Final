@@ -8,6 +8,8 @@ import {
   docBounds,
   flattenSub,
   deleteNode,
+  deleteNodes,
+  translateNodes,
   moveNodePart,
   offsetPiece,
   redundantNodes,
@@ -238,5 +240,31 @@ describe('editDoc', () => {
     expect(n.i).toEqual({ x: 4, y: 0 });
     const less = deleteNode(moved, { path: 0, sub: 0, node: 2 });
     expect(countNodes(less)).toBe(3);
+  });
+});
+
+describe('varios nodos elegidos', () => {
+  const two = () => {
+    const r = buildEditDoc(svg('<path d="M1 1 L5 1 L5 5 L1 5 Z"/><path d="M10 1 L14 1 L12 4 Z"/>'));
+    if (!r.ok) throw new Error(r.error);
+    return r.doc;
+  };
+
+  it('las flechas mueven solo los nodos elegidos', () => {
+    const doc = two();
+    const next = translateNodes(doc, [{ path: 0, sub: 0, node: 1 }, { path: 0, sub: 0, node: 2 }], 0.5, 0);
+    const n = next.paths[0].subs[0].nodes;
+    expect(n[0].p).toEqual({ x: 1, y: 1 });
+    expect(n[1].p).toEqual({ x: 5.5, y: 1 });
+    expect(n[2].p).toEqual({ x: 5.5, y: 5 });
+    expect(n[3].p).toEqual({ x: 1, y: 5 });
+    expect(next.paths[1]).toEqual(doc.paths[1]);
+  });
+
+  it('borrar varios saca esos nodos y el contorno que queda sin nodos suficientes', () => {
+    const doc = two();
+    const next = deleteNodes(doc, [{ path: 0, sub: 0, node: 1 }, { path: 1, sub: 0, node: 0 }, { path: 1, sub: 0, node: 1 }]);
+    expect(next.paths).toHaveLength(1);
+    expect(next.paths[0].subs[0].nodes.map((n) => n.p)).toEqual([{ x: 1, y: 1 }, { x: 5, y: 5 }, { x: 1, y: 5 }]);
   });
 });

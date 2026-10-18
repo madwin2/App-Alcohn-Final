@@ -1,5 +1,16 @@
 # Chequeo de fresa
 
+## Selección del repaso 0,2 por ganancia (2026-10-17, POL-090)
+
+✅ `passes.ts` (`fineGainRegion`, `repasoSelection`): la 0,2 se elige **donde talla al menos `REPASO_MIN_GAIN_MM` (0,10 mm) más hondo que la 0,6**, para cualquier profundidad hasta el final del repaso (0,6 mm), y en zonas de al menos 0,03 mm². No depende del tipo de zona: entran ranuras, pasos entre letras, ojos y ángulos cerrados; un vértice abierto, un borde recto o un cuadrado sólido dan poca o ninguna ganancia y no entran. Se seleccionan las **piezas negras que bordean** cada zona (las dos, si es entre letras).
+
+- Reemplaza el criterio anterior, que solo tomaba zonas «alta/media» de la primera fresa: en Magui Lucero dejaba afuera la ranura baja de la E (0,64 mm, la 0,6 llegaba a 0,05 y la clasificaba «baja»). Con la ganancia entran las dos ranuras; la 0,2 pasa por 9 de 16 piezas (no I, L, la primera U, la I grande ni las patas). Probado en `passes.test.ts` con el vector real (`__fixtures__/magui-lucero.svg`).
+- 0,10 y 0,15 mm eligen las mismas piezas en ese caso; 0,05 elige casi todo y 0,30 deja afuera pasos reales (U–C, R–O).
+- Chequeo individual: un veredicto único («Con el repaso 0,2 se separa todo · pasa por N de M piezas»); se abre en «Qué deja la 0,6» con lo que saca el repaso en verde agua y, en cada lugar, si lo resuelve el repaso.
+- Mesa: con «Fresa» activado, cada sello muestra lo que saca la 0,2 (verde agua) y lo que ni la 0,2 resuelve (rojo/ámbar); con repaso «Sin repaso», todo lo que deja la 0,6.
+- **Gadget (2026-10-17):** al guardar, cada sello lleva en `fine.pieces` las piezas elegidas, normalizadas a la caja del diseño **ya ubicado** (0 a 1, origen arriba a la izquierda; `placedRepasoPieces`: espejo en X y, si es apaisado, giro 90° antihorario = trasponer; sin cambios si el vector ya está mecanizado). El gadget (`partialFine` en `SyncPreparation.lua`) recorre el grupo del sello y copia a la capa REPASO solo los contornos de esas piezas (el de afuera y sus agujeros). Cada pieza tiene que coincidir con sus contornos a menos de 0,3 mm; prueba también el giro de 180° y, si el diseño es simétrico y no se sabe cuál es, repasa las dos. Si alguna pieza no coincide, **repasa el sello completo** con un aviso (`FINE_FALLBACK`): nunca repasa menos de lo pedido. «Completo» sigue repasando todo y un gadget anterior ignora `fine.pieces` (repasa todo).
+- 🔶 Sin probar en Aspire: la capa REPASO, el tallado V de la 0,2 sobre un subconjunto de letras (equivale a lo que el equipo hacía a mano seleccionando en la capa VECTOR) y el sentido del giro de `RotationMatrix2D`. Si el giro fuera el opuesto, el gadget igual lo encuentra con la prueba de 180°. La simulación 3D de la mesa todavía dibuja la 0,2 en todo el sello.
+
 ## Comparación de dos pasadas (implementación 2026-10-15)
 
 ✅ `passes.ts` compara la principal configurada 0,6 mm / 15° por lado (final Clásico 1,7; 3MM/Alimento 3) con la fina **configurada 0,2 mm**, física 0,1 mm / 30° por lado (final 0,6 en todos; Q-PROG-020). `FRESA_ALIMENTO` usa referencia inferior 0,4 y comparación a 0,5; el 1 mm corresponde a la principal. Análisis **v6**, caché por receta/opciones. Profundidades relativas al planeado previo de 0,5 mm; las plantillas conservan ese inicio y un único Z0.
@@ -138,6 +149,12 @@ Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo p
 
 **Elegir versión** (Revisión): `ReviewItem.originalSvg` guarda el vector como salió (o el cargado con «Cambiar») y `ReviewItem.fresaChoice` qué versión es `svg`: `original`, `auto` o `manual`. Si la automática cambió algo y todavía no se eligió, **queda elegida**; la tarjeta muestra **Guardar: Original | Automático (| A mano)** y **Ver / editar** abre el diálogo con la corrección ya hecha (`initialFix`), con **Editar el corregido / Editar el original** y **Usar el original**. Confirmar guarda `svg`. «Cambiar» borra `originalSvg` y `fresaChoice` (el archivo nuevo es el original). La versión agrandada (último recurso) sigue siendo una decisión manual en el diálogo.
 
+## 4 quater. Herramientas del editor (✅ 2026-10-18, `editCorners.ts`, `unionPieces`)
+
+- **Redondear vértices**: arrastrando el círculo dentro del vértice elegido (radio en vivo), con «Redondear vértice» o, para una pieza, «Redondear internos» (puntas blancas donde la fresa no entra; incluye ojos en forma de hoja de dos nodos). Arco circular exacto entre tramos rectos o curvos; si el radio no entra, el máximo posible.
+- **Copiar / cortar / pegar / duplicar** (Ctrl+C/X/V/D, Ctrl+Shift+V en el mismo lugar), también entre sellos (se reescala a mm). Los agujeros de cada pieza se buscan **solo en su propio trazado** (`computePieces`): pegar una letra encima de otra (por ejemplo un «4» corrido 0,5 mm) ya no le pasa el agujero de la de abajo ni mezcla las dos.
+- **Girar** (90° o libre) y **espejar**; **unir** lo que se pisa (Ctrl+G).
+
 ## 5. Dónde aparece en la app
 
 | Pantalla | Qué se ve | Qué se puede hacer |
@@ -150,6 +167,9 @@ Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo p
 ⚠️ Si se corrige el vector de un sello que **ya está armado en Aspire**, el gadget en modo Actualizar no lo reimporta solo (lo reconoce por su marca y lo conserva). Hay que borrarlo del archivo y correr Actualizar eligiendo «reimportar», o usar Rehacer desde cero. El diálogo lo avisa.
 
 ## 6. Rendimiento
+
+- ✅ (2026-10-17) **Aplanado a la medida real:** `computeReport` lee primero el SVG en grueso para conocer la escala de fabricación y después aplana las curvas a `flattenTolMm` (4 µm) **de esa medida**. Antes se usaba la medida declarada en el SVG (por ejemplo 1497 px ≈ 396 mm para un sello de 35 mm), que aplanaba ~11 veces más fino de lo necesario. En el logo real de Rockets Butchery: 13 021 → 5 454 puntos y 7,3 → 3,4 s. La corrección usa la misma tolerancia. Con el repaso por ganancia y la mesa analizando muchos sellos a la vez, la pestaña se quedaba sin memoria (Out of Memory); con 15 sellos reales, zonas activadas y Mecanizado ahora queda en ~100 MB.
+- El paso de profundidad del repaso (`REPASO_DEPTH_STEP_MM`) es 0,10 mm: en Magui Lucero elige las mismas piezas que 0,05 a la mitad de costo.
 
 - La geometría corre en un **Web Worker** (`fresa.worker.ts`, ~88 KB) para no trabar la pantalla; si el navegador no lo soporta, corre en el hilo principal.
 - Análisis: 25–400 ms por vector real; corrección + re-chequeo: 0,2–8 s (hasta ~20 s en diseños con cientos de piezas), en el worker.

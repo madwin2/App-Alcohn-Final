@@ -1,5 +1,21 @@
 # 5. Programas
 
+## Probar la mesa de armado
+
+En `/dev/mesa-programas` podés probar la nueva mesa con datos de ejemplo; Aspire está simulado. El **imantado está siempre activo**: cada sello queda centrado y separado exactamente **8 mm** del siguiente.
+
+- Arrastrá un sello para ubicarlo antes o después de otro, o cambiarlo de planchuela. Los demás se acomodan y la vista previa muestra cómo quedarán.
+- Al cambiar el **largo de fabricación**, el diseño conserva su proporción y los sellos de abajo bajan o suben automáticamente. Lo vendido no cambia.
+- **Subir** y **Bajar** cambian un puesto. **Al final** lo coloca justo debajo del último sello de esa planchuela.
+- **Quitar** cierra el hueco. **Deshacer/Rehacer** permite recuperar todo el acomodo anterior.
+- Si no entra o la planchuela está sin material, aparece un aviso y se conserva el armado anterior. Elegí otra medida o planchuela.
+
+No hace falta Ordenar, Fijar ni Soltar: el acomodo es automático y la separación no se modifica.
+
+La vista **2D** oculta las trabas de fijación y muestra las ranuras redondeadas con líneas finas y tenues para destacar los sellos. En **3D/Mecanizado** siguen visibles las trabas.
+
+**3D** muestra toda la mesa en líneas y el relieve estimado de los sellos, con los fondos y pendientes de las fresas configuradas. **Mecanizado** muestra ese mismo relieve con acabado de bronce. Acercá con la rueda para ver los detalles; pasá el cursor sobre un sello para saber si muestra solo la principal o también el repaso completo. El automático necesita un chequeo vigente. El repaso parcial se revisa en Aspire: esta vista no reproduce sus trayectorias.
+
 ## Preparar sobre el soporte (nuevo flujo, requiere puesta en marcha)
 
 En la hoja o tarjeta de un programa de la máquina C (G y XL todavía no), abrí **Preparar programa**. Elegí un sello o arrastralo a otra planchuela; podés cambiar medida proporcional, mecanizado, posición, fijarlo o usar **Llevar al final**. **Reacomodar libres** conserva las posiciones fijas. **Deshacer/Rehacer** permite volver atrás. Las medidas vendidas no cambian.
@@ -225,3 +241,12 @@ Para usar el ensayo auxiliar de lógica, elegí **Prueba lógica sin Aspire**:
 El ejemplo guarda únicamente en memoria. No abre Aspire, no calcula trayectorias ni verifica contactos de la fresa; no modifica pedidos, material ni estados reales.
 
 **Prueba con Aspire real:** **Descargar armado para prueba real** guarda un JSON del plan que tenés guardado, con los dibujos ficticios. Si el armado tiene errores, bloquea la descarga. Ese archivo se utiliza con el instrumento local de calificación y las plantillas reales de C; no abre Aspire por sí solo ni es un botón de sincronización de producción. El ensayo del 16/10/2026 importó ocho sellos, calculó quince trayectorias y conservó una corrección al mover/agrandar desde la app. Se guardó una copia independiente y se ejecutó su vista previa de mecanizado. [Resultado y límites](../audits/programas-aspire-real-2026-10-16.md).
+
+## Mesa de armado (vista principal)
+
+Al entrar a Programas se abre la **mesa de armado**: elegís la máquina (Chica, Grande, XL) y el programa del día, y arrastrás sellos de la cola a las planchuelas. Sumar o quitar un sello lo asigna al programa en el momento, como en el tablero.
+
+- **Chica**: «Guardar y chequear» guarda el armado y chequea la fresa; después «Llevar a Aspire» baja el paquete para el gadget 3.2.
+- **Grande y XL**: la mesa elige los sellos y chequea la fresa; «Bajar ZIP para Aspire» usa el gadget de siempre, que ubica los sellos.
+- Al terminar, **Marcar fabricado** pregunta si algún sello salió mal, como siempre.
+- Para ABC, terminados, papelera, bloqueo o historial usá **Todos los programas** (arriba a la derecha).

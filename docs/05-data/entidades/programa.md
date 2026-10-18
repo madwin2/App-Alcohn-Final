@@ -2,6 +2,8 @@
 
 **Qué representa**: un lote de sellos que se mecaniza junto en una máquina CNC (una corrida de Aspire). 4 filas (módulo nuevo). Ver [módulo Programas](../../02-modules/programas/README.md).
 
+✅ Prototipo `/dev/mesa-programas` (2026-10-17): el orden se obtiene de `stamps.topY`; las operaciones recalculan coordenadas centradas y `gapMm=8`, con `pinned=false`. No agrega campos ni cambia el contrato v2. Dimensiones/vector de fabricación y su chequeo siguen en el documento en memoria; los datos comerciales, tablas y estados no se escriben desde este prototipo. [BR-PROG-019](../../04-business-rules/programas-y-material.md).
+
 ## `programa`
 
 | Grupo | Campos |

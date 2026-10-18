@@ -14,14 +14,22 @@ import {
   ArrowRight,
   ArrowUp,
   CheckCircle2,
+  ClipboardPaste,
+  Copy,
+  CopyPlus,
   Eraser,
+  FlipHorizontal2,
+  FlipVertical2,
   Focus,
   Keyboard,
   Loader2,
   Magnet,
+  Merge,
   Maximize2,
   MousePointer2,
   Redo2,
+  RotateCcw,
+  RotateCw,
   Spline,
   Trash2,
   Undo2,
@@ -32,11 +40,13 @@ import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { cn } from '@/lib/utils/cn';
 import type { FresaReport } from '@/lib/fresa/chequeoFresa';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
+import { copyRefs, cornerInfo, internalCorners, mirrorRefs, pasteClip, rotateRefs, roundCorner, roundCorners, type VectorClip } from '@/lib/fresa/editCorners';
 import {
   buildEditDoc,
   computePieces,
   countNodes,
   deleteNode,
+  deleteNodes,
   docBounds,
   isSmooth,
   moveNodePart,
@@ -53,7 +63,9 @@ import {
   simplifyDoc,
   specks,
   subToD,
+  translateNodes,
   translateRefs,
+  unionPieces,
   type Box as DocBox,
   type EditDoc,
   type EditPiece,
@@ -66,6 +78,10 @@ import {
   boxesTouch,
   constrainAxis,
   distributeShifts,
+  spreadAxis,
+  spreadGroups,
+  spreadShifts,
+  type SpreadAnchor,
   neighborGaps,
   shiftBox,
   snapMove,
@@ -108,6 +124,17 @@ const GUIDE_COLOR = '#d946ef';
 
 const refKey = (r: SubRef) => `${r.path}:${r.sub}`;
 const keyOf = (p: EditPiece) => refKey(p.refs[0]);
+/**
+ * Lo copiado en cualquier editor de vectores de la app: se puede pegar en
+ * otro sello (se reescala a su medida en mm).
+ */
+let editorClipboard: VectorClip | null = null;
+/** De qué dibujo se copió (para saber si se pega en otro sello). */
+let clipboardSource: string | null = null;
+/** Pegadas seguidas de lo mismo: cada una se corre un poco más (no quedan apiladas). */
+let pasteCount = 0;
+/** Radios para redondear vértices (mm). */
+const ROUND_OPTIONS = ['0.05', '0.1', '0.2', '0.3', '0.5', '1'];
 const sameNode = (a: NodeRef | null, b: NodeRef) => !!a && a.path === b.path && a.sub === b.sub && a.node === b.node;
 
 function fitBox(b: Box, aspect: number): Box {
@@ -163,7 +190,10 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   /** Piezas elegidas (clave de su contorno de afuera); la primera es la "principal". */
   const [selKeys, setSelKeys] = useState<string[]>([]);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
-  const [selNode, setSelNode] = useState<NodeRef | null>(null);
+  /** Nodos elegidos (Shift suma); el último es el "activo": muestra manijas y se redondea. */
+  const [nodeSel, setNodeSel] = useState<NodeRef[]>([]);
+  const selNode: NodeRef | null = nodeSel[nodeSel.length - 1] ?? null;
+  const setSelNode = (r: NodeRef | null) => setNodeSel(r ? [r] : []);
   const [showAllNodes, setShowAllNodes] = useState(false);
   const [showZones, setShowZones] = useState(true);
   const [showRelief, setShowRelief] = useState(false);
@@ -185,6 +215,18 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   /** Escala mientras se arrastra un tirador (para mostrar el %). */
   const [scaleInfo, setScaleInfo] = useState<number | null>(null);
   const [hoverHandle, setHoverHandle] = useState<number | null>(null);
+  /** Radio para redondear vértices (mm) y el que se ve mientras se arrastra el círculo. */
+  const [roundMm, setRoundMm] = useState('0.2');
+  const [angleDeg, setAngleDeg] = useState('90');
+  /** Distanciar: cuánto (mm), desde dónde y si las letras de una palabra van juntas. */
+  const [spreadMm, setSpreadMm] = useState('0.5');
+  const [spreadAnchor, setSpreadAnchor] = useState<SpreadAnchor>('start');
+  const [spreadWords, setSpreadWords] = useState(true);
+  const [roundInfo, setRoundInfo] = useState<number | null>(null);
+  /** Marcar los vértices internos de lo elegido (al pasar por el botón). */
+  const [showInner, setShowInner] = useState(false);
+  /** Se toca al copiar: el portapapeles es del módulo y no hace re-render solo. */
+  const [, setClipTick] = useState(0);
 
   const tolUnits = 0.004 / k; // aplanado para piezas y toques
   const pieces = useMemo(() => (shown ? computePieces(shown, tolUnits) : []), [shown, tolUnits]);
@@ -413,6 +455,13 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   const selNodes = shown && selRefs.length ? countNodes(shown, selRefs) : 0;
   const motas = useMemo(() => specks(pieces, SPECK_MM2, k), [pieces, k]);
   const selNodeData = selNode && shown ? shown.paths[selNode.path]?.subs[selNode.sub]?.nodes[selNode.node] : undefined;
+  /** El nodo elegido como vértice (se puede redondear). */
+  const selCorner = useMemo(() => (tool === 'nodos' && selNode && doc ? cornerInfo(doc, selNode) : null), [tool, selNode, doc]);
+  /** Vértices internos (punta blanca, donde la fresa no entra) de lo elegido. */
+  const innerCorners = useMemo(
+    () => (doc && tool === 'mover' && selection.length ? internalCorners(doc, selection, tolUnits) : []),
+    [doc, tool, selection, tolUnits],
+  );
 
   // ------------------------------------------------------------ arrastre
   //
@@ -426,9 +475,11 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   type Drag =
     | { kind: 'pan'; x: number; y: number; view: Box; moved: boolean }
     | { kind: 'move'; start: Pt; refs: SubRef[]; box: DocBox; others: DocBox[]; moved: boolean }
-    | { kind: 'marquee'; start: Pt; additive: boolean; moved: boolean }
+    | { kind: 'marquee'; start: Pt; additive: boolean; moved: boolean; nodes?: boolean }
     | { kind: 'node'; ref: NodeRef; part: NodePart; xs: number[]; ys: number[]; moved: boolean }
-    | { kind: 'scale'; refs: SubRef[]; corner: Pt; opposite: Pt; center: Pt; moved: boolean };
+    | { kind: 'nodes'; start: Pt; refs: NodeRef[]; moved: boolean }
+    | { kind: 'scale'; refs: SubRef[]; corner: Pt; opposite: Pt; center: Pt; moved: boolean }
+    | { kind: 'round'; ref: NodeRef; corner: Pt; bisector: Pt; half: number; moved: boolean };
   const drag = useRef<Drag | null>(null);
   const [dragging, setDragging] = useState<Drag['kind'] | null>(null);
 
@@ -476,6 +527,13 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     return i >= 0 ? i : null;
   };
 
+  /** Círculo para redondear el vértice elegido: adentro de la punta, sobre la bisectriz. */
+  const roundWidget = (): Pt | null => {
+    if (!selCorner || !selNodeData) return null;
+    const d = 16 / pxPerUnit;
+    return { x: selNodeData.p.x + selCorner.bisector.x * d, y: selNodeData.p.y + selCorner.bisector.y * d };
+  };
+
   /** x e y de los otros nodos de la pieza (imán para un nodo). */
   const nodeSnapLines = (ref: NodeRef): { xs: number[]; ys: number[] } => {
     const xs: number[] = [];
@@ -513,7 +571,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       }
     }
     const W = 220;
-    const H = target === 'pieza' ? 290 : target === 'nodo' ? 130 : 150;
+    const H = target === 'pieza' ? 460 : target === 'nodo' ? 160 : 210;
     setMenu({
       x: Math.max(4, Math.min(e.clientX - col.left, col.width - W - 4)),
       y: Math.max(4, Math.min(e.clientY - col.top, col.height - H - 4)),
@@ -562,8 +620,29 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       return;
     }
 
+    const rw = tool === 'nodos' ? roundWidget() : null;
+    if (rw && selCorner && selNodeData && Math.hypot(p.x - rw.x, p.y - rw.y) <= 7 / pxPerUnit) {
+      drag.current = {
+        kind: 'round', ref: selCorner.ref, corner: selNodeData.p, bisector: selCorner.bisector,
+        half: Math.sin((selCorner.angleDeg * Math.PI) / 360), moved: false,
+      };
+      setDragging('round');
+      return;
+    }
+
     if (tool === 'nodos' && primary) {
       const h = hitNode(p);
+      if (h && h.part === 'p' && e.shiftKey) {
+        // Shift: suma o saca el nodo de los elegidos (no arrastra).
+        setNodeSel(nodeSel.some((r) => sameNode(r, h.ref)) ? nodeSel.filter((r) => !sameNode(r, h.ref)) : [...nodeSel, h.ref]);
+        return;
+      }
+      if (h && h.part === 'p' && nodeSel.length > 1 && nodeSel.some((r) => sameNode(r, h.ref))) {
+        // Agarrar uno de varios elegidos: se mueven todos juntos.
+        drag.current = { kind: 'nodes', start: p, refs: nodeSel, moved: false };
+        setDragging('nodes');
+        return;
+      }
       if (h) {
         setSelNode(h.ref);
         const { xs, ys } = nodeSnapLines(h.ref);
@@ -577,8 +656,14 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     if (pc) {
       const key = keyOf(pc);
       if (tool === 'nodos') {
-        // Editando nodos: tocar otra pieza pasa a editar los de esa.
-        if (key !== keyOf(primary ?? pc) || !primary) setSelection([key]);
+        // Editando nodos: tocar otra pieza pasa a editar los de esa; arrastrar
+        // sobre la misma, rectángulo para elegir nodos.
+        if (key !== keyOf(primary ?? pc) || !primary) {
+          setSelection([key]);
+          return;
+        }
+        drag.current = { kind: 'marquee', start: p, additive: e.shiftKey, moved: false, nodes: true };
+        setDragging('marquee');
         return;
       }
       let keys = selKeys;
@@ -600,13 +685,9 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       return;
     }
 
-    // Fondo: editando nodos, sale de la edición; si no, rectángulo de selección.
-    if (tool === 'nodos') {
-      setTool('mover');
-      setSelNode(null);
-      return;
-    }
-    drag.current = { kind: 'marquee', start: p, additive: e.shiftKey, moved: false };
+    // Fondo: rectángulo de selección (de nodos, si se están editando). Un clic
+    // sin arrastrar en el fondo sale de la edición de nodos (al soltar).
+    drag.current = { kind: 'marquee', start: p, additive: e.shiftKey, moved: false, nodes: tool === 'nodos' };
     setDragging('marquee');
   };
 
@@ -649,6 +730,16 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       setTemp(scaleRefsAt(doc, d.refs, f, anchor.x, anchor.y));
       return;
     }
+    if (d.kind === 'round') {
+      // Centro del arco sobre la bisectriz: radio = distancia × sen(ángulo / 2).
+      const along = (p.x - d.corner.x) * d.bisector.x + (p.y - d.corner.y) * d.bisector.y;
+      const r = Math.max(0, along) * d.half;
+      d.moved = true;
+      const res = r > 0 ? roundCorner(doc, d.ref, r) : null;
+      setRoundInfo(res ? res.radius * k : 0);
+      setTemp(res ? res.doc : null);
+      return;
+    }
     if (d.kind === 'marquee') {
       if (Math.hypot(p.x - d.start.x, p.y - d.start.y) * pxPerUnit > 3) d.moved = true;
       setMarquee({
@@ -684,6 +775,19 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       setTemp(translateRefs(doc, d.refs, dx, dy));
       return;
     }
+    if (d.kind === 'nodes') {
+      let dx = p.x - d.start.x;
+      let dy = p.y - d.start.y;
+      if (Math.hypot(dx, dy) * pxPerUnit > 2) d.moved = true;
+      if (!d.moved) return;
+      if (e.shiftKey) {
+        const c = constrainAxis(dx, dy);
+        dx = c.dx;
+        dy = c.dy;
+      }
+      setTemp(translateNodes(doc, d.refs, dx, dy));
+      return;
+    }
     // Nodo o manija.
     d.moved = true;
     let q = p;
@@ -706,7 +810,40 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     setDragInfo(null);
     const f = scaleInfo;
     setScaleInfo(null);
+    const rr = roundInfo;
+    setRoundInfo(null);
     if (!d || d.kind === 'pan') return;
+    if (d.kind === 'round') {
+      if (temp && rr) {
+        commit(temp, `Vértice redondeado (radio ${mm(rr, 2)} mm).`);
+        setSelNode(null);
+      } else setTemp(null);
+      return;
+    }
+    if (d.kind === 'marquee' && d.nodes) {
+      const m = marquee;
+      setMarquee(null);
+      if (!d.moved || !m) {
+        if (d.additive) return;
+        // Clic en la pieza: suelta los nodos; en el fondo: termina de editar.
+        if (pieceAt(pieces, d.start)) setSelNode(null);
+        else {
+          setTool('mover');
+          setSelNode(null);
+        }
+        return;
+      }
+      const hit: NodeRef[] = [];
+      for (const r of nodeRefs) {
+        (shown?.paths[r.path]?.subs[r.sub]?.nodes ?? []).forEach((n, ni) => {
+          if (n.p.x >= m.minX && n.p.x <= m.maxX && n.p.y >= m.minY && n.p.y <= m.maxY) hit.push({ ...r, node: ni });
+        });
+      }
+      const next = d.additive ? [...nodeSel, ...hit.filter((h) => !nodeSel.some((r) => sameNode(r, h)))] : hit;
+      setNodeSel(next);
+      if (hit.length) showNotice(`${next.length} nodo${next.length === 1 ? '' : 's'} elegido${next.length === 1 ? '' : 's'}.`, 'ok');
+      return;
+    }
     if (d.kind === 'marquee') {
       const m = marquee;
       setMarquee(null);
@@ -729,9 +866,11 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             ? n > 1
               ? `${n} piezas movidas.`
               : 'Pieza movida.'
-            : d.part === 'p'
-              ? 'Nodo movido.'
-              : 'Manija movida.',
+            : d.kind === 'nodes'
+              ? `${d.refs.length} nodos movidos.`
+              : d.part === 'p'
+                ? 'Nodo movido.'
+                : 'Manija movida.',
       );
     } else {
       setTemp(null);
@@ -811,6 +950,26 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     const fresh = computePieces(r.doc, tolUnits).filter((p) => p.refs[0].path >= r.firstNewPath);
     setSelection(fresh.map(keyOf));
   };
+  /** Unir lo elegido en una sola pieza (lo que se pisa queda una figura). */
+  const doUnion = () => {
+    if (nSel < 2 || !doc) return;
+    const r = unionPieces(doc, selection, k);
+    if (!r) { say('Ninguna de las elegidas se toca con otra: no hay nada para unir.'); return; }
+    const merged = computePieces(r.doc, tolUnits).filter((pc) => pc.refs[0].path >= r.firstNewPath);
+    const loose = nSel - r.merged;
+    commit(r.doc, `${r.merged} piezas unidas en ${merged.length}.${loose ? ` ${loose} no se tocaban y quedaron igual.` : ''}`);
+    setSelection(merged.map(keyOf));
+  };
+  /** Girar (positivo = horario) o espejar lo elegido sobre el centro de su caja. */
+  const doRotate = (deg: number) => {
+    if (!nSel || !doc || !selBox || !deg) return;
+    const g = Math.abs(deg);
+    commit(rotateRefs(doc, selRefs, selBox, deg), `${what} girada${nSel > 1 ? 's' : ''} ${Number.isInteger(g) ? g : mm(g, 1)}° ${deg > 0 ? 'a la derecha' : 'a la izquierda'}.`);
+  };
+  const doMirror = (axis: 'x' | 'y') => {
+    if (!nSel || !doc || !selBox) return;
+    commit(mirrorRefs(doc, selRefs, selBox, axis), `${what} espejada${nSel > 1 ? 's' : ''} ${axis === 'x' ? 'izquierda ↔ derecha' : 'arriba ↕ abajo'}.`);
+  };
   const doAlign = (mode: AlignMode) => {
     if (nSel < 2 || !doc) return;
     const shifts = alignShifts(selection.map((p) => p.bounds), mode);
@@ -829,6 +988,29 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     });
     commit(next, `${nSel} piezas con el mismo espacio entre sí.`);
   };
+  /** Qué se movería al distanciar: el eje y los grupos (palabras o piezas). */
+  const spread = useMemo(() => {
+    if (selection.length < 2) return null;
+    const boxes = selection.map((p) => p.bounds);
+    const axis = spreadAxis(boxes);
+    return { boxes, axis, groups: spreadGroups(boxes, axis, spreadWords, 0.2 / k) };
+  }, [selection, spreadWords, k]);
+  const doSpread = (sign: 1 | -1) => {
+    if (!doc || !spread) return;
+    if (spread.groups.length < 2) {
+      say(spreadWords ? 'No se distinguen palabras en lo elegido: sacá «por palabras» para separar pieza por pieza.' : 'Elegí piezas que estén una al lado de la otra.');
+      return;
+    }
+    const d = Math.abs(num(spreadMm));
+    if (!d) return;
+    const shifts = spreadShifts(spread.boxes, spread.groups, spread.axis, (sign * d) / k, spreadAnchor);
+    let next = doc;
+    selection.forEach((p, i) => {
+      if (shifts[i].dx || shifts[i].dy) next = translateRefs(next, p.refs, shifts[i].dx, shifts[i].dy);
+    });
+    const n = spread.groups.length;
+    commit(next, `${n} ${spreadWords ? 'palabras' : 'piezas'} ${sign > 0 ? 'separadas' : 'juntadas'} ${mm(d)} mm entre sí.`);
+  };
   const doDeleteSelection = () => {
     if (!nSel || !doc) return;
     commit(removeRefs(doc, selRefs), `${what} borrada${nSel > 1 ? 's' : ''}. Ctrl+Z para recuperar${nSel > 1 ? 'las' : 'la'}.`);
@@ -836,8 +1018,15 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   };
   const doDeleteNode = () => {
     if (!selNode || !doc) return;
-    commit(deleteNode(doc, selNode), 'Nodo borrado.');
+    if (nodeSel.length > 1) commit(deleteNodes(doc, nodeSel), `${nodeSel.length} nodos borrados.`);
+    else commit(deleteNode(doc, selNode), 'Nodo borrado.');
     setSelNode(null);
+  };
+  /** Flechas con nodos elegidos: mueven esos nodos, no la pieza. */
+  const nudgeNodes = (dxMm: number, dyMm: number) => {
+    if (!nodeSel.length || !doc) return;
+    const n = nodeSel.length;
+    commit(translateNodes(doc, nodeSel, dxMm / k, dyMm / k), `${n > 1 ? `${n} nodos movidos` : 'Nodo movido'} ${mm(Math.hypot(dxMm, dyMm))} mm.`);
   };
   const doNodeCorner = () => {
     if (!selNode || !doc) return;
@@ -876,6 +1065,54 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     setSelection([]);
   };
 
+  const roundR = Math.max(0.001, num(roundMm) || 0.2);
+  const doRoundNode = () => {
+    if (!doc || !selCorner) return;
+    const r = roundCorner(doc, selCorner.ref, roundR / k);
+    if (!r) return;
+    const used = r.radius * k;
+    commit(r.doc, used < roundR - 1e-4 ? `Vértice redondeado con el máximo que entra: ${mm(used, 2)} mm.` : `Vértice redondeado (radio ${mm(used, 2)} mm).`);
+    setSelNode(null);
+  };
+  const doRoundInternal = () => {
+    if (!doc || !innerCorners.length) return;
+    const r = roundCorners(doc, innerCorners.map((c) => c.ref), roundR / k);
+    if (!r.done) return;
+    commit(r.doc, `${r.done} vértice${r.done === 1 ? '' : 's'} interno${r.done === 1 ? '' : 's'} redondeado${r.done === 1 ? '' : 's'} (radio ${mm(roundR, 2)} mm o el máximo que entra).`);
+  };
+  /** Copiar lo elegido (sirve para pegar acá o en el editor de otro sello). */
+  const doCopy = (cut = false) => {
+    if (!doc || !nSel || !selBox) return;
+    editorClipboard = copyRefs(doc, selRefs, selBox, k);
+    clipboardSource = svgText;
+    pasteCount = 0;
+    setClipTick((t) => t + 1);
+    if (cut) {
+      commit(removeRefs(doc, selRefs), `${what} cortada${nSel > 1 ? 's' : ''}. Ctrl+V para pegar.`);
+      setSelection([]);
+    } else showNotice(`${what} copiada${nSel > 1 ? 's' : ''}. Ctrl+V pega al lado; Ctrl+Shift+V, en el mismo lugar.`, 'ok');
+  };
+  /** Pegar: corrido 0,5 mm (para verlo), o en el mismo lugar. Lo pegado queda elegido. */
+  const doPaste = (samePlace = false) => {
+    if (!doc || !editorClipboard) return;
+    pasteCount += 1;
+    // De otro sello: al centro de lo que se ve (su lugar en el otro dibujo no significa nada acá).
+    const other = clipboardSource !== svgText;
+    const r = other
+      ? pasteClip(doc, editorClipboard, k, 0, { x: view.x + view.w / 2, y: view.y + view.h / 2 })
+      : pasteClip(doc, editorClipboard, k, samePlace ? 0 : 0.5 * pasteCount);
+    commit(r.doc, other ? 'Pegado desde otro sello, al centro de la vista y a su medida en mm.' : samePlace ? 'Pegado en el mismo lugar.' : 'Pegado. Arrastralo a su lugar (Shift: un solo eje).');
+    setTool('mover');
+    setSelection(computePieces(r.doc, tolUnits).filter((pc) => pc.refs[0].path >= r.firstNewPath).map(keyOf));
+  };
+  const doDuplicate = () => {
+    if (!doc || !nSel || !selBox) return;
+    const clip = copyRefs(doc, selRefs, selBox, k);
+    const r = pasteClip(doc, clip, k, 0.5);
+    commit(r.doc, `${what} duplicada${nSel > 1 ? 's' : ''}.`);
+    setSelection(computePieces(r.doc, tolUnits).filter((pc) => pc.refs[0].path >= r.firstNewPath).map(keyOf));
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     // En un campo de texto o un desplegable, las teclas son de ese campo.
     if ((e.target as HTMLElement).closest('input, select, textarea')) return;
@@ -894,6 +1131,28 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     if (mod && e.key.toLowerCase() === 'y') {
       e.preventDefault();
       redo();
+      return;
+    }
+    if (mod && e.key.toLowerCase() === 'g') {
+      e.preventDefault();
+      doUnion();
+      return;
+    }
+    if (mod && ['c', 'x', 'v', 'd'].includes(e.key.toLowerCase())) {
+      e.preventDefault();
+      const key = e.key.toLowerCase();
+      if (key === 'c') doCopy();
+      else if (key === 'x') doCopy(true);
+      else if (key === 'v') doPaste(e.shiftKey);
+      else doDuplicate();
+      return;
+    }
+    if (mod && e.key.toLowerCase() === 'a' && tool === 'nodos' && primary && shown) {
+      // Editando nodos: todos los nodos de la pieza.
+      e.preventDefault();
+      const all = nodeRefs.flatMap((r) => (shown.paths[r.path]?.subs[r.sub]?.nodes ?? []).map((_, ni) => ({ ...r, node: ni })));
+      setNodeSel(all);
+      showNotice(`${all.length} nodos elegidos.`, 'ok');
       return;
     }
     if (mod && e.key.toLowerCase() === 'a') {
@@ -928,6 +1187,11 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       ArrowUp: [0, -s],
       ArrowDown: [0, s],
     };
+    if (dirs[e.key] && tool === 'nodos' && nodeSel.length) {
+      e.preventDefault();
+      nudgeNodes(...dirs[e.key]);
+      return;
+    }
     if (dirs[e.key] && nSel) {
       e.preventDefault();
       nudge(...dirs[e.key]);
@@ -985,9 +1249,13 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
         ? 'Tocá una pieza para editar sus nodos. Esc o clic en el fondo: terminar.'
         : !nodesTouchable
           ? 'Los nodos están muy juntos: acercate con la rueda (o F) para poder tocarlos.'
-          : selNode
-            ? 'Arrastrá el nodo o sus manijas (se alinea con los otros; Ctrl lo suelta). Clic derecho: esquina, suave o borrar.'
-            : 'Arrastrá un nodo, o tocalo para ver sus manijas. Esc o clic en el fondo: terminar.'
+          : nodeSel.length > 1
+            ? `${nodeSel.length} nodos elegidos: arrastrá uno para mover todos, o usá las flechas (Shift: ×10). Shift+clic suma o saca. Supr: borrarlos.`
+            : selNode
+              ? selCorner
+                ? 'Arrastrá el círculo hacia adentro para redondear el vértice, o el nodo y sus manijas. Flechas: mover el nodo. Shift+clic: sumar otro.'
+                : 'Arrastrá el nodo o sus manijas (se alinea con los otros; Ctrl lo suelta). Flechas: mover el nodo. Shift+clic: sumar otro.'
+              : 'Arrastrá un nodo, o tocalo para ver sus manijas. Shift+clic o arrastrar un rectángulo: varios. Esc o clic en el fondo: terminar.'
       : dragging === 'move'
         ? 'Shift: solo en horizontal o vertical. Ctrl: sin imán.'
         : dragging === 'scale'
@@ -1002,7 +1270,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       ? 'cursor-grabbing'
       : dragging === 'scale'
         ? 'cursor-nwse-resize'
-        : dragging === 'move' || dragging === 'node'
+        : dragging === 'move' || dragging === 'node' || dragging === 'round'
           ? 'cursor-move'
           : dragging === 'marquee'
             ? 'cursor-crosshair'
@@ -1250,6 +1518,30 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               </g>
             ) : null}
 
+            {/* Vértices internos de lo elegido (al pasar por «Redondear internos») */}
+            {showInner && shown
+              ? innerCorners.map((c) => {
+                  const n = shown.paths[c.ref.path]?.subs[c.ref.sub]?.nodes[c.ref.node];
+                  return n ? <circle key={`${refKey(c.ref)}:${c.ref.node}`} cx={n.p.x} cy={n.p.y} r={5 * u} fill="none" stroke="#f97316" strokeWidth={2 * u} style={{ pointerEvents: 'none' }} /> : null;
+                })
+              : null}
+
+            {/* Círculo para redondear el vértice elegido */}
+            {(() => {
+              const w = tool === 'nodos' && dragging !== 'round' ? roundWidget() : null;
+              return w ? (
+                <g style={{ pointerEvents: 'none' }}>
+                  <circle cx={w.x} cy={w.y} r={4.5 * u} fill="#fff" stroke="#2563eb" strokeWidth={1.4 * u} />
+                  <circle cx={w.x} cy={w.y} r={1.6 * u} fill="#2563eb" />
+                </g>
+              ) : null;
+            })()}
+            {dragging === 'round' && roundInfo != null && selNodeData ? (
+              <text x={selNodeData.p.x + 10 * u} y={selNodeData.p.y - 10 * u} fontSize={11 * u} fill="#2563eb" fontWeight={600} stroke="#fff" strokeWidth={3 * u} paintOrder="stroke" style={{ pointerEvents: 'none' }}>
+                {roundInfo > 0 ? `radio ${mm(roundInfo, 2)} mm` : 'sin redondear'}
+              </text>
+            ) : null}
+
             {/* Nodos */}
             {shown
               ? nodeRefs.map((r) => {
@@ -1275,7 +1567,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                     <g key={refKey(r)} style={{ pointerEvents: 'none' }}>
                       {sub.nodes.map((n, ni) => {
                         const ref = { ...r, node: ni };
-                        const isSel = sameNode(selNode, ref);
+                        const isSel = nodeSel.some((x) => sameNode(x, ref));
                         const showHandles =
                           tool === 'nodos' && !!selNode && selNode.path === r.path && selNode.sub === r.sub && Math.abs(selNode.node - ni) <= 1;
                         const isExtra = extraKeys.has(`${r.path}:${r.sub}:${ni}`);
@@ -1431,6 +1723,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               const off = mm(Math.abs(num(offsetMm)) || 0.05);
               if (menu.target === 'nodo') {
                 return [
+                  item(`Redondear ${mm(roundR, 2)} mm`, doRoundNode, { disabled: !selCorner }),
                   item('Esquina (sin manijas)', doNodeCorner, { disabled: !selNodeData?.i && !selNodeData?.o }),
                   item('Suave (manijas alineadas)', doNodeSmooth),
                   sep('s1'),
@@ -1449,14 +1742,24 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                   item('Achicar 1 %', () => scaleBy(0.99)),
                   item(`Engordar ${off} mm`, () => doOffset(1)),
                   item(`Afinar ${off} mm`, () => doOffset(-1)),
+                  item('Girar 90° a la derecha', () => doRotate(90)),
+                  item('Espejar izquierda ↔ derecha', () => doMirror('x')),
                   item('Simplificar nodos', doSimplify),
+                  item(`Redondear internos (${innerCorners.length})`, doRoundInternal, { disabled: !innerCorners.length }),
                   sep('s2'),
+                  item('Copiar', () => doCopy(), { keys: 'Ctrl+C' }),
+                  item('Cortar', () => doCopy(true), { keys: 'Ctrl+X' }),
+                  item('Duplicar', doDuplicate, { keys: 'Ctrl+D' }),
+                  item(`Unir ${nSel > 1 ? nSel : ''} piezas`.replace('  ', ' '), doUnion, { keys: 'Ctrl+G', disabled: nSel < 2 }),
+                  sep('s3'),
                   item(nSel > 1 ? `Borrar ${nSel} piezas` : 'Borrar pieza', doDeleteSelection, { keys: 'Supr', danger: true }),
                 ];
               }
               return [
                 item('Elegir todo', () => setSelection(pieces.map(keyOf)), { keys: 'Ctrl+A' }),
                 item('Ver todo', fitAll, { keys: '0' }),
+                item('Pegar', () => doPaste(), { keys: 'Ctrl+V', disabled: !editorClipboard }),
+                item('Pegar en el mismo lugar', () => doPaste(true), { keys: 'Ctrl+Shift+V', disabled: !editorClipboard }),
                 sep('s1'),
                 item('Deshacer', undo, { keys: 'Ctrl+Z', disabled: idx === 0 }),
                 item('Rehacer', redo, { keys: 'Ctrl+Y', disabled: idx >= history.length - 1 }),
@@ -1509,6 +1812,18 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             </li>
             <li>
               <b>Ctrl+Z</b> / <b>Ctrl+Y</b> deshacer / rehacer
+            </li>
+            <li>
+              <b>Ctrl+C</b> copiar · <b>Ctrl+X</b> cortar · <b>Ctrl+D</b> duplicar
+            </li>
+            <li>
+              <b>Ctrl+V</b> pegar al lado · <b>Ctrl+Shift+V</b> en el mismo lugar
+            </li>
+            <li>
+              Vértice elegido: arrastrar el <b>círculo</b> para redondear
+            </li>
+            <li>
+              <b>Ctrl+G</b> unir lo elegido en una pieza
             </li>
           </ul>
         ) : null}
@@ -1592,6 +1907,18 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               <span className="tabular-nums">
                 {selBox ? `${mm((selBox.maxX - selBox.minX) * k)} × ${mm((selBox.maxY - selBox.minY) * k)} mm` : 'ninguna elegida'}
               </span>
+              <button type="button" className="inline-flex size-6 items-center justify-center rounded hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+                disabled={!nSel} onClick={() => doCopy()} title="Copiar (Ctrl+C): se puede pegar acá o en el editor de otro sello" aria-label="Copiar">
+                <Copy className="size-3.5" />
+              </button>
+              <button type="button" className="inline-flex size-6 items-center justify-center rounded hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+                disabled={!nSel} onClick={doDuplicate} title="Duplicar (Ctrl+D)" aria-label="Duplicar">
+                <CopyPlus className="size-3.5" />
+              </button>
+              <button type="button" className="inline-flex size-6 items-center justify-center rounded hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+                disabled={!editorClipboard} onClick={() => doPaste()} title="Pegar (Ctrl+V; Ctrl+Shift+V en el mismo lugar)" aria-label="Pegar">
+                <ClipboardPaste className="size-3.5" />
+              </button>
               <button
                 type="button"
                 className="inline-flex size-6 items-center justify-center rounded text-red-600 hover:bg-red-500/10 dark:text-red-400 disabled:opacity-30 disabled:hover:bg-transparent"
@@ -1673,6 +2000,75 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               />
               <span className="text-xs text-muted-foreground">mm</span>
             </Row>
+            <Row label="Girar">
+              <button type="button" className={iconBtn} onClick={() => doRotate(-90)} title="Girar 90° a la izquierda">
+                <RotateCcw className="size-3.5" />
+              </button>
+              <button type="button" className={iconBtn} onClick={() => doRotate(90)} title="Girar 90° a la derecha">
+                <RotateCw className="size-3.5" />
+              </button>
+              <button type="button" className={iconBtn} onClick={() => doMirror('x')} title="Espejar izquierda ↔ derecha">
+                <FlipHorizontal2 className="size-3.5" />
+              </button>
+              <button type="button" className={iconBtn} onClick={() => doMirror('y')} title="Espejar arriba ↕ abajo">
+                <FlipVertical2 className="size-3.5" />
+              </button>
+              <input
+                className="h-7 w-12 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
+                inputMode="decimal"
+                value={angleDeg}
+                onChange={(e) => setAngleDeg(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') doRotate(num(angleDeg));
+                }}
+                title="Grados a girar (negativo: a la izquierda). Enter para aplicar"
+              />
+              <span className="text-xs text-muted-foreground">°</span>
+              <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={() => doRotate(num(angleDeg))}>
+                Girar
+              </Button>
+            </Row>
+            <Row label="Distanciar">
+              <input
+                className="h-7 w-12 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
+                inputMode="decimal"
+                value={spreadMm}
+                onChange={(e) => setSpreadMm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') doSpread(1);
+                }}
+                title="Cuánto se agranda (o achica) cada espacio. Enter para separar"
+              />
+              <span className="text-xs text-muted-foreground">mm</span>
+              <Button type="button" size="sm" variant="outline" className="h-7 px-2" disabled={!spread} onClick={() => doSpread(1)}
+                title={spread ? 'Agranda cada espacio lo mismo' : 'Elegí 2 piezas o más (por ejemplo, todas las letras del renglón)'}>
+                Separar
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-7 px-2" disabled={!spread} onClick={() => doSpread(-1)} title="Achica cada espacio lo mismo">
+                Juntar
+              </Button>
+            </Row>
+            <div className="flex flex-wrap items-center gap-1.5 pl-[3.375rem]">
+              <div className="flex rounded border" role="group" aria-label="Desde dónde se distancia">
+                {(
+                  [
+                    ['start', spread?.axis === 'y' ? 'Arriba' : 'Izq.', spread?.axis === 'y' ? 'Queda fijo lo de arriba' : 'Queda fijo lo de la izquierda'],
+                    ['center', 'Centro', 'Se abre hacia los dos lados; el centro queda en su lugar'],
+                    ['end', spread?.axis === 'y' ? 'Abajo' : 'Der.', spread?.axis === 'y' ? 'Queda fijo lo de abajo' : 'Queda fijo lo de la derecha'],
+                  ] as const
+                ).map(([id, label, help]) => (
+                  <button key={id} type="button" aria-pressed={spreadAnchor === id} onClick={() => setSpreadAnchor(id)} title={help}
+                    className={cn('h-7 px-2 text-xs', spreadAnchor === id ? 'bg-muted font-medium' : 'text-muted-foreground hover:bg-muted/60')}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                title="Las letras de cada palabra se mueven juntas: solo crece el espacio entre palabras. Sin esto, crece el espacio entre todas las piezas.">
+                <Checkbox checked={spreadWords} onCheckedChange={(v) => setSpreadWords(v === true)} />
+                Por palabras{spread && spreadWords ? ` (${spread.groups.length})` : ''}
+              </label>
+            </div>
             {/* Alinear (2+) y espaciar parejo (3+), en un solo renglón de íconos. */}
             <div className="flex items-center gap-1" role="group" aria-label="Alinear y espaciar">
               {(
@@ -1697,6 +2093,15 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                 </button>
               ))}
               <span className="mx-1 h-5 border-l" aria-hidden />
+              <button
+                type="button"
+                className={iconBtn}
+                disabled={nSel < 2}
+                onClick={doUnion}
+                title={nSel < 2 ? 'Unir: elegí 2 piezas o más que se toquen' : 'Unir en una sola pieza lo que se pisa (Ctrl+G)'}
+              >
+                <Merge className="size-3.5" />
+              </button>
               <button
                 type="button"
                 className={iconBtn}
@@ -1762,6 +2167,36 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                 </span>
               </>
             )}
+          </div>
+          {/* Redondear: el vértice elegido (editando nodos) o los internos de lo elegido. */}
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 tabular-nums"
+              disabled={tool === 'nodos' ? !selCorner : !innerCorners.length}
+              onClick={tool === 'nodos' ? doRoundNode : doRoundInternal}
+              onMouseEnter={() => setShowInner(true)}
+              onMouseLeave={() => setShowInner(false)}
+              title={tool === 'nodos'
+                ? 'Redondea el vértice elegido con un arco de este radio (también: arrastrar el círculo azul)'
+                : 'Redondea los vértices internos de lo elegido: las puntas blancas donde la fresa no entra (en naranja al pasar por acá)'}
+            >
+              {tool === 'nodos' ? 'Redondear vértice' : `Redondear internos (${innerCorners.length})`}
+            </Button>
+            <select
+              className="h-7 rounded border bg-background px-1 text-xs"
+              value={roundMm}
+              onChange={(e) => setRoundMm(e.target.value)}
+              title="Radio del redondeo (si no entra, se usa el máximo posible)"
+            >
+              {ROUND_OPTIONS.map((v) => (
+                <option key={v} value={v}>
+                  radio {v.replace('.', ',')} mm
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex items-center gap-1.5">
             <Button

@@ -143,4 +143,23 @@ export const MIN_BLACK_WIDTH_MM = 0.4;
 export const MAX_SCALE_UP = 1.06;
 
 /** Versión del algoritmo: cambia → se invalida la caché de resultados. */
+/**
+ * Repaso fino: se selecciona donde la fresa de 0,2 talla al menos esto más
+ * hondo que la primera (0,6), hasta la profundidad final del repaso (0,6 mm).
+ * Mide la diferencia real entre herramientas: un vértice abierto o un borde
+ * recto dan poca ganancia y no entran; una ranura o un ángulo cerrado, sí.
+ * Probado con Magui Lucero: 0,10 y 0,15 eligen las mismas piezas (2026-10-17).
+ */
+export const REPASO_MIN_GAIN_MM = 0.1;
+/** Paso entre profundidades al buscar la ganancia (mm). 0,10 elige las mismas piezas que 0,05 en Magui Lucero a la mitad de costo. */
+export const REPASO_DEPTH_STEP_MM = 0.1;
+/**
+ * Una zona de repaso cuenta solo si es al menos esta parte del tamaño de la
+ * letra (pieza) que toca: el mismo rincón de 0,5 mm pesa en una letra de 3 mm
+ * y no se nota en un número de 21 mm. Calibrado con el programa «15 OCT x15 C»
+ * (2026-10-18): 4708 queda en 2–3,4 % (sin repaso), Matungo 8–12 %, Alcornoque
+ * hasta 29 %, letras chicas por encima del 35 %.
+ */
+export const REPASO_MIN_RELATIVE = 0.08;
+
 export const FRESA_ANALYSIS_VERSION = 6;

@@ -1,5 +1,14 @@
 # Preguntas abiertas — Programas
 
+### Q-PROG-023
+- **Módulo**: Programas / mesa de armado · **Estado**: documentada (2026-10-17)
+- **Pregunta**: Para una excepción por sello, ¿se modifica la separación entre diseños o el margen del diseño a ambos cortes? ¿Se permite bajar del mínimo vigente de 8 mm entre diseños?
+- **Contexto confirmado por el usuario**: imantado obligatorio, reordenamiento sin posiciones libres, reacomodo al cambiar tamaño y «Al final» debajo del último sello. También pide poder aumentar/reducir excepcionalmente el espaciado.
+- **Evidencia**: `preparationRules.json` exige 8 mm entre diseños; `executionPlan` sitúa el corte 4 mm por debajo de cada diseño. Cambiar solo el hueco no aumenta ambos márgenes del sello.
+- **Por qué importa**: una excepción de margen cambia los auxiliares de Aspire; no equivale a mover únicamente el sello siguiente.
+- **Respuesta del usuario**: «lo que yo quiero es que sea exactamente esa distancia. ni mas ni menos».
+- **Documentado en**: [BR-PROG-019](../04-business-rules/programas-y-material.md), [ADR-027](../13-decisions/ADR-027-mesa-de-armado.md) y [manual](../manual/05-programas.md). La mesa conserva exactamente 8 mm entre diseños y los cortes vigentes a 4 mm debajo; no se agrega ajuste excepcional de espaciado.
+
 ### Q-PROG-001
 - **Módulo**: Programas · **Estado**: documentada (2026-09-28)
 - **Pregunta**: ¿Con qué criterio se decide qué sellos entran en un programa y cuándo se arma (prioridad, fecha límite, llenar planchuelas, tipo de sello, máquina libre)?
@@ -179,3 +188,12 @@
 - **Impacto**: alto.
 - **Respuesta**: el usuario confirma los mismos mecanizados de 3 mm, seguidos de `Corte Forma` con fresa de 6 mm, inicio 3,5 mm y pasada 5,5 mm, después del repaso fino.
 - **Documentado**: POL-088 y [preparación visual](../02-modules/programas/preparacion-visual.md). Se reutilizan los bytes de las plantillas 3MM y se adaptan únicamente sus selectores a las capas de Alimento mediante el SDK; el perímetro manual recibe `Corte Alimento`. No se modifican herramienta ni profundidades del archivo.
+
+### Q-PROG-024
+- **Módulo**: Programas / simulación del mecanizado en la mesa · **Estado**: respondida (2026-10-17)
+- **Respuesta (usuario, 2026-10-17)**: (a) sí, taladrado y roscado se hacen previamente del lado de atrás; está bien que la vista no los muestre. (b) la planchuela tiene **10 mm**; se planea 0,5 mm y el corte baja 9 mm desde la cara planeada, así que los sellos quedan unidos por **0,5 mm**. Aplicado en `FIXTURE.barHeightMm = 10` y en la profundidad del corte (`barSegments`).
+- **Pregunta**: (a) ¿«0 Taladrado» (broca Ø5 a 6,5 mm) y «0 Roscado» (Ø4,8 a 5 mm), en el centro de cada sello, se hacen del lado de atrás, antes de dar vuelta la planchuela? (b) ¿Cuánto mide de espesor la planchuela en bruto? El perfil del SVG de la base la dibuja de 11,13 mm y el «5 Corte 6MM» baja a 9 mm: ¿deja ~2 mm sin cortar a propósito (los sellos se separan después) o la planchuela es más fina?
+- **Evidencia**: plantillas nativas de la base C (`Native-001`…`012`): capa «Taladrado» = círculo de 6 mm en el centro del diseño; Zmin del taladrado −6,5 y del roscado −5; corte «Profile On» sobre la línea «Corte», inicio 3,5 y pasada 5,5 (Zmin −9).
+- **Por qué importa**: la simulación de la mesa no muestra el taladrado (si fuera del frente atravesaría el diseño) y dibuja el corte como ranura hasta −9 mm sobre una planchuela de 11,13 mm. Sin la respuesta, la vista puede mostrar un material o una separación que no es la real.
+- **Impacto**: medio (solo visualización; no cambia trayectorias ni reglas de armado).
+- **Relacionado**: POL-089, ADR-027.

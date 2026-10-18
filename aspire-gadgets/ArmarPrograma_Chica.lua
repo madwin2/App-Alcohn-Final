@@ -2373,6 +2373,56 @@ local function auxiliaries(ctx, s, entries, operation)
   addTagged(ctx.job, "Taladrado", CreateCadContour(circle), s, "drill")
 end
 
+-- Contornos sueltos del diseno (sin grupos), con su caja normalizada a la caja
+-- del sello ubicado: 0 a 1, origen arriba a la izquierda (igual que la app).
+local function designLeaves(entries)
+  local box=bbox(entries); if not box then return {} end
+  local w,h=box.maxX-box.minX,box.maxY-box.minY
+  local out={}
+  if w<=0 or h<=0 then return out end
+  for _,entry in ipairs(entries) do if entry.role=="design" then
+    walk(entry.object,function(object)
+      if children(object) then return end
+      local b=object:GetBoundingBox()
+      out[#out+1]={object=object,x0=(b.MinX-box.minX)/w,x1=(b.MaxX-box.minX)/w,y0=(box.maxY-b.MaxY)/h,y1=(box.maxY-b.MinY)/h,w=w,h=h}
+    end)
+  end end
+  return out
+end
+
+-- Repaso solo por las piezas que eligio la app. Cada pieza tiene que coincidir
+-- con sus contornos (el de afuera y sus agujeros) dentro de 0,3 mm; si alguna no
+-- coincide en ninguna de las dos orientaciones posibles, devuelve nil y se
+-- repasa el sello completo. Nunca repasa menos de lo pedido.
+local function partialFine(entries,pieces)
+  local leaves=designLeaves(entries)
+  if #leaves==0 then return nil end
+  local tx,ty=0.3/leaves[1].w,0.3/leaves[1].h
+  local function try(turn)
+    local chosen={}
+    for _,p in ipairs(pieces) do
+      local x0,x1,y0,y1=p.x0,p.x1,p.y0,p.y1
+      if turn then x0,x1,y0,y1=1-p.x1,1-p.x0,1-p.y1,1-p.y0 end
+      local u={x0=math.huge,x1=-math.huge,y0=math.huge,y1=-math.huge}
+      local inside={}
+      for i,leaf in ipairs(leaves) do
+        if leaf.x0>=x0-tx and leaf.x1<=x1+tx and leaf.y0>=y0-ty and leaf.y1<=y1+ty then
+          inside[#inside+1]=i
+          u.x0=math.min(u.x0,leaf.x0); u.x1=math.max(u.x1,leaf.x1); u.y0=math.min(u.y0,leaf.y0); u.y1=math.max(u.y1,leaf.y1)
+        end
+      end
+      if #inside==0 or math.abs(u.x0-x0)>tx or math.abs(u.x1-x1)>tx or math.abs(u.y0-y0)>ty or math.abs(u.y1-y1)>ty then return nil end
+      for _,i in ipairs(inside) do chosen[i]=true end
+    end
+    return chosen
+  end
+  local a,b=try(false),try(true)
+  if not a and not b then return nil end
+  local out={}
+  for i,leaf in ipairs(leaves) do if (a and a[i]) or (b and b[i]) then out[#out+1]=leaf.object end end
+  return out
+end
+
 local function fineSelection(ctx,s,entries,sourceHash)
   local fine=s.fine or {mode="auto",needsFine=true,inputHash=""}
   local existing=0
@@ -2392,7 +2442,17 @@ local function fineSelection(ctx,s,entries,sourceHash)
     and ((fine.geometryHash and fine.geometryHash==hash) or (fine.inputHash~="" and fine.inputHash==sourceHash
       and str(ctx.job.JobParameters,"SOURCE_IS_OBSERVED:" .. s.instanceId)~="1" and str(ctx.job.JobParameters,"SOURCE_GEOMETRY:" .. s.instanceId)==hash))
   if fine.mode=="auto" and fresh and not fine.needsFine then return nil end
+  local warning=nil
+  if fine.mode=="auto" and fresh and type(fine.pieces)=="table" and #fine.pieces>0 then
+    local partial=partialFine(entries,fine.pieces)
+    if partial then
+      for _,object in ipairs(partial) do addTagged(ctx.job,"REPASO " .. s.recipe,object:Clone(),s,"fine") end
+      return nil
+    end
+    warning="No se pudo ubicar la seleccion del repaso en el dibujo: se incluyo el sello completo."
+  end
   for _,entry in ipairs(entries) do if entry.role=="design" then addTagged(ctx.job,"REPASO " .. s.recipe,entry.object:Clone(),s,"fine") end end
+  if warning then return warning end
   if fine.mode=="auto" and not fresh then return "Analisis de repaso pendiente o desactualizado: se incluyo el sello completo. Actualiza el informe y guarda la preparacion para re-chequear." end
   return nil
 end
@@ -2862,6 +2922,7 @@ end
 PreparationSync.mergeStamp = updateStamp
 PreparationSync.remember = remember
 PreparationSync.fineSelection = fineSelection
+PreparationSync.partialFine = partialFine
 return PreparationSync
 
 end)()

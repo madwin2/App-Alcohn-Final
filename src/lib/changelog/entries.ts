@@ -1133,6 +1133,37 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 62,
+    date: '2026-10-17',
+    title: 'Prototipo de programas: acomodo automático',
+    version: '1.80',
+    slides: [
+      {
+        heading: 'La mesa conserva la distancia',
+        body: 'En el prototipo /dev/mesa-programas, agrandar o achicar un sello acomoda los de abajo y mantiene exactamente 8 mm entre diseños. Arrastrar cambia el orden o la planchuela.',
+        icon: Ruler,
+      },
+      {
+        heading: 'Al final, debajo del último',
+        body: 'Subir y Bajar cambian un puesto; Al final lo coloca debajo del último sello. Ya no hace falta Fijar ni Soltar. Por ahora se prueba con datos de ejemplo y Aspire simulado.',
+        icon: Layers,
+      },
+    ],
+  },
+  {
+    id: 63,
+    date: '2026-10-17',
+    title: 'Prototipo de programas: relieve en 3D',
+    version: '1.81',
+    slides: [
+      {
+        heading: '3D en líneas, mecanizado en bronce',
+        body: 'En /dev/mesa-programas, 3D muestra el relieve estimado con las pendientes de las fresas. Mecanizado usa la misma forma con acabado de bronce. Acercá con la rueda para ver el detalle.',
+        icon: Layers,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */
