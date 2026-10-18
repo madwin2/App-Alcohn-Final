@@ -341,7 +341,6 @@ export function FresaCheckDialog({
                 mode={mode}
                 visibleSeverities={visible}
                 showDepth={showDepth}
-                repasoZones={passView === 'primary' ? passes?.repaso.zones : undefined}
                 selectedGroupId={selected}
                 hoveredGroupId={hovered}
                 onSelectGroup={select}

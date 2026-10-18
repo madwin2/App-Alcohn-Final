@@ -29,6 +29,12 @@ Pruebas: `editCorners.test.ts` (arco exacto, radio máximo, vértices internos d
 2. **Ojos en forma de hoja de dos nodos** (dos curvas, muy común en vectores trazados) no se detectaban como vértices internos ni se podían redondear → ahora sí (prueba con la forma de la captura). **Pegar varias veces** dejaba las copias apiladas → cada pegada se corre un poco más.
 3. **Pegar en otro sello** ubicaba la pieza donde estaba en el dibujo original (podía quedar fuera de la vista) → ahora va al centro de lo que se ve, a su medida en mm. Verificado con el programa real: la nota «Material 24mm, 20mm exacto» de 4708 ahora aparece en el detalle; la mesa abre encuadrada con los 15 sellos.
 
+## 2 ter. Pedido del usuario: menos ruido y simulación fiel (2026-10-18)
+
+- **Sin recuadro** alrededor de cada sello en la vista 2D de la mesa (cargaba la vista). Se conserva el contorno al elegir, arrastrar o si hay un error.
+- **Zonas de fresa**: ya no se dibuja lo que saca la 0,2 (manchas verde agua por todos lados, también en espacios vacíos: eran pasos angostos entre letras donde la 0,2 talla un poco más, correctos pero inútiles de ver). Solo queda lo que **ni con la 0,2** sale (rojo/ámbar, con el número) y una etiqueta **«sin 0,2»** en los sellos donde la 0,6 alcanza. Lo mismo en la ventana de la fresa: sin manchas, con el veredicto y la nota por lugar.
+- **Automático vs. completo en la simulación**: «Automático» sin chequeo vigente dibujaba solo la 0,6 (se veía mal), pero el gadget en ese caso repasa **el sello completo**. Ahora la simulación hace lo mismo que el gadget: completo y automático sin chequear → repaso en todo el sello; automático chequeado → repaso solo en las piezas elegidas (y la 0,6 en el resto); automático chequeado sin necesidad → sin repaso.
+
 ## 3. Propuestas para Programas (valor en el día a día)
 
 Ordenadas por impacto. Ninguna inventa reglas de negocio: donde hace falta una definición, está marcada.

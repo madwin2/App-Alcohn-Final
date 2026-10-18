@@ -24,6 +24,7 @@ export interface StampZones {
   imageBox: FresaReport['imageBox'];
   /** Caja del relieve (lo negro), en unidades: la que usa la simulación 3D. */
   blackBox: { x: number; y: number; w: number; h: number };
+  /** alta/media: lo que queda sin resolver; repaso: lugares donde trabaja la 0,2 (0 = la 0,6 alcanza). */
   counts: Record<ZoneTone, number>;
   status: FresaReport['status'];
 }
@@ -40,12 +41,12 @@ async function compute(stamp: StampPlacement): Promise<StampZones> {
   if (!box) throw new Error('Sin geometría.');
   const p = report.passes;
   const show = (z: { id: string; rings: Pt[][]; center: { x: number; y: number } }, severity: ZoneTone): DisplayZone => ({ id: z.id, rings: z.rings, center: z.center, severity });
-  const zones: DisplayZone[] = p?.primary
-    ? stamp.fine?.mode === 'none'
-      ? p.primary.zones.map((z) => show(z, z.severity))
-      : [...p.repaso.zones.map((z) => show(z, 'repaso')), ...p.fine.zones.map((z) => show(z, z.severity))]
-    : (report.check?.zones ?? []).map((z) => show(z, z.severity));
-  const counts: Record<ZoneTone, number> = { alta: 0, media: 0, baja: 0, repaso: 0 };
+  // Solo lo que sigue siendo un problema (rojo/ámbar). Lo que saca la 0,2 no se
+  // dibuja: eran manchas por todos lados que no decían nada (pedido del usuario).
+  const serious = (z: { severity: ZoneSeverity }) => z.severity !== 'baja';
+  const source = p?.primary ? (stamp.fine?.mode === 'none' ? p.primary.zones : p.fine.zones) : (report.check?.zones ?? []);
+  const zones: DisplayZone[] = source.filter(serious).map((z) => show(z, z.severity));
+  const counts: Record<ZoneTone, number> = { alta: 0, media: 0, baja: 0, repaso: p?.repaso.zones.length ?? 0 };
   zones.forEach((z) => { counts[z.severity] += 1; });
   return {
     zones, mmPerUnit: report.mmPerUnit, imageBox: report.imageBox, counts, status: report.status,

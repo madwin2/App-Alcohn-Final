@@ -46,7 +46,7 @@ export function FresaPassesPanel({ report, view, onView }: {
       </div>
       <p className="text-muted-foreground">
         {p.primaryProfile ? `Primera: 0,6 mm, 15° por lado, hasta ${mm(p.primaryProfile.finalDepthMm, 1)} mm. ` : ''}
-        Repaso: 0,2 mm, 30° por lado, hasta 0,6 mm. {view === 'primary' && p.repaso.zones.length ? 'En verde agua, lo que saca el repaso.' : ''}
+        Repaso: 0,2 mm, 30° por lado, hasta 0,6 mm.
       </p>
       {p.recipe === 'ALIMENTO' ? <p>Alimento: preferir la primera fresa (referencia 1 mm); para repaso, comparar el rango 0,4–0,5 mm. Son referencias para revisar.</p> : null}
     </div>

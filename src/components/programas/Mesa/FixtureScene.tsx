@@ -190,19 +190,25 @@ function StampFace({ stamp, view, fixture, selected, bad, warn, isNew, reliefPad
         style={{ left: relief.leftMm * S, top: relief.topMm * S, width: relief.widthMm * S, height: relief.heightMm * S }} /> : null}
       {wants && !relief ? <span className="absolute inset-0 flex items-center justify-center text-[10px] text-zinc-400" role="status">{error ? 'Sin simulación' : '…'}</span> : null}
       <div className={cn('pointer-events-none absolute inset-0 rounded-[2px]',
-        view === '2d' && 'outline outline-white/45',
         isNew && 'bg-white/[0.08] outline-dashed outline-white/80',
         selected && 'outline outline-white', bad && 'bg-red-500/20 outline outline-red-400')}
         style={{ outlineWidth: (selected || bad || isNew ? 2 : 1) * Math.min(1, unit), outlineOffset: selected ? unit : 0 }} />
       {showZones && zones ? <ZoneOverlay data={zones} view={view} landscape={landscape} alreadyMachined={!!stamp.vectorSvg && !!stamp.vectorAlreadyMachined}
         w={w} h={h} pad={pad} unit={unit} /> : null}
-      {showZones && zones && (zones.counts.alta || zones.counts.media || zones.counts.repaso) ? (
-        // Cantidad de zonas, de tamaño fijo en pantalla: se ve aunque la vista esté lejos.
+      {showZones && zones && (zones.counts.alta || zones.counts.media) ? (
+        // Lo que ni con la 0,2 sale: cantidad, de tamaño fijo en pantalla.
         <span className="absolute flex items-center justify-center rounded-full font-semibold tabular-nums text-white"
-          title={zones.counts.alta || zones.counts.media ? `${zones.counts.alta} para corregir · ${zones.counts.media} pierden detalle` : `El repaso 0,2 pasa por ${zones.counts.repaso} ${zones.counts.repaso === 1 ? 'lugar' : 'lugares'}`}
+          title={`${zones.counts.alta} para corregir · ${zones.counts.media} pierden detalle (ni con el repaso 0,2)`}
           style={{ left: -6 * unit, top: -6 * unit, minWidth: 16 * unit, height: 16 * unit, padding: `0 ${4 * unit}px`, fontSize: 10 * unit,
-            background: ZONE_FILL[zones.counts.alta ? 'alta' : zones.counts.media ? 'media' : 'repaso'], boxShadow: `0 0 0 ${2 * unit}px black` }}>
-          {zones.counts.alta || zones.counts.media || zones.counts.repaso}
+            background: ZONE_FILL[zones.counts.alta ? 'alta' : 'media'], boxShadow: `0 0 0 ${2 * unit}px black` }}>
+          {zones.counts.alta || zones.counts.media}
+        </span>
+      ) : showZones && zones && !zones.counts.repaso ? (
+        // La 0,6 alcanza: este sello no necesita la 0,2.
+        <span className="absolute whitespace-nowrap rounded-full bg-zinc-200 font-medium text-zinc-900"
+          title="La fresa de 0,6 alcanza: no hace falta repaso 0,2"
+          style={{ left: -6 * unit, top: -6 * unit, height: 15 * unit, lineHeight: `${15 * unit}px`, padding: `0 ${5 * unit}px`, fontSize: 9.5 * unit, boxShadow: `0 0 0 ${2 * unit}px black` }}>
+          sin 0,2
         </span>
       ) : null}
       {warn ? <span className="absolute rounded-full bg-amber-300" title="Revisar la fresa"
@@ -408,7 +414,7 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
     const v = [...zoneMap.current.values()];
     const done = v.filter((x): x is StampZones['counts'] => x !== 'pending');
     return { total: v.length, ready: done.length, alta: done.filter((c) => c.alta).length, media: done.filter((c) => !c.alta && c.media).length,
-      repaso: done.filter((c) => !c.alta && !c.media && c.repaso).length };
+      sinRepaso: done.filter((c) => !c.alta && !c.media && !c.repaso).length };
   }, [zoneTick]);
 
   // IntersectionObserver no ve a través de preserve-3d: se mide la caja proyectada
@@ -666,17 +672,17 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
       {showZones ? (
         <div className="pointer-events-none absolute bottom-3 right-3 max-w-[58%] space-y-0.5 rounded-xl bg-zinc-950/90 px-3 py-1.5 text-[12px] text-zinc-300" role="status">
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {(['alta', 'media', 'repaso', 'baja'] as ZoneTone[]).map((sev) => (
+            {(['alta', 'media'] as ZoneTone[]).map((sev) => (
               <span key={sev} className="flex items-center gap-1.5">
-                <span className="size-2.5 rounded-sm" style={sev === 'baja' ? { boxShadow: `inset 0 0 0 1.5px ${ZONE_FILL[sev]}` } : { background: ZONE_FILL[sev] }} />{ZONE_LABEL[sev]}
+                <span className="size-2.5 rounded-sm" style={{ background: ZONE_FILL[sev] }} />{ZONE_LABEL[sev]} (ni con la 0,2)
               </span>
             ))}
+            <span className="flex items-center gap-1.5"><span className="rounded-full bg-zinc-200 px-1.5 text-[10px] font-medium text-zinc-900">sin 0,2</span>la 0,6 alcanza</span>
           </p>
           <p className="flex items-center gap-1.5 text-zinc-400">
             {zoneStats.ready < zoneStats.total ? <><Loader2 className="size-3 animate-spin" />Analizando la fresa · {zoneStats.ready} de {zoneStats.total}</>
-              : zoneStats.alta || zoneStats.media ? <>{zoneStats.alta ? `${zoneStats.alta} ${zoneStats.alta === 1 ? 'sello' : 'sellos'} para corregir` : ''}{zoneStats.alta && zoneStats.media ? ' · ' : ''}{zoneStats.media ? `${zoneStats.media} pierden detalle` : ''}{zoneStats.repaso ? ` · ${zoneStats.repaso} con repaso 0,2` : ''} · elegí uno y «Ver fresa»</>
-                : zoneStats.repaso ? `Nada para corregir · ${zoneStats.repaso} ${zoneStats.repaso === 1 ? 'sello lleva' : 'sellos llevan'} repaso 0,2 donde la 0,6 no llega`
-                : zoneStats.total ? 'Ningún sello visible tiene zonas para corregir' : 'Acercá la vista a los sellos'}
+              : zoneStats.alta || zoneStats.media ? <>{zoneStats.alta ? `${zoneStats.alta} ${zoneStats.alta === 1 ? 'sello' : 'sellos'} para corregir` : ''}{zoneStats.alta && zoneStats.media ? ' · ' : ''}{zoneStats.media ? `${zoneStats.media} pierden detalle` : ''}{zoneStats.sinRepaso ? ` · ${zoneStats.sinRepaso} sin 0,2` : ''} · elegí uno y «Ver fresa»</>
+                : zoneStats.total ? `Con el repaso 0,2 sale todo${zoneStats.sinRepaso ? ` · ${zoneStats.sinRepaso} ${zoneStats.sinRepaso === 1 ? 'sello no lo necesita' : 'sellos no lo necesitan'}` : ''}` : 'Acercá la vista a los sellos'}
           </p>
         </div>
       ) : null}
