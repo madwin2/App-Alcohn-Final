@@ -269,6 +269,8 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
   const [movingId, setMovingId] = useState<string | null>(null);
   const drag = useRef<{ kind: 'stamp'; id: string; grabMm: number; x: number; y: number; moved: boolean } | { kind: 'pan'; x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null);
   const hinted = useRef(false);
+  /** Sello bajo el puntero al apretar (se elige al soltar si no se arrastró). */
+  const pressedStamp = useRef<string | null>(null);
 
   useLayoutEffect(() => {
     const el = viewport.current;
@@ -538,12 +540,21 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
         const d = drag.current;
         drag.current = null;
         if (dragging) { if (ghost?.valid) onDrop(dragging.id, ghost.columnId, ghost.wantedTop); setGhost(null); return; }
-        if (d?.kind === 'pan' && !d.moved) onSelect(null);
+        // Clic sin arrastrar: elige el sello que se tocó (en 3D el puntero lo
+        // captura el lienzo para mover la vista) o, en el fondo, suelta la elección.
+        const pressed = pressedStamp.current;
+        pressedStamp.current = null;
+        if (d?.kind === 'pan' && !d.moved) onSelect(pressed);
+        // En 3D arrastrar un sello mueve la vista; se avisa una vez cómo moverlo.
+        if (d?.kind === 'pan' && d.moved && pressed && view !== '2d' && !readOnly && !hinted.current) {
+          hinted.current = true;
+          onHint('Para mover sellos volvé a 2D (tecla 1) o usá las flechas del teclado.');
+        }
         if (d?.kind === 'stamp') { setMovingId(null); if (d.moved && ghost?.valid) onMove(d.id, ghost.columnId, ghost.wantedTop); }
         setGhost(null);
       }}
       onPointerLeave={() => { if (dragging) setGhost(null); }}
-      onPointerCancel={() => { drag.current = null; setMovingId(null); setGhost(null); }}
+      onPointerCancel={() => { drag.current = null; pressedStamp.current = null; setMovingId(null); setGhost(null); }}
     >
       <div className="absolute left-1/2 top-1/2" style={{ transform: `translate(${cam.x}px, ${cam.y}px) scale(${scale})`, transformOrigin: '0 0',
         transition: cam.animate ? 'transform 420ms cubic-bezier(0.22, 0.8, 0.2, 1)' : undefined }}>
@@ -604,13 +615,12 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
                         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(s.instanceId); onContextMenu(s.instanceId, e.clientX, e.clientY); }}
                         onPointerDown={(e) => {
                           if (e.button !== 0) return;
+                          // Si el clic sigue hasta el lienzo (3D o solo lectura), se elige al
+                          // soltar sin arrastrar: arrastrar mueve la vista.
+                          pressedStamp.current = s.instanceId;
+                          if (view !== '2d') return;
                           onSelect(s.instanceId);
                           if (readOnly) return;
-                          if (view !== '2d') {
-                            // En 3D arrastrar mueve la vista; se avisa una vez cómo mover sellos.
-                            if (!hinted.current) { hinted.current = true; onHint('Para mover sellos volvé a 2D (tecla 1) o usá las flechas del teclado.'); }
-                            return;
-                          }
                           e.stopPropagation();
                           const p = toMm(e.clientX, e.clientY);
                           drag.current = { kind: 'stamp', id: s.instanceId, grabMm: p.y - -s.topY, x: e.clientX, y: e.clientY, moved: false };
