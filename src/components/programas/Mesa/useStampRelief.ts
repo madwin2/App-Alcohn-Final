@@ -39,8 +39,21 @@ function compute(svg: string, stamp: StampPlacement, pad: ReliefPad): StampRelie
   const pixels = ctx.getImageData(0, 0, w, h).data;
   const mask = new Uint8Array(w * h);
   for (let i = 0; i < mask.length; i++) mask[i] = pixels[i * 4 + 3] > 127 ? 1 : 0;
-  const { tools, note } = reliefTools(stamp, preparationFingerprint(svg));
-  const depth = faceDepth(mask, w, h, cellMm, tools);
+  const { tools, note, pieces } = reliefTools(stamp, preparationFingerprint(svg));
+  let depth = faceDepth(mask, w, h, cellMm, tools);
+  if (pieces?.length) {
+    // Repaso solo en las piezas elegidas (como el gadget): la 0,2 alrededor de
+    // esas piezas (su caja + lo que alcanza la fresa) y la 0,6 en el resto.
+    const primary = faceDepth(mask, w, h, cellMm, tools.filter((t) => t.id !== 'repaso'));
+    const reach = Math.ceil(0.5 / cellMm);
+    const inFine = new Uint8Array(w * h);
+    for (const b of pieces) {
+      const x0 = Math.max(0, Math.floor(px + b.x0 * iw) - reach), x1 = Math.min(w - 1, Math.ceil(px + b.x1 * iw) + reach);
+      const y0 = Math.max(0, Math.floor(pt + b.y0 * ih) - reach), y1 = Math.min(h - 1, Math.ceil(pt + b.y1 * ih) + reach);
+      for (let y = y0; y <= y1; y++) inFine.fill(1, y * w + x0, y * w + x1 + 1);
+    }
+    depth = depth.map((d, i) => (inFine[i] ? d : primary[i]));
+  }
   const recipeDepth = Math.max(...tools.filter((t) => t.id !== 'repaso').map((t) => t.depthMm));
   const mesh = buildReliefMesh(depth, w, h, (w - 1) * cellMm, (h - 1) * cellMm, FACE_OPS.exteriorDepthMm, [recipeDepth]);
   const render = renderMachiningMesh(mesh);

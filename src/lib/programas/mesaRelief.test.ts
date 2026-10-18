@@ -56,15 +56,27 @@ describe('relieve estimado de la mesa', () => {
     expect(reliefPasses({ ...stamp, fine: { ...fine, scope: 'internal' } }).note).toContain('parcial sin simular');
   });
 
-  it('invalida el repaso automático si cambia el SVG, la medida, receta o versión de chequeo', () => {
+  it('automático sin chequeo vigente simula el sello completo, como hace el gadget', () => {
     for (const changed of [{ heightMm: 32 }, { widthMm: 16 }, { recipe: '3MM' as const },
       { fine: { ...fine, analysisVersion: FRESA_ANALYSIS_VERSION - 1 } }]) {
       const result = reliefPasses({ ...stamp, fine, ...changed }, 'svg-a');
-      expect(result.profiles).toHaveLength(1);
-      expect(result.note).toContain('pendiente');
+      expect(result.profiles).toHaveLength(2);
+      expect(result.note).toContain('sin chequear');
+      expect(result.pieces).toBeUndefined();
     }
-    expect(reliefPasses({ ...stamp, fine }, 'svg-b').profiles).toHaveLength(1);
-    expect(reliefPasses(stamp).note).toContain('pendiente');
+    expect(reliefPasses({ ...stamp, fine }, 'svg-b').profiles).toHaveLength(2);
+    expect(reliefPasses(stamp).note).toContain('sin chequear');
+  });
+
+  it('automático chequeado: solo las piezas elegidas, o nada si la 0,6 alcanza', () => {
+    const pieces = [{ x0: 0.1, y0: 0.2, x1: 0.5, y1: 0.6 }];
+    const partial = reliefPasses({ ...stamp, fine: { ...fine, pieces } }, 'svg-a');
+    expect(partial.profiles).toHaveLength(2);
+    expect(partial.pieces).toEqual(pieces);
+    expect(partial.note).toContain('1 pieza');
+    const none = reliefPasses({ ...stamp, fine: { ...fine, needsFine: false } }, 'svg-a');
+    expect(none.profiles).toHaveLength(1);
+    expect(none.note).toContain('la 0,6 alcanza');
   });
 
   it('genera superficie, normales y líneas con profundidad real para ambos materiales', () => {

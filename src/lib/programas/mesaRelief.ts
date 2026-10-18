@@ -1,4 +1,5 @@
 /** Geometría orientativa del relieve. No genera ni valida trayectorias CAM. */
+import type { FinePiece } from './preparation';
 import { FRESA_ANALYSIS_VERSION, FRESA_FINA, primaryProfile, type FresaProfile } from '@/lib/fresa/config';
 import { distanceToBlack } from '@/lib/fresa/vcarveRelief';
 import { PREPARATION_RULES, type StampPlacement } from './preparation';
@@ -43,12 +44,18 @@ export function machiningSequence(recipe: StampPlacement['recipe'], withFine: bo
   return tools;
 }
 
-export function reliefTools(stamp: StampPlacement, inputHash?: string): { tools: MachiningTool[]; note: string } {
-  const { profiles, note } = reliefPasses(stamp, inputHash);
-  return { tools: machiningSequence(stamp.recipe, profiles.length > 1), note };
+export function reliefTools(stamp: StampPlacement, inputHash?: string): { tools: MachiningTool[]; note: string; pieces?: FinePiece[] } {
+  const { profiles, note, pieces } = reliefPasses(stamp, inputHash);
+  return { tools: machiningSequence(stamp.recipe, profiles.length > 1), note, ...(pieces ? { pieces } : {}) };
 }
 
-export function reliefPasses(stamp: StampPlacement, inputHash?: string): { profiles: FresaProfile[]; note: string } {
+/**
+ * Qué pasadas simular: lo mismo que hace el gadget. «Completo» y «automático
+ * sin chequear» repasan todo el sello (el gadget, sin análisis vigente, mete el
+ * sello entero); «automático» chequeado repasa solo las piezas elegidas
+ * (`pieces`) o nada si la 0,6 alcanza.
+ */
+export function reliefPasses(stamp: StampPlacement, inputHash?: string): { profiles: FresaProfile[]; note: string; pieces?: FinePiece[] } {
   const profiles = [primaryProfile(stamp.recipe)];
   const fine = stamp.fine;
   const checked = fine?.analysisVersion === FRESA_ANALYSIS_VERSION && fine.widthMm === stamp.widthMm
@@ -57,11 +64,14 @@ export function reliefPasses(stamp: StampPlacement, inputHash?: string): { profi
   if (fine?.mode === 'aspire' || fine?.scope === 'internal' && fine.mode !== 'none') {
     return { profiles, note: 'Principal · repaso parcial sin simular' };
   }
-  if (fine?.mode === 'whole' || fine?.mode === 'auto' && checked && fine.needsFine) {
-    profiles.push(FRESA_FINA);
-    return { profiles, note: 'Principal + repaso completo' };
-  }
-  return { profiles, note: !fine || fine.mode === 'auto' && !checked ? 'Principal · repaso pendiente de chequeo' : 'Principal' };
+  if (fine?.mode === 'none') return { profiles, note: 'Principal · sin repaso (elegido)' };
+  if (fine?.mode === 'whole') { profiles.push(FRESA_FINA); return { profiles, note: 'Principal + repaso completo' }; }
+  // Automático.
+  if (!checked) { profiles.push(FRESA_FINA); return { profiles, note: 'Principal + repaso completo (sin chequear: así lo hace el gadget)' }; }
+  if (!fine!.needsFine) return { profiles, note: 'Principal · sin repaso: la 0,6 alcanza' };
+  profiles.push(FRESA_FINA);
+  if (fine!.pieces?.length) return { profiles, note: `Principal + repaso en ${fine!.pieces.length} pieza${fine!.pieces.length === 1 ? '' : 's'}`, pieces: fine!.pieces };
+  return { profiles, note: 'Principal + repaso completo' };
 }
 
 const asTool = (t: FresaProfile | MachiningTool): MachiningTool => 'kind' in t ? t
