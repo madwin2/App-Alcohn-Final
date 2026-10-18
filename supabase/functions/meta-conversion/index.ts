@@ -4,6 +4,10 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 /** Leer secrets en cada request (no al cargar el módulo). */
 const getMetaEnv = () => ({
   pixelId: (Deno.env.get("META_PIXEL_ID") ?? "").trim(),
+  /** Dataset CAPI del WABA (POST /{waba-id}/dataset). Destino de eventos CTWA. */
+  waDatasetId: (
+    Deno.env.get("META_WA_DATASET_ID") ?? "1590689962745150"
+  ).trim(),
   accessToken: (
     Deno.env.get("META_ACCESS_TOKEN") ?? Deno.env.get("API_META") ?? ""
   ).trim(),
@@ -162,6 +166,51 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
       },
     );
   });
+
+type MetaPostResult = {
+  ok: boolean;
+  status: number;
+  json: unknown;
+  destinationId: string;
+};
+
+const postMetaPurchase = async (
+  metaEnv: ReturnType<typeof getMetaEnv>,
+  destinationId: string,
+  eventPayload: Record<string, unknown>,
+): Promise<MetaPostResult> => {
+  const metaBody: Record<string, unknown> = {
+    data: [eventPayload],
+  };
+  if (metaEnv.testEventCode) {
+    metaBody.test_event_code = metaEnv.testEventCode;
+  }
+
+  const metaUrl =
+    `https://graph.facebook.com/${metaEnv.apiVersion}/${destinationId}/events` +
+    `?access_token=${encodeURIComponent(metaEnv.accessToken)}`;
+
+  const metaResponse = await fetch(metaUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(metaBody),
+  });
+
+  const metaText = await metaResponse.text();
+  let metaJson: unknown;
+  try {
+    metaJson = JSON.parse(metaText);
+  } catch {
+    metaJson = { raw: metaText };
+  }
+
+  return {
+    ok: metaResponse.ok,
+    status: metaResponse.status,
+    json: metaJson,
+    destinationId,
+  };
+};
 
 /** Soft-fail: nunca bloquea el Purchase si el otro proyecto falla. */
 const lookupWhatsappAdReferral = async (
@@ -408,85 +457,108 @@ Deno.serve(async (req: Request) => {
     const referral = attrLookup.referral;
     const hasCtwa = Boolean(referral?.ctwa_clid);
 
-    const userData: Record<string, unknown> = {};
-    if (emHash) userData.em = [emHash];
-    if (phHash) userData.ph = [phHash];
-    if (fnHash) userData.fn = [fnHash];
-    if (lnHash) userData.ln = [lnHash];
-    if (hasCtwa && referral) {
-      userData.ctwa_clid = referral.ctwa_clid.trim();
-      const wabaId = (referral.waba_id ?? "").trim();
-      if (wabaId) {
-        userData.whatsapp_business_account_id = wabaId;
-      }
-    }
+    // Datos de persona (siempre). El ctwa_clid NO va en el evento offline:
+    // Meta solo lo acepta en business_messaging hacia el dataset del WABA.
+    const userDataOffline: Record<string, unknown> = {};
+    if (emHash) userDataOffline.em = [emHash];
+    if (phHash) userDataOffline.ph = [phHash];
+    if (fnHash) userDataOffline.fn = [fnHash];
+    if (lnHash) userDataOffline.ln = [lnHash];
 
-    let actionSource: string;
-    if (hasCtwa) {
-      actionSource = "business_messaging";
-    } else if (esWeb) {
-      actionSource = "website";
-    } else {
-      actionSource = "physical_store";
-    }
-
-    const eventPayload: Record<string, unknown> = {
+    const offlineActionSource = esWeb ? "website" : "physical_store";
+    const offlinePayload: Record<string, unknown> = {
       event_name: "Purchase",
       event_time: eventTime,
       event_id: ordenId,
-      action_source: actionSource,
-      user_data: userData,
+      action_source: offlineActionSource,
+      user_data: userDataOffline,
       custom_data: {
         currency: metaEnv.currency,
         value: toNumber(row.valor_total),
       },
     };
+    if (esWeb) {
+      offlinePayload.event_source_url = metaEnv.eventSourceUrl;
+    }
 
-    if (hasCtwa) {
-      // Requerido por CAPI for Business Messaging (CTWA).
-      eventPayload.messaging_channel = "whatsapp";
-      if (referral?.source_url) {
-        eventPayload.event_source_url = referral.source_url;
+    // 1) Siempre al dataset de campañas (Ventas WhatsApp / META_PIXEL_ID).
+    const offlineResult = await postMetaPurchase(
+      metaEnv,
+      metaEnv.pixelId,
+      offlinePayload,
+    );
+
+    // 2) Si hay match CTWA, además al dataset del WABA (atribución anuncio WA).
+    let ctwaResult: MetaPostResult | null = null;
+    if (hasCtwa && referral) {
+      if (!metaEnv.waDatasetId) {
+        console.error(
+          "meta-conversion CTWA sin META_WA_DATASET_ID; se omite envío business_messaging",
+        );
+      } else {
+        const userDataCtwa: Record<string, unknown> = {
+          ...userDataOffline,
+          ctwa_clid: referral.ctwa_clid.trim(),
+        };
+        const wabaId = (referral.waba_id ?? "").trim();
+        if (wabaId) {
+          userDataCtwa.whatsapp_business_account_id = wabaId;
+        }
+
+        const ctwaPayload: Record<string, unknown> = {
+          event_name: "Purchase",
+          event_time: eventTime,
+          // Mismo event_id: Meta deduplica por dataset; reintentos no duplican en 1590.
+          event_id: ordenId,
+          action_source: "business_messaging",
+          messaging_channel: "whatsapp",
+          user_data: userDataCtwa,
+          custom_data: {
+            currency: metaEnv.currency,
+            value: toNumber(row.valor_total),
+          },
+        };
+
+        ctwaResult = await postMetaPurchase(
+          metaEnv,
+          metaEnv.waDatasetId,
+          ctwaPayload,
+        );
       }
-    } else if (esWeb) {
-      eventPayload.event_source_url = metaEnv.eventSourceUrl;
     }
 
-    const metaBody: Record<string, unknown> = {
-      data: [eventPayload],
-    };
+    // success = offline OK (es lo que alimenta las campañas actuales).
+    const success = offlineResult.ok;
+    const offlineJson =
+      typeof offlineResult.json === "object" && offlineResult.json !== null
+        ? offlineResult.json as Record<string, unknown>
+        : { raw: offlineResult.json };
 
-    if (metaEnv.testEventCode) {
-      metaBody.test_event_code = metaEnv.testEventCode;
-    }
-
-    const metaUrl =
-      `https://graph.facebook.com/${metaEnv.apiVersion}/${metaEnv.pixelId}/events` +
-      `?access_token=${encodeURIComponent(metaEnv.accessToken)}`;
-
-    const metaResponse = await fetch(metaUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(metaBody),
-    });
-
-    const metaText = await metaResponse.text();
-    let metaJson: unknown;
-    try {
-      metaJson = JSON.parse(metaText);
-    } catch {
-      metaJson = { raw: metaText };
-    }
-
-    const success = metaResponse.ok;
     const metaResponseWithDebug = {
-      ...(typeof metaJson === "object" && metaJson !== null
-        ? metaJson as Record<string, unknown>
-        : { raw: metaJson }),
+      ...offlineJson,
       _debug: {
         pixel_id: metaEnv.pixelId,
+        wa_dataset_id: metaEnv.waDatasetId || null,
+        destination_id: offlineResult.destinationId,
+        offline: {
+          ok: offlineResult.ok,
+          status: offlineResult.status,
+          destination_id: offlineResult.destinationId,
+          action_source: offlineActionSource,
+        },
+        ctwa: ctwaResult
+          ? {
+            ok: ctwaResult.ok,
+            status: ctwaResult.status,
+            destination_id: ctwaResult.destinationId,
+            action_source: "business_messaging",
+            response: ctwaResult.json,
+          }
+          : hasCtwa
+          ? { ok: false, skipped: true, reason: "missing_wa_dataset_id" }
+          : null,
         test_event_code: metaEnv.testEventCode || null,
-        action_source: eventPayload.action_source,
+        action_source: offlineActionSource,
         wa_attribution: {
           status: attrLookup.status,
           error: attrLookup.error ?? null,
@@ -520,7 +592,9 @@ Deno.serve(async (req: Request) => {
         orden_id: ordenId,
         event_time: eventTime,
         purchase_at: purchaseAt,
-        meta_status: metaResponse.status,
+        meta_status: offlineResult.status,
+        offline_ok: offlineResult.ok,
+        ctwa_ok: ctwaResult?.ok ?? null,
         wa_attribution_status: attrLookup.status,
         meta_response: metaResponseWithDebug,
       }),
