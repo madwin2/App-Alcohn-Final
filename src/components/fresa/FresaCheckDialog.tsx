@@ -71,6 +71,8 @@ interface Props {
   initialFix?: FresaFixResult | null;
   /** Si se pasa, aparece «Usar el original» (descarta la corrección). */
   onUseOriginal?: () => void;
+  /** Abrir directo en el editor del vector (por ejemplo, desde «Editar vector»). */
+  startEditing?: boolean;
 }
 
 const DEFAULT_VISIBLE: ZoneSeverity[] = ['alta', 'media'];
@@ -143,6 +145,7 @@ export function FresaCheckDialog({
   downloadName = 'vector',
   initialFix = null,
   onUseOriginal,
+  startEditing = false,
 }: Props) {
   const { toast } = useToast();
   const report = useFresaReport(open ? svgText : null, open ? target : null);
@@ -172,7 +175,7 @@ export function FresaCheckDialog({
     );
     setSelected(null);
     setVisible(new Set(DEFAULT_VISIBLE));
-    setEditing(false);
+    setEditing(open && startEditing ? 'original' : false);
     setPassView('fine');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al abrir o cambiar de diseño
   }, [svgText, open]);

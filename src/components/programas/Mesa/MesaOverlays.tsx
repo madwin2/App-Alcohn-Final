@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUp, Crosshair, ScanSearch, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUp, Crosshair, PencilRuler, ScanSearch, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Recipe } from '@/lib/programas/preparation';
 import { cn } from '@/lib/utils/cn';
@@ -8,7 +8,7 @@ import { FOCUS, Kbd } from './mesaUi';
 export interface StampMenuActions {
   recipe: Recipe;
   canUp: boolean; canDown: boolean; canLeft: boolean; canRight: boolean; readOnly: boolean;
-  onFocus: () => void; onFresa: () => void; onShift: (d: -1 | 1) => void; onEnd: () => void;
+  onFocus: () => void; onFresa: () => void; onEditVector: () => void; onShift: (d: -1 | 1) => void; onEnd: () => void;
   onNeighbor: (d: -1 | 1) => void; onRecipe: (r: Recipe) => void; onRemove: () => void;
 }
 
@@ -48,6 +48,7 @@ export function StampContextMenu({ at, actions, onClose }: { at: { x: number; y:
       style={{ left: pos?.x ?? at.x, top: pos?.y ?? at.y, visibility: pos ? 'visible' : 'hidden' }}>
       <Item icon={<Crosshair className="size-4" />} label="Ir al sello" kbd="F" onClick={run(a.onFocus)} />
       <Item icon={<ScanSearch className="size-4" />} label="Ver fresa" onClick={run(a.onFresa)} />
+      <Item icon={<PencilRuler className="size-4" />} label="Editar vector" disabled={a.readOnly} onClick={run(a.onEditVector)} />
       <div className="my-1 h-px bg-white/10" />
       <Item icon={<ArrowUp className="size-4" />} label="Subir" kbd="↑" disabled={a.readOnly || !a.canUp} onClick={run(() => a.onShift(-1))} />
       <Item icon={<ArrowDown className="size-4" />} label="Bajar" kbd="↓" disabled={a.readOnly || !a.canDown} onClick={run(() => a.onShift(1))} />

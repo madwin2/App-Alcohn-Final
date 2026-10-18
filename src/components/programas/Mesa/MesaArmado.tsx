@@ -98,7 +98,7 @@ export function MesaArmado({
   const [zonesOn, setZonesOn] = useState(() => { try { return window.localStorage.getItem('mesa-zonas-fresa') === '1'; } catch { return false; } });
   useEffect(() => { try { window.localStorage.setItem('mesa-zonas-fresa', zonesOn ? '1' : '0'); } catch { /* sin almacenamiento */ } }, [zonesOn]);
   const [camera, setCamera] = useState<CameraCommand>({ kind: 'work', key: 0 });
-  const [fresa, setFresa] = useState<{ instanceId: string; svg: string; machined: boolean } | null>(null);
+  const [fresa, setFresa] = useState<{ instanceId: string; svg: string; machined: boolean; edit?: boolean } | null>(null);
   const [fill, setFill] = useState<{ doc: PreparationDocument; added: string[] } | null>(null);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [shortcuts, setShortcuts] = useState(false);
@@ -270,8 +270,8 @@ export function MesaArmado({
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  const openFresa = async (s: StampPlacement) => {
-    try { setFresa({ instanceId: s.instanceId, svg: s.vectorSvg ?? await fetchSvgText(s.sourceUrl), machined: !!s.vectorSvg && !!s.vectorAlreadyMachined }); }
+  const openFresa = async (s: StampPlacement, edit = false) => {
+    try { setFresa({ instanceId: s.instanceId, svg: s.vectorSvg ?? await fetchSvgText(s.sourceUrl), machined: !!s.vectorSvg && !!s.vectorAlreadyMachined, edit }); }
     catch (e) { setNotice({ text: `No se pudo abrir el vector${e instanceof Error ? `: ${e.message}` : ''}`, tone: 'error' }); }
   };
   const fresaStamp = doc?.stamps.find((s) => s.instanceId === fresa?.instanceId) ?? null;
@@ -443,6 +443,7 @@ export function MesaArmado({
           canUp: menuIndex > 0, canDown: menuIndex < menuRow.length - 1,
           canLeft: moveToNeighbor(doc, menuStamp.instanceId, -1).added, canRight: moveToNeighbor(doc, menuStamp.instanceId, 1).added,
           onFocus: () => cam('stamp', menuStamp.instanceId), onFresa: () => void openFresa(menuStamp),
+          onEditVector: () => void openFresa(menuStamp, true),
           onShift: (d) => apply(shiftStamp(doc, menuStamp.instanceId, d)), onEnd: () => apply(sendToEnd(doc, menuStamp.instanceId)),
           onNeighbor: (d) => apply(moveToNeighbor(doc, menuStamp.instanceId, d)),
           onRecipe: (recipe) => patch(menuStamp.instanceId, { recipe }), onRemove: () => remove(menuStamp.instanceId),
@@ -465,7 +466,7 @@ export function MesaArmado({
           setNotice({ text: 'Estados de fabricación actualizados', tone: 'ok' });
         }} />
 
-      <FresaCheckDialog open={!!fresa} onOpenChange={(o) => { if (!o) setFresa(null); }} title={fresaStamp?.name ?? ''} svgText={fresa?.svg ?? null}
+      <FresaCheckDialog open={!!fresa} onOpenChange={(o) => { if (!o) setFresa(null); }} title={fresaStamp?.name ?? ''} svgText={fresa?.svg ?? null} startEditing={!!fresa?.edit}
         target={fresaStamp ? { mode: 'fabricacion', longSideMm: Math.max(fresaStamp.widthMm, fresaStamp.heightMm), stampType: fresaStamp.recipe, alimento: fresaStamp.recipe === 'ALIMENTO' } : null}
         applyLabel="Usar en este programa" applyHint="Conserva lo vendido; el vector corregido queda solo en este programa."
         onApply={(svgText, _fix, opts) => {
