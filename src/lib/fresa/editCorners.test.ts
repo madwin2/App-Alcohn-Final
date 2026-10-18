@@ -178,3 +178,29 @@ describe('el caso de la captura: ojo en forma de hoja', () => {
     expect(r.radius).toBeCloseTo(0.8, 6);
   });
 });
+
+describe('pegar encima de otra pieza (caso del «4» de 55845)', () => {
+  it('lo pegado conserva su agujero y el original el suyo: no se mezclan', () => {
+    // Pieza con agujero (como un 4 o una A), pegada corrida 0,5 sobre sí misma.
+    const doc = docOf('M0 0H10V12H0Z M3 3H7V8H3Z', 'fill-rule="evenodd"');
+    const clip = copyRefs(doc, [{ path: 0, sub: 0 }, { path: 0, sub: 1 }], { minX: 0, minY: 0, maxX: 10, maxY: 12 }, 1);
+    const r = pasteClip(doc, clip, 1, 0.5);
+    const pieces = computePieces(r.doc, 0.01);
+    expect(pieces).toHaveLength(2);
+    for (const pc of pieces) {
+      // Cada pieza: su contorno de afuera y su agujero, los dos del mismo trazado.
+      expect(pc.refs).toHaveLength(2);
+      expect(new Set(pc.refs.map((ref) => ref.path)).size).toBe(1);
+    }
+    const pasted = pieces.find((pc) => pc.refs[0].path === r.firstNewPath)!;
+    expect(pasted.refs.every((ref) => ref.path === r.firstNewPath)).toBe(true);
+  });
+
+  it('una letra suelta adentro del aro de otro trazado sigue siendo su propia pieza', () => {
+    const r = buildEditDoc('<svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="40mm" viewBox="0 0 40 40"><path fill-rule="evenodd" d="M0 0H30V30H0Z M5 5H25V25H5Z"/><path d="M12 12H18V18H12Z"/></svg>');
+    if (!r.ok) throw new Error(r.error);
+    const pieces = computePieces(r.doc, 0.01);
+    expect(pieces).toHaveLength(2);
+    expect(pieces.find((pc) => pc.refs[0].path === 1)!.refs).toHaveLength(1);
+  });
+});

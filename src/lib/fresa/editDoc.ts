@@ -410,12 +410,16 @@ export function computePieces(doc: EditDoc, tol: number): EditPiece[] {
       items.push({ ref: { path: pi, sub: si }, poly, b: polyBounds(poly), area: polyArea(poly) });
     }),
   );
-  // Padre directo: el contorno más chico que lo contiene.
+  // Padre directo: el contorno más chico que lo contiene, del MISMO trazado.
+  // Cada trazado se pinta negro entero: un contorno de otro trazado nunca es su
+  // agujero. Sin esto, una letra pegada encima de otra (Ctrl+V) se quedaba con
+  // el agujero de la de abajo y las dos se mezclaban.
   const parent = items.map((it, k) => {
     let best = -1;
     for (let j = 0; j < items.length; j++) {
       if (j === k) continue;
       const o = items[j];
+      if (o.ref.path !== it.ref.path) continue;
       if (o.area <= it.area || !containsBox(o.b, it.b)) continue;
       if (!pointInPolygon(it.poly[0], o.poly)) continue;
       if (best < 0 || o.area < items[best].area) best = j;

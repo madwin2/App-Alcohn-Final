@@ -152,7 +152,7 @@ Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo p
 ## 4 quater. Herramientas del editor (✅ 2026-10-18, `editCorners.ts`, `unionPieces`)
 
 - **Redondear vértices**: arrastrando el círculo dentro del vértice elegido (radio en vivo), con «Redondear vértice» o, para una pieza, «Redondear internos» (puntas blancas donde la fresa no entra; incluye ojos en forma de hoja de dos nodos). Arco circular exacto entre tramos rectos o curvos; si el radio no entra, el máximo posible.
-- **Copiar / cortar / pegar / duplicar** (Ctrl+C/X/V/D, Ctrl+Shift+V en el mismo lugar), también entre sellos (se reescala a mm).
+- **Copiar / cortar / pegar / duplicar** (Ctrl+C/X/V/D, Ctrl+Shift+V en el mismo lugar), también entre sellos (se reescala a mm). Los agujeros de cada pieza se buscan **solo en su propio trazado** (`computePieces`): pegar una letra encima de otra (por ejemplo un «4» corrido 0,5 mm) ya no le pasa el agujero de la de abajo ni mezcla las dos.
 - **Girar** (90° o libre) y **espejar**; **unir** lo que se pisa (Ctrl+G).
 
 ## 5. Dónde aparece en la app
