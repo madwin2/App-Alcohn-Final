@@ -353,7 +353,7 @@ export function FresaCheckDialog({
               </div>
             )}
             <p className="shrink-0 text-[11px] text-muted-foreground">
-              Rueda del mouse para acercar · arrastrá para mover · clic en un número para ver el detalle
+              Rueda del mouse para acercar · arrastrá para mover · pasá o tocá una marca para ver el hueco
             </p>
           </div>
 
