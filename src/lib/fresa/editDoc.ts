@@ -17,7 +17,7 @@
  */
 import { FillRule } from 'clipper2-ts';
 import { bezierPoint, fitCubics, isNearlyStraight, type Cubic } from './curveFit';
-import { UM, offset as offsetRegion, toPath64, union, type Paths64 } from './geometry';
+import { UM, intersect, offset as offsetRegion, toPath64, union, type Paths64 } from './geometry';
 import { absoluteSubpaths, flattenPathData, parsePointList, type AbsSegment, type Pt } from './pathData';
 import { applyMatrix, multiply, parseSvgShapes, parseTransform, type Matrix } from './svgShapes';
 
@@ -518,6 +518,23 @@ function validClosed(nodes: ENode[]): boolean {
   return nodes.length === 2 && nodes.some((n) => n.i || n.o);
 }
 
+/** Región (Clipper, en µm) de una pieza, respetando el relleno de cada trazado. */
+function pieceRegion(doc: EditDoc, piece: EditPiece, mmPerUnit: number, tolMm: number): Paths64 {
+  const flatTol = tolMm / 3 / mmPerUnit;
+  const byRule = new Map<string, Paths64>();
+  for (const r of piece.refs) {
+    const path = doc.paths[r.path];
+    const sub = path?.subs[r.sub];
+    if (!sub) continue;
+    const list = byRule.get(path.fillRule) ?? [];
+    list.push(toPath64(flattenSub(sub, flatTol), mmPerUnit));
+    byRule.set(path.fillRule, list);
+  }
+  let region: Paths64 = [];
+  for (const [rule, paths] of byRule) region = union(region, union(paths, null, rule === 'evenodd' ? FillRule.EvenOdd : FillRule.NonZero));
+  return region;
+}
+
 /** Contornos nuevos de una pieza con offset (null si desaparece). */
 function offsetSubs(doc: EditDoc, piece: EditPiece, deltaMm: number, mmPerUnit: number, tolMm: number): ESub[] | null {
   const flatTol = tolMm / 3 / mmPerUnit;
@@ -574,6 +591,41 @@ export function offsetPieces(
   const refs = results.flatMap((subs, k) => subs.map((_, si) => ({ path: firstNewPath + k, sub: si })));
   next = removeRedundant(next, (tolMm * 0.2) / mmPerUnit, refs).doc;
   return { doc: next, firstNewPath };
+}
+
+/**
+ * Une varias piezas en una sola (como «Unir» de Illustrator): lo que se pisa
+ * queda una sola figura, con los agujeros que correspondan. El contorno se
+ * vuelve a ajustar con curvas (error < `tolMm`). Null si no hay nada que unir.
+ */
+export function unionPieces(doc: EditDoc, pieces: EditPiece[], mmPerUnit: number, tolMm = 0.01): { doc: EditDoc; firstNewPath: number; merged: number } | null {
+  if (pieces.length < 2) return null;
+  // Solo se juntan las que de verdad se pisan o se tocan: las sueltas quedan intactas
+  // (no se les rehacen las curvas). Grupos por contacto, transitivos.
+  const regions = pieces.map((p) => offsetRegion(pieceRegion(doc, p, mmPerUnit, tolMm), 1));
+  const group = pieces.map((_, i) => i);
+  const find = (i: number): number => (group[i] === i ? i : (group[i] = find(group[i])));
+  for (let a = 0; a < pieces.length; a++) for (let b = a + 1; b < pieces.length; b++) {
+    const A = pieces[a].bounds, B = pieces[b].bounds;
+    if (A.maxX < B.minX || B.maxX < A.minX || A.maxY < B.minY || B.maxY < A.minY) continue;
+    if (intersect(regions[a], regions[b]).length) group[find(a)] = find(b);
+  }
+  const groups = new Map<number, EditPiece[]>();
+  pieces.forEach((p, i) => groups.set(find(i), [...(groups.get(find(i)) ?? []), p]));
+  const toMerge = [...groups.values()].filter((g) => g.length > 1);
+  if (!toMerge.length) return null;
+  const results: ESub[][] = [];
+  for (const g of toMerge) {
+    const subs = offsetSubs(doc, { ...g[0], refs: g.flatMap((p) => p.refs) }, 0, mmPerUnit, tolMm);
+    if (subs) results.push(subs);
+  }
+  if (!results.length) return null;
+  let next = removeRefs(doc, toMerge.flat().flatMap((p) => p.refs));
+  const firstNewPath = next.paths.length;
+  for (const subs of results) next.paths.push({ fillRule: 'nonzero', subs });
+  const refs = results.flatMap((subs, k) => subs.map((_, si) => ({ path: firstNewPath + k, sub: si })));
+  next = removeRedundant(next, (tolMm * 0.2) / mmPerUnit, refs).doc;
+  return { doc: next, firstNewPath, merged: toMerge.reduce((n, g) => n + g.length, 0) };
 }
 
 /** Offset de una sola pieza (ver `offsetPieces`). */

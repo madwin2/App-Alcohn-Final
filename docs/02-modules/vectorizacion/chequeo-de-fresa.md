@@ -149,6 +149,12 @@ Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo p
 
 **Elegir versión** (Revisión): `ReviewItem.originalSvg` guarda el vector como salió (o el cargado con «Cambiar») y `ReviewItem.fresaChoice` qué versión es `svg`: `original`, `auto` o `manual`. Si la automática cambió algo y todavía no se eligió, **queda elegida**; la tarjeta muestra **Guardar: Original | Automático (| A mano)** y **Ver / editar** abre el diálogo con la corrección ya hecha (`initialFix`), con **Editar el corregido / Editar el original** y **Usar el original**. Confirmar guarda `svg`. «Cambiar» borra `originalSvg` y `fresaChoice` (el archivo nuevo es el original). La versión agrandada (último recurso) sigue siendo una decisión manual en el diálogo.
 
+## 4 quater. Herramientas del editor (✅ 2026-10-18, `editCorners.ts`, `unionPieces`)
+
+- **Redondear vértices**: arrastrando el círculo dentro del vértice elegido (radio en vivo), con «Redondear vértice» o, para una pieza, «Redondear internos» (puntas blancas donde la fresa no entra; incluye ojos en forma de hoja de dos nodos). Arco circular exacto entre tramos rectos o curvos; si el radio no entra, el máximo posible.
+- **Copiar / cortar / pegar / duplicar** (Ctrl+C/X/V/D, Ctrl+Shift+V en el mismo lugar), también entre sellos (se reescala a mm).
+- **Girar** (90° o libre) y **espejar**; **unir** lo que se pisa (Ctrl+G).
+
 ## 5. Dónde aparece en la app
 
 | Pantalla | Qué se ve | Qué se puede hacer |
@@ -161,6 +167,9 @@ Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo p
 ⚠️ Si se corrige el vector de un sello que **ya está armado en Aspire**, el gadget en modo Actualizar no lo reimporta solo (lo reconoce por su marca y lo conserva). Hay que borrarlo del archivo y correr Actualizar eligiendo «reimportar», o usar Rehacer desde cero. El diálogo lo avisa.
 
 ## 6. Rendimiento
+
+- ✅ (2026-10-17) **Aplanado a la medida real:** `computeReport` lee primero el SVG en grueso para conocer la escala de fabricación y después aplana las curvas a `flattenTolMm` (4 µm) **de esa medida**. Antes se usaba la medida declarada en el SVG (por ejemplo 1497 px ≈ 396 mm para un sello de 35 mm), que aplanaba ~11 veces más fino de lo necesario. En el logo real de Rockets Butchery: 13 021 → 5 454 puntos y 7,3 → 3,4 s. La corrección usa la misma tolerancia. Con el repaso por ganancia y la mesa analizando muchos sellos a la vez, la pestaña se quedaba sin memoria (Out of Memory); con 15 sellos reales, zonas activadas y Mecanizado ahora queda en ~100 MB.
+- El paso de profundidad del repaso (`REPASO_DEPTH_STEP_MM`) es 0,10 mm: en Magui Lucero elige las mismas piezas que 0,05 a la mitad de costo.
 
 - La geometría corre en un **Web Worker** (`fresa.worker.ts`, ~88 KB) para no trabar la pantalla; si el navegador no lo soporta, corre en el hilo principal.
 - Análisis: 25–400 ms por vector real; corrección + re-chequeo: 0,2–8 s (hasta ~20 s en diseños con cientos de piezas), en el worker.
