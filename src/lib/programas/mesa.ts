@@ -213,6 +213,18 @@ export function moveToNeighbor(doc: PreparationDocument, instanceId: string, dir
   return { doc, added: false, reason: firstReason ?? `No hay otra planchuela hacia la ${direction < 0 ? 'izquierda' : 'derecha'}.` };
 }
 
+/** Lo del pedido que importa al armar: nota del cliente, prioridad y vencimiento. */
+export interface StampInfo { notes?: string | null; isPriority?: boolean; deadlineAt?: string }
+
+/** Texto corto del vencimiento («vence hoy», «venció ayer»…), o null si no tiene. */
+export function dueText(info: StampInfo, today: Date): { text: string; urgent: boolean } | null {
+  const days = daysToDeadline({ deadlineAt: info.deadlineAt } as MesaSource, today);
+  const urgent = !!info.isPriority || (days !== null && days <= 3);
+  if (days === null) return info.isPriority ? { text: 'prioritario', urgent } : null;
+  const t = days < 0 ? (days === -1 ? 'venció ayer' : `venció hace ${-days} días`) : days === 0 ? 'vence hoy' : days === 1 ? 'vence mañana' : `vence en ${days} días`;
+  return { text: info.isPriority ? `prioritario · ${t}` : t, urgent };
+}
+
 export type QueueSection = 'urgentes' | 'semana' | 'despues';
 export const QUEUE_SECTION_LABEL: Record<QueueSection, string> = { urgentes: 'Urgentes', semana: 'Esta semana', despues: 'Más adelante' };
 

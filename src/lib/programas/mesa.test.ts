@@ -315,3 +315,15 @@ describe('mesa: gadget anterior ya sincronizado', () => {
     expect(synced.done.fabricar).toBe(true);
   });
 });
+
+describe('mesa: vencimiento para mostrar', () => {
+  it('arma el texto y marca lo urgente', async () => {
+    const { dueText } = await import('./mesa');
+    const today = new Date(2026, 9, 18);
+    expect(dueText({ deadlineAt: '2026-10-18' }, today)).toEqual({ text: 'vence hoy', urgent: true });
+    expect(dueText({ deadlineAt: '2026-10-17' }, today)).toEqual({ text: 'venció ayer', urgent: true });
+    expect(dueText({ deadlineAt: '2026-10-28' }, today)).toEqual({ text: 'vence en 10 días', urgent: false });
+    expect(dueText({ isPriority: true }, today)).toEqual({ text: 'prioritario', urgent: true });
+    expect(dueText({}, today)).toBeNull();
+  });
+});

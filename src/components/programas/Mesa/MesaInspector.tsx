@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowDownToLine, ArrowUp, Minus, Plus, ScanSearch, Trash2, X } from 'lucide-react';
 import type { PreparationDocument, Recipe, StampPlacement } from '@/lib/programas/preparation';
-import { columnStamps, columnUsage } from '@/lib/programas/mesa';
+import { columnStamps, columnUsage, dueText, type StampInfo } from '@/lib/programas/mesa';
 import { PASS_OUTCOME_LABEL, type PassOutcome } from '@/lib/fresa/passes';
 import { cn } from '@/lib/utils/cn';
 import { DesignTile, Dot, FOCUS, Kbd, Label, PILL_GHOST, PILL_SOFT, Segmented } from './mesaUi';
@@ -9,10 +9,12 @@ type FineMode = NonNullable<StampPlacement['fine']>['mode'];
 const RECIPE_HINT: Record<Recipe, string> = { CLASICO: '1,7 mm de profundidad', '3MM': '3 mm de profundidad', ALIMENTO: '3 mm y corte de forma con fresa de 6' };
 
 /** El sello elegido: lo vendido, cómo se fabrica y acciones rápidas. */
-export function MesaInspector({ doc, stamp, sold, readOnly, grow, shrink, onRecipe, onResize, onFine, onColumn, onEnd, onShift, onRemove, onFresa, onClose }: {
+export function MesaInspector({ doc, stamp, sold, info, today, readOnly, grow, shrink, onRecipe, onResize, onFine, onColumn, onEnd, onShift, onRemove, onFresa, onClose }: {
   doc: PreparationDocument;
   stamp: StampPlacement;
   sold: { shortMm: number; longMm: number };
+  info?: StampInfo;
+  today: Date;
   readOnly: boolean;
   /** Paso de ± y si entra (motivo si no). */
   grow: { stepMm: number; reason: string | null };
@@ -46,9 +48,16 @@ export function MesaInspector({ doc, stamp, sold, readOnly, grow, shrink, onReci
             vendido {sold.shortMm}×{sold.longMm} mm
             {changed ? <span className="text-sky-300"> · se fabrica {stamp.widthMm}×{stamp.heightMm}</span> : null}
           </p>
+          {(() => { const due = info ? dueText(info, today) : null; return due ? <p className={cn('text-[13px]', due.urgent ? 'text-red-300' : 'text-zinc-400')}>{due.text}</p> : null; })()}
         </div>
         <button type="button" className={cn(PILL_GHOST, 'px-2')} onClick={onClose} aria-label="Cerrar el detalle (Esc)" title="Cerrar (Esc)"><X className="size-4" /></button>
       </div>
+
+      {info?.notes?.trim() ? (
+        <p className="whitespace-pre-wrap break-words rounded-2xl bg-sky-400/10 px-3 py-2 text-[13px] text-sky-200" title="Nota del pedido">
+          <span className="mr-1 font-medium text-sky-300">Nota:</span>{info.notes.trim()}
+        </p>
+      ) : null}
 
       <div className="relative flex h-44 w-full items-center justify-center rounded-2xl bg-black/40">
         <DesignTile sourceUrl={stamp.sourceUrl} inline={stamp.vectorSvg} widthPx={stamp.widthMm * k} heightPx={stamp.heightMm * k} upright />

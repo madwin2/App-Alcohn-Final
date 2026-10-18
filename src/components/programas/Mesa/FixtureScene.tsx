@@ -281,6 +281,8 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
   }, []);
 
   const W = fixture.widthMm, H = fixture.heightMm;
+  /** El usuario movió la cámara a mano (rueda, arrastre, ±): un cambio de tamaño no la re-encuadra. */
+  const userMoved = useRef(false);
   const fit = Math.max(0.01, Math.min((vp.w || 800) / ((W + 24) * S), (vp.h || 600) / ((H + 40) * S)));
   const scale = fit * cam.zoom;
   const invalid = useMemo(() => new Set(validatePreparation(doc).filter((i) => LAYOUT_CODES.includes(i.code)).map((i) => i.instanceId)), [doc]);
@@ -293,6 +295,7 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
   const frame = (el: Element | null, margin = 28, maxZoom = ZOOM_MAX) => {
     const v = viewport.current;
     if (!el || !v) return;
+    userMoved.current = false;
     const r = el.getBoundingClientRect(), vr = v.getBoundingClientRect();
     if (!r.width || !r.height || !vr.width) return;
     setCam((c) => {
@@ -309,10 +312,10 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
       return { zoom, x: -cx * fitNow * zoom, y: -cy * fitNow * zoom + bar / 2, animate: true };
     });
   };
-  const zoomBy = (k: number) => setCam((c) => {
+  const zoomBy = (k: number) => { userMoved.current = true; setCam((c) => {
     const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, c.zoom * k)); const f = zoom / c.zoom;
     return { zoom, x: c.x * f, y: c.y * f, animate: true };
-  });
+  }); };
   const run = (cmd: Omit<CameraCommand, 'key'>) => {
     const root = world.current;
     if (!root) return;
@@ -333,6 +336,17 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
     lastCmd.current = camera.key;
     runRef.current(camera);
   }, [camera]);
+  // Si el lienzo cambia de tamaño (ventana, panel, zoom del navegador): sin tocar la
+  // cámara, se vuelve a encuadrar; si se movió a mano, se conserva la escala que se ve.
+  const lastFit = useRef(fit);
+  useEffect(() => {
+    const prev = lastFit.current; lastFit.current = fit;
+    if (!ready || Math.abs(prev - fit) / prev < 0.02) return;
+    if (userMoved.current) { setCam((c) => ({ ...c, zoom: c.zoom * prev / fit, animate: false })); return; }
+    const t = window.setTimeout(() => runRef.current(selectedRef.current ? { kind: 'stamp', id: selectedRef.current } : { kind: 'work' }), 120);
+    return () => window.clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fit]);
   // Encuadre automático al abrir, al cambiar de máquina y al terminar el giro de la vista (se mide ya proyectado).
   const ready = vp.w > 0 && vp.h > 0;
   const opened = useRef(false);
@@ -436,6 +450,19 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
     return { x0, x1, y0: top - 14, y1 };
   }, [fixture, doc.stamps, H]);
 
+  // Si la zona de trabajo cambia bastante (se cargó el programa, se sumaron
+  // sellos) y no se movió la cámara a mano, se vuelve a encuadrar.
+  const workKey = Math.round(work.y1 / 20);
+  const lastWork = useRef(workKey);
+  useEffect(() => {
+    if (workKey === lastWork.current) return;
+    lastWork.current = workKey;
+    if (userMoved.current || !ready || dragging || view !== '2d') return;
+    const t = window.setTimeout(() => runRef.current({ kind: 'work' }), 80);
+    return () => window.clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workKey]);
+
   // Rótulos: si dos quedan muy cerca en pantalla, el segundo sube una fila.
   const labelRows = useMemo(() => {
     const rows = new Map<string, number>();
@@ -453,6 +480,7 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
     <div ref={viewport}
       className={cn('relative h-full w-full touch-none select-none overflow-hidden rounded-2xl', dragging ? 'cursor-copy' : 'cursor-grab active:cursor-grabbing')}
       onWheel={(e) => {
+        userMoved.current = true;
         const r = viewport.current!.getBoundingClientRect();
         const cx = e.clientX - r.left - r.width / 2, cy = e.clientY - r.top - r.height / 2;
         setCam((c) => {
@@ -468,6 +496,7 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
         if (hit?.dataset.stamp) { onSelect(hit.dataset.stamp); run({ kind: 'stamp', id: hit.dataset.stamp }); return; }
         const r = viewport.current!.getBoundingClientRect();
         const cx = e.clientX - r.left - r.width / 2, cy = e.clientY - r.top - r.height / 2;
+        userMoved.current = true;
         setCam((c) => {
           const zoom = Math.min(ZOOM_MAX, c.zoom * 2); const k = zoom / c.zoom;
           return { zoom, x: cx - (cx - c.x) * k, y: cy - (cy - c.y) * k, animate: true };
@@ -489,7 +518,7 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
         if (!d) return;
         if (d.kind === 'pan') {
           if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3) d.moved = true;
-          if (d.moved) setCam((c) => ({ ...c, x: d.cx + e.clientX - d.x, y: d.cy + e.clientY - d.y, animate: false }));
+          if (d.moved) { userMoved.current = true; setCam((c) => ({ ...c, x: d.cx + e.clientX - d.x, y: d.cy + e.clientY - d.y, animate: false })); }
           return;
         }
         const s = doc.stamps.find((x) => x.instanceId === d.id);

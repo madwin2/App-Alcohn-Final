@@ -87,7 +87,8 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
     } catch (e) { toast({ title: 'No se pudo cargar la cola', description: e instanceof Error ? e.message : undefined, variant: 'destructive' }); }
   }, [toast]);
   // Se recarga cuando cambian los programas (incluye realtime de otras PCs).
-  useEffect(() => { const t = window.setTimeout(() => void refreshQueue(), 250); return () => window.clearTimeout(t); }, [programs, refreshQueue]);
+  // Espaciado: con otras PCs trabajando los programas cambian seguido y cada recarga son tres consultas.
+  useEffect(() => { const t = window.setTimeout(() => void refreshQueue(), 1500); return () => window.clearTimeout(t); }, [programs, refreshQueue]);
 
   // Carga el borrador del programa elegido y lo mantiene al día con sus sellos.
   useEffect(() => {
@@ -127,6 +128,12 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
       const w = s.anchoRealCm != null ? s.anchoRealCm * 10 : s.widthMm, h = s.largoRealCm != null ? s.largoRealCm * 10 : s.heightMm;
       out[s.id] = { shortMm: Math.min(w, h), longMm: Math.max(w, h) };
     }
+    return out;
+  }, [queue, programs]);
+
+  const stampInfo = useMemo(() => {
+    const out: Record<string, { notes?: string | null; isPriority?: boolean; deadlineAt?: string }> = {};
+    for (const s of [...queue, ...programs.flatMap((p) => p.stamps)] as ProgramStamp[]) out[s.id] = { notes: s.notes, isPriority: s.isPriority, deadlineAt: s.deadlineAt };
     return out;
   }, [queue, programs]);
 
@@ -261,7 +268,7 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
         programId={programId}
         onProgram={(id) => setSelected((s) => ({ ...s, [machine]: id }))}
         onNewProgram={() => void onNewProgram()}
-        queue={queue} soldSizes={soldSizes} today={today} machinesFor={machinesFor}
+        queue={queue} soldSizes={soldSizes} stampInfo={stampInfo} today={today} machinesFor={machinesFor}
         legacyAspire={isLegacy(machine)}
         checking={checking || (!!program && !current)}
         onChange={(id, doc) => void onChange(id, doc)}

@@ -10,7 +10,7 @@ import { fetchSvgText } from '@/lib/fresa/useFresaReport';
 import { type PreparationDocument, type PreparationMachine, type Recipe, type StampPlacement } from '@/lib/programas/preparation';
 import {
   addStamp, columnStamps, fillFromQueue, fitsMachine, mesaChecks, mesaProgress, moveStamp, moveToNeighbor, queueSection, removeStamp,
-  resizeStamp, sendToEnd, shiftStamp, updateStampGeometry, type AddResult, type MesaSource,
+  resizeStamp, sendToEnd, shiftStamp, updateStampGeometry, type AddResult, type MesaSource, type StampInfo,
 } from '@/lib/programas/mesa';
 import type { FabricationState, ProgramStamp } from '@/lib/types/index';
 import { cn } from '@/lib/utils/cn';
@@ -53,7 +53,7 @@ const isDirty = (p: MesaProgram) => JSON.stringify(p.doc) !== JSON.stringify(p.s
  * al tablero + hoja + «Preparar programa»: armar y preparar es lo mismo.
  */
 export function MesaArmado({
-  machine, onMachine, programs, programId, onProgram, onNewProgram, queue, soldSizes, today, machinesFor,
+  machine, onMachine, programs, programId, onProgram, onNewProgram, queue, soldSizes, stampInfo = {}, today, machinesFor,
   legacyAspire, checking, onChange, onSave, onAspire, onFabricated, onSetup, onOpenBoard,
 }: {
   machine: PreparationMachine;
@@ -66,6 +66,8 @@ export function MesaArmado({
   queue: MesaSource[];
   /** Medida vendida por sello (lado corto/largo). */
   soldSizes: Record<string, { shortMm: number; longMm: number }>;
+  /** Nota, prioridad y vencimiento del pedido de cada sello. */
+  stampInfo?: Record<string, StampInfo>;
   today: Date;
   /** Otras máquinas donde entra un sello (para los que no entran en esta). */
   machinesFor: (s: MesaSource) => PreparationMachine[];
@@ -404,6 +406,7 @@ export function MesaArmado({
               {selected && sizeLimits ? (
                 <MesaInspector doc={doc} stamp={selected} readOnly={readOnly}
                   sold={soldSizes[selected.selloId] ?? { shortMm: selected.widthMm, longMm: selected.heightMm }}
+                  info={stampInfo[selected.selloId]} today={today}
                   grow={sizeLimits.grow} shrink={sizeLimits.shrink}
                   onRecipe={(recipe: Recipe) => patch(selected.instanceId, { recipe })}
                   onResize={(h) => apply(resizeStamp(doc, selected.instanceId, h))}
@@ -415,7 +418,7 @@ export function MesaArmado({
                   onFresa={() => void openFresa(selected)}
                   onClose={() => setSelectedId(null)} />
               ) : (
-                <MesaSummary doc={doc} readOnly={readOnly} warnings={warnings} onPick={pick} onShortcuts={() => setShortcuts(true)}
+                <MesaSummary doc={doc} readOnly={readOnly} warnings={warnings} info={stampInfo} today={today} onPick={pick} onShortcuts={() => setShortcuts(true)}
                   onToggleMaterial={(columnId) => commit({ ...doc, columns: doc.columns.map((c) => c.id === columnId ? { ...c, available: !c.available } : c) })} />
               )}
             </Panel>

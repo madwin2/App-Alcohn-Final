@@ -100,6 +100,7 @@ export default function ProgramasMesaSandboxPage() {
               setState((s) => ({ ...s, programs: [...s.programs, p], selected: { ...s.selected, [machine]: p.id } }));
             }}
             queue={queue} soldSizes={soldSizes} today={today}
+            stampInfo={Object.fromEntries(state.queue.map((s) => [s.id, { notes: s.notes, isPriority: s.isPriority, deadlineAt: s.deadlineAt }]))}
             legacyAspire={machine !== 'C'}
             machinesFor={(s) => MACHINES.filter((m) => fitsMachine({ ...emptyDocument('x', m), columns: state.setups[m].columns }, s))}
             onFabricated={(id, states) => updateProgram(id, (p) => ({ ...p, locked: true, fabricated: {

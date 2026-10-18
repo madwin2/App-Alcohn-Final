@@ -1,6 +1,6 @@
-import { Keyboard } from 'lucide-react';
+import { Keyboard, StickyNote } from 'lucide-react';
 import type { PreparationDocument, Recipe } from '@/lib/programas/preparation';
-import { columnStamps, columnUsage } from '@/lib/programas/mesa';
+import { columnStamps, columnUsage, dueText, type StampInfo } from '@/lib/programas/mesa';
 import { cn } from '@/lib/utils/cn';
 import { Dot, FOCUS, Label, PILL_GHOST } from './mesaUi';
 
@@ -10,10 +10,12 @@ const RECIPES: { id: Recipe; label: string }[] = [{ id: 'CLASICO', label: 'Clás
  * Sin sello elegido, la columna derecha resume el programa: qué lleva, cuánto
  * queda en cada planchuela (y si hay material) y la lista de sellos para ir a uno.
  */
-export function MesaSummary({ doc, readOnly, warnings, onPick, onToggleMaterial, onShortcuts }: {
+export function MesaSummary({ doc, readOnly, warnings, info = {}, today, onPick, onToggleMaterial, onShortcuts }: {
   doc: PreparationDocument;
   readOnly: boolean;
   warnings: Set<string>;
+  info?: Record<string, StampInfo>;
+  today: Date;
   onPick: (instanceId: string) => void;
   onToggleMaterial: (columnId: string) => void;
   onShortcuts: () => void;
@@ -71,6 +73,8 @@ export function MesaSummary({ doc, readOnly, warnings, onPick, onToggleMaterial,
                   className={cn(FOCUS, 'flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left text-[13px] hover:bg-white/[0.05]')}>
                   <span className="w-12 shrink-0 text-[12px] tabular-nums text-zinc-500">{c.nominalMm} · {i + 1}</span>
                   <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                  {info[s.selloId]?.notes?.trim() ? <StickyNote className="size-3.5 shrink-0 text-sky-300" aria-label="Tiene nota del pedido" /> : null}
+                  {(() => { const due = info[s.selloId] ? dueText(info[s.selloId], today) : null; return due?.urgent ? <span className="shrink-0 text-[11px] text-red-300" title={due.text}>{due.text.replace('prioritario · ', '')}</span> : null; })()}
                   {warnings.has(s.instanceId) ? <Dot tone="warning" /> : null}
                   <span className="text-[12px] tabular-nums text-zinc-500">{s.widthMm}×{s.heightMm}</span>
                 </button>
