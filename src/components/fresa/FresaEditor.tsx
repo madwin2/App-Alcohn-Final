@@ -46,6 +46,7 @@ import {
   computePieces,
   countNodes,
   deleteNode,
+  deleteNodes,
   docBounds,
   isSmooth,
   moveNodePart,
@@ -62,6 +63,7 @@ import {
   simplifyDoc,
   specks,
   subToD,
+  translateNodes,
   translateRefs,
   unionPieces,
   type Box as DocBox,
@@ -184,7 +186,10 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   /** Piezas elegidas (clave de su contorno de afuera); la primera es la "principal". */
   const [selKeys, setSelKeys] = useState<string[]>([]);
   const [hoverKey, setHoverKey] = useState<string | null>(null);
-  const [selNode, setSelNode] = useState<NodeRef | null>(null);
+  /** Nodos elegidos (Shift suma); el último es el "activo": muestra manijas y se redondea. */
+  const [nodeSel, setNodeSel] = useState<NodeRef[]>([]);
+  const selNode: NodeRef | null = nodeSel[nodeSel.length - 1] ?? null;
+  const setSelNode = (r: NodeRef | null) => setNodeSel(r ? [r] : []);
   const [showAllNodes, setShowAllNodes] = useState(false);
   const [showZones, setShowZones] = useState(true);
   const [showRelief, setShowRelief] = useState(false);
@@ -462,8 +467,9 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   type Drag =
     | { kind: 'pan'; x: number; y: number; view: Box; moved: boolean }
     | { kind: 'move'; start: Pt; refs: SubRef[]; box: DocBox; others: DocBox[]; moved: boolean }
-    | { kind: 'marquee'; start: Pt; additive: boolean; moved: boolean }
+    | { kind: 'marquee'; start: Pt; additive: boolean; moved: boolean; nodes?: boolean }
     | { kind: 'node'; ref: NodeRef; part: NodePart; xs: number[]; ys: number[]; moved: boolean }
+    | { kind: 'nodes'; start: Pt; refs: NodeRef[]; moved: boolean }
     | { kind: 'scale'; refs: SubRef[]; corner: Pt; opposite: Pt; center: Pt; moved: boolean }
     | { kind: 'round'; ref: NodeRef; corner: Pt; bisector: Pt; half: number; moved: boolean };
   const drag = useRef<Drag | null>(null);
@@ -618,6 +624,17 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
 
     if (tool === 'nodos' && primary) {
       const h = hitNode(p);
+      if (h && h.part === 'p' && e.shiftKey) {
+        // Shift: suma o saca el nodo de los elegidos (no arrastra).
+        setNodeSel(nodeSel.some((r) => sameNode(r, h.ref)) ? nodeSel.filter((r) => !sameNode(r, h.ref)) : [...nodeSel, h.ref]);
+        return;
+      }
+      if (h && h.part === 'p' && nodeSel.length > 1 && nodeSel.some((r) => sameNode(r, h.ref))) {
+        // Agarrar uno de varios elegidos: se mueven todos juntos.
+        drag.current = { kind: 'nodes', start: p, refs: nodeSel, moved: false };
+        setDragging('nodes');
+        return;
+      }
       if (h) {
         setSelNode(h.ref);
         const { xs, ys } = nodeSnapLines(h.ref);
@@ -631,8 +648,14 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     if (pc) {
       const key = keyOf(pc);
       if (tool === 'nodos') {
-        // Editando nodos: tocar otra pieza pasa a editar los de esa.
-        if (key !== keyOf(primary ?? pc) || !primary) setSelection([key]);
+        // Editando nodos: tocar otra pieza pasa a editar los de esa; arrastrar
+        // sobre la misma, rectángulo para elegir nodos.
+        if (key !== keyOf(primary ?? pc) || !primary) {
+          setSelection([key]);
+          return;
+        }
+        drag.current = { kind: 'marquee', start: p, additive: e.shiftKey, moved: false, nodes: true };
+        setDragging('marquee');
         return;
       }
       let keys = selKeys;
@@ -654,13 +677,9 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       return;
     }
 
-    // Fondo: editando nodos, sale de la edición; si no, rectángulo de selección.
-    if (tool === 'nodos') {
-      setTool('mover');
-      setSelNode(null);
-      return;
-    }
-    drag.current = { kind: 'marquee', start: p, additive: e.shiftKey, moved: false };
+    // Fondo: rectángulo de selección (de nodos, si se están editando). Un clic
+    // sin arrastrar en el fondo sale de la edición de nodos (al soltar).
+    drag.current = { kind: 'marquee', start: p, additive: e.shiftKey, moved: false, nodes: tool === 'nodos' };
     setDragging('marquee');
   };
 
@@ -748,6 +767,19 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       setTemp(translateRefs(doc, d.refs, dx, dy));
       return;
     }
+    if (d.kind === 'nodes') {
+      let dx = p.x - d.start.x;
+      let dy = p.y - d.start.y;
+      if (Math.hypot(dx, dy) * pxPerUnit > 2) d.moved = true;
+      if (!d.moved) return;
+      if (e.shiftKey) {
+        const c = constrainAxis(dx, dy);
+        dx = c.dx;
+        dy = c.dy;
+      }
+      setTemp(translateNodes(doc, d.refs, dx, dy));
+      return;
+    }
     // Nodo o manija.
     d.moved = true;
     let q = p;
@@ -780,6 +812,30 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       } else setTemp(null);
       return;
     }
+    if (d.kind === 'marquee' && d.nodes) {
+      const m = marquee;
+      setMarquee(null);
+      if (!d.moved || !m) {
+        if (d.additive) return;
+        // Clic en la pieza: suelta los nodos; en el fondo: termina de editar.
+        if (pieceAt(pieces, d.start)) setSelNode(null);
+        else {
+          setTool('mover');
+          setSelNode(null);
+        }
+        return;
+      }
+      const hit: NodeRef[] = [];
+      for (const r of nodeRefs) {
+        (shown?.paths[r.path]?.subs[r.sub]?.nodes ?? []).forEach((n, ni) => {
+          if (n.p.x >= m.minX && n.p.x <= m.maxX && n.p.y >= m.minY && n.p.y <= m.maxY) hit.push({ ...r, node: ni });
+        });
+      }
+      const next = d.additive ? [...nodeSel, ...hit.filter((h) => !nodeSel.some((r) => sameNode(r, h)))] : hit;
+      setNodeSel(next);
+      if (hit.length) showNotice(`${next.length} nodo${next.length === 1 ? '' : 's'} elegido${next.length === 1 ? '' : 's'}.`, 'ok');
+      return;
+    }
     if (d.kind === 'marquee') {
       const m = marquee;
       setMarquee(null);
@@ -802,9 +858,11 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             ? n > 1
               ? `${n} piezas movidas.`
               : 'Pieza movida.'
-            : d.part === 'p'
-              ? 'Nodo movido.'
-              : 'Manija movida.',
+            : d.kind === 'nodes'
+              ? `${d.refs.length} nodos movidos.`
+              : d.part === 'p'
+                ? 'Nodo movido.'
+                : 'Manija movida.',
       );
     } else {
       setTemp(null);
@@ -929,8 +987,15 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
   };
   const doDeleteNode = () => {
     if (!selNode || !doc) return;
-    commit(deleteNode(doc, selNode), 'Nodo borrado.');
+    if (nodeSel.length > 1) commit(deleteNodes(doc, nodeSel), `${nodeSel.length} nodos borrados.`);
+    else commit(deleteNode(doc, selNode), 'Nodo borrado.');
     setSelNode(null);
+  };
+  /** Flechas con nodos elegidos: mueven esos nodos, no la pieza. */
+  const nudgeNodes = (dxMm: number, dyMm: number) => {
+    if (!nodeSel.length || !doc) return;
+    const n = nodeSel.length;
+    commit(translateNodes(doc, nodeSel, dxMm / k, dyMm / k), `${n > 1 ? `${n} nodos movidos` : 'Nodo movido'} ${mm(Math.hypot(dxMm, dyMm))} mm.`);
   };
   const doNodeCorner = () => {
     if (!selNode || !doc) return;
@@ -1051,6 +1116,14 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       else doDuplicate();
       return;
     }
+    if (mod && e.key.toLowerCase() === 'a' && tool === 'nodos' && primary && shown) {
+      // Editando nodos: todos los nodos de la pieza.
+      e.preventDefault();
+      const all = nodeRefs.flatMap((r) => (shown.paths[r.path]?.subs[r.sub]?.nodes ?? []).map((_, ni) => ({ ...r, node: ni })));
+      setNodeSel(all);
+      showNotice(`${all.length} nodos elegidos.`, 'ok');
+      return;
+    }
     if (mod && e.key.toLowerCase() === 'a') {
       e.preventDefault();
       setSelection(pieces.map(keyOf));
@@ -1083,6 +1156,11 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       ArrowUp: [0, -s],
       ArrowDown: [0, s],
     };
+    if (dirs[e.key] && tool === 'nodos' && nodeSel.length) {
+      e.preventDefault();
+      nudgeNodes(...dirs[e.key]);
+      return;
+    }
     if (dirs[e.key] && nSel) {
       e.preventDefault();
       nudge(...dirs[e.key]);
@@ -1140,11 +1218,13 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
         ? 'Tocá una pieza para editar sus nodos. Esc o clic en el fondo: terminar.'
         : !nodesTouchable
           ? 'Los nodos están muy juntos: acercate con la rueda (o F) para poder tocarlos.'
-          : selNode
-            ? selCorner
-              ? 'Arrastrá el círculo hacia adentro para redondear el vértice, o el nodo y sus manijas. Clic derecho: más.'
-              : 'Arrastrá el nodo o sus manijas (se alinea con los otros; Ctrl lo suelta). Clic derecho: esquina, suave o borrar.'
-            : 'Arrastrá un nodo, o tocalo para ver sus manijas. Esc o clic en el fondo: terminar.'
+          : nodeSel.length > 1
+            ? `${nodeSel.length} nodos elegidos: arrastrá uno para mover todos, o usá las flechas (Shift: ×10). Shift+clic suma o saca. Supr: borrarlos.`
+            : selNode
+              ? selCorner
+                ? 'Arrastrá el círculo hacia adentro para redondear el vértice, o el nodo y sus manijas. Flechas: mover el nodo. Shift+clic: sumar otro.'
+                : 'Arrastrá el nodo o sus manijas (se alinea con los otros; Ctrl lo suelta). Flechas: mover el nodo. Shift+clic: sumar otro.'
+              : 'Arrastrá un nodo, o tocalo para ver sus manijas. Shift+clic o arrastrar un rectángulo: varios. Esc o clic en el fondo: terminar.'
       : dragging === 'move'
         ? 'Shift: solo en horizontal o vertical. Ctrl: sin imán.'
         : dragging === 'scale'
@@ -1456,7 +1536,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                     <g key={refKey(r)} style={{ pointerEvents: 'none' }}>
                       {sub.nodes.map((n, ni) => {
                         const ref = { ...r, node: ni };
-                        const isSel = sameNode(selNode, ref);
+                        const isSel = nodeSel.some((x) => sameNode(x, ref));
                         const showHandles =
                           tool === 'nodos' && !!selNode && selNode.path === r.path && selNode.sub === r.sub && Math.abs(selNode.node - ni) <= 1;
                         const isExtra = extraKeys.has(`${r.path}:${r.sub}:${ni}`);

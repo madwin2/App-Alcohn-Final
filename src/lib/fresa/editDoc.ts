@@ -738,6 +738,43 @@ export function deleteNode(doc: EditDoc, ref: NodeRef): EditDoc {
   return next;
 }
 
+/** Mueve varios nodos (cada uno con sus manijas) la misma distancia. */
+export function translateNodes(doc: EditDoc, refs: NodeRef[], dx: number, dy: number): EditDoc {
+  if (!refs.length || (!dx && !dy)) return doc;
+  const next = cloneDoc(doc);
+  const mv = (q: Pt) => ({ x: q.x + dx, y: q.y + dy });
+  for (const r of refs) {
+    const n = next.paths[r.path]?.subs[r.sub]?.nodes[r.node];
+    if (!n) continue;
+    n.p = mv(n.p);
+    if (n.i) n.i = mv(n.i);
+    if (n.o) n.o = mv(n.o);
+  }
+  return next;
+}
+
+/** Borra varios nodos; el contorno que se queda sin nodos suficientes se borra entero. */
+export function deleteNodes(doc: EditDoc, refs: NodeRef[]): EditDoc {
+  if (!refs.length) return doc;
+  const bySub = new Map<string, Set<number>>();
+  for (const r of refs) {
+    const key = `${r.path}:${r.sub}`;
+    if (!bySub.has(key)) bySub.set(key, new Set());
+    bySub.get(key)!.add(r.node);
+  }
+  const next = cloneDoc(doc);
+  const kill: SubRef[] = [];
+  for (const [key, nodes] of bySub) {
+    const [path, sub] = key.split(':').map(Number);
+    const s = next.paths[path]?.subs[sub];
+    if (!s) continue;
+    const left = s.nodes.filter((_, ni) => !nodes.has(ni));
+    if (left.length < (s.closed ? 3 : 2)) kill.push({ path, sub });
+    else s.nodes = left;
+  }
+  return kill.length ? removeRefs(next, kill) : next;
+}
+
 export function countNodes(doc: EditDoc, refs?: SubRef[]): number {
   const subs = refs
     ? refs.map((r) => doc.paths[r.path]?.subs[r.sub]).filter((s): s is ESub => !!s)
