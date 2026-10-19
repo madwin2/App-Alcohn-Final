@@ -2186,6 +2186,25 @@ local function scan(job)
   end
   return result, unknown
 end
+-- Un aviso por tipo, con la cantidad: un archivo con sellos del gadget anterior
+-- tiene cientos de vectores sin identidad y el informe no puede llevar uno por vector.
+local function unidentifiedIssues(unknown)
+  local counts, order = {}, {}
+  for _, text in ipairs(unknown) do
+    if not counts[text] then counts[text] = 0; order[#order+1] = text end
+    counts[text] = counts[text] + 1
+  end
+  local out = {}
+  for _, text in ipairs(order) do
+    out[#out+1] = counts[text] > 1 and (text .. " (" .. counts[text] .. ")") or text
+  end
+  if #order > 0 then
+    out[#out+1] = "El archivo tiene dibujos que no armo este gadget (por ejemplo, sellos del gadget anterior). Usa un archivo base sin sellos, o Preparar base y Vincular cada sello."
+  end
+  return out
+end
+PreparationSync.unidentifiedIssues = unidentifiedIssues
+
 local function bbox(entries)
   local box = nil
   for _, entry in ipairs(entries or {}) do if entry.role == "design" then
@@ -2769,7 +2788,7 @@ function PreparationSync.run(ctx)
   local function issue(code,message,id) issues[#issues+1]={code=code,message=message,instanceId=id,severity="error"} end
   local function hasErrors() for _,item in ipairs(issues) do if item.severity=="error" then return true end end; return false end
   local inventory, unknown = scan(job)
-  for _, text in ipairs(unknown) do issue("UNIDENTIFIED",text) end
+  for _, text in ipairs(unidentifiedIssues(unknown)) do issue("UNIDENTIFIED",text) end
   local wanted={}; for _,s in ipairs(doc.stamps) do if not s.excluded then wanted[s.instanceId]=s end end
   if #unknown == 0 then
     for id, entries in pairs(inventory) do if not wanted[id] then
@@ -2804,7 +2823,7 @@ function PreparationSync.run(ctx)
   end
   set(job.JobParameters,"ALCOHN_PREPARATION_PROGRAM_ID",doc.programId)
   local _,afterUnknown=scan(job)
-  for _,text in ipairs(afterUnknown) do issue("UNIDENTIFIED",text) end
+  for _,text in ipairs(unidentifiedIssues(afterUnknown)) do issue("UNIDENTIFIED",text) end
   local execution=ExecutionPlan.build(doc,observed,RULES)
   for _,item in ipairs(execution.issues) do issues[#issues+1]=item end
   local recalculated=false
