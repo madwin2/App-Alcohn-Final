@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { PreparationDocument, PreparationMachine } from '@/lib/programas/preparation';
 import { MESA_GAP_MM } from '@/lib/programas/mesa';
@@ -54,17 +54,18 @@ function FixturePreview({ machine, columns }: { machine: PreparationMachine; col
  * Lo que es de la máquina y no de cada programa: soporte, separación y
  * plantillas de Aspire. Se carga una vez; cambiar algo pide verificar de nuevo.
  */
-export function MachineSetupSheet({ open, onOpenChange, machine, machineLabel, setup, onChange, onUpload }: {
+export function MachineSetupSheet({ open, onOpenChange, machine, machineLabel, setup, onChange, onUploadAll }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   machine: PreparationMachine;
   machineLabel: string;
   setup: MachineSetup;
   onChange: (s: MachineSetup) => void;
-  /** Subir plantillas nativas de una receta (en el prototipo no está disponible). */
-  onUpload?: (recipe: keyof MachineSetup['recipes'], files: File[]) => void;
+  /** Subir todas las plantillas nativas juntas; la app ubica cada una (en el prototipo no está disponible). */
+  onUploadAll?: (files: File[]) => Promise<void>;
 }) {
-  const recipes = Object.entries(setup.recipes) as [keyof MachineSetup['recipes'], MachineSetup['recipes'][keyof MachineSetup['recipes']]][];
+  const [uploading, setUploading] = useState(false);
+  const recipes = (['CLASICO', '3MM', 'ALIMENTO'] as const).map((id) => [id, setup.recipes[id]] as const);
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-[440px] overflow-y-auto border-white/10 bg-zinc-950 sm:max-w-[440px]">
@@ -97,6 +98,20 @@ export function MachineSetupSheet({ open, onOpenChange, machine, machineLabel, s
 
         <section className="mt-8 space-y-3">
           <h3 className="text-[15px] font-medium">Plantillas de Aspire</h3>
+          {onUploadAll ? (
+            <div className="space-y-2 rounded-2xl bg-white/[0.035] p-3">
+              <p className="text-[12px] text-zinc-300">Elegí <b className="font-medium text-foreground">todas juntas</b> (una trayectoria por archivo, con su nombre de Aspire: «0 Taladrado», «4 Perfilado 0.1MM»…). La app pone cada una en su receta, en el repaso o en el Corte Forma.</p>
+              <input type="file" accept=".ToolpathTemplate" multiple disabled={uploading} aria-label="Subir todas las plantillas de Aspire"
+                className="block w-full text-[12px] text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-white/[0.12] file:px-3 file:py-1 file:text-foreground disabled:opacity-50"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []); e.target.value = '';
+                  if (!files.length) return;
+                  setUploading(true);
+                  void onUploadAll(files).finally(() => setUploading(false));
+                }} />
+              {uploading ? <p className="text-[12px] text-zinc-400">Subiendo y revisando…</p> : null}
+            </div>
+          ) : <p className="text-[12px] text-zinc-500">En el prototipo las plantillas son de ejemplo.</p>}
           {recipes.map(([id, r]) => {
             const complete = !!r.templatePaths?.length && (id !== 'ALIMENTO' || !!r.perimeterTemplate);
             return (
@@ -106,10 +121,14 @@ export function MachineSetupSheet({ open, onOpenChange, machine, machineLabel, s
                   <span className="text-[13px] font-medium">{RECIPE_LABEL[id]}</span>
                   <span className="ml-auto text-[12px] text-zinc-400">{r.templatePaths?.length ?? 0} trayectorias{r.fineTemplates?.full ? ' · repaso' : ''}{r.perimeterTemplate ? ' · corte forma' : ''}</span>
                 </div>
-                {onUpload ? (
-                  <input type="file" accept=".ToolpathTemplate" multiple className="block w-full text-[12px] text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-white/[0.08] file:px-3 file:py-1 file:text-foreground"
-                    onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; if (files.length) onUpload(id, files); }} />
-                ) : <p className="text-[12px] text-zinc-500">En el prototipo las plantillas son de ejemplo.</p>}
+                {r.templatePaths?.length || r.fineTemplates?.full || r.fineTemplates?.internal || r.perimeterTemplate ? (
+                  <ul className="space-y-0.5 text-[12px] text-zinc-400">
+                    {(r.templatePaths?.length ? r.templates : []).map((name) => <li key={name}>{name.replace(/\.ToolpathTemplate$/i, '')}</li>)}
+                    {r.fineTemplates?.full ? <li><span className="text-zinc-500">Repaso:</span> {r.fineTemplates.full.name.replace(/\.ToolpathTemplate$/i, '')}</li> : <li className="text-amber-300">Falta el repaso (4 Perfilado 0.1MM)</li>}
+                    {r.fineTemplates?.internal ? <li><span className="text-zinc-500">Repaso interior:</span> {r.fineTemplates.internal.name.replace(/\.ToolpathTemplate$/i, '')}</li> : null}
+                    {id === 'ALIMENTO' ? (r.perimeterTemplate ? <li><span className="text-zinc-500">Corte forma:</span> {r.perimeterTemplate.name.replace(/\.ToolpathTemplate$/i, '')}</li> : <li className="text-amber-300">Falta el Corte Forma</li>) : null}
+                  </ul>
+                ) : <p className="text-[12px] text-zinc-500">Sin plantillas.</p>}
                 <Check checked={r.verified} onChange={(v) => onChange({ ...setup, recipes: { ...setup.recipes, [id]: { ...r, verified: v } } })}>Verifiqué herramientas, profundidades y selección.</Check>
               </div>
             );
