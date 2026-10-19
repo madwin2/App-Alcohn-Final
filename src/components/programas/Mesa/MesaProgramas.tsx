@@ -7,6 +7,7 @@ import { checkPreparation } from '@/lib/programas/checkPreparation';
 import { emptyDocument, reconcileMesa as reconcile, reflowMesa, type MesaPending as Pending, type MesaSource } from '@/lib/programas/mesa';
 import { type PreparationDocument, type PreparationMachine, type PreparationRecord } from '@/lib/programas/preparation';
 import { generateProgramName } from '@/lib/programas/programName';
+import { missingForRecipe, sortTemplateFiles } from '@/lib/programas/templateSort';
 import {
   getProgramPreparation, inheritMachineSetup, peekMachineSetup, saveProgramPreparation, uploadPreparationTemplates, type MachineSetup as StoredSetup,
 } from '@/lib/supabase/services/programPreparation.service';
@@ -207,6 +208,71 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
     } finally { setChecking(false); }
   };
 
+  /**
+   * Todas las plantillas de Aspire de una vez (una trayectoria por archivo):
+   * cada una va a su receta, al repaso o al Corte Forma según lo que tiene
+   * adentro. Reemplaza lo cargado en las recetas que reciben algo; queda en el
+   * borrador hasta «Guardar y chequear».
+   */
+  const uploadAllTemplates = async (id: string, files: File[]) => {
+    try {
+      const { sorted, rejected, byName } = await sortTemplateFiles(files);
+      if (!sorted.length) {
+        toast({ title: 'Ninguna plantilla se pudo usar', description: rejected.map((r) => `${r.name}: ${r.reason}`).join(' · '), variant: 'destructive' });
+        return;
+      }
+      const ordered = [...sorted].sort((a, b) => (a.stage ?? 99) - (b.stage ?? 99));
+      const fileOf = (name: string) => byName.get(name)!;
+      type RecipeSetup = PreparationDocument['recipes']['CLASICO'];
+      const updates: Partial<Record<keyof PreparationDocument['recipes'], Partial<RecipeSetup>>> = {};
+      const full = ordered.find((s) => s.slot.kind === 'fine_full');
+      const internal = ordered.find((s) => s.slot.kind === 'fine_internal');
+      for (const recipe of ['CLASICO', '3MM', 'ALIMENTO'] as const) {
+        const auto = ordered.filter((s) => s.slot.kind === 'automatic' && s.slot.recipes.includes(recipe));
+        const perimeter = recipe === 'ALIMENTO' ? ordered.find((s) => s.slot.kind === 'food_perimeter') : undefined;
+        if (!auto.length && !full && !internal && !perimeter) continue;
+        const next: Partial<RecipeSetup> = { verified: false };
+        if (auto.length) {
+          next.templatePaths = await uploadPreparationTemplates(id, recipe, auto.map((s) => fileOf(s.name)));
+          next.templates = auto.map((s) => s.name);
+        }
+        const fine: NonNullable<RecipeSetup['fineTemplates']> = {};
+        for (const [kind, s] of [['full', full], ['internal', internal]] as const) {
+          if (!s) continue;
+          const [path] = await uploadPreparationTemplates(id, recipe, [fileOf(s.name)], kind === 'full' ? 'fine_full' : 'fine_internal');
+          fine[kind] = { name: s.name, path };
+        }
+        if (fine.full || fine.internal) next.fineTemplates = fine;
+        if (perimeter) {
+          const [path] = await uploadPreparationTemplates(id, recipe, [fileOf(perimeter.name)], 'food_perimeter');
+          next.perimeterTemplate = { name: perimeter.name, path };
+        }
+        updates[recipe] = next;
+      }
+      setLoaded((l) => {
+        const d = l[id]?.draft;
+        if (!d) return l;
+        const recipes = { ...d.recipes };
+        for (const r of Object.keys(updates) as (keyof typeof recipes)[]) {
+          const u = updates[r]!;
+          recipes[r] = { ...recipes[r], ...u, fineTemplates: u.fineTemplates ? { ...recipes[r].fineTemplates, ...u.fineTemplates } : recipes[r].fineTemplates };
+        }
+        return { ...l, [id]: { ...l[id], draft: { ...d, recipes } } };
+      });
+      const label = { CLASICO: 'Clásico', '3MM': '3 mm', ALIMENTO: 'Alimento' } as const;
+      const missing = (['CLASICO', '3MM', 'ALIMENTO'] as const).flatMap((r) => {
+        const m = missingForRecipe(r, sorted);
+        return m.length ? [`${label[r]}: falta ${m.join(', ')}.`] : [];
+      });
+      toast({
+        title: `${sorted.length} plantilla${sorted.length === 1 ? '' : 's'} cargada${sorted.length === 1 ? '' : 's'}`,
+        description: [...rejected.map((r) => `No se usó «${r.name}»: ${r.reason}.`), ...missing,
+          'Revisalas, marcá «Verifiqué…» en cada receta y tocá «Guardar y chequear».'].join(' '),
+        variant: rejected.length ? 'destructive' : undefined,
+      });
+    } catch (e) { toast({ title: 'No se pudieron subir las plantillas', description: e instanceof Error ? e.message : undefined, variant: 'destructive' }); }
+  };
+
   // Mientras se espera a Aspire, se relee la preparación para ver si el gadget sincronizó.
   const [waitingFor, setWaitingFor] = useState<string | null>(null);
   useEffect(() => {
@@ -282,13 +348,7 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
         <MachineSetupSheet open={setupOpen} onOpenChange={setSetupOpen} machine={machine} machineLabel={MACHINE_LABEL[machine]} setup={setup}
           onChange={(next) => current && setDraft(program.id, reflowMesa({ ...current.draft, ...next,
             columns: next.columns.map((c) => ({ ...c, available: current.draft.columns.find((x) => x.id === c.id)?.available ?? true })) }))}
-          onUpload={isLegacy(machine) ? undefined : async (recipe, files) => {
-            try {
-              const paths = await uploadPreparationTemplates(program.id, recipe, files);
-              const d = loaded[program.id]?.draft;
-              if (d) setDraft(program.id, { ...d, recipes: { ...d.recipes, [recipe]: { ...d.recipes[recipe], templates: files.map((f) => f.name), templatePaths: paths, verified: false } } });
-            } catch (e) { toast({ title: 'No se pudieron subir las plantillas', description: e instanceof Error ? e.message : undefined, variant: 'destructive' }); }
-          }} />
+          onUploadAll={isLegacy(machine) ? undefined : (files) => uploadAllTemplates(program.id, files)} />
       ) : null}
     </>
   );
