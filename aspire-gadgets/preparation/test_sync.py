@@ -126,6 +126,15 @@ class SyncTests(unittest.TestCase):
         result = self.module.json(self.lua.table_from({'issues': self.lua.table_from([]), 'name': 'a"\n\\á'}))
         self.assertEqual(json.loads(result), {'issues': [], 'name': 'a"\n\\á'})
 
+    def test_unidentified_vectors_are_summarised_not_listed_one_by_one(self):
+        # Un archivo con los sellos del gadget anterior: cientos de vectores sin identidad.
+        unknown = self.lua.table_from(['Vector sin identidad en VECTOR'] * 772 + ['Vector sin identidad en Corte'] * 30)
+        out = list(self.module.unidentifiedIssues(unknown).values())
+        self.assertEqual(out[:2], ['Vector sin identidad en VECTOR (772)', 'Vector sin identidad en Corte (30)'])
+        self.assertEqual(len(out), 3)
+        self.assertIn('archivo base sin sellos', out[2])
+        self.assertEqual(list(self.module.unidentifiedIssues(self.lua.table_from([])).values()), [])
+
     def test_translation_keeps_geometry_identity(self):
         self.run_lua('''
           local ctx,s,entries,shape,drill=setup()
