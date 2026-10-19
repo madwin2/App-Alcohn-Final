@@ -131,8 +131,10 @@ export function runPasses(
   }
   // Lo que ni la 0,2 separa es un problema del diseño, con o sin repaso.
   const unresolved = regionArea(intersect(union(needed.flatMap(region)), fineMiss)) >= meaningful;
+  // Sin zonas de repaso que pesen (ver REPASO_MIN_RELATIVE), lo que deja la 0,6
+  // es chico para el tamaño de la letra: tampoco se avisa. Solo avisa lo que ni la 0,2 saca.
   result.outcome = unresolved || result.candidates.some((c) => c.assessment === 'revisar') ? 'revisar_diseno'
-    : !result.repaso.zones.length ? 'revisar_principal'
+    : !result.repaso.zones.length ? 'sin_repaso'
       : result.candidates.some((c) => c.assessment === 'en_rango') ? 'revisar_rango'
         : 'repaso_sugerido';
   return result;
