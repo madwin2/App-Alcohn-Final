@@ -101,6 +101,8 @@ describe('el repaso pesa según el tamaño de la letra (caso real: 4708)', () =>
     const r = at(68.55);
     expect(r.repaso.zones).toHaveLength(0);
     expect(r.repaso.pieces.some((p) => p.selected)).toBe(false);
+    // Sin repaso porque lo que deja la 0,6 es chico para el número: tampoco pide revisar.
+    expect(r.outcome).toBe('sin_repaso');
   });
   it('el mismo diseño chico sí lo necesita', () => {
     expect(at(12).repaso.zones.length).toBeGreaterThan(0);

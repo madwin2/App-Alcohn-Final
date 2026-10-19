@@ -10,7 +10,10 @@ export async function uploadPreparationTemplates(programId: string, recipe: stri
     if (inspection.issues.length) throw new Error(`${file.name}: ${inspection.issues.join(' ')}`);
   }
   for (const file of files) {
-    const path = `${programId}/${recipe}/${purpose === 'automatic' ? '' : purpose + '/'}${crypto.randomUUID()}-${file.name}`;
+    // Storage no acepta algunos caracteres en la ruta («[» en «4 Perfilado 0.1MM [interior»):
+    // la ruta lleva un nombre seguro; el original se conserva en el documento.
+    const safe = file.name.replace(/[^A-Za-z0-9._ ()-]/g, '_');
+    const path = `${programId}/${recipe}/${purpose === 'automatic' ? '' : purpose + '/'}${crypto.randomUUID()}-${safe}`;
     const { error } = await supabase.storage.from('programas-plantillas').upload(path, file, { upsert: false });
     if (error) throw new Error(error.message);
     paths.push(path);
