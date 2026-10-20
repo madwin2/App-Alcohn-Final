@@ -2736,6 +2736,22 @@ local function verifyExecution(job, execution)
   end
 end
 
+-- Deja el archivo como base para otro programa: sin trayectorias, sin los
+-- sellos ni sus auxiliares. Conserva el resto del dibujo (soporte, reglas).
+local function cleanForProgram(ctx, programId)
+  local job = ctx.job
+  local tm = ToolpathManager(); local list = {}; local pos = tm:GetHeadPosition()
+  while pos do local path; path, pos = tm:GetNext(pos); list[#list+1] = path end
+  for _, path in ipairs(list) do tm:DeleteToolpath(path) end
+  local names = {"Planeado", "Rectangulo exterior"}
+  for name in pairs(DESIGN_LAYERS) do names[#names+1] = name end
+  for name in pairs(TRACKED_LAYERS) do names[#names+1] = name end
+  for _, name in ipairs(names) do if layer(job, name) then ctx.clearLayer(job, name) end end
+  set(job.JobParameters, "ALCOHN_MANAGED_TOOLPATHS", ""); set(job.JobParameters, "ALCOHN_TEMPLATE_FINGERPRINT", "")
+  set(job.JobParameters, "ALCOHN_PROGRAMA_V1", ""); set(job.JobParameters, "ALCOHN_PREPARATION_PROGRAM_ID", programId)
+end
+PreparationSync.cleanForProgram = cleanForProgram
+
 function PreparationSync.run(ctx)
   local prep, job = ctx.manifest.preparation,ctx.job
   local doc = prep.document
@@ -2743,7 +2759,28 @@ function PreparationSync.run(ctx)
   if prep.rules_version ~= RULES.version then error("El paquete y el gadget usan reglas diferentes. Actualiza el gadget.") end
   local priorProgram = str(job.JobParameters,"ALCOHN_PREPARATION_PROGRAM_ID")
   if priorProgram=="" then priorProgram=str(job.JobParameters,"ALCOHN_PROGRAMA_V1"):match('"programa_id"%s*:%s*"([^"]+)"') or "" end
-  if priorProgram ~= "" and priorProgram ~= doc.programId then error("El archivo pertenece a otro programa; no se mezclaron vectores") end
+  -- Una base reutilizada (de otro programa, o con sellos y trayectorias que no
+  -- armo este gadget, como los del gadget anterior): se ofrece limpiarla con copia.
+  local foreign = priorProgram ~= "" and priorProgram ~= doc.programId
+  local _, leftovers = scan(job)
+  local managed, untracked = str(job.JobParameters, "ALCOHN_MANAGED_TOOLPATHS"), 0
+  do local tm = ToolpathManager(); local p = tm:GetHeadPosition()
+    while p do local path; path, p = tm:GetNext(p); if not managed:find("|" .. objectId(path) .. "|", 1, true) then untracked = untracked + 1 end end end
+  if foreign or #leftovers > 0 or untracked > 0 then
+    local what = " se guarda una copia y se borran las trayectorias, los sellos y sus auxiliares (corte, taladro, offsets, repaso, planeado). El soporte y el resto del dibujo quedan."
+    local options = foreign and {"Limpiar y usar para este programa", "Cancelar sin tocar nada"}
+      or {"Limpiar y usar para este programa", "Seguir sin limpiar (vincular a mano)", "Cancelar sin tocar nada"}
+    local decision = choose(foreign and "Archivo de otro programa" or "Archivo con sellos anteriores",
+      (foreign and "Este archivo de Aspire ya se uso para otro programa. Para usarlo con " or "Este archivo tiene sellos o trayectorias que no armo este gadget (por ejemplo, del gadget anterior). Para usarlo con ")
+        .. ctx.manifest.programa_nombre .. what, options)
+    if decision == 1 then
+      checkpoint(ctx, "antes-limpiar")
+      cleanForProgram(ctx, doc.programId)
+      checkpoint(ctx)
+    elseif foreign or decision ~= 2 then
+      ctx.message(foreign and "Cancelado: el archivo pertenece a otro programa y no se modifico." or "Cancelado: no se modifico el archivo."); return true
+    end
+  end
   local action = choose("Preparacion visual", "Programa " .. ctx.manifest.programa_nombre .. ". Los cambios se aplican sobre los vectores existentes.", {
     "Sincronizar y recalcular", "Vincular el diseno seleccionado a un sello (archivo anterior)",
     "Preparar base: respaldar y retirar trayectorias/auxiliares anteriores, conservar dibujos" })

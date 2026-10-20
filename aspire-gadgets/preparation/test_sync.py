@@ -304,6 +304,40 @@ class FullFlowTests(unittest.TestCase):
           assert(#tm.items==3)
         ''')
 
+    def test_file_from_another_program_is_cleaned_with_backup_and_reused(self):
+        self.run_lua('''
+          sync.run(ctx); assert(state.uploads==1, state.message)
+          -- El mismo archivo, ahora como base de otro programa.
+          ctx.job.JobParameters:SetString('ALCOHN_PREPARATION_PROGRAM_ID','programa-viejo')
+          local stray=rectangle(0,0,5,5); ctx.job.LayerManager:GetLayerWithName('VECTOR'):AddObject(stray,true)
+          sync.run(ctx); assert(state.uploads==2, state.message)
+          assert(ctx.job.JobParameters:GetString('ALCOHN_PREPARATION_PROGRAM_ID','')=='program')
+          local backup=false; for path in pairs(state.files) do if path:find('antes%-limpiar') then backup=true end end
+          assert(backup, 'falta la copia antes de limpiar')
+          for _,o in ipairs(ctx.job.LayerManager:GetLayerWithName('VECTOR').items) do assert(o~=stray, 'quedo un vector del programa anterior') end
+          assert(#entries('program:s','design')==1); assert(state.imports==2)
+        ''')
+
+    def test_file_from_another_program_is_left_untouched_when_cancelled(self):
+        self.run_lua('''
+          sync.run(ctx)
+          ctx.job.JobParameters:SetString('ALCOHN_PREPARATION_PROGRAM_ID','programa-viejo')
+          state.choice=2
+          sync.run(ctx)
+          assert(state.uploads==1); assert(state.message:find('Cancelado',1,true))
+          assert(ctx.job.JobParameters:GetString('ALCOHN_PREPARATION_PROGRAM_ID','')=='programa-viejo')
+          assert(#entries('program:s','design')==1)
+        ''')
+
+    def test_leftovers_of_the_old_gadget_offer_cleaning_the_same_program_file(self):
+        self.run_lua('''
+          -- Mismo programa, armado antes con el gadget anterior: vectores sin identidad.
+          local old=rectangle(0,0,5,5); ctx.job.LayerManager:GetLayerWithName('VECTOR'):AddObject(old,true)
+          sync.run(ctx); assert(state.uploads==1, state.message)
+          for _,o in ipairs(ctx.job.LayerManager:GetLayerWithName('VECTOR').items) do assert(o~=old) end
+          assert(#entries('program:s','design')==1)
+        ''')
+
     def test_scaling_keeps_drill_diameter_and_recalculates_cut(self):
         self.run_lua('''
           sync.run(ctx)

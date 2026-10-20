@@ -56,8 +56,35 @@ const originalOf = (item: ReviewItem) => item.originalSvg ?? item.svg;
 /** Corrección automática de un ítem: null = todavía corriendo. */
 type AutoState = { report: FresaReport; fix: FresaFixResult | null } | null;
 
+/**
+ * Medida contra la que se corrige el original: la del pedido, sin el agrandado.
+ * Si se usara la agrandada, «Automático» guardaría un vector corregido para
+ * otra medida (al elegirlo se vuelve a la medida del pedido).
+ */
+function autoTarget(item: ReviewItem): FresaTarget {
+  return reviewTarget({ ...item, fabricationOverrideMm: undefined });
+}
+
 function autoKey(item: ReviewItem): string {
-  return fresaCacheKey(originalOf(item), reviewTarget(item));
+  return fresaCacheKey(originalOf(item), autoTarget(item));
+}
+
+const reviewById = (id: string) => useVectorizacionStore.getState().reviewQueue.find((r) => r.id === id) ?? null;
+
+/**
+ * El ítem tal como se va a guardar, leído del store (no de un render viejo).
+ * Si todavía no se eligió versión, queda la automática, igual que cuando la
+ * corrección termina sola.
+ */
+async function itemParaGuardar(id: string): Promise<ReviewItem | null> {
+  const item = reviewById(id);
+  if (!item || item.fresaChoice) return item;
+  const res = await autoCorregir(originalOf(item), autoTarget(item));
+  const current = reviewById(id);
+  if (res.fix && current && !current.fresaChoice && autoKey(current) === autoKey(item)) {
+    useVectorizacionStore.getState().chooseReviewSvg(id, 'auto', res.fix.svg);
+  }
+  return reviewById(id);
 }
 
 /** Botón de una versión (Original / Automático / A mano). */
@@ -261,7 +288,8 @@ function ReviewCard({
           <Button
             type="button"
             size="sm"
-            disabled={confirming || item.mode !== 'production'}
+            disabled={confirming || item.mode !== 'production' || !auto}
+            title={!auto ? 'Esperá a que termine la corrección automática' : undefined}
             onClick={() => (problemas > 0 ? setGuardOpen(true) : onConfirm())}
           >
             <Check className="mr-1 size-3.5" />
@@ -303,7 +331,7 @@ function ReviewCard({
         onOpenChange={setFresaOpen}
         title={`${item.designName} — ${item.clienteNombre}`}
         svgText={originalOf(item)}
-        target={reviewTarget(item)}
+        target={autoTarget(item)}
         downloadName={item.designName}
         initialFix={auto?.fix ?? null}
         onUseOriginal={() => onChoose('original', originalOf(item))}
@@ -371,7 +399,7 @@ export function RevisionTab() {
     let alive = true;
     for (const item of store.reviewQueue) {
       const key = autoKey(item);
-      void autoCorregir(originalOf(item), reviewTarget(item)).then((res) => {
+      void autoCorregir(originalOf(item), autoTarget(item)).then((res) => {
         if (!alive) return;
         setAutos((prev) => (prev[key] === res ? prev : { ...prev, [key]: res }));
         const current = useVectorizacionStore.getState().reviewQueue.find((r) => r.id === item.id);
@@ -401,9 +429,11 @@ export function RevisionTab() {
     return { conProblemas, analizados, errores };
   }, [store.reviewQueue, fresaReports, fresaKeys]);
 
-  const confirmOne = async (item: ReviewItem) => {
-    setConfirmingId(item.id);
+  const confirmOne = async (id: string) => {
+    setConfirmingId(id);
     try {
+      const item = await itemParaGuardar(id);
+      if (!item || item.mode !== 'production') return;
       const saved = await saveSelloVector({
         selloId: item.selloId,
         orderId: item.orderId,
@@ -444,13 +474,17 @@ export function RevisionTab() {
   const confirmItems = async (items: ReviewItem[]) => {
     for (const item of items) {
       if (item.mode !== 'production') continue;
-      if (!useVectorizacionStore.getState().reviewQueue.some((r) => r.id === item.id)) continue;
-      await confirmOne(item);
+      if (!reviewById(item.id)) continue;
+      await confirmOne(item.id);
     }
   };
 
   const confirmAll = async () => {
-    const items = store.reviewQueue.filter((i) => i.mode === 'production');
+    // Con la versión elegida de cada uno (o la automática si todavía no terminó).
+    const resolved = await Promise.all(
+      store.reviewQueue.filter((i) => i.mode === 'production').map((i) => itemParaGuardar(i.id)),
+    );
+    const items = resolved.filter((i): i is ReviewItem => Boolean(i));
     const reports = await Promise.all(items.map((i) => chequearSvg(i.svg, reviewTarget(i))));
     const withIssues = items.filter((_, k) => fresaProblemas(reports[k]) > 0);
     if (withIssues.length) {
@@ -525,7 +559,7 @@ export function RevisionTab() {
             confirming={confirmingId === item.id}
             fresa={fresaFor(item)}
             auto={autoFor(item)}
-            onConfirm={() => void confirmOne(item)}
+            onConfirm={() => void confirmOne(item.id)}
             onReject={() => {
               store.removeReview(item.id);
               store.removeLocal(item.selloId);
