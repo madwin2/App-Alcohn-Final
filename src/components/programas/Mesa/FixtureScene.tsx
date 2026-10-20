@@ -359,8 +359,12 @@ export function FixtureScene({ doc, view, selectedId, dragging, candidate, readO
   const ready = vp.w > 0 && vp.h > 0;
   const opened = useRef(false);
   const selectedRef = useRef(selectedId); selectedRef.current = selectedId;
+  // 3D y Mecanizado comparten proyección: pasar de una a otra no mueve la cámara.
+  const lastFrame = useRef({ view, machine: doc.machine });
   useEffect(() => {
     if (!ready) return;
+    const prev = lastFrame.current; lastFrame.current = { view, machine: doc.machine };
+    if (opened.current && prev.machine === doc.machine && prev.view !== view && prev.view !== '2d' && view !== '2d') return;
     const first = !opened.current; opened.current = true;
     const t = window.setTimeout(() => runRef.current(!first && selectedRef.current ? { kind: 'stamp', id: selectedRef.current } : { kind: 'work' }), first ? 40 : 950);
     return () => window.clearTimeout(t);
