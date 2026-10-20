@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, Keyboard, LayoutGrid, Lock, Magnet, Plus, Redo2, ScanSearch, SlidersHorizontal, Undo2 } from 'lucide-react';
+import { Archive, ChevronDown, Keyboard, LayoutGrid, Lock, Magnet, Plus, Redo2, ScanSearch, SlidersHorizontal, Undo2 } from 'lucide-react';
 import { FresaCheckDialog } from '@/components/fresa/FresaCheckDialog';
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { DoneReviewDialog } from '@/components/programas/DoneReview/DoneReviewDialog';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { fetchSvgText } from '@/lib/fresa/useFresaReport';
 import { type PreparationDocument, type PreparationMachine, type Recipe, type StampPlacement } from '@/lib/programas/preparation';
@@ -19,7 +19,7 @@ import { Dot, FOCUS, PILL_GHOST, PILL_PRIMARY, Panel, Segmented } from './mesaUi
 import { MesaQueue, type Misfit } from './MesaQueue';
 import { MesaInspector } from './MesaInspector';
 import { MesaSummary } from './MesaSummary';
-import { MesaActionBar, type FabricationRecord } from './MesaActionBar';
+import { MesaActionBar, type FabricatingRecord, type FabricationRecord } from './MesaActionBar';
 import { STEP_LABEL } from './MesaChecklist';
 import { ShortcutsDialog, StampContextMenu } from './MesaOverlays';
 
@@ -36,8 +36,16 @@ export interface MesaProgram {
   locked?: boolean;
   /** Va con el gadget anterior (G/XL, o una Chica que ya fue a Aspire sin preparación). */
   legacy?: boolean;
+  /** Cantidad real de sellos, para cuando el documento no está cargado todavía. */
+  stampCount?: number;
   /** Marcado como fabricado (queda en solo lectura). */
   fabricated?: FabricationRecord | null;
+  /** En la máquina: algún sello Haciendo (queda en solo lectura). */
+  fabricating?: FabricatingRecord | null;
+  /** Abierto desde el historial de terminados. */
+  fromHistory?: boolean;
+  /** Todavía no se leyó su armado (solo se carga el programa elegido). */
+  loading?: boolean;
 }
 
 export const MACHINE_LABEL: Record<PreparationMachine, string> = { C: 'Chica', G: 'Grande', XL: 'XL' };
@@ -46,6 +54,7 @@ type FineMode = NonNullable<StampPlacement['fine']>['mode'];
 type Notice = { text: string; tone: 'ok' | 'error' | 'info'; undo?: boolean };
 
 const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]');
+const countOf = (p: MesaProgram) => p.loading ? p.stampCount ?? 0 : p.doc.stamps.length;
 const isDirty = (p: MesaProgram) => JSON.stringify(p.doc) !== JSON.stringify(p.savedDoc);
 
 /**
@@ -54,7 +63,7 @@ const isDirty = (p: MesaProgram) => JSON.stringify(p.doc) !== JSON.stringify(p.s
  */
 export function MesaArmado({
   machine, onMachine, programs, programId, onProgram, onNewProgram, queue, soldSizes, stampInfo = {}, today, machinesFor,
-  legacyAspire, checking, onChange, onSave, onAspire, onFabricated, onSetup, onOpenBoard,
+  legacyAspire, checking, onChange, onSave, onAspire, onFabricated, onStart, starting = false, onSetup, onOpenBoard, onOpenHistory,
 }: {
   machine: PreparationMachine;
   onMachine: (m: PreparationMachine) => void;
@@ -78,7 +87,12 @@ export function MesaArmado({
   onSave: (programId: string) => Promise<void>;
   onAspire: (programId: string) => void;
   onFabricated: (programId: string, states: { instanceId: string; state: FabricationState }[]) => void;
+  /** Pasa todo el programa a Haciendo; devuelve si se pudo. */
+  onStart?: (programId: string) => Promise<boolean>;
+  starting?: boolean;
   onSetup: () => void;
+  /** Abre el historial de programas terminados. */
+  onOpenHistory?: () => void;
   /** Abre el tablero con todos los programas (ABC, terminados, papelera…). */
   onOpenBoard?: () => void;
 }) {
@@ -88,7 +102,7 @@ export function MesaArmado({
   const machinePrograms = programs.filter((p) => p.machine === machine);
   const program = machinePrograms.find((p) => p.id === programId) ?? null;
   const doc = program?.doc ?? null;
-  const readOnly = !program || !!program.locked || !!program.fabricated;
+  const readOnly = !program || !!program.loading || !!program.locked || !!program.fabricated || !!program.fabricating;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragging, setDragging] = useState<MesaSource | null>(null);
   const [hovered, setHovered] = useState<MesaSource | null>(null);
@@ -105,6 +119,10 @@ export function MesaArmado({
   const [waiting, setWaiting] = useState<Record<string, number>>({});
   const [fabAsk, setFabAsk] = useState(false);
   const [fabReview, setFabReview] = useState(false);
+
+  // El selector separa lo que está en curso de lo recién terminado; lo viejo vive en el historial.
+  const inProgress = machinePrograms.filter((p) => !p.fabricated);
+  const recentDone = machinePrograms.filter((p) => p.fabricated);
 
   const cam = useCallback((kind: CameraCommand['kind'], id?: string) => setCamera((c) => ({ kind, id, key: c.key + 1 })), []);
   useEffect(() => { setSelectedId(null); setFill(null); setMenu(null); cam('work'); }, [programId, machine, cam]);
@@ -296,7 +314,8 @@ export function MesaArmado({
     left: machineQueue.length - fill.added.length,
   } : null;
 
-  const help = readOnly ? 'Solo lectura: el programa está fabricado o bloqueado · se puede mirar en 2D, 3D y Mecanizado'
+  const help = program?.fabricating ? 'En la máquina: el armado no se puede cambiar · se puede mirar en 2D, 3D y Mecanizado'
+    : readOnly ? 'Solo lectura: el programa está fabricado o bloqueado · se puede mirar en 2D, 3D y Mecanizado'
     : dragging ? 'Soltá sobre una planchuela resaltada · Esc cancela'
     : fill ? 'Vista previa: los sellos punteados son los que sumaría «Llenar solo»'
       : view !== '2d' ? 'Relieve estimado · doble clic en un sello para verlo de cerca · el repaso parcial se revisa en Aspire'
@@ -304,7 +323,9 @@ export function MesaArmado({
           : 'Arrastrá sellos desde la cola · rueda o doble clic para acercar · ? atajos';
 
   const stageOf = (p: MesaProgram) => {
-    if (p.fabricated) return STEP_LABEL.fabricado;
+    if (p.fabricated) return `${STEP_LABEL.fabricado} el ${p.fabricated.at}`;
+    if (p.fabricating) return STEP_LABEL.fabricando;
+    if (p.loading) return 'En curso';
     const pr = mesaProgress(p.doc, { savedRevision: p.savedRevision, dirty: isDirty(p), syncedRevision: p.syncedRevision, fileRevision: p.fileRevision }, undefined, { legacy: p.legacy ?? legacyAspire });
     // La última etapa cumplida («Armando» mientras no hay ninguna).
     const last = (['fabricar', 'aspire', 'revisar'] as const).find((s) => pr.done[s]);
@@ -320,9 +341,9 @@ export function MesaArmado({
             <button type="button" className={cn(FOCUS, 'flex items-center gap-2 rounded-full bg-white/[0.05] px-3.5 py-1.5 text-[13px] hover:bg-white/[0.09]')} aria-label="Elegir programa">
               {program ? (
                 <>
-                  {program.locked || program.fabricated ? <Lock className="size-3.5 text-zinc-400" /> : null}
+                  {program.locked ? <Lock className="size-3.5 text-zinc-400" /> : <StageDot p={program} />}
                   <span className="font-medium">{program.name}</span>
-                  <span className="text-zinc-400">· {program.doc.stamps.length} {program.doc.stamps.length === 1 ? 'sello' : 'sellos'} · {stageOf(program)}</span>
+                  <span className="text-zinc-400">· {countOf(program)} {countOf(program) === 1 ? 'sello' : 'sellos'} · {stageOf(program)}</span>
                   {dirty && program.savedRevision !== null ? <span className="flex items-center gap-1.5 text-amber-200"><Dot tone="warning" />sin guardar</span>
                     : dirty ? <span className="text-zinc-400">· borrador</span> : null}
                 </>
@@ -330,17 +351,23 @@ export function MesaArmado({
               <ChevronDown className="size-4 text-zinc-400" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[320px]">
-            {machinePrograms.map((p) => (
-              <DropdownMenuItem key={p.id} onSelect={() => onProgram(p.id)} className={cn('flex items-center gap-2', p.id === programId && 'bg-white/[0.06]')}>
-                {p.locked || p.fabricated ? <Lock className="size-3.5 text-zinc-400" /> : <span className="size-3.5" />}
-                <span className="font-medium">{p.name}</span>
-                <span className="flex-1 text-zinc-400">{p.doc.stamps.length} {p.doc.stamps.length === 1 ? 'sello' : 'sellos'}</span>
-                <span className="text-[12px] text-zinc-400">{stageOf(p)}</span>
-              </DropdownMenuItem>
-            ))}
+          <DropdownMenuContent align="start" className="w-[360px]">
+            {([['En curso', inProgress], ['Terminados hace poco', recentDone]] as const).map(([label, list]) => list.length ? (
+              <div key={label}>
+                <DropdownMenuLabel className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</DropdownMenuLabel>
+                {list.map((p) => (
+                  <DropdownMenuItem key={p.id} onSelect={() => onProgram(p.id)} className={cn('flex items-center gap-2', p.id === programId && 'bg-white/[0.06]')}>
+                    {p.locked ? <Lock className="size-3.5 text-zinc-400" /> : <span className="flex size-3.5 items-center justify-center"><StageDot p={p} /></span>}
+                    <span className="font-medium">{p.name}</span>
+                    <span className="flex-1 text-zinc-400">{countOf(p)} {countOf(p) === 1 ? 'sello' : 'sellos'}</span>
+                    <span className="text-[12px] text-zinc-400">{stageOf(p)}</span>
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            ) : null)}
             {machinePrograms.length ? <DropdownMenuSeparator /> : null}
             <DropdownMenuItem onSelect={onNewProgram}><Plus className="mr-2 size-4" />Nuevo programa para la {MACHINE_LABEL[machine]}</DropdownMenuItem>
+            {onOpenHistory ? <DropdownMenuItem onSelect={onOpenHistory}><Archive className="mr-2 size-4" />Historial de terminados…</DropdownMenuItem> : null}
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="ml-auto flex items-center gap-1">
@@ -426,8 +453,9 @@ export function MesaArmado({
 
           <MesaActionBar progress={progress} groups={groups} checking={checking} dirty={dirty} savedRevision={program.savedRevision}
             hasStamps={doc.stamps.length > 0} readOnly={readOnly} locked={!!program.locked} legacyAspire={legacy}
-            waitingSince={waitingSince} fabricated={program.fabricated ?? null}
-            onSave={save} onAspire={toAspire} onFabricated={() => setFabAsk(true)} onPick={pick} onSetup={onSetup} />
+            waitingSince={waitingSince} fabricated={program.fabricated ?? null} fabricating={program.fabricating ?? null} starting={starting}
+            onSave={save} onAspire={toAspire} onFabricated={() => setFabAsk(true)} onPick={pick} onSetup={onSetup}
+            onStart={() => { if (onStart) void onStart(program.id).then((ok) => ok && setNotice({ text: 'Programa en la máquina: todos los sellos pasaron a Haciendo', tone: 'ok' })); }} />
         </>
       )}
 
@@ -477,4 +505,9 @@ export function MesaArmado({
         }} />
     </div>
   );
+}
+
+/** Punto de estado en el selector: verde en la máquina, blanco terminado, gris en curso. */
+function StageDot({ p }: { p: MesaProgram }) {
+  return <span aria-hidden className={cn('size-2 rounded-full', p.fabricating ? 'bg-emerald-300' : p.fabricated ? 'bg-white/70' : 'bg-white/25')} />;
 }

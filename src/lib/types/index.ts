@@ -385,6 +385,13 @@ export interface Program {
   syncPayload?: Record<string, unknown> | null;
   createdAt: string;
   lastUpdated: string;
+  /**
+   * Cuándo empezó a fabricarse (último paso de un sello a Haciendo) y cuándo
+   * terminó (último paso a Hecho/Verificar), según `estado_historial`.
+   * `updated_at` no sirve: lo tocan triggers y relecturas.
+   */
+  fabricationStartedAt?: string | null;
+  finishedAt?: string | null;
   createdBy: string;
   tags?: string[];
   settings?: Record<string, any>;

@@ -1164,6 +1164,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 64,
+    date: '2026-10-20',
+    title: 'Programas: fabricar desde la mesa e historial',
+    version: '1.82',
+    slides: [
+      {
+        heading: 'Empezar a fabricar y marcar fabricado',
+        body: 'Cuando Aspire devuelve el programa, la barra de abajo muestra «Empezar a fabricar»: tocalo al dejar la CNC corriendo. Queda en «Fabricando» y, al terminar y probar en cuero, tocás «Marcar fabricado».',
+        icon: ListTodo,
+      },
+      {
+        heading: 'Los terminados no llenan la lista',
+        body: 'El selector de programas separa «En curso» de «Terminados hace poco» (los últimos dos días). Todos los anteriores están en «Historial de terminados…», por mes, con buscador y filtro por máquina.',
+        icon: Archive,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

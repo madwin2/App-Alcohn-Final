@@ -43,3 +43,8 @@ En programas con preparación, la comprobación de auxiliares (`execution.verifi
 
 - El trigger `mark_programa_dirty_on_sello_relevant_update` marca `dirty` y devuelve `LISTO → BORRADOR` ante **cualquier** UPDATE de un sello que sigue en el programa, incluido pasarlo a `Haciendo`/`Hecho`. En la práctica el estado derivado lo tapa, pero `estado_programa` guardado y `dirty` quedan en valores que no reflejan "cambió el contenido". → [AUD-INC-008](../audits/inconsistencias.md#aud-inc-008).
 - Un sello sacado a `Sin Hacer` desde Producción sigue con `programa_id` y el programa no se entera por la vía normal.
+
+## En la mesa de armado (2026-10-20)
+
+Etapas visibles: Armado → Revisado → En Aspire → Para fabricar → **Fabricando** (algún sello `Haciendo`, botón «Empezar a fabricar») → Fabricado (botón «Marcar fabricado»). Un fabricado queda en la mesa 2 días desde el último paso a `Hecho` (`estado_historial`) y después solo en el historial. Ver [módulo](../02-modules/programas/README.md#fabricación-y-archivo-en-la-mesa-2026-10-20).
+

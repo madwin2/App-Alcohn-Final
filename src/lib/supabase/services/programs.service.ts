@@ -436,31 +436,32 @@ async function recalculateAndPersistLengths(programId: string, perdidaCorteCm: n
     .eq('id', programId);
 }
 
-export const getPrograms = async (): Promise<Program[]> => {
+/** Los filtros `.in()` viajan en la URL: se parten para no pasar su largo máximo. */
+const IN_CHUNK = 120;
+const chunks = <T,>(list: T[]) => Array.from({ length: Math.ceil(list.length / IN_CHUNK) }, (_, i) => list.slice(i * IN_CHUNK, (i + 1) * IN_CHUNK));
+
+/**
+ * Programas terminados que siguen llegando con la lista de trabajo. Los más
+ * viejos quedan en el historial (`getFinishedProgramsPage`) para que la
+ * pantalla no cargue todos los programas de la historia.
+ */
+export const FINISHED_PROGRAMS_WINDOW_DAYS = 14;
+
+/** Arma los programas con sus sellos y las fechas de inicio/fin de fabricación. */
+async function hydratePrograms(programas: ProgramaRow[]): Promise<Program[]> {
+  const validPrograms = programas.filter((p) => p.nombre && p.nombre.trim() !== '');
+  if (!validPrograms.length) return [];
   const { perdidaCorteCm } = await loadMaterialParams();
 
-  const { data: programas, error: programasError } = await supabase
-    .from('programa')
-    .select('*')
-    .not('nombre', 'is', null)
-    .neq('nombre', '')
-    .order('fecha', { ascending: false });
-
-  if (programasError) throw programasError;
-  if (!programas?.length) return [];
-
-  const validPrograms = programas.filter((p) => p.nombre && p.nombre.trim() !== '');
-  const programaIds = validPrograms.map((p) => p.id);
-
-  const { data: sellos, error: sellosError } = await supabase
-    .from('sellos')
-    .select('*')
-    .in('programa_id', programaIds);
-
-  if (sellosError) throw sellosError;
+  const sellos: SelloRow[] = [];
+  for (const ids of chunks(validPrograms.map((p) => p.id))) {
+    const { data, error } = await supabase.from('sellos').select('*').in('programa_id', ids);
+    if (error) throw error;
+    sellos.push(...(data ?? []));
+  }
 
   const sellosPorPrograma = new Map<string, SelloRow[]>();
-  sellos?.forEach((sello) => {
+  sellos.forEach((sello) => {
     if (!sello.programa_id) return;
     const lista = sellosPorPrograma.get(sello.programa_id) || [];
     lista.push(sello);
@@ -468,12 +469,53 @@ export const getPrograms = async (): Promise<Program[]> => {
   });
 
   const programs = validPrograms.map((programa) =>
-    mapProgramaToProgram(
-      programa,
-      sellosPorPrograma.get(programa.id) || [],
-      perdidaCorteCm,
-    ),
+    mapProgramaToProgram(programa, sellosPorPrograma.get(programa.id) || [], perdidaCorteCm),
   );
+
+  // Inicio y fin de fabricación desde el historial de estados (solo de los que fabricaron algo).
+  const started = new Map<string, string>(), finished = new Map<string, string>();
+  const fabIds = programs.filter((p) => p.estadoPrograma === 'EN_FABRICACION' || p.estadoPrograma === 'FINALIZADO').flatMap((p) => p.stamps.map((s) => s.id));
+  for (const ids of chunks(fabIds)) {
+    const { data, error } = await supabase
+      .from('estado_historial')
+      .select('sello_id, estado_nuevo, changed_at')
+      .eq('campo', 'estado_fabricacion')
+      .in('estado_nuevo', ['Haciendo', 'Hecho', 'Verificar'])
+      .in('sello_id', ids);
+    if (error) { console.error('[programas] no se pudo leer el historial de fabricación', error); break; }
+    for (const h of data ?? []) {
+      const target = h.estado_nuevo === 'Haciendo' ? started : finished;
+      const prev = target.get(h.sello_id as string);
+      if (!prev || prev < (h.changed_at as string)) target.set(h.sello_id as string, h.changed_at as string);
+    }
+  }
+  const latest = (p: Program, m: Map<string, string>) => p.stamps.reduce<string | null>((max, s) => {
+    const at = m.get(s.id);
+    return at && (!max || at > max) ? at : max;
+  }, null);
+  for (const p of programs) {
+    p.fabricationStartedAt = latest(p, started);
+    p.finishedAt = p.estadoPrograma === 'FINALIZADO' ? latest(p, finished) ?? p.lastUpdated : null;
+  }
+  return programs;
+}
+
+export const getPrograms = async (): Promise<Program[]> => {
+  const since = new Date(Date.now() - FINISHED_PROGRAMS_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const { data: programas, error: programasError } = await supabase
+    .from('programa')
+    .select('*')
+    .not('nombre', 'is', null)
+    .neq('nombre', '')
+    // Todo lo que no terminó + lo terminado de las últimas semanas.
+    .or(`estado_programa.is.null,estado_programa.neq.FINALIZADO,fecha.gte.${since}`)
+    .order('fecha', { ascending: false });
+
+  if (programasError) throw programasError;
+  if (!programas?.length) return [];
+
+  const programs = await hydratePrograms(programas);
+  const validPrograms = programas.filter((p) => p.nombre && p.nombre.trim() !== '');
 
   const persistTasks = programs.flatMap((program, index) => {
     const stored = ((validPrograms[index] as any).estado_programa || 'BORRADOR') as ProgramLifecycleState;
@@ -503,6 +545,41 @@ export const getPrograms = async (): Promise<Program[]> => {
 
   await Promise.allSettled(persistTasks);
   return programs;
+};
+
+export interface FinishedProgramsPage {
+  programs: Program[];
+  /** Total de terminados que cumplen el filtro (para «Cargar más»). */
+  total: number;
+}
+
+/**
+ * Historial de programas terminados, de a una página y del más nuevo al más
+ * viejo. Los programas nunca se borran: quedan para saber en qué corrida se
+ * hizo (o falló) cada sello (Q-PROG-009).
+ */
+export const getFinishedProgramsPage = async (opts: {
+  machine?: ProgramMachineType | null;
+  search?: string;
+  offset?: number;
+  limit?: number;
+} = {}): Promise<FinishedProgramsPage> => {
+  const offset = opts.offset ?? 0, limit = opts.limit ?? 30;
+  let query = supabase
+    .from('programa')
+    .select('*', { count: 'exact' })
+    .eq('estado_programa', 'FINALIZADO')
+    .not('nombre', 'is', null)
+    .neq('nombre', '');
+  if (opts.machine) query = query.eq('maquina', opts.machine);
+  const q = opts.search?.trim().replace(/[%,()]/g, ' ');
+  if (q) query = query.ilike('nombre', `%${q}%`);
+  const { data, error, count } = await query
+    .order('fecha', { ascending: false })
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw error;
+  return { programs: await hydratePrograms(data ?? []), total: count ?? 0 };
 };
 
 export const getProgramById = async (programId: string): Promise<Program | null> => {

@@ -12,6 +12,20 @@ En `/dev/mesa-programas` podés probar la nueva mesa con datos de ejemplo; Aspir
 
 No hace falta Ordenar, Fijar ni Soltar: el acomodo es automático y la separación no se modifica.
 
+### Fabricar desde la mesa
+
+La barra de abajo muestra las etapas **Armado → Revisado → En Aspire → Para fabricar → Fabricando → Fabricado** y un solo botón con lo que sigue.
+
+1. Cuando Aspire devolvió el programa (etapa **Para fabricar**), pasá las trayectorias a la CNC. Al dejarla corriendo tocá **Empezar a fabricar**: todos los sellos pasan a **Haciendo** y el armado queda en solo lectura.
+2. Mientras está **Fabricando**, la barra dice desde qué hora está en la máquina.
+3. Al terminar, cortar y **probar en cuero**, tocá **Marcar fabricado**. Te pregunta si algún sello salió mal: **No** marca todos **Hecho**; **Sí** te deja elegir **Hecho**, **Retocar** o **Rehacer** por sello.
+
+⚠️ **Empezar a fabricar** aparece recién cuando Aspire devolvió la revisión guardada y su archivo. Antes, la base de datos no deja pasar los sellos a Haciendo.
+
+### Programas terminados en la mesa
+
+El selector de programas (arriba, al lado de la máquina) separa **En curso** de **Terminados hace poco**: un programa fabricado sigue ahí **dos días** desde que se marcó el último sello como Hecho. Los anteriores no se borran: están en **Historial de terminados…** (al final del mismo selector), agrupados por mes, con buscador por nombre y filtro por máquina; **Cargar más** trae los anteriores. Tocá uno para verlo en la mesa en solo lectura.
+
 La vista **2D** oculta las trabas de fijación y muestra las ranuras redondeadas con líneas finas y tenues para destacar los sellos. En **3D/Mecanizado** siguen visibles las trabas.
 
 **3D** muestra toda la mesa en líneas y el relieve estimado de los sellos, con los fondos y pendientes de las fresas configuradas. **Mecanizado** muestra ese mismo relieve con acabado de bronce. Acercá con la rueda para ver los detalles; pasá el cursor sobre un sello para saber si muestra solo la principal o también el repaso completo. El automático necesita un chequeo vigente. El repaso parcial se revisa en Aspire: esta vista no reproduce sus trayectorias.
