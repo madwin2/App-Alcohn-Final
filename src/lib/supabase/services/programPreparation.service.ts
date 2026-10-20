@@ -1,5 +1,5 @@
 import { supabase } from '../client';
-import { isPreparationDocument, type PreparationDocument, type PreparationRecord } from '@/lib/programas/preparation';
+import { defaultColumns, isPreparationDocument, type PreparationDocument, type PreparationRecord } from '@/lib/programas/preparation';
 import { inspectNativeTemplate, isNativeTemplateFilename, type NativeTemplatePurpose } from '../../../../supabase/functions/_shared/nativeTemplate';
 
 export async function uploadPreparationTemplates(programId: string, recipe: string, files: File[], purpose: NativeTemplatePurpose = 'automatic'): Promise<string[]> {
@@ -60,14 +60,29 @@ export type MachineSetup = Pick<PreparationDocument, 'columns' | 'gapMm' | 'supp
  * copian a la carpeta de este programa porque el servidor exige ese prefijo.
  * La disponibilidad de material es de cada corrida y no se hereda.
  */
-export async function inheritMachineSetup(programId: string, machine: PreparationDocument['machine']): Promise<MachineSetup | null> {
-  const { data, error } = await supabase.from('programa_preparacion')
-    .select('programa_id, documento, programa!inner(nombre, maquina)')
-    .eq('programa.maquina', machine).neq('programa_id', programId)
-    .order('updated_at', { ascending: false }).limit(5);
+/** Última preparación guardada de una máquina (sin contar este programa). */
+async function latestPreparation(machine: PreparationDocument['machine'], exceptProgramId?: string) {
+  let query = supabase.from('programa_preparacion')
+    .select('programa_id, documento, updated_at, programa!inner(nombre, maquina)')
+    .eq('programa.maquina', machine);
+  if (exceptProgramId) query = query.neq('programa_id', exceptProgramId);
+  const { data, error } = await query.order('updated_at', { ascending: false }).limit(5);
   if (error) return null;
-  const row = (data ?? []).find((r) => isPreparationDocument(r.documento) && r.documento.machine === machine);
+  return (data ?? []).find((r) => isPreparationDocument(r.documento) && r.documento.machine === machine) ?? null;
+}
+
+/**
+ * Grande y XL usan las mismas fresas y trayectorias que la Chica (usuario,
+ * 2026-10-20): si todavía no tienen plantillas propias, se reciclan las de la
+ * Chica. El soporte nunca se recicla: es de cada máquina.
+ */
+const SHARES_CHICA_TEMPLATES: PreparationDocument['machine'][] = ['G', 'XL'];
+
+export async function inheritMachineSetup(programId: string, machine: PreparationDocument['machine']): Promise<MachineSetup | null> {
+  const own = await latestPreparation(machine, programId);
+  const row = own ?? (SHARES_CHICA_TEMPLATES.includes(machine) ? await latestPreparation('C', programId) : null);
   if (!row) return null;
+  const borrowed = !own;
   const source = row.documento as PreparationDocument;
   const from = row.programa_id as string;
   const copy = async (path: string) => {
@@ -88,13 +103,15 @@ export async function inheritMachineSetup(programId: string, machine: Preparatio
       for (const [kind, file] of Object.entries(r.fineTemplates ?? {}) as ['full' | 'internal', { name: string; path: string }][])
         fineTemplates[kind] = { name: file.name, path: await copy(file.path) };
       recipes[recipe] = {
-        templates: r.templates, verified: r.verified,
+        // Prestadas de la Chica: se confirman en esta máquina antes de usarlas.
+        templates: r.templates, verified: borrowed ? false : r.verified,
         ...(r.templatePaths ? { templatePaths: await Promise.all(r.templatePaths.map(copy)) } : {}),
         ...(r.fineTemplates ? { fineTemplates } : {}),
         ...(r.perimeterTemplate ? { perimeterTemplate: { name: r.perimeterTemplate.name, path: await copy(r.perimeterTemplate.path) } } : {}),
       };
     }
     const nombre = (row.programa as unknown as { nombre?: string } | null)?.nombre ?? 'otro programa';
+    if (borrowed) return { columns: defaultColumns(machine), gapMm: source.gapMm, supportVerified: false, recipes, fromProgramName: `${nombre} (Chica)` };
     return { columns: source.columns.map((c) => ({ ...c, available: true })), gapMm: source.gapMm,
       supportVerified: source.supportVerified, recipes, fromProgramName: nombre };
   } catch {
@@ -108,15 +125,16 @@ export async function inheritMachineSetup(programId: string, machine: Preparatio
  * `inheritMachineSetup`, que sí las copia a la carpeta del programa.
  */
 export async function peekMachineSetup(machine: PreparationDocument['machine']): Promise<MachineSetup | null> {
-  const { data, error } = await supabase.from('programa_preparacion')
-    .select('programa_id, documento, programa!inner(nombre, maquina)')
-    .eq('programa.maquina', machine)
-    .order('updated_at', { ascending: false }).limit(5);
-  if (error) return null;
-  const row = (data ?? []).find((r) => isPreparationDocument(r.documento) && r.documento.machine === machine);
+  const own = await latestPreparation(machine);
+  const row = own ?? (SHARES_CHICA_TEMPLATES.includes(machine) ? await latestPreparation('C') : null);
   if (!row) return null;
   const source = row.documento as PreparationDocument;
   const nombre = (row.programa as unknown as { nombre?: string } | null)?.nombre ?? 'otro programa';
+  if (!own) {
+    const recipes = { ...source.recipes };
+    for (const r of ['CLASICO', '3MM', 'ALIMENTO'] as const) recipes[r] = { ...recipes[r], verified: false };
+    return { columns: defaultColumns(machine), gapMm: source.gapMm, supportVerified: false, recipes, fromProgramName: `${nombre} (Chica)` };
+  }
   return { columns: source.columns.map((c) => ({ ...c, available: true })), gapMm: source.gapMm,
     supportVerified: source.supportVerified, recipes: source.recipes, fromProgramName: nombre };
 }
