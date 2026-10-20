@@ -17,7 +17,7 @@
  */
 import { FillRule } from 'clipper2-ts';
 import { bezierPoint, fitCubics, isNearlyStraight, type Cubic } from './curveFit';
-import { UM, intersect, offset as offsetRegion, toPath64, union, type Paths64 } from './geometry';
+import { UM, components, difference, intersect, offset as offsetRegion, toPath64, union, xor, type Paths64 } from './geometry';
 import { absoluteSubpaths, flattenPathData, parsePointList, type AbsSegment, type Pt } from './pathData';
 import { applyMatrix, multiply, parseSvgShapes, parseTransform, type Matrix } from './svgShapes';
 
@@ -65,6 +65,8 @@ export interface EditPiece {
   bounds: Box;
   /** Contorno de afuera aplanado (para tocar con el mouse). */
   outer: Pt[];
+  /** Agujeros aplanados: tocar adentro de uno (el centro de un aro) no agarra la pieza. */
+  holes: Pt[][];
   /** Área aproximada (unidades²): afuera menos agujeros. */
   area: number;
 }
@@ -440,18 +442,28 @@ export function computePieces(doc: EditDoc, tol: number): EditPiece[] {
   const pieces: EditPiece[] = [];
   for (const [root, ks] of groups) {
     const area = ks.reduce((acc, k) => acc + (k === root ? items[k].area : -items[k].area), 0);
-    pieces.push({ id: pieces.length, refs: ks.map((k) => items[k].ref), bounds: items[root].b, outer: items[root].poly, area: Math.max(0, area) });
+    pieces.push({
+      id: pieces.length,
+      refs: ks.map((k) => items[k].ref),
+      bounds: items[root].b,
+      outer: items[root].poly,
+      holes: ks.filter((k) => k !== root).map((k) => items[k].poly),
+      area: Math.max(0, area),
+    });
   }
   return pieces;
 }
 
-/** La pieza bajo el punto (la más chica si hay varias). */
+/**
+ * La pieza bajo el punto (la más chica si hay varias). Adentro de un agujero
+ * no cuenta: el centro de un aro es fondo (ahí se arrastra el rectángulo).
+ */
 export function pieceAt(pieces: EditPiece[], p: Pt, pad = 0): EditPiece | null {
   let best: EditPiece | null = null;
   for (const pc of pieces) {
     const b = pc.bounds;
     if (p.x < b.minX - pad || p.x > b.maxX + pad || p.y < b.minY - pad || p.y > b.maxY + pad) continue;
-    if (!pointInPolygon(p, pc.outer) && pad === 0) continue;
+    if (pad === 0 && (!pointInPolygon(p, pc.outer) || pc.holes.some((h) => pointInPolygon(p, h)))) continue;
     const a = (b.maxX - b.minX) * (b.maxY - b.minY);
     if (!best || a < (best.bounds.maxX - best.bounds.minX) * (best.bounds.maxY - best.bounds.minY)) best = pc;
   }
@@ -539,30 +551,22 @@ function pieceRegion(doc: EditDoc, piece: EditPiece, mmPerUnit: number, tolMm: n
   return region;
 }
 
-/** Contornos nuevos de una pieza con offset (null si desaparece). */
-function offsetSubs(doc: EditDoc, piece: EditPiece, deltaMm: number, mmPerUnit: number, tolMm: number): ESub[] | null {
-  const flatTol = tolMm / 3 / mmPerUnit;
-  const byRule = new Map<string, Paths64>();
-  for (const r of piece.refs) {
-    const path = doc.paths[r.path];
-    const sub = path?.subs[r.sub];
-    if (!sub) continue;
-    const list = byRule.get(path.fillRule) ?? [];
-    list.push(toPath64(flattenSub(sub, flatTol), mmPerUnit));
-    byRule.set(path.fillRule, list);
-  }
-  let region: Paths64 = [];
-  for (const [rule, paths] of byRule) {
-    region = union(region, union(paths, null, rule === 'evenodd' ? FillRule.EvenOdd : FillRule.NonZero));
-  }
-  const grown = offsetRegion(region, Math.round(deltaMm * UM));
-  if (!grown.length) return null;
+/** Una región de Clipper (µm) de vuelta a contornos con curvas (error < `tolMm`). */
+function regionSubs(region: Paths64, mmPerUnit: number, tolMm: number): ESub[] {
   const subs: ESub[] = [];
-  for (const ring of grown) {
+  for (const ring of region) {
     const pts = ring.map((q) => ({ x: q.x / (mmPerUnit * UM), y: q.y / (mmPerUnit * UM) }));
     const s = fitClosedRing(pts, tolMm / mmPerUnit);
     if (s) subs.push(s);
   }
+  return subs;
+}
+
+/** Contornos nuevos de una pieza con offset (null si desaparece). */
+function offsetSubs(doc: EditDoc, piece: EditPiece, deltaMm: number, mmPerUnit: number, tolMm: number): ESub[] | null {
+  const grown = offsetRegion(pieceRegion(doc, piece, mmPerUnit, tolMm), Math.round(deltaMm * UM));
+  if (!grown.length) return null;
+  const subs = regionSubs(grown, mmPerUnit, tolMm);
   return subs.length ? subs : null;
 }
 
@@ -630,6 +634,256 @@ export function unionPieces(doc: EditDoc, pieces: EditPiece[], mmPerUnit: number
   const refs = results.flatMap((subs, k) => subs.map((_, si) => ({ path: firstNewPath + k, sub: si })));
   next = removeRedundant(next, (tolMm * 0.2) / mmPerUnit, refs).doc;
   return { doc: next, firstNewPath, merged: toMerge.reduce((n, g) => n + g.length, 0) };
+}
+
+/** Buscatrazos (además de «Unir»): ver `booleanPieces`. */
+export type BooleanOp = 'restar' | 'intersecar' | 'excluir' | 'dividir';
+
+/** Partes de menos de esto (µm², 0,0005 mm²) son restos del cálculo, no diseño. */
+const SLIVER_UM2 = 500;
+
+/**
+ * Buscatrazos, como en Illustrator, sobre las piezas elegidas. Lo de más
+ * abajo es lo que se pinta primero (el trazado anterior en el dibujo).
+ *   - restar: a la de más abajo se le saca todo lo que tiene encima
+ *   - intersecar: queda solo lo que tienen en común todas
+ *   - excluir: se saca donde se pisan una cantidad par de veces
+ *   - dividir: cada parte que se forma al cruzarse queda como pieza aparte
+ * El resultado reemplaza a las elegidas, con curvas (error < `tolMm`).
+ * Null si no queda nada.
+ */
+export function booleanPieces(
+  doc: EditDoc,
+  pieces: EditPiece[],
+  op: BooleanOp,
+  mmPerUnit: number,
+  tolMm = 0.01,
+): { doc: EditDoc; firstNewPath: number; count: number } | null {
+  if (pieces.length < 2) return null;
+  const ordered = [...pieces].sort((a, b) => a.refs[0].path - b.refs[0].path || a.refs[0].sub - b.refs[0].sub);
+  const regions = ordered.map((p) => pieceRegion(doc, p, mmPerUnit, tolMm));
+  let parts: Paths64[];
+  if (op === 'restar') {
+    parts = [difference(regions[0], union(regions.slice(1).flat()))];
+  } else if (op === 'intersecar') {
+    parts = [regions.slice(1).reduce((acc, r) => intersect(acc, r), regions[0])];
+  } else if (op === 'excluir') {
+    parts = [regions.slice(1).reduce((acc, r) => xor(acc, r), regions[0])];
+  } else {
+    // Cada región parte a las que ya hay en lo que se pisa y lo que no.
+    let atoms: Paths64[] = [];
+    for (const r of regions) {
+      const next: Paths64[] = [];
+      for (const a of atoms) {
+        const both = intersect(a, r);
+        const only = difference(a, r);
+        if (both.length) next.push(both);
+        if (only.length) next.push(only);
+      }
+      const rest = difference(r, union(atoms.flat()));
+      if (rest.length) next.push(rest);
+      atoms = next;
+    }
+    parts = atoms;
+  }
+  // Cada parte conexa (con sus agujeros) va en su propio trazado.
+  const comps = parts.flatMap((p) => components(p)).filter((c) => c.areaUm2 >= SLIVER_UM2);
+  const results = comps.map((c) => regionSubs(c.paths, mmPerUnit, tolMm)).filter((s) => s.length);
+  if (!results.length) return null;
+  let next = removeRefs(doc, pieces.flatMap((p) => p.refs));
+  const firstNewPath = next.paths.length;
+  for (const subs of results) next.paths.push({ fillRule: 'nonzero', subs });
+  const refs = results.flatMap((subs, k) => subs.map((_, si) => ({ path: firstNewPath + k, sub: si })));
+  next = removeRedundant(next, (tolMm * 0.2) / mmPerUnit, refs).doc;
+  return { doc: next, firstNewPath, count: results.length };
+}
+
+/** Medio ancho del corte del cuchillo (mm): 4 µm en total, invisible para la fresa. */
+const KNIFE_HALF_MM = 0.002;
+
+/**
+ * Cuchillo: corta con la recta de `a` a `b` las piezas que cruza de lado a
+ * lado (cada parte queda como pieza aparte). Una pieza que la línea solo
+ * roza o en la que entra sin salir queda igual. Null si no cortó nada.
+ */
+export function knifeCut(
+  doc: EditDoc,
+  pieces: EditPiece[],
+  a: Pt,
+  b: Pt,
+  mmPerUnit: number,
+  tolMm = 0.01,
+): { doc: EditDoc; firstNewPath: number; cut: number; parts: number } | null {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (!len) return null;
+  const w = KNIFE_HALF_MM / mmPerUnit;
+  const nx = (-(b.y - a.y) / len) * w;
+  const ny = ((b.x - a.x) / len) * w;
+  const strip = [
+    toPath64(
+      [
+        { x: a.x + nx, y: a.y + ny },
+        { x: b.x + nx, y: b.y + ny },
+        { x: b.x - nx, y: b.y - ny },
+        { x: a.x - nx, y: a.y - ny },
+      ],
+      mmPerUnit,
+    ),
+  ];
+  const minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x), minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y);
+  const cutPieces: EditPiece[] = [];
+  const results: ESub[][] = [];
+  for (const pc of pieces) {
+    const B = pc.bounds;
+    if (B.maxX < minX || B.minX > maxX || B.maxY < minY || B.minY > maxY) continue;
+    const region = pieceRegion(doc, pc, mmPerUnit, tolMm);
+    const before = components(region).filter((c) => c.areaUm2 >= SLIVER_UM2).length;
+    const after = components(difference(region, strip)).filter((c) => c.areaUm2 >= SLIVER_UM2);
+    // Solo si de verdad quedó partida (más partes que antes).
+    if (after.length <= before) continue;
+    cutPieces.push(pc);
+    for (const c of after) {
+      const subs = regionSubs(c.paths, mmPerUnit, tolMm);
+      if (subs.length) results.push(subs);
+    }
+  }
+  if (!cutPieces.length) return null;
+  let next = removeRefs(doc, cutPieces.flatMap((p) => p.refs));
+  const firstNewPath = next.paths.length;
+  for (const subs of results) next.paths.push({ fillRule: 'nonzero', subs });
+  const refs = results.flatMap((subs, k) => subs.map((_, si) => ({ path: firstNewPath + k, sub: si })));
+  next = removeRedundant(next, (tolMm * 0.2) / mmPerUnit, refs).doc;
+  return { doc: next, firstNewPath, cut: cutPieces.length, parts: results.length };
+}
+
+// ---------------------------------------------------------------- tramos y figuras
+
+/** Curva de un tramo: del nodo `a` al `b` (recto si no hay manijas). */
+function segCubic(a: ENode, b: ENode): Cubic {
+  return [a.p, a.o ?? a.p, b.i ?? b.p, b.p];
+}
+
+/**
+ * El tramo más cercano al punto entre los contornos dados (a menos de
+ * `maxDist`): `seg` es el índice del nodo donde empieza y `t` dónde cae (0–1).
+ */
+export function nearestSegment(
+  doc: EditDoc,
+  refs: SubRef[],
+  p: Pt,
+  maxDist: number,
+): { ref: SubRef; seg: number; t: number; at: Pt; d: number } | null {
+  let best: { ref: SubRef; seg: number; t: number; at: Pt; d: number } | null = null;
+  for (const r of refs) {
+    const sub = doc.paths[r.path]?.subs[r.sub];
+    if (!sub) continue;
+    const n = sub.nodes;
+    const segs = sub.closed ? n.length : n.length - 1;
+    for (let s = 0; s < segs; s++) {
+      const c = segCubic(n[s], n[(s + 1) % n.length]);
+      // Descarte rápido por la caja de la curva (la curva está dentro de sus 4 puntos).
+      const xs = c.map((q) => q.x);
+      const ys = c.map((q) => q.y);
+      if (p.x < Math.min(...xs) - maxDist || p.x > Math.max(...xs) + maxDist || p.y < Math.min(...ys) - maxDist || p.y > Math.max(...ys) + maxDist) continue;
+      const STEPS = 32;
+      let bt = 0;
+      let bd = Infinity;
+      for (let k = 0; k <= STEPS; k++) {
+        const q = bezierPoint(c, k / STEPS);
+        const d = Math.hypot(q.x - p.x, q.y - p.y);
+        if (d < bd) {
+          bd = d;
+          bt = k / STEPS;
+        }
+      }
+      // Afinar alrededor del mejor.
+      let lo = Math.max(0, bt - 1 / STEPS);
+      let hi = Math.min(1, bt + 1 / STEPS);
+      for (let it = 0; it < 20; it++) {
+        const m1 = lo + (hi - lo) / 3;
+        const m2 = hi - (hi - lo) / 3;
+        const q1 = bezierPoint(c, m1);
+        const q2 = bezierPoint(c, m2);
+        if (Math.hypot(q1.x - p.x, q1.y - p.y) < Math.hypot(q2.x - p.x, q2.y - p.y)) hi = m2;
+        else lo = m1;
+      }
+      const t = (lo + hi) / 2;
+      const at = bezierPoint(c, t);
+      const d = Math.hypot(at.x - p.x, at.y - p.y);
+      if (d <= maxDist && (!best || d < best.d)) best = { ref: r, seg: s, t, at, d };
+    }
+  }
+  return best;
+}
+
+const lerp = (a: Pt, b: Pt, t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+
+/**
+ * Agrega un nodo en el tramo `seg` (del nodo `seg` al siguiente), en `t`, sin
+ * cambiar la forma: la curva se parte en dos (de Casteljau).
+ */
+export function insertNode(doc: EditDoc, ref: SubRef, seg: number, t: number): { doc: EditDoc; ref: NodeRef } | null {
+  const sub = doc.paths[ref.path]?.subs[ref.sub];
+  if (!sub || t <= 0 || t >= 1) return null;
+  const n = sub.nodes;
+  const ib = (seg + 1) % n.length;
+  if (!sub.closed && ib === 0) return null;
+  const next = cloneDoc(doc);
+  const nodes = next.paths[ref.path].subs[ref.sub].nodes;
+  const a = nodes[seg];
+  const b = nodes[ib];
+  let mid: ENode;
+  if (!a.o && !b.i) {
+    mid = { p: lerp(a.p, b.p, t) };
+  } else {
+    const [p0, p1, p2, p3] = segCubic(a, b);
+    const q0 = lerp(p0, p1, t);
+    const q1 = lerp(p1, p2, t);
+    const q2 = lerp(p2, p3, t);
+    const r0 = lerp(q0, q1, t);
+    const r1 = lerp(q1, q2, t);
+    mid = { i: r0, p: lerp(r0, r1, t), o: r1 };
+    // Sin manija de ese lado, q0 / q2 caen sobre el nodo: queda igual sin manija.
+    if (a.o) a.o = q0;
+    if (b.i) b.i = q2;
+  }
+  nodes.splice(seg + 1, 0, mid);
+  return { doc: next, ref: { ...ref, node: seg + 1 } };
+}
+
+/** Cuánto se separan las manijas para que 4 curvas den un círculo. */
+const KAPPA = 0.5522847498;
+
+/** Agrega un rectángulo o una elipse (pieza nueva, al final del dibujo). */
+export function addShape(doc: EditDoc, kind: 'rect' | 'ellipse', b: Box): { doc: EditDoc; path: number } | null {
+  const w = b.maxX - b.minX;
+  const h = b.maxY - b.minY;
+  if (!(w > 0) || !(h > 0)) return null;
+  let nodes: ENode[];
+  if (kind === 'rect') {
+    nodes = [
+      { p: { x: b.minX, y: b.minY } },
+      { p: { x: b.maxX, y: b.minY } },
+      { p: { x: b.maxX, y: b.maxY } },
+      { p: { x: b.minX, y: b.maxY } },
+    ];
+  } else {
+    const cx = (b.minX + b.maxX) / 2;
+    const cy = (b.minY + b.maxY) / 2;
+    const rx = w / 2;
+    const ry = h / 2;
+    const kx = rx * KAPPA;
+    const ky = ry * KAPPA;
+    nodes = [
+      { p: { x: cx, y: b.minY }, i: { x: cx - kx, y: b.minY }, o: { x: cx + kx, y: b.minY } },
+      { p: { x: b.maxX, y: cy }, i: { x: b.maxX, y: cy - ky }, o: { x: b.maxX, y: cy + ky } },
+      { p: { x: cx, y: b.maxY }, i: { x: cx + kx, y: b.maxY }, o: { x: cx - kx, y: b.maxY } },
+      { p: { x: b.minX, y: cy }, i: { x: b.minX, y: cy + ky }, o: { x: b.minX, y: cy - ky } },
+    ];
+  }
+  const next = cloneDoc(doc);
+  next.paths.push({ fillRule: 'nonzero', subs: [{ closed: true, nodes }] });
+  return { doc: next, path: next.paths.length - 1 };
 }
 
 /** Offset de una sola pieza (ver `offsetPieces`). */

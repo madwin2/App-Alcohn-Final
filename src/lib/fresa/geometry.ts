@@ -62,6 +62,13 @@ export function intersect(a: Paths64, b: Paths64): Paths64 {
   return booleanOp(ClipType.Intersection, a, b, FillRule.NonZero);
 }
 
+/** Lo que está en una sola de las dos regiones (se saca donde se pisan). */
+export function xor(a: Paths64, b: Paths64): Paths64 {
+  if (!a.length) return b;
+  if (!b.length) return a;
+  return booleanOp(ClipType.Xor, a, b, FillRule.NonZero);
+}
+
 /** Offset de una región (delta > 0 agranda, < 0 achica). Juntas redondas: es una fresa. */
 export function offset(paths: Paths64, deltaUm: number): Paths64 {
   if (!paths.length) return [];
