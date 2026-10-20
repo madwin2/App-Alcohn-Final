@@ -20,8 +20,12 @@ import { MachineSetupSheet, type MachineSetup } from './MachineSetupSheet';
 import { Panel } from './mesaUi';
 
 const MACHINES: PreparationMachine[] = ['C', 'G', 'XL'];
-/** Solo la Chica tiene calificado el gadget 3.2 con preparación (ADR-027). */
-const isLegacy = (m: PreparationMachine) => m !== 'C';
+/**
+ * Las tres máquinas usan el gadget 3.2 con preparación (usuario, 2026-10-20:
+ * «dejemos todas activas para probar todas»). Un programa que ya fue a Aspire
+ * con el gadget anterior sigue en ese flujo (`wentLegacy`).
+ */
+const isLegacy = (_m: PreparationMachine) => false;
 const DONE_STATES = new Set<FabricationState>(['HECHO', 'VERIFICAR', 'RETOCAR', 'REHACER']);
 /** Un fabricado sigue a mano en la mesa un par de días; después queda en «Todos». */
 const FABRICATED_VISIBLE_DAYS = 2;

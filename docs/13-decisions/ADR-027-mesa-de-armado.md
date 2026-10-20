@@ -10,6 +10,7 @@ Armar un programa pasaba por tres capas: el tablero de bolsillos (soltar sellos)
 
 - **La mesa reemplaza al tablero.** La página de Programas pasa a ser una mesa por máquina (pestañas Chica / Grande / XL) con: la cola de sellos para programar a la izquierda, el soporte real a escala en el centro y el sello elegido más los controles a la derecha. Arrastrar un sello a una planchuela lo suma al programa **y** lo ubica.
 - **G y XL usan la misma mesa** para armar y controlar, pero siguen llevándose a Aspire con el ZIP y el gadget anterior hasta calificarlas con el 3.2.
+- **Actualización (2026-10-20, pedido del usuario: «dejemos todas activas para probar todas»):** G y XL pasan al gadget 3.2 con preparación, como la Chica. Usan las mismas fresas y trayectorias: si no tienen plantillas propias, toman las de la última preparación de la Chica (marcadas sin verificar en esa máquina). El soporte es propio de cada una (ver Q-PROG-019). Los programas que ya fueron a Aspire con el gadget anterior siguen en ese flujo.
 - **Se prioriza el escritorio** (Fede, en la PC del taller). En pantallas chicas la mesa se apila; en el celular es para consultar.
 - **Primero un prototipo navegable**, después la conexión a los datos reales.
 
