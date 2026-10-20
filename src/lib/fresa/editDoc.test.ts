@@ -17,6 +17,12 @@ import {
   serializeEditDoc,
   simplifyDoc,
   translateRefs,
+  addShape,
+  booleanPieces,
+  insertNode,
+  knifeCut,
+  nearestSegment,
+  pieceAt,
   type EditDoc,
 } from './editDoc';
 import { buildBlackRegion } from './analyze';
@@ -266,5 +272,98 @@ describe('varios nodos elegidos', () => {
     const next = deleteNodes(doc, [{ path: 0, sub: 0, node: 1 }, { path: 1, sub: 0, node: 0 }, { path: 1, sub: 0, node: 1 }]);
     expect(next.paths).toHaveLength(1);
     expect(next.paths[0].subs[0].nodes.map((n) => n.p)).toEqual([{ x: 1, y: 1 }, { x: 5, y: 5 }, { x: 1, y: 5 }]);
+  });
+});
+
+describe('herramientas de la barra', () => {
+  const build = (body: string) => {
+    const r = buildEditDoc(svg(body));
+    if (!r.ok) throw new Error(r.error);
+    return r.doc;
+  };
+
+  it('adentro del agujero de un aro no se agarra el aro', () => {
+    const d = build('<path d="M1 1h8v8h-8z M3 3h4v4h-4z" fill-rule="evenodd"/>');
+    const pieces = computePieces(d, 0.01);
+    expect(pieceAt(pieces, { x: 2, y: 5 })).not.toBeNull();
+    expect(pieceAt(pieces, { x: 5, y: 5 })).toBeNull();
+  });
+
+  const twoSquares = () => build('<path d="M1 1h4v4h-4z"/><path d="M3 3h4v4h-4z"/>');
+  const area = (d: EditDoc) => areaOf(serializeEditDoc(d));
+
+  it('restar: a la de abajo se le saca la de arriba', () => {
+    const d = twoSquares();
+    const r = booleanPieces(d, computePieces(d, 0.01), 'restar', 1)!;
+    expect(area(r.doc)).toBeCloseTo(16 - 4, 2);
+  });
+
+  it('intersecar y excluir', () => {
+    const d = twoSquares();
+    expect(area(booleanPieces(d, computePieces(d, 0.01), 'intersecar', 1)!.doc)).toBeCloseTo(4, 2);
+    expect(area(booleanPieces(d, computePieces(d, 0.01), 'excluir', 1)!.doc)).toBeCloseTo(32 - 8, 2);
+  });
+
+  it('dividir deja cada parte como pieza aparte', () => {
+    const d = twoSquares();
+    const r = booleanPieces(d, computePieces(d, 0.01), 'dividir', 1)!;
+    expect(r.count).toBe(3);
+    expect(computePieces(r.doc, 0.01)).toHaveLength(3);
+  });
+
+  it('intersecar dos que no se tocan no deja nada', () => {
+    const d = build('<path d="M1 1h2v2h-2z"/><path d="M10 1h2v2h-2z"/>');
+    expect(booleanPieces(d, computePieces(d, 0.01), 'intersecar', 1)).toBeNull();
+  });
+
+  it('agregar un nodo en una curva no cambia la forma', () => {
+    const d = build('<circle cx="5" cy="5" r="3"/>');
+    const before = area(d);
+    const hit = nearestSegment(d, [{ path: 0, sub: 0 }], { x: 8.2, y: 5.5 }, 1)!;
+    expect(hit).not.toBeNull();
+    const r = insertNode(d, hit.ref, hit.seg, hit.t)!;
+    expect(countNodes(r.doc)).toBe(countNodes(d) + 1);
+    // Partir la curva es exacto; la diferencia es del aplanado al medir el área.
+    expect(area(r.doc)).toBeCloseTo(before, 2);
+    const n = r.doc.paths[0].subs[0].nodes[r.ref.node].p;
+    expect(Math.hypot(n.x - 5, n.y - 5)).toBeCloseTo(3, 2);
+  });
+
+  it('agregar un nodo en una recta lo pone sobre la recta', () => {
+    const d = build('<path d="M1 1h4v4h-4z"/>');
+    const hit = nearestSegment(d, [{ path: 0, sub: 0 }], { x: 3, y: 0.8 }, 1)!;
+    const r = insertNode(d, hit.ref, hit.seg, hit.t)!;
+    expect(r.doc.paths[0].subs[0].nodes[r.ref.node].p.y).toBeCloseTo(1, 6);
+    expect(area(r.doc)).toBeCloseTo(16, 4);
+  });
+
+  it('el cuchillo parte en dos lo que cruza de lado a lado', () => {
+    const d = build('<path d="M1 1h4v4h-4z"/><path d="M8 1h4v4h-4z"/>');
+    const r = knifeCut(d, computePieces(d, 0.01), { x: 3, y: 0 }, { x: 3, y: 6 }, 1)!;
+    expect(r.cut).toBe(1);
+    expect(r.parts).toBe(2);
+    expect(computePieces(r.doc, 0.01)).toHaveLength(3);
+    // Se pierden 4 µm de ancho: nada para la fresa.
+    expect(area(r.doc)).toBeCloseTo(32, 1);
+  });
+
+  it('el cuchillo no corta si entra sin salir', () => {
+    const d = build('<path d="M1 1h4v4h-4z"/>');
+    expect(knifeCut(d, computePieces(d, 0.01), { x: 3, y: 0 }, { x: 3, y: 3 }, 1)).toBeNull();
+  });
+
+  it('el cuchillo parte un aro en dos', () => {
+    const d = build('<path d="M1 1h8v8h-8z M3 3h4v4h-4z" fill-rule="evenodd"/>');
+    const r = knifeCut(d, computePieces(d, 0.01), { x: 5, y: 0 }, { x: 5, y: 10 }, 1)!;
+    expect(r.parts).toBe(2);
+  });
+
+  it('rectángulo y elipse nuevos', () => {
+    const d = build('<path d="M1 1h1v1h-1z"/>');
+    const rect = addShape(d, 'rect', { minX: 3, minY: 3, maxX: 7, maxY: 5 })!;
+    expect(area(rect.doc)).toBeCloseTo(1 + 8, 3);
+    const ell = addShape(d, 'ellipse', { minX: 3, minY: 3, maxX: 7, maxY: 7 })!;
+    expect(area(ell.doc)).toBeCloseTo(1 + Math.PI * 4, 1);
+    expect(computePieces(ell.doc, 0.01)).toHaveLength(2);
   });
 });
