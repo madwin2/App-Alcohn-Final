@@ -201,7 +201,8 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
   updateReviewSvg: (id, svg, fabricationOverrideMm) => {
     set({
       reviewQueue: get().reviewQueue.map((item) =>
-        item.id === id ? { ...item, svg, fabricationOverrideMm, originalSvg: undefined, fresaChoice: undefined } : item,
+        // Queda elegido tal cual: la corrección automática no lo reemplaza sola.
+        item.id === id ? { ...item, svg, fabricationOverrideMm, originalSvg: svg, fresaChoice: 'original' } : item,
       ),
     });
     schedulePersistReviewQueue(() => get().reviewQueue);

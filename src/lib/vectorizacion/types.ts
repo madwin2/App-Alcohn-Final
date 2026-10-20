@@ -129,6 +129,7 @@ export interface ReviewItem {
   /**
    * Vector como salió de la vectorización (o el que se cargó con «Cambiar»).
    * `svg` es el que se va a guardar. Falta mientras no se eligió otra versión.
+   * Lo cargado con «Cambiar» queda elegido tal cual (`fresaChoice: 'original'`).
    */
   originalSvg?: string;
   /** Qué versión es `svg`: la original, la corrección automática o una edición a mano. */
