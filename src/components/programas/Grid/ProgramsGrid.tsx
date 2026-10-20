@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -30,6 +30,7 @@ import {
   type StampDragData,
 } from './ProgramsSidePanel';
 import { FinishedProgramsBrowse } from './FinishedProgramsBrowse';
+import { getFinishedProgramsPage } from '@/lib/supabase/services/programs.service';
 import { Program, FabricationState, ProgramMachineType, ProgramStamp } from '@/lib/types/index';
 import { useProgramsStore } from '@/lib/state/programs.store';
 import { RemoveStampChoice, RemoveStampDialog } from '../RemoveStamp/RemoveStampDialog';
@@ -147,6 +148,16 @@ export function ProgramsGrid({
   const [creating, setCreating] = useState(false);
   const [poolKey, setPoolKey] = useState(0);
   const [showFinished, setShowFinished] = useState(false);
+  // La lista de trabajo solo trae lo terminado hace poco: el fichero pide el historial al abrirse.
+  const [finishedHistory, setFinishedHistory] = useState<Program[] | null>(null);
+  useEffect(() => {
+    if (!showFinished) return;
+    let alive = true;
+    getFinishedProgramsPage({ limit: 200 })
+      .then(({ programs: list }) => { if (alive) setFinishedHistory(list); })
+      .catch((e) => toast({ title: 'No se pudo cargar el historial', description: e instanceof Error ? e.message : undefined, variant: 'destructive' }));
+    return () => { alive = false; };
+  }, [showFinished]);
   const [activeStamp, setActiveStamp] = useState<ProgramStamp | null>(null);
   const boardWrapRef = useRef<HTMLDivElement>(null);
   const returningFromFinishedRef = useRef(false);
@@ -513,7 +524,7 @@ export function ProgramsGrid({
   if (showFinished) {
     return (
       <FinishedProgramsBrowse
-        programs={finishedPrograms}
+        programs={finishedHistory ?? finishedPrograms}
         cardProps={cardProps}
         onBack={() => {
           returningFromFinishedRef.current = true;

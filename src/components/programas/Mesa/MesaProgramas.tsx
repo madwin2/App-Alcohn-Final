@@ -16,6 +16,7 @@ import type { usePrograms } from '@/lib/hooks/usePrograms';
 import type { FabricationState, Program, ProgramStamp } from '@/lib/types/index';
 import { todayArgentinaDateKey } from '@/lib/utils/argentinaDate';
 import { MACHINE_LABEL, MesaArmado, type MesaProgram } from './MesaArmado';
+import { MesaHistory } from './MesaHistory';
 import { MachineSetupSheet, type MachineSetup } from './MachineSetupSheet';
 import { Panel } from './mesaUi';
 
@@ -27,7 +28,7 @@ const MACHINES: PreparationMachine[] = ['C', 'G', 'XL'];
  */
 const isLegacy = (_m: PreparationMachine) => false;
 const DONE_STATES = new Set<FabricationState>(['HECHO', 'VERIFICAR', 'RETOCAR', 'REHACER']);
-/** Un fabricado sigue a mano en la mesa un par de días; después queda en «Todos». */
+/** Un fabricado sigue a mano en la mesa un par de días; después queda en el historial. */
 const FABRICATED_VISIBLE_DAYS = 2;
 
 type Programs = ReturnType<typeof usePrograms>;
@@ -47,6 +48,10 @@ interface Loaded {
  */
 const wentLegacy = (p: Program, record: PreparationRecord | null) => !record && !!(p.syncAt || p.archivoAspireUrl || p.archivoZipUrl);
 const isFabricated = (p: Program) => p.stamps.length > 0 && p.stamps.every((s) => DONE_STATES.has(s.fabricationState ?? 'SIN_HACER'));
+/** En la máquina: algún sello en Haciendo y todavía no terminó. */
+const isFabricating = (p: Program) => !isFabricated(p) && p.stamps.some((s) => s.fabricationState === 'HACIENDO');
+/** Cuándo terminó: el último sello que pasó a Hecho (no `updated_at`, que lo tocan triggers y relecturas). */
+const finishedAt = (p: Program) => p.finishedAt ?? p.lastUpdated;
 
 const withSetup = (doc: PreparationDocument, setup: StoredSetup | null): PreparationDocument =>
   setup ? reflowMesa({ ...doc, columns: setup.columns, gapMm: setup.gapMm, supportVerified: setup.supportVerified, recipes: setup.recipes }) : doc;
@@ -70,15 +75,23 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
   const [checking, setChecking] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [eligible, setEligible] = useState<Record<PreparationMachine, ProgramStamp[]> | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  /** Programas viejos abiertos desde el historial (no vienen con la lista de trabajo). */
+  const [fromHistory, setFromHistory] = useState<Program[]>([]);
+  const [starting, setStarting] = useState<string | null>(null);
   const setups = useRef<Partial<Record<PreparationMachine, Promise<StoredSetup | null>>>>({});
   const pending = useRef<Pending>({ adding: new Set(), removing: new Set() });
   const setupFor = (m: PreparationMachine) => (setups.current[m] ??= peekMachineSetup(m).catch(() => null));
 
-  // Programas que van en la mesa: C/G/XL, sin los fabricados viejos.
-  const mesaPrograms = useMemo(() => programs
-    .filter((p): p is Program & { machine: PreparationMachine } => (MACHINES as string[]).includes(p.machine))
-    .filter((p) => !isFabricated(p) || differenceInCalendarDays(today, parseISO(p.lastUpdated)) <= FABRICATED_VISIBLE_DAYS)
-    .sort((a, b) => (b.productionDate ?? '').localeCompare(a.productionDate ?? '') || b.createdAt.localeCompare(a.createdAt)), [programs, today]);
+  // Programas que van en la mesa: C/G/XL en curso, los fabricados de los últimos días y los abiertos desde el historial.
+  const mesaPrograms = useMemo(() => {
+    const ids = new Set(programs.map((p) => p.id));
+    const opened = new Set(fromHistory.map((p) => p.id));
+    return [...programs, ...fromHistory.filter((p) => !ids.has(p.id))]
+      .filter((p): p is Program & { machine: PreparationMachine } => (MACHINES as string[]).includes(p.machine))
+      .filter((p) => opened.has(p.id) || !isFabricated(p) || differenceInCalendarDays(today, parseISO(finishedAt(p))) <= FABRICATED_VISIBLE_DAYS)
+      .sort((a, b) => (b.productionDate ?? '').localeCompare(a.productionDate ?? '') || b.createdAt.localeCompare(a.createdAt));
+  }, [programs, fromHistory, today]);
   const programId = selected[machine]
     ?? mesaPrograms.find((p) => p.machine === machine && !isFabricated(p) && !p.bloqueado)?.id
     ?? mesaPrograms.find((p) => p.machine === machine)?.id ?? null;
@@ -144,25 +157,28 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
 
   const mesaList: MesaProgram[] = useMemo(() => mesaPrograms.flatMap((p): MesaProgram[] => {
     const l = loaded[p.id];
-    if (!l) return [{ id: p.id, name: p.name, machine: p.machine, doc: emptyDocument(p.id, p.machine), savedRevision: null, savedDoc: null, syncedRevision: null, fileRevision: null, locked: true }];
     const fabricated = isFabricated(p) ? {
-      at: format(parseISO(p.lastUpdated), 'd MMM', { locale: es }),
+      at: format(parseISO(finishedAt(p)), 'd MMM', { locale: es }),
       retocar: p.stamps.filter((s) => s.fabricationState === 'RETOCAR').length,
       rehacer: p.stamps.filter((s) => s.fabricationState === 'REHACER').length,
     } : null;
-    const locked = p.bloqueado || p.estadoPrograma === 'EN_FABRICACION';
+    const fabricating = isFabricating(p) ? { since: p.fabricationStartedAt ? format(parseISO(p.fabricationStartedAt), "HH:mm 'del' d MMM", { locale: es }) : null } : null;
+    const base = { id: p.id, name: p.name, machine: p.machine, stampCount: p.stamps.length, fabricated, fabricating, fromHistory: fromHistory.some((x) => x.id === p.id) };
+    // Sin cargar todavía (solo se carga el elegido): alcanza para la lista de programas.
+    if (!l) return [{ ...base, doc: emptyDocument(p.id, p.machine), savedRevision: null, savedDoc: null, syncedRevision: null, fileRevision: null, locked: p.bloqueado, loading: true }];
+    const locked = p.bloqueado;
     if (l.legacy || wentLegacy(p, l.record)) {
       // G/XL: no hay revisiones; Aspire queda hecho cuando el gadget sincronizó y no hubo cambios después.
       const synced = !!p.syncAt && !p.dirty;
-      return [{ id: p.id, name: p.name, machine: p.machine, doc: l.draft, savedRevision: 1, savedDoc: l.draft,
-        syncedRevision: synced ? 1 : null, fileRevision: synced && p.archivoAspireUrl ? 1 : null, locked, fabricated, legacy: true }];
+      return [{ ...base, doc: l.draft, savedRevision: 1, savedDoc: l.draft,
+        syncedRevision: synced ? 1 : null, fileRevision: synced && p.archivoAspireUrl ? 1 : null, locked, legacy: true }];
     }
     const r = l.record;
     // El archivo vale para la revisión si se subió después de guardarla y Aspire la sincronizó.
     const filed = !!r && r.syncedRevision === r.revision && !!p.archivoAspireSubidoAt && !!r.updatedAt && p.archivoAspireSubidoAt >= r.updatedAt;
-    return [{ id: p.id, name: p.name, machine: p.machine, doc: l.draft, savedRevision: r?.revision ?? null, savedDoc: r?.document ?? null,
-      syncedRevision: r?.syncedRevision ?? null, fileRevision: filed ? r!.revision : null, locked, fabricated, legacy: false }];
-  }), [mesaPrograms, loaded]);
+    return [{ ...base, doc: l.draft, savedRevision: r?.revision ?? null, savedDoc: r?.document ?? null,
+      syncedRevision: r?.syncedRevision ?? null, fileRevision: filed ? r!.revision : null, locked, legacy: false }];
+  }), [mesaPrograms, loaded, fromHistory]);
 
   const setDraft = (id: string, draft: PreparationDocument) => setLoaded((l) => l[id] ? { ...l, [id]: { ...l[id], draft } } : l);
 
@@ -301,6 +317,27 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
     } catch (e) { toast({ title: 'No se pudo armar el paquete', description: e instanceof Error ? e.message : undefined, variant: 'destructive' }); }
   };
 
+  /** «Empezar a fabricar»: la máquina quedó corriendo, todos los sellos a Haciendo. */
+  const onStart = async (id: string) => {
+    setStarting(id);
+    try {
+      await api.setFabricationStateForProgram(id, 'HACIENDO');
+      return true;
+    } catch (e) {
+      toast({ title: 'No se pudo empezar a fabricar', description: e instanceof Error ? e.message : undefined, variant: 'destructive' });
+      return false;
+    } finally { setStarting(null); }
+  };
+
+  const openFromHistory = (p: Program) => {
+    if ((MACHINES as string[]).includes(p.machine)) {
+      setFromHistory((list) => list.some((x) => x.id === p.id) ? list : [...list, p]);
+      setMachine(p.machine as PreparationMachine);
+      setSelected((s) => ({ ...s, [p.machine]: p.id }));
+    }
+    setHistoryOpen(false);
+  };
+
   const onFabricated = async (id: string, states: { instanceId: string; state: FabricationState }[]) => {
     const doc = loaded[id]?.draft;
     if (!doc) return;
@@ -345,9 +382,12 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
         onSave={onSave}
         onAspire={(id) => void onAspire(id)}
         onFabricated={(id, states) => void onFabricated(id, states)}
+        onStart={onStart} starting={!!program && starting === program.id}
+        onOpenHistory={() => setHistoryOpen(true)}
         onSetup={() => setSetupOpen(true)}
         onOpenBoard={onOpenBoard}
       />
+      <MesaHistory open={historyOpen} onOpenChange={setHistoryOpen} machine={machine} onOpenProgram={openFromHistory} />
       {program && setup ? (
         <MachineSetupSheet open={setupOpen} onOpenChange={setSetupOpen} machine={machine} machineLabel={MACHINE_LABEL[machine]} setup={setup}
           onChange={(next) => current && setDraft(program.id, reflowMesa({ ...current.draft, ...next,

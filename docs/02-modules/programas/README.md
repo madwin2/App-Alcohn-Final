@@ -182,3 +182,14 @@ La [revisión de código](../../audits/programas-automatizacion-2026-10-15.md) p
 ✅ En el prototipo, **3D** muestra fijación, planchuelas y relieve en líneas; **Mecanizado** usa la misma superficie con acabado de bronce. `mesaRelief`/`mesaReliefRender` estiman pendientes y fondos con los perfiles configurados de principal y repaso completo. El automático requiere chequeo vigente; el repaso parcial no se inventa. La vista indica «Relieve estimado» y cada sello detalla qué pasadas representa. No sustituye la revisión de trayectorias en Aspire ni modifica datos o estados de producción. Ver [ADR-027](../../13-decisions/ADR-027-mesa-de-armado.md).
 
 ✅ En esa mesa, el imantado es obligatorio: centrado en la planchuela y **8 mm exactos entre diseños**, conservando el inicio del soporte y los cortes actuales. Agrandar/achicar, corregir medidas desde Fresa, insertar, quitar o cambiar de planchuela reacomoda la fila. Arrastrar elige el orden; Subir/Bajar intercambia vecinos y Al final coloca debajo del último sello. Ya no hay Fijar/Soltar ni Ordenar manual. Una operación que exceda ancho/largo o vaya a una planchuela sin material se rechaza con aviso y conserva el armado. Datos en memoria, Aspire simulado y sin escrituras de negocio; el editor previo conserva su comportamiento. Regla confirmada en Q-PROG-023; implementación `mesa.ts`, `MesaArmado`, `MesaInspector` y `FixtureScene`.
+
+## Fabricación y archivo en la mesa (2026-10-20)
+
+✅ La mesa agrega la etapa **Fabricando** entre «Para fabricar» y «Fabricado». En «Para fabricar» la barra ofrece **Empezar a fabricar** (`setFabricationStateForProgram(id, 'HACIENDO')`; el trigger `validar_inicio_preparacion_programa` sigue siendo el control real). Con algún sello `Haciendo` el programa queda en solo lectura y la barra ofrece **Marcar fabricado** (pregunta por retocar/rehacer). Antes, `EN_FABRICACION` se mostraba como «bloqueado» sin ninguna acción.
+
+✅ Carga acotada: `getPrograms()` trae los programas no finalizados y los `FINALIZADO` con `fecha` de los últimos `FINISHED_PROGRAMS_WINDOW_DAYS` (14). El resto se pide de a páginas con `getFinishedProgramsPage` (historial de la mesa y fichero «Terminados» del tablero, hasta 200). Los `.in()` se parten en tandas de 120 ids para no exceder el largo de la URL.
+
+✅ Fechas reales: `Program.fabricationStartedAt` / `finishedAt` salen de `estado_historial` (último paso a `Haciendo` / a `Hecho`·`Verificar`). La mesa muestra un fabricado durante 2 días desde `finishedAt` (antes usaba `updated_at`, que lo tocan triggers y la persistencia del estado derivado, y hacía reaparecer programas de septiembre). Los programas nunca se borran (trazabilidad, Q-PROG-009).
+
+UI: `MesaActionBar` (acciones), `MesaChecklist` (`MesaSteps`, 6 etapas), `MesaArmado` (selector «En curso» / «Terminados hace poco» / «Historial de terminados…»), `MesaHistory` (historial por mes, buscador, filtro por máquina, «Cargar más»).
+

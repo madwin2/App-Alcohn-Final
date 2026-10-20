@@ -3,13 +3,16 @@ import type { CheckGroup, MesaProgress, MesaStep } from '@/lib/programas/mesa';
 import { cn } from '@/lib/utils/cn';
 import { Dot, FOCUS } from './mesaUi';
 
-export type MesaStage = MesaStep | 'fabricado';
-export const STEP_LABEL: Record<MesaStage, string> = { armado: 'Armado', revisar: 'Revisado', aspire: 'En Aspire', fabricar: 'Para fabricar', fabricado: 'Fabricado' };
-const STEPS: MesaStage[] = ['armado', 'revisar', 'aspire', 'fabricar', 'fabricado'];
+export type MesaStage = MesaStep | 'fabricando' | 'fabricado';
+export const STEP_LABEL: Record<MesaStage, string> = { armado: 'Armado', revisar: 'Revisado', aspire: 'En Aspire', fabricar: 'Para fabricar', fabricando: 'Fabricando', fabricado: 'Fabricado' };
+const STEPS: MesaStage[] = ['armado', 'revisar', 'aspire', 'fabricar', 'fabricando', 'fabricado'];
 
-/** Etapas del programa: cinco puntos unidos por una línea. */
-export function MesaSteps({ progress, fabricated }: { progress: MesaProgress; fabricated: boolean }) {
-  const done = (s: MesaStage) => s === 'fabricado' ? fabricated : fabricated || progress.done[s];
+/** Etapas del programa: seis puntos unidos por una línea. */
+export function MesaSteps({ progress, fabricating, fabricated }: { progress: MesaProgress; fabricating: boolean; fabricated: boolean }) {
+  // En la máquina o terminado: lo anterior ya pasó, aunque el armado se haya tocado después.
+  const done = (s: MesaStage) => s === 'fabricado' ? fabricated
+    : s === 'fabricando' ? fabricated
+      : fabricated || fabricating || progress.done[s];
   const current = fabricated ? null : STEPS.find((s) => !done(s)) ?? null;
   return (
     <ol className="flex items-center" aria-label="Etapas del programa">
