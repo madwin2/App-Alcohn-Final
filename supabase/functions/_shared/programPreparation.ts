@@ -54,7 +54,8 @@ export function defaultColumns(machine: PreparationMachine): SupportColumn[] {
     : machine === 'G' ? [[38, 36.5, 50.65], [12, 11.5, 94.4]] : [[63, 63, 31.5]];
   return cols.map(([nominalMm, usableMm, centerX]) => ({
     id: `p${nominalMm}`, nominalMm, usableMm, centerX, topY: machine === 'C' ? -8.958 : machine === 'G' ? -9.788 : -1,
-    bottomY: machine === 'C' ? -400 : -250, toolEnvelopeMm: nominalMm + 14, available: true,
+    // G: 250 mm útiles desde donde empieza el primer sello (usuario, 2026-10-20).
+    bottomY: machine === 'C' ? -400 : machine === 'G' ? -9.788 - 250 : -250, toolEnvelopeMm: nominalMm + 14, available: true,
   }));
 }
 
