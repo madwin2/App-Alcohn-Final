@@ -20,6 +20,7 @@ import {
   type FresaReport,
   type FresaTarget,
 } from '@/lib/fresa/chequeoFresa';
+import { machiningRecipe } from '@/lib/fresa/config';
 import { resumenOperaciones } from '@/lib/fresa/textos';
 
 /** La medida con la que se va a guardar: la misma lógica que "Confirmar". */
@@ -69,16 +70,22 @@ function autoKey(item: ReviewItem): string {
   return fresaCacheKey(originalOf(item), autoTarget(item));
 }
 
+/**
+ * Sellos de 3 mm: la corrección automática se calcula y se puede elegir, pero
+ * nunca queda elegida sola (Q-VEC-016, 2026-10-21).
+ */
+const sinAutoSola = (item: ReviewItem) => machiningRecipe(item.stampType, item.alimento) === '3MM';
+
 const reviewById = (id: string) => useVectorizacionStore.getState().reviewQueue.find((r) => r.id === id) ?? null;
 
 /**
  * El ítem tal como se va a guardar, leído del store (no de un render viejo).
  * Si todavía no se eligió versión, queda la automática, igual que cuando la
- * corrección termina sola.
+ * corrección termina sola (salvo en los de 3 mm).
  */
 async function itemParaGuardar(id: string): Promise<ReviewItem | null> {
   const item = reviewById(id);
-  if (!item || item.fresaChoice) return item;
+  if (!item || item.fresaChoice || sinAutoSola(item)) return item;
   const res = await autoCorregir(originalOf(item), autoTarget(item));
   const current = reviewById(id);
   if (res.fix && current && !current.fresaChoice && autoKey(current) === autoKey(item)) {
@@ -168,6 +175,7 @@ function VersionPicker({
             ? `Automático resuelve los ${antes} lugares. `
             : `Automático resuelve ${antes - despues} de ${antes} lugares. `
           : ''}
+        {sinAutoSola(item) ? 'Sello de 3 mm: el automático no se elige solo. ' : ''}
         {resumenOperaciones(fix.operations)}
       </p>
     </div>
@@ -393,7 +401,7 @@ export function RevisionTab() {
   }, [store.reviewQueue, fresaKeys]);
 
   // Corrección automática de cada vector que llega (de a uno, en segundo plano).
-  // Si todavía no se eligió versión y la automática cambia algo, queda elegida.
+  // Si todavía no se eligió versión y la automática cambia algo, queda elegida (salvo en los de 3 mm).
   const chooseReviewSvg = store.chooseReviewSvg;
   useEffect(() => {
     let alive = true;
@@ -403,7 +411,7 @@ export function RevisionTab() {
         if (!alive) return;
         setAutos((prev) => (prev[key] === res ? prev : { ...prev, [key]: res }));
         const current = useVectorizacionStore.getState().reviewQueue.find((r) => r.id === item.id);
-        if (res.fix && current && !current.fresaChoice && autoKey(current) === key) {
+        if (res.fix && current && !current.fresaChoice && !sinAutoSola(current) && autoKey(current) === key) {
           chooseReviewSvg(item.id, 'auto', res.fix.svg);
         }
       });

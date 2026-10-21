@@ -1182,6 +1182,29 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 65,
+    date: '2026-10-21',
+    title: 'Editor de vectores con herramientas y sellos de 3 mm',
+    version: '1.83',
+    slides: [
+      {
+        heading: 'Herramientas como en Illustrator',
+        body: 'Al editar un vector a mano, a la izquierda hay una barra: selección, selección directa, añadir y borrar nodos, rectángulo, elipse, cuchillo, girar, medir, mano y zoom, con las mismas teclas que Illustrator.',
+        icon: MousePointerClick,
+      },
+      {
+        heading: 'Buscatrazos y selección dentro de un aro',
+        body: 'Con dos piezas elegidas podés unir, restar, intersecar, excluir o dividir. Y arrastrar adentro de un aro ahora hace el rectángulo de selección en vez de mover el aro.',
+        icon: Spline,
+      },
+      {
+        heading: 'Los sellos de 3 mm no se corrigen solos',
+        body: 'En Revisión, la corrección automática de un sello de 3 mm se puede ver y elegir, pero nunca queda elegida sola: se guarda el original salvo que elijas otra versión.',
+        icon: Wand2,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

@@ -91,3 +91,33 @@
 - **Impacto**: bajo.
 - **Respuesta**: se puede ajustar lo que se necesite sin deformarlo mucho. "Fuera de su arco" = esa letra sola se acerca o se aleja del centro, así que queda un poco corrida respecto de la curva de sus vecinas. Se tomó como tope el **8 % del alto de la letra**, entre 0,15 y 0,35 mm (a esa escala no se nota a simple vista).
 - **Documentado en**: [chequeo-de-fresa §4](../02-modules/vectorizacion/chequeo-de-fresa.md).
+
+### Q-VEC-013
+- **Módulo**: Vectorización / corrección automática · **Estado**: documentada (respondida 2026-10-21)
+- **Pregunta**: ¿Qué es «confiable» en números para que la app guarde una corrección sola, sin que nadie la mire? Propuesta: un tipo de caso pasa a «aplica sola» con ≥ 95 % de propuestas aceptadas sin cambios en ≥ 100 casos y ningún rehacer por vector en ese período. ¿Qué error no se acepta nunca (por ejemplo, que cambie un logo de marca)?
+- **Por qué importa**: define cuándo se activa cada nivel de autonomía ([PLAN_CORRECCION_AUTONOMA_VECTORES §7](../../PLAN_CORRECCION_AUTONOMA_VECTORES.md)).
+- **Impacto**: alto.
+- **Respuesta**: **90 %** de aceptación sin cambios → la app guarda sola y marca para revisar (nivel 3); **95 %** → autónoma con revisión por muestreo (nivel 4). La cantidad mínima de casos y qué error no se acepta nunca quedan para definir con los datos.
+- **Documentado en**: [PLAN_CORRECCION_AUTONOMA_VECTORES §7](../../PLAN_CORRECCION_AUTONOMA_VECTORES.md).
+
+### Q-VEC-014
+- **Módulo**: Vectorización / registro de ediciones · **Estado**: documentada (respondida 2026-10-21)
+- **Pregunta**: Al editar un vector a mano, ¿Fede quiere marcar el motivo con un toque (por ejemplo «letras pegadas», «ojo tapado», «no me gustó cómo quedó») o solo se registra lo que hace?
+- **Por qué importa**: el motivo ayuda a aprender más rápido, pero suma un paso. Sin motivo, se deduce de las operaciones y del chequeo.
+- **Impacto**: medio.
+- **Respuesta**: alcanza con registrar lo que se hace; no se pide motivo.
+- **Documentado en**: [PLAN_CORRECCION_AUTONOMA_VECTORES §4](../../PLAN_CORRECCION_AUTONOMA_VECTORES.md).
+
+### Q-VEC-015
+- **Módulo**: Vectorización / prueba de mecanizado · **Estado**: abierta (2026-10-21)
+- **Pregunta**: ¿Cómo se puede medir la profundidad del corte en la placa de prueba de bronce (comparador, corte de la pieza, molde, otra forma)? ¿O solo se evalúa si se separa y cómo marca?
+- **Por qué importa**: con la profundidad se calibra la simulación directamente; sin ella, solo se sabe el límite (sí/no) de cada celda.
+- **Impacto**: medio.
+
+### Q-VEC-016
+- **Módulo**: Vectorización / corrección automática · **Estado**: documentada (respondida 2026-10-21)
+- **Pregunta**: ¿Hay sellos que nunca deberían corregirse solos, aunque la app esté segura (Alimento, logos de marca registrada, pedidos de prueba, clientes particulares)?
+- **Por qué importa**: quedarían siempre para revisión manual, en cualquier nivel de autonomía.
+- **Impacto**: medio.
+- **Respuesta**: los sellos de **3 mm** no se modifican nunca automáticamente. Ya aplicado en Revisión: la corrección automática se calcula y se puede elegir, pero no queda elegida sola ni se usa al «Confirmar todos». Los demás tipos (Alimento, logos de marca) no se mencionaron: se revisa si aparece un caso.
+- **Documentado en**: [chequeo-de-fresa §4 ter](../02-modules/vectorizacion/chequeo-de-fresa.md), [PLAN_CORRECCION_AUTONOMA_VECTORES §7](../../PLAN_CORRECCION_AUTONOMA_VECTORES.md).
