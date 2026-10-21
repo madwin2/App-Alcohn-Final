@@ -16,6 +16,7 @@ import {
 import { FresaEditor } from './FresaEditor';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
 import type { ZoneSeverity } from '@/lib/fresa/analyze';
+import type { EditorLogEntry } from '@/lib/fresa/fix';
 import {
   KIND_HELP,
   DEPTH_BAND_FILL,
@@ -217,12 +218,12 @@ export function FresaCheckDialog({
   };
 
   /** Termina la edición manual: el resultado queda como una corrección más. */
-  const finishEdit = async (edited: string, cambios: number) => {
+  const finishEdit = async (edited: string, cambios: number, extra: { registro: EditorLogEntry[]; segundos: number }) => {
     if (!report) return;
     setEditing(false);
     setFixing(true);
     try {
-      const res = await resultadoManual(edited, report, cambios);
+      const res = await resultadoManual(edited, report, cambios, undefined, extra);
       setFix(res);
       setMode('corregido');
       setSelected(null);
@@ -296,7 +297,7 @@ export function FresaCheckDialog({
           <FresaEditor
             svgText={editing === 'corregido' && fix ? fix.svg : svgText}
             report={report}
-            onDone={(edited, cambios) => void finishEdit(edited, cambios)}
+            onDone={(edited, cambios, extra) => void finishEdit(edited, cambios, extra)}
             onCancel={() => setEditing(false)}
           />
         ) : (

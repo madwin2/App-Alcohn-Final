@@ -4,6 +4,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/components/ui/use-toast';
 import { useVectorizacionStore } from '@/lib/state/vectorizacion.store';
 import { saveSelloVector } from '@/lib/vectorizacion/saveVector';
+import { registrarEdicion } from '@/lib/supabase/services/vectorEdiciones.service';
+import type { FixOperation } from '@/lib/fresa/fix';
 import { downloadSvg, downloadBlob, zipDownloadName, zipVectorResults } from '@/lib/vectorizacion/zipResults';
 import type { ReviewItem } from '@/lib/vectorizacion/types';
 import { Check, Download, Loader2, Replace, Search, Wand2, X } from 'lucide-react';
@@ -89,7 +91,7 @@ async function itemParaGuardar(id: string): Promise<ReviewItem | null> {
   const res = await autoCorregir(originalOf(item), autoTarget(item));
   const current = reviewById(id);
   if (res.fix && current && !current.fresaChoice && autoKey(current) === autoKey(item)) {
-    useVectorizacionStore.getState().chooseReviewSvg(id, 'auto', res.fix.svg);
+    useVectorizacionStore.getState().chooseReviewSvg(id, 'auto', res.fix.svg, undefined, res.fix.operations);
   }
   return reviewById(id);
 }
@@ -131,7 +133,7 @@ function VersionPicker({
 }: {
   item: ReviewItem;
   auto: AutoState;
-  onChoose: (choice: NonNullable<ReviewItem['fresaChoice']>, svg: string) => void;
+  onChoose: (choice: NonNullable<ReviewItem['fresaChoice']>, svg: string, override?: undefined, ops?: FixOperation[]) => void;
   onOpen: () => void;
 }) {
   if (!auto) {
@@ -155,7 +157,7 @@ function VersionPicker({
           <VersionButton active={choice === 'original'} onClick={() => onChoose('original', originalOf(item))}>
             Original
           </VersionButton>
-          <VersionButton active={choice === 'auto'} onClick={() => onChoose('auto', fix.svg)}>
+          <VersionButton active={choice === 'auto'} onClick={() => onChoose('auto', fix.svg, undefined, fix.operations)}>
             <Wand2 className="mr-1 inline size-3" />
             Automático
           </VersionButton>
@@ -207,6 +209,7 @@ function ReviewCard({
     choice: NonNullable<ReviewItem['fresaChoice']>,
     svg: string,
     fabricationOverrideMm?: { widthMm: number; heightMm: number },
+    ops?: FixOperation[],
   ) => void;
 }) {
   const [checker, setChecker] = useState(false);
@@ -345,7 +348,7 @@ function ReviewCard({
         onUseOriginal={() => onChoose('original', originalOf(item))}
         onApply={(svg, fix, opts) => {
           const manual = fix.operations.some((o) => o.kind === 'manual');
-          onChoose(manual ? 'manual' : 'auto', svg, opts.scaledUp ? opts.fabricationMm : undefined);
+          onChoose(manual ? 'manual' : 'auto', svg, opts.scaledUp ? opts.fabricationMm : undefined, fix.operations);
           toast({
             title: opts.scaledUp ? 'Vector corregido y agrandado' : 'Vector corregido',
             description: opts.scaledUp
@@ -412,7 +415,7 @@ export function RevisionTab() {
         setAutos((prev) => (prev[key] === res ? prev : { ...prev, [key]: res }));
         const current = useVectorizacionStore.getState().reviewQueue.find((r) => r.id === item.id);
         if (res.fix && current && !current.fresaChoice && !sinAutoSola(current) && autoKey(current) === key) {
-          chooseReviewSvg(item.id, 'auto', res.fix.svg);
+          chooseReviewSvg(item.id, 'auto', res.fix.svg, undefined, res.fix.operations);
         }
       });
     }
@@ -454,6 +457,21 @@ export function RevisionTab() {
       });
       store.removeReview(item.id);
       store.removeLocal(item.selloId);
+      // Registro para aprender de las ediciones (en segundo plano, no frena nada).
+      void registrarEdicion({
+        origen: 'revision',
+        selloId: item.selloId,
+        ordenId: item.orderId,
+        original: originalOf(item),
+        final: item.svg,
+        eleccion: item.fresaChoice ?? 'original',
+        operaciones: item.fresaChoice === 'original' ? null : item.fresaOps,
+        propuestaVista: true,
+        target: autoTarget(item),
+        targetFinal: reviewTarget(item),
+        tipoSello: item.stampType,
+        alimento: item.alimento,
+      });
       if (saved.needsReview) {
         store.setFabricationReviews([
           ...useVectorizacionStore.getState().fabricationReviews,
@@ -573,7 +591,7 @@ export function RevisionTab() {
               store.removeLocal(item.selloId);
             }}
             onChangeSvg={(svg) => store.updateReviewSvg(item.id, svg)}
-            onChoose={(choice, svg, override) => store.chooseReviewSvg(item.id, choice, svg, override)}
+            onChoose={(choice, svg, override, ops) => store.chooseReviewSvg(item.id, choice, svg, override, ops)}
           />
         ))}
       </div>

@@ -28,4 +28,6 @@
 
 ## Referencias guardadas en la base
 
+En el bucket `vector`, la carpeta `ediciones/<sello_id>/` guarda las versiones de cada vector registrado en `vector_ediciones` (original, automática y final; [ADR-028](../13-decisions/ADR-028-registro-de-ediciones-de-vectores.md)). Esa tabla guarda el **path** dentro del bucket, no la URL.
+
 Las columnas guardan **URL pública completa** (p. ej. `sellos.archivo_base`, `archivo_vector_preview`, `foto_sello`), salvo casos legados con path relativo (el trigger de foto y `webhook-bot` contemplan ambos). Utilidades: `src/lib/utils/storageUrlUtils.ts`, `storageFileKind.ts`, `vectorUrlFromPreview.ts`.

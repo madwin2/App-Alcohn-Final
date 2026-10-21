@@ -27,7 +27,7 @@ import type { PaintShape } from './analyze';
 import { runCheck, runFix, type CheckOutput, type FixOutput } from './engine';
 import { runPasses, type PassesOutput } from './passes';
 import { buildCorrectedSvg, wrapFit } from './exportSvg';
-import type { FixOperation } from './fix';
+import type { EditorLogEntry, FixOperation } from './fix';
 import { applyPieceMoves } from './moveSvg';
 import { buildEditDoc, countNodes, removeRedundant, serializeEditDoc, simplifyDoc } from './editDoc';
 import { parseSvgShapes, type ParsedSvg } from './svgShapes';
@@ -627,12 +627,13 @@ export async function resultadoManual(
   before: FresaReport,
   cambios: number,
   options: FresaAnalysisOptions = DEFAULT_ANALYSIS_OPTIONS,
+  extra: { registro?: EditorLogEntry[]; segundos?: number } = {},
 ): Promise<FresaFixResult> {
   const after = await chequearSvg(svg, sameScaleTarget(before), options);
   return {
     svg,
     removedAreaMm2: 0,
-    operations: [{ kind: 'manual', cambios }],
+    operations: [{ kind: 'manual', cambios, ...extra }],
     fixedZoneIds: [],
     skippedZoneIds: [],
     fitScale: 1,

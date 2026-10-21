@@ -37,4 +37,6 @@ Decisiones de producto/arquitectura **reconstruidas** a partir de los planes en 
 
 [ADR-027 · Mesa de armado](ADR-027-mesa-de-armado.md): la página de Programas pasa a ser una mesa por máquina (cola, soporte a escala, controles y etapas); prototipo en `/dev/mesa-programas`.
 
+[ADR-028 · Registro de ediciones de vectores](ADR-028-registro-de-ediciones-de-vectores.md): cada vector que se guarda queda anotado (original, automática, final, operaciones) en `vector_ediciones` para medir y mejorar la corrección automática.
+
 1. Contexto (qué problema), 2. Decisión, 3. Alternativas descartadas, 4. Consecuencias (qué módulos cambian), 5. Fuente (issue, plan, conversación), 6. Fecha. Actualizar módulos, reglas y estados afectados.

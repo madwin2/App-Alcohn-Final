@@ -566,6 +566,7 @@ export function CellVector({ order, onUpdate, editingRowId }: CellVectorProps) {
             stampType: item?.stampType,
           }}
           onSaveCorrected={onUpdate ? saveCorrectedVector : undefined}
+          registro={item ? { selloId: item.id, origen: 'pedidos' } : undefined}
         />
       ) : null}
       <NonSvgVectorConfirmDialog

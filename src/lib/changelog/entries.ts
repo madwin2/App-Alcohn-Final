@@ -1199,6 +1199,11 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         icon: Spline,
       },
       {
+        heading: 'Calidad del automático',
+        body: 'Cada vector que se guarda queda anotado solo (cómo salió, qué propuso la automática y qué quedó). En Vectorización, «Calidad del automático» muestra cuánto acierta por tipo de caso. No cambia nada de cómo trabajás.',
+        icon: BarChart3,
+      },
+      {
         heading: 'Los sellos de 3 mm no se corrigen solos',
         body: 'En Revisión, la corrección automática de un sello de 3 mm se puede ver y elegir, pero nunca queda elegida sola: se guarda el original salvo que elijas otra versión.',
         icon: Wand2,

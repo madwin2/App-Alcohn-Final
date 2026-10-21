@@ -46,6 +46,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { cn } from '@/lib/utils/cn';
 import type { FresaReport } from '@/lib/fresa/chequeoFresa';
+import type { EditorLogEntry } from '@/lib/fresa/fix';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
 import { copyRefs, cornerInfo, internalCorners, mirrorRefs, pasteClip, rotateRefs, roundCorner, roundCorners, type VectorClip } from '@/lib/fresa/editCorners';
 import {
@@ -112,7 +113,8 @@ interface Props {
   svgText: string;
   /** Reporte del original: escala (mm por unidad) y perfil de fresa. */
   report: FresaReport;
-  onDone: (svg: string, cambios: number) => void;
+  /** `extra`: registro de lo que se hizo y segundos de edición (se guardan en `vector_ediciones`). */
+  onDone: (svg: string, cambios: number, extra: { registro: EditorLogEntry[]; segundos: number }) => void;
   onCancel: () => void;
 }
 
@@ -363,22 +365,33 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     return () => window.clearTimeout(t);
   }, [notice]);
 
-  const commit = useCallback(
-    (next: EditDoc, text?: string, tone: 'ok' | 'warn' = 'ok') => {
-      const nh = [...history.slice(0, idx + 1), next].slice(-80);
-      setHistory(nh);
-      setIdx(nh.length - 1);
-      setTemp(null);
-      if (text) showNotice(text, tone);
-    },
-    [history, idx, showNotice],
-  );
+  // Registro de lo que se hace (para aprender de las ediciones; ver PLAN_CORRECCION_AUTONOMA_VECTORES).
+  const openedAt = useRef(Date.now());
+  const editLog = useRef<EditorLogEntry[]>([]);
+  const logAction = (accion: string) => {
+    editLog.current.push({
+      s: Math.round((Date.now() - openedAt.current) / 1000),
+      herramienta: tool,
+      piezas: selKeys.length,
+      nodos: nodeSel.length,
+      accion,
+    });
+  };
+  const commit = (next: EditDoc, text?: string, tone: 'ok' | 'warn' = 'ok') => {
+    const nh = [...history.slice(0, idx + 1), next].slice(-80);
+    setHistory(nh);
+    setIdx(nh.length - 1);
+    setTemp(null);
+    logAction(text ?? 'Cambio');
+    if (text) showNotice(text, tone);
+  };
   const say = (text: string, tone: 'ok' | 'warn' = 'warn') => showNotice(text, tone);
   const undo = () => {
     if (idx === 0) return;
     setIdx(idx - 1);
     setTemp(null);
     setSelNode(null);
+    logAction('Deshecho.');
     showNotice('Deshecho.', 'ok');
   };
   const redo = () => {
@@ -386,6 +399,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
     setIdx(idx + 1);
     setTemp(null);
     setSelNode(null);
+    logAction('Rehecho.');
     showNotice('Rehecho.', 'ok');
   };
 
@@ -2752,7 +2766,13 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
           <Button
             type="button"
             disabled={!changes || !doc}
-            onClick={() => doc && onDone(serializeEditDoc(doc), changes)}
+            onClick={() =>
+              doc &&
+              onDone(serializeEditDoc(doc), changes, {
+                registro: editLog.current,
+                segundos: Math.round((Date.now() - openedAt.current) / 1000),
+              })
+            }
             title="Vuelve al chequeo con lo editado para compararlo y usarlo"
           >
             Terminar edición

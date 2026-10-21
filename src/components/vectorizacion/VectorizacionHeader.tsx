@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { fetchVectorizerAccount } from '@/lib/vectorizacion/vectorizerApi';
 import { useVectorizacionStore } from '@/lib/state/vectorizacion.store';
+import { BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CalidadAutomaticoDialog } from './CalidadAutomaticoDialog';
 
 export function VectorizacionHeader() {
   const includeRehacer = useVectorizacionStore((s) => s.includeRehacerPrioridad);
@@ -13,6 +16,7 @@ export function VectorizacionHeader() {
   const reviewCount = useVectorizacionStore((s) => s.reviewQueue.length);
   const [credits, setCredits] = useState<number | null>(null);
   const [creditError, setCreditError] = useState<string | null>(null);
+  const [calidadOpen, setCalidadOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,6 +43,16 @@ export function VectorizacionHeader() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setCalidadOpen(true)}
+            title="Cuánto acierta la corrección automática del chequeo de fresa"
+          >
+            <BarChart3 className="mr-1.5 size-3.5" />
+            Calidad del automático
+          </Button>
           <Badge
             variant={creditError ? 'destructive' : 'secondary'}
             className="rounded-full border border-white/10 bg-white/5 text-foreground"
@@ -72,6 +86,7 @@ export function VectorizacionHeader() {
           </label>
         </div>
       </div>
+      <CalidadAutomaticoDialog open={calidadOpen} onOpenChange={setCalidadOpen} />
     </div>
   );
 }

@@ -15,10 +15,10 @@
 | 1 | Situación actual y por qué no es confiable | — |
 | 2 | Principios | — |
 | 3 | Fase 0 · Prueba de mecanizado y umbrales reales | placa lista, falta fabricarla |
-| 4 | Fase 1 · Registro de ediciones | por hacer |
-| 5 | Fase 2 · Medir: tasa de aceptación y casos de prueba | por hacer |
+| 4 | Fase 1 · Registro de ediciones | ✅ hecho (2026-10-21, ADR-028); falta crear la tabla |
+| 5 | Fase 2 · Medir: tasa de aceptación y casos de prueba | ✅ hecho; esperando datos |
 | 6 | Fase 3 · Mejorar la corrección con lo aprendido | por hacer |
-| 7 | Fase 4 · Autonomía por niveles | por hacer |
+| 7 | Fase 4 · Autonomía por niveles | modo sombra ✅; aplicar sola espera datos |
 | 8 | Lo que no se hace (por ahora) | — |
 | 9 | Preguntas abiertas | Q-VEC-015 abierta; 013, 014 y 016 respondidas |
 | 10 | Orden y tamaño | — |
@@ -71,6 +71,8 @@ Si hace falta, una segunda placa más fina alrededor de los límites que aparezc
 
 ## 4. Fase 1 · Registro de ediciones
 
+> ✅ Implementado (2026-10-21): `registrarEdicion` en `src/lib/supabase/services/vectorEdiciones.service.ts`, enganchado en Revisión, Asignar SVG y el chequeo de Pedidos, Producción y Programas; el editor anota cada acción. Tabla en [`migration_vector_ediciones.sql`](migration_vector_ediciones.sql). Detalle y diferencias con este diseño: [ADR-028](docs/13-decisions/ADR-028-registro-de-ediciones-de-vectores.md).
+
 Guardar, por cada vector que se confirma, qué propuso la automática y qué quedó al final. Es lo que alimenta todo lo demás; conviene prenderlo cuanto antes porque los datos tardan en juntarse.
 
 ### Qué se guarda
@@ -112,6 +114,8 @@ El dato más valioso es si **el sello salió bien**. Ya existe `sello_rehacer_ev
 
 ## 5. Fase 2 · Medir: tasa de aceptación y casos de prueba
 
+> ✅ Implementado (2026-10-21): botón **Calidad del automático** en Vectorización (`CalidadAutomaticoDialog`, métricas en `edicionesMetricas.ts`), `scripts/exportar-casos-vectores.mjs` y `src/lib/fresa/casosReales.test.ts`.
+
 ### Indicadores
 
 - **Aceptación sin cambios**: de los vectores donde la automática propuso algo, cuántos se guardaron tal cual (`eleccion = auto` sin operaciones encima).
@@ -144,7 +148,7 @@ Se sube de nivel **por tipo de caso** y solo con números; se baja solo si los n
 | Nivel | Qué hace la app | Cuándo |
 |---|---|---|
 | 1 · Sugiere | Hoy: propone y alguien elige | — |
-| 2 · Sombra | Corre en silencio y se compara con lo que hace Fede, sin cambiar nada | Desde que hay registro (Fase 1) |
+| 2 · Sombra | Corre en silencio y se compara con lo que hace Fede, sin cambiar nada | ✅ Desde que hay registro: en Asignar y en el chequeo de un sello guardado, la automática se calcula y se guarda aunque nadie la haya pedido |
 | 3 · Aplica y marca | Si la confianza es alta, guarda la corrección sola; el resto queda para revisar | Tipo de caso con ≥ **90 %** de aceptación sin cambios y sin rehacer por vector (Q-VEC-013) |
 | 4 · Autónoma | Corrige y guarda; se revisa una muestra | Tipo de caso con ≥ **95 %** de aceptación sostenida en nivel 3 (Q-VEC-013) |
 
@@ -173,11 +177,11 @@ Registradas en [`docs/14-open-questions/vectorizacion.md`](docs/14-open-question
 | Paso | Qué | Tamaño | Depende de |
 |---|---|---|---|
 | 1 | Fabricar y anotar la placa | taller | — |
-| 2 | Tabla `vector_ediciones` + registro en Revisión / Asignar / corregidos | M | permiso para migrar |
-| 3 | Registro de operaciones del editor | S | 2 |
+| 2 | Tabla `vector_ediciones` + registro en Revisión / Asignar / corregidos | ✅ (falta aplicar la migración) | permiso para migrar |
+| 3 | Registro de operaciones del editor | ✅ | 2 |
 | 4 | Calibrar `config.ts` con la placa | S | 1 |
-| 5 | Indicadores y vista del último mes | M | 2 + un mes de datos |
-| 6 | Casos de prueba exportados y test de regresión | M | 2 |
+| 5 | Indicadores y vista del último mes | ✅ (se llena con los datos) | 2 + un mes de datos |
+| 6 | Casos de prueba exportados y test de regresión | ✅ (se llena con los datos) | 2 |
 | 7 | Ajustes del planificador y puntaje de confianza | M–L | 4, 5, 6 |
 | 8 | Modo sombra y niveles de autonomía | M | 7 |
 

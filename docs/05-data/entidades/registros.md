@@ -9,6 +9,7 @@
 | `meta_conversion_log` | Evento Purchase enviado a Meta por orden (idempotencia) | edge `meta-conversion` | 636 |
 | `web_pedido_confirm_log` | Confirmación de pedido web procesada (sellos normalizados, WhatsApp enviado, error) | edge `confirm-web-order` | 64 |
 | `web_analytics_events` | Eventos de navegación de la tienda web (UTM, visitante, sesión, IP, user agent) | Tienda web | 44.885 |
+| `vector_ediciones` | Cada vector guardado: original, propuesta automática y final (paths en el bucket `vector`, carpeta `ediciones/`), elección, resultado (`aceptada`/`rechazada`/`editada`/`sin_propuesta`), tipo de caso, resumen del chequeo de fresa de cada versión, operaciones y tiempo de edición ([ADR-028](../../13-decisions/ADR-028-registro-de-ediciones-de-vectores.md)). Solo se inserta. | Revisión, Asignar SVG, chequeo en Pedidos/Producción/Programas (`registrarEdicion`) | — |
 | `vector_jobs` | Cola del vector-worker (`PENDING`,`PROCESSING`,`DONE`,`ERROR`, intentos, lock) | App (encolar) + worker | 70 |
 | `fotos_pendientes` | Fotos subidas en "Subir fotos" aún no asignadas | Pedidos | 47 |
 | `programa_eventos` | Historial de programas | App, edge | 47 |
