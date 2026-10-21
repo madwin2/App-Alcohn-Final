@@ -3,6 +3,8 @@ import { Order } from '@/lib/types/index';
 import { EditableInline } from './EditableInline';
 import { formatAbecedarioSummary } from '@/lib/abecedario/abecedarioConfig';
 import { OrderTypeBadge } from '@/components/pedidos/OrderTypeBadge';
+import { parseMedidaMmAString } from '@/lib/precios/cotizacionMedida';
+import { useToast } from '@/components/ui/use-toast';
 
 interface CellDisenioProps {
   order: Order;
@@ -13,6 +15,7 @@ interface CellDisenioProps {
 }
 
 export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, onUpdate }: CellDisenioProps) {
+  const { toast } = useToast();
   const item = order.items[0]; // Mostrar el primer item
   const hasMultipleItems = order.items.length > 1;
   const isEditing = editingRowId === order.id;
@@ -49,16 +52,33 @@ export function CellDisenio({ order, showNotes = true, onExpand, editingRowId, o
           }} 
           className="text-sm font-medium"
         />
-        <EditableInline 
-          value={`${item.requestedWidthMm || 0}×${item.requestedHeightMm || 0}mm`} 
+        <EditableInline
+          value={`${item.requestedWidthMm || 0}×${item.requestedHeightMm || 0}mm`}
           onCommit={(v) => {
-            const match = v.match(/(\d+)×(\d+)/);
-            if (match && item.id) {
-              const width = parseInt(match[1]);
-              const height = parseInt(match[2]);
-              onUpdate?.(order.id, { items: [{ id: item.id, requestedWidthMm: width, requestedHeightMm: height }] });
+            if (!item.id) return;
+            // Click sin cambios: no guardar ni avisar.
+            if (v.trim() === `${item.requestedWidthMm || 0}×${item.requestedHeightMm || 0}mm`) return;
+            const parsed = parseMedidaMmAString(v);
+            if (!parsed) {
+              // Antes el parseo fallaba en silencio (p. ej. "50x30" con x común)
+              // y al salir de la edición volvía la medida anterior sin avisar.
+              toast({
+                title: 'Medida no guardada',
+                description: 'Escribila en milímetros, por ejemplo 50×30 o 50x30.',
+                variant: 'destructive',
+              });
+              return;
             }
-          }} 
+            if (
+              parsed.anchoMm === item.requestedWidthMm &&
+              parsed.altoMm === item.requestedHeightMm
+            ) {
+              return;
+            }
+            onUpdate?.(order.id, {
+              items: [{ id: item.id, requestedWidthMm: parsed.anchoMm, requestedHeightMm: parsed.altoMm }],
+            });
+          }}
           className="text-xs text-muted-foreground"
         />
         {showNotes && (

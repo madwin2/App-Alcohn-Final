@@ -171,12 +171,18 @@ export function clasificarGrupoSelloRectangularMm(
 }
 
 /**
- * Parse "40×40", "35,5×25" o "40" (cuadrado) en **milímetros** → `requestedWidthMm` / `requestedHeightMm`.
+ * Parse "40×40", "40x40", "40 x 40 mm", "35,5×25" o "40" (cuadrado) en
+ * **milímetros** → `requestedWidthMm` / `requestedHeightMm`.
+ * Acepta como separador `×`, `x`, `X` o `*`, espacios y el sufijo `mm`.
  * Convención Alcohn: siempre lado largo × lado corto (el orden al escribir no importa).
  */
 export function parseMedidaMmAString(raw: string): { anchoMm: number; altoMm: number } | null {
-  const t = raw.trim().replace(/,/g, '.').replace(/\s/g, '');
-  const m = t.match(/^(\d+(?:\.\d+)?)(?:[xX×](\d+(?:\.\d+)?))?$/);
+  const t = raw
+    .trim()
+    .replace(/,/g, '.')
+    .replace(/\s/g, '')
+    .replace(/mm$/i, '');
+  const m = t.match(/^(\d+(?:\.\d+)?)(?:[xX×*](\d+(?:\.\d+)?))?$/);
   if (!m) return null;
   const wMm = parseFloat(m[1]);
   const hMm = m[2] !== undefined ? parseFloat(m[2]) : wMm;

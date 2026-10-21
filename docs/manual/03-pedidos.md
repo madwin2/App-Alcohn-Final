@@ -147,6 +147,7 @@ Clic derecho → **Editar pedido**. La fila queda marcada y podés escribir dire
 
 - **Enter** o hacer clic afuera guarda.
 - **Escape** cancela.
+- La **medida** se escribe en milímetros y acepta `50×30`, `50x30` o `50 x 30 mm`. Si el formato no se entiende, la app avisa **Medida no guardada** y queda la medida anterior.
 
 Si escribís un número de seguimiento que no corresponde a la empresa elegida (por ejemplo, un número de Andreani en un pedido de Correo), la app te pregunta **Seguimiento y empresa no coinciden**: podés cambiar la empresa, **Continuar sin cambiar** o **Cancelar**.
 
