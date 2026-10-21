@@ -15,7 +15,7 @@
 | 1 | Situación actual y por qué no es confiable | — |
 | 2 | Principios | — |
 | 3 | Fase 0 · Prueba de mecanizado y umbrales reales | placa lista, falta fabricarla |
-| 4 | Fase 1 · Registro de ediciones | ✅ hecho (2026-10-21, ADR-028); falta crear la tabla |
+| 4 | Fase 1 · Registro de ediciones | ✅ activo desde 2026-10-21 (ADR-028) |
 | 5 | Fase 2 · Medir: tasa de aceptación y casos de prueba | ✅ hecho; esperando datos |
 | 6 | Fase 3 · Mejorar la corrección con lo aprendido | por hacer |
 | 7 | Fase 4 · Autonomía por niveles | modo sombra ✅; aplicar sola espera datos |
@@ -71,7 +71,7 @@ Si hace falta, una segunda placa más fina alrededor de los límites que aparezc
 
 ## 4. Fase 1 · Registro de ediciones
 
-> ✅ Implementado (2026-10-21): `registrarEdicion` en `src/lib/supabase/services/vectorEdiciones.service.ts`, enganchado en Revisión, Asignar SVG y el chequeo de Pedidos, Producción y Programas; el editor anota cada acción. Tabla en [`migration_vector_ediciones.sql`](migration_vector_ediciones.sql). Detalle y diferencias con este diseño: [ADR-028](docs/13-decisions/ADR-028-registro-de-ediciones-de-vectores.md).
+> ✅ Implementado (2026-10-21): `registrarEdicion` en `src/lib/supabase/services/vectorEdiciones.service.ts`, enganchado en Revisión, Asignar SVG y el chequeo de Pedidos, Producción y Programas; el editor anota cada acción. Tabla creada en producción el 2026-10-21 con [`migration_vector_ediciones.sql`](migration_vector_ediciones.sql). Detalle y diferencias con este diseño: [ADR-028](docs/13-decisions/ADR-028-registro-de-ediciones-de-vectores.md).
 
 Guardar, por cada vector que se confirma, qué propuso la automática y qué quedó al final. Es lo que alimenta todo lo demás; conviene prenderlo cuanto antes porque los datos tardan en juntarse.
 
@@ -177,7 +177,7 @@ Registradas en [`docs/14-open-questions/vectorizacion.md`](docs/14-open-question
 | Paso | Qué | Tamaño | Depende de |
 |---|---|---|---|
 | 1 | Fabricar y anotar la placa | taller | — |
-| 2 | Tabla `vector_ediciones` + registro en Revisión / Asignar / corregidos | ✅ (falta aplicar la migración) | permiso para migrar |
+| 2 | Tabla `vector_ediciones` + registro en Revisión / Asignar / corregidos | ✅ (tabla creada 2026-10-21) | — |
 | 3 | Registro de operaciones del editor | ✅ | 2 |
 | 4 | Calibrar `config.ts` con la placa | S | 1 |
 | 5 | Indicadores y vista del último mes | ✅ (se llena con los datos) | 2 + un mes de datos |

@@ -1,6 +1,6 @@
 # ADR-028 · Registro de ediciones de vectores
 
-Fecha: 2026-10-21. Estado: **implementado en código**; la tabla `vector_ediciones` se crea con [`migration_vector_ediciones.sql`](../../migration_vector_ediciones.sql).
+Fecha: 2026-10-21. Estado: **activo**. La tabla `vector_ediciones` se creó en producción el 2026-10-21 con [`migration_vector_ediciones.sql`](../../migration_vector_ediciones.sql).
 
 ## Problema
 
