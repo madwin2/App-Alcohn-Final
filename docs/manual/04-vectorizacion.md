@@ -52,7 +52,7 @@ Por cada diseño se ve el antes y el después (**Damero** muestra el fondo a cua
 
 ### Chequeo de fresa
 
-Cada tarjeta muestra un chip **Fresa**: la app simula el V-carve de la fresa más fina (cónica de 60°, punta 0,1 mm) a la medida a la que se va a fabricar. Donde el blanco se angosta, la fresa sube y talla menos hondo: eso está bien en rincones y ángulos, pero **entre letras y en los ojos tiene que bajar al menos 0,3 mm** (en sellos de **Alimento, 1 mm**). Si no, las letras se pegan o el ojo se tapa.
+Cada tarjeta muestra un chip **Fresa**: la app simula el V-carve de la fresa más fina (cónica de 60°; punta física 0,1 mm, configurada 0,2 mm en Aspire, y la app calcula con 0,2) a la medida a la que se va a fabricar. Donde el blanco se angosta, la fresa sube y talla menos hondo: eso está bien en rincones y ángulos, pero **entre letras y en los ojos tiene que bajar al menos 0,3 mm** (en sellos de **Alimento, 0,4 mm**). Si no, las letras se pegan o el ojo se tapa.
 
 | Chip | Qué significa |
 |---|---|

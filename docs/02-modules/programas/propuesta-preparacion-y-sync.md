@@ -19,13 +19,13 @@ No se propone modificar ahora estados productivos, consumo de bronce ni automati
 - **POL-079 / Q-PROG-013 (parcial)**: C, G y XL tienen cada una un soporte de fijación fijo. Uso parcial significa cargar menos sellos sobre una planchuela completa: el ejemplo del usuario son cuatro sellos de 50 mm sobre una planchuela de 400 mm. Ese ejemplo describe 200 mm de diseño; para planificar se agregan las separaciones/cortes vigentes, sin cambiar BR-MAT-002. Faltan geometría útil y márgenes exactos. No implica que existan tres CNC físicas: Q-CNC-007 sigue abierta.
 - **POL-080 / Q-PROG-014**: conservar lo vendido y registrar aparte cómo se fabrica. El tipo comercial no debe cambiar silenciosamente al elegir una receta de mecanizado.
 - **POL-081 / Q-PROG-015 (parcial)**: mantener las correcciones hechas sobre los vectores de Aspire; aplicar sobre ellos cambios compatibles de la app. Pedir decisión solo cuando la misma propiedad cambió en los dos lados. Falta resolver el reemplazo del vector fuente frente a una geometría corregida localmente.
-- **POL-082 / Q-PROG-017**: decidir el repaso con punta 0,1 mm viendo qué detalle falta después de la fresa de 0,5 mm (15° laterales). Elegir solo una parte si no toca el resto; ampliar la selección cuando haga falta para evitar choques, pudiendo incluir todo el sello y evitando partes innecesarias.
-- **POL-083/084 / Q-PROG-018**: la fresa llamada «0,5 mm» está configurada como **0,6 mm**, con 15° laterales; la fina conserva punta 0,1 mm, 30° laterales y profundidad final **0,6 mm también en Alimento**. Profundidad del mecanizado principal: Clásico 1,7 mm; 3 mm a 3 mm; Alimento a 3 mm más corte perimetral con fresa de 6 mm.
+- **POL-082 / Q-PROG-017**: decidir el repaso con la fina «0,1» (física 0,1 mm, configurada 0,2 mm en Aspire) viendo qué detalle falta después de la fresa de 0,5 mm (15° laterales). Elegir solo una parte si no toca el resto; ampliar la selección cuando haga falta para evitar choques, pudiendo incluir todo el sello y evitando partes innecesarias.
+- **POL-083/084 / Q-PROG-018**: la fresa llamada «0,5 mm» está configurada como **0,6 mm**, con 15° laterales; la fina tiene punta física 0,1 mm, configurada 0,2 mm en Aspire (Q-PROG-020), 30° laterales y profundidad final **0,6 mm también en Alimento**. Profundidad del mecanizado principal: Clásico 1,7 mm; 3 mm a 3 mm; Alimento a 3 mm más corte perimetral con fresa de 6 mm.
 - **POL-085 / Q-VEC-011**: para Alimento, lo ideal es que baste la primera fresa; ≈1 mm era referencia de buen grabado para esa pasada. Si necesita la fina, buscar unos **0,4–0,5 mm**, con máximo 0,6 mm. Rango confirmado; corte rígido de aprobación y tratamiento de advertencias por calibrar.
 
 Las decisiones restantes de este documento son **propuestas**, no reglas vigentes.
 
-**Trabajo manual actual confirmado (Q-PROG-016)**: después del gadget, Fede ajusta vectores, chequea medidas (puede pasarle una diferencia) y decide qué mecanizar con el perfilado de 0,1 mm. Esta última selección también forma parte del trabajo que se busca automatizar; no alcanza con organizar posiciones y tamaños.
+**Trabajo manual actual confirmado (Q-PROG-016)**: después del gadget, Fede ajusta vectores, chequea medidas (puede pasarle una diferencia) y decide qué mecanizar con el perfilado fino «0,1» (configurada 0,2 mm en Aspire). Esta última selección también forma parte del trabajo que se busca automatizar; no alcanza con organizar posiciones y tamaños.
 
 ## 3. Qué existe hoy (✅ código local)
 
@@ -89,22 +89,22 @@ Dos momentos: **preparación en la app** y **verificación de lo realmente aplic
 
 Definir con Fede tolerancias absolutas/relativas apropiadas para cada control. Ni el 2 % usado al importar ni el umbral de 6 mm usado en revisión del pedido deben reutilizarse automáticamente como tolerancia final de fabricación.
 
-### Selección del perfilado de 0,1 mm (criterio confirmado)
+### Selección del perfilado fino «0,1» (criterio confirmado)
 
-**Operación confirmada** (Q-PROG-017): Fede revisa cómo queda el sello con la fresa de 0,5 mm, de 15° laterales, y decide dónde necesita la de punta 0,1 mm. Si solo falta un detalle y la pasada sobre ese detalle no toca el resto, elige esa parte. Si toca, incluye las partes necesarias para evitar el choque; puede llegar al sello completo y evita repasar partes innecesarias. El criterio está documentado; la automatización sigue propuesta.
+**Operación confirmada** (Q-PROG-017): Fede revisa cómo queda el sello con la fresa de 0,5 mm, de 15° laterales, y decide dónde necesita la fina «0,1» (física 0,1 mm, configurada 0,2 mm en Aspire). Si solo falta un detalle y la pasada sobre ese detalle no toca el resto, elige esa parte. Si toca, incluye las partes necesarias para evitar el choque; puede llegar al sello completo y evita repasar partes innecesarias. El criterio está documentado; la automatización sigue propuesta.
 
 Esto requiere comparar **resultado de la primera pasada**, **mejora posible con la fina** y **efecto de la selección concreta sobre el resto del diseño**. El chequeo actual responde qué problemas quedan con la fina; no demuestra que la primera pasada alcance ni propone una selección de repaso.
 
 Proceso de cálculo propuesto:
 
 1. Representar el resultado de la pasada de 0,5 mm con sus parámetros reales, después de las operaciones previas que correspondan a la receta. Para una primera sugerencia puede usarse una aproximación geométrica; distinguirla del resultado calculado de Aspire.
-2. Detectar qué detalle relevante falta respecto del resultado deseado y qué puede resolver la de 0,1 mm. Si tampoco lo resuelve la fina, señalar que necesita corrección del diseño u otra revisión; no generar una pasada inútil como solución.
+2. Detectar qué detalle relevante falta respecto del resultado deseado y qué puede resolver la fina «0,1» (configurada 0,2 mm). Si tampoco lo resuelve la fina, señalar que necesita corrección del diseño u otra revisión; no generar una pasada inútil como solución.
 3. Proponer la selección más acotada que cubra ese detalle. Mantener todo el diseño como contexto de protección, incluidas piezas e islas excluidas y sus agujeros. Seleccionar un ojo aislado o una letra no puede convertir en vaciable el relieve que quedó fuera de la selección.
 4. Calcular la pasada correspondiente y comprobar la huella completa de la herramienta a las alturas relevantes contra las partes que deben conservarse. Comprobar movimientos de corte y entradas/salidas pertinentes; una caja o una distancia en 2D no certifica ausencia de contacto.
 5. Si existe contacto no previsto, ampliar con los contornos necesarios y recalcular. La ampliación no garantiza por sí sola que desaparezca el problema: verificar el resultado de cada intento. Puede llegar al sello completo; si tampoco hay una solución comprobada, marcar «Requiere revisión», sin declarar la selección apta.
 6. Comparar resultado combinado de ambas pasadas con el objetivo: detalle cubierto y diseño protegido. Reducir recorrido innecesario solo entre opciones que cumplan esos controles. No afirmar que se encontró el mínimo global de tiempo sin medirlo.
 
-La punta más pequeña no garantiza menor ocupación lateral a todas las profundidades: influyen el ángulo del cono, la profundidad y el material que se conserva. Q-PROG-018 aclara que la primera herramienta se llama «0,5» pero está configurada como **0,6 mm**; no usar el nombre para reconstruir su geometría. La fina conserva punta **0,1 mm y 30° por lado**, con final **0,6 mm** en la descripción de su pasada. Ambas usan V-carve: el tope final no implica profundidad constante en todas las secciones.
+La punta más pequeña no garantiza menor ocupación lateral a todas las profundidades: influyen el ángulo del cono, la profundidad y el material que se conserva. Q-PROG-018 aclara que la primera herramienta se llama «0,5» pero está configurada como **0,6 mm**; no usar el nombre para reconstruir su geometría. La fina tiene punta **física 0,1 mm, configurada 0,2 mm en Aspire, y 30° por lado**, con final **0,6 mm** en la descripción de su pasada. Ambas usan V-carve: el tope final no implica profundidad constante en todas las secciones.
 
 | Mecanizado confirmado | Profundidad principal | Operación adicional confirmada |
 |---|---|---|
@@ -114,7 +114,7 @@ La punta más pequeña no garantiza menor ocupación lateral a todas las profund
 
 El modelo debe distinguir profundidad principal de la del repaso. No comparar las herramientas como si ambas debieran alcanzar el mismo fondo ni exigir a la fina 1,7/3 mm por el solo nombre del mecanizado. Simular el resultado acumulado, tomando en cuenta el material retirado por las operaciones anteriores y el relieve que se conserva.
 
-**Criterio de calidad confirmado para Alimento (POL-085)**: evaluar primero si la primera fresa resuelve el grabado sin repaso fino. El ≈1 mm indicado antes corresponde a esa verificación. Solo donde necesite la de punta 0,1 mm, buscar que alcance **unos 0,4–0,5 mm**, con máximo 0,6 mm. No exigir a ambas herramientas la misma profundidad ni aplicar a Alimento el mínimo general de 0,3 mm por defecto.
+**Criterio de calidad confirmado para Alimento (POL-085)**: evaluar primero si la primera fresa resuelve el grabado sin repaso fino. El ≈1 mm indicado antes corresponde a esa verificación. Solo donde necesite la fina «0,1» (configurada 0,2 mm), buscar que alcance **unos 0,4–0,5 mm**, con máximo 0,6 mm. No exigir a ambas herramientas la misma profundidad ni aplicar a Alimento el mínimo general de 0,3 mm por defecto.
 
 Esto cambia la recomendación del editor: distinguir «Queda bien con la primera fresa» de «Necesita repaso y la fina alcanza la profundidad buscada». Un detalle puede ser válido con la primera y no necesitar la fina aunque exista una herramienta menor. El objetivo de evitar repaso no autoriza deformar el logo ni cambiar automáticamente medida/receta: cualquier corrección sigue las decisiones y límites ya confirmados.
 
@@ -124,7 +124,7 @@ Esto cambia la recomendación del editor: distinguir «Queda bien con la primera
 
 Elegir Alimento también exige comprobar la huella y el espacio del **corte perimetral de 6 mm**, incluidos vecinos y soporte; no basta con comprobar que el dibujo entra sobre la planchuela. El diámetro de corte, su compensación y los márgenes pertinentes deben participar en la validación del montaje.
 
-Propuesta de experiencia: en la mesa, cada sello indica «Sin repaso», «Repaso parcial», «Repaso completo» o «Requiere revisión». Al seleccionarlo se muestra cómo queda con 0,5 mm, qué detalle mejora la de 0,1 mm y qué selección se propone. Si la selección creció, explicar la causa: por ejemplo «Incluye el contorno vecino para evitar invadirlo». Poder incluir/excluir, revisar el efecto y deshacer; una edición manual debe recalcular cobertura y contactos.
+Propuesta de experiencia: en la mesa, cada sello indica «Sin repaso», «Repaso parcial», «Repaso completo» o «Requiere revisión». Al seleccionarlo se muestra cómo queda con 0,5 mm, qué detalle mejora la fina «0,1» y qué selección se propone. Si la selección creció, explicar la causa: por ejemplo «Incluye el contorno vecino para evitar invadirlo». Poder incluir/excluir, revisar el efecto y deshacer; una edición manual debe recalcular cobertura y contactos.
 
 El gadget debe aplicar una selección por identidades geométricas, no por número de elemento en una lista. Guardar selección y contexto de protección por ejecución/revisión. Cambiar geometría, tamaño, herramienta, profundidad o receta invalida el análisis; una traslación rígida conserva la selección local solo si también se comprueban los nuevos límites y vecinos del montaje.
 
@@ -229,7 +229,7 @@ La documentación oficial confirma que los gadgets pueden manipular geometría y
 - La simulación usa los 0,6 mm configurados de la herramienta llamada «0,5», no deduce el diámetro desde su nombre. Distingue profundidad principal y repaso fino.
 - Al cambiar a Alimento se incorpora y verifica el corte perimetral con fresa de 6 mm y se revalida su efecto sobre el montaje.
 - La selección del perfilado fino responde al criterio confirmado de Fede y queda vinculada al diseño sobre el que se calculó. No se reutiliza una selección anterior sin comprobar su correspondencia.
-- Caso sin repaso: la pasada de 0,5 mm ya da el resultado aceptado; no se añade 0,1 mm solo por existir la herramienta.
+- Caso sin repaso: la pasada de 0,5 mm ya da el resultado aceptado; no se añade la fina «0,1» solo por existir la herramienta.
 - Alimento distingue ≈1 mm como referencia de la primera pasada y unos 0,4–0,5 mm para los detalles que requieren repaso fino. No usa final 3 mm ni mínima 1 mm para la fina, ni convierte el rango en un umbral rígido sin calibración.
 - Caso parcial: una zona necesita la fina y el cálculo del repaso no invade partes excluidas; se conserva una selección acotada.
 - Caso con vecinos: la selección inicial invadiría otras partes; se amplía y recalcula hasta obtener un resultado comprobado. Seleccionar todo no se acepta como garantía automática.

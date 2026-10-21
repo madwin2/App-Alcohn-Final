@@ -42,7 +42,7 @@ flowchart LR
 
 - **Dentro** ✅: gadget que baja el programa, importa, ubica, recalcula, reporta y sube el `.crv3d`.
 - **Externo** 👥: hay **dos PCs, una por CNC**. Fede arma los programas y corre el gadget **siempre con internet** (la subida manual del `.crv3d` se evita). Fede mantiene los `.crv3d` base.
-- **Revisión posterior al gadget** 👥 (Q-PROG-016/017/018, 2026-10-15): Fede ajusta vectores, chequea medidas y revisa cómo queda la pasada de la fresa llamada «0,5 mm» (configurada como 0,6 mm, 15° laterales). Elige repaso con punta 0,1 mm para las partes que necesitan detalle; amplía la selección si la pasada toca el resto del diseño, hasta evitar choques, pudiendo incluir todo el sello. La fina llega hasta 0,6 mm también en Alimento; criterio y parámetros registrados en POL-082…084 y en el SOP de fabricación.
+- **Revisión posterior al gadget** 👥 (Q-PROG-016/017/018, 2026-10-15): Fede ajusta vectores, chequea medidas y revisa cómo queda la pasada de la fresa llamada «0,5 mm» (configurada como 0,6 mm, 15° laterales). Elige repaso con la fina «0,1» (física 0,1 mm, configurada 0,2 mm en Aspire) para las partes que necesitan detalle; amplía la selección si la pasada toca el resto del diseño, hasta evitar choques, pudiendo incluir todo el sello. La fina llega hasta 0,6 mm también en Alimento; criterio y parámetros registrados en POL-082…084 y en el SOP de fabricación.
 - **Pendiente** ❓: relación entre las 2 CNC físicas y las 3 máquinas del sistema ([Q-CNC-007](../14-open-questions/produccion-fabricacion.md#q-cnc-007)).
 
 <a id="fr-04"></a>

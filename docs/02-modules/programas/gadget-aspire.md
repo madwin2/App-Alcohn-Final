@@ -60,9 +60,9 @@ Puntos clave:
 
 Evidencia y límites previos: [auditoría de automatización](../../audits/programas-automatizacion-2026-10-15.md). [Preparación visual y sincronización](preparacion-visual.md): migración y edge publicadas el 2026-10-16; gadget operativo y calificación remota pendientes. El alcance parcial automático sigue en la propuesta.
 
-**Operación confirmada (Q-PROG-016/017, 2026-10-15)**: después del gadget, Fede ajusta vectores, chequea medidas y revisa el resultado de la fresa de 0,5 mm (15° laterales) para elegir qué repasar con la de punta 0,1 mm. Elige partes si la pasada no toca el resto del sello; si toca, amplía la selección hasta evitar choques, pudiendo elegir el sello completo. Este criterio manual no está cubierto por el simple recálculo ni por el chequeo de fresa actual. Perfiles/profundidades exactos: Q-PROG-018.
+**Operación confirmada (Q-PROG-016/017, 2026-10-15)**: después del gadget, Fede ajusta vectores, chequea medidas y revisa el resultado de la fresa de 0,5 mm (15° laterales) para elegir qué repasar con la fina «0,1» (física 0,1 mm, configurada 0,2 mm en Aspire). Elige partes si la pasada no toca el resto del sello; si toca, amplía la selección hasta evitar choques, pudiendo elegir el sello completo. Este criterio manual no está cubierto por el simple recálculo ni por el chequeo de fresa actual. Perfiles/profundidades exactos: Q-PROG-018.
 
-**Parámetros confirmados (Q-PROG-018)**: «0,5» es el nombre; su configuración es **0,6 mm**, con 15° laterales. Profundidad principal: Clásico 1,7 mm; 3 mm/Alimento a 3 mm. Alimento agrega corte perimetral con fresa de 6 mm. La fina usa punta 0,1 mm/30° laterales y V-carve hasta **0,6 mm también en Alimento**. El motor local ya separa las dos herramientas; los gadgets 3.1 requieren plantillas nativas verificadas para estos parámetros.
+**Parámetros confirmados (Q-PROG-018)**: «0,5» es el nombre; su configuración es **0,6 mm**, con 15° laterales. Profundidad principal: Clásico 1,7 mm; 3 mm/Alimento a 3 mm. Alimento agrega corte perimetral con fresa de 6 mm. La fina usa punta física 0,1 mm, configurada 0,2 mm en Aspire (Q-PROG-020), 30° laterales y V-carve hasta **0,6 mm también en Alimento**. El motor local ya separa las dos herramientas; los gadgets 3.1 requieren plantillas nativas verificadas para estos parámetros.
 
 ## 3. API `programa-sync` (✅)
 
