@@ -48,7 +48,7 @@ erDiagram
 | Catálogos y parámetros | `correo_sucursales`, `costos_de_envio`, `fabricacion_parametros`, `precios_*`, `catalogo_items` | [catalogos-y-parametros.md](entidades/catalogos-y-parametros.md) |
 | Tareas | `tareas`, `tareas_dashboard`, `tareas_pedidos_globales` | [tareas.md](entidades/tareas.md) |
 | Notificaciones | `notificaciones`, `notificacion_destinatarios`, `usuario_area` | [../02-modules/notificaciones](../02-modules/notificaciones/README.md) |
-| Registros y auditoría | `estado_historial`, `envio_eventos`, `sello_rehacer_eventos`, `webhook_logs`, `meta_conversion_log`, `web_pedido_confirm_log`, `web_analytics_events`, `vector_jobs`, `fotos_pendientes` | [registros.md](entidades/registros.md) |
+| Registros y auditoría | `estado_historial`, `envio_eventos`, `sello_rehacer_eventos`, `webhook_logs`, `meta_conversion_log`, `web_pedido_confirm_log`, `web_analytics_events`, `vector_jobs`, `vector_ediciones`, `fotos_pendientes` | [registros.md](entidades/registros.md) |
 | Usuarios y preferencias | `auth.users`, `solicitudes_registro`, `usuario_area`, `perfiles_equipo`, `changelog_visto`, `vistas_tabla` | [usuarios.md](entidades/usuarios.md) |
 | Equipo (Mi perfil) | `perfiles_equipo`, `feriados`, `ausencias_equipo`, `tareas_recurrentes`, `notas_personales`, `necesidades_equipo`, `objetivos_personales`, `feedback_equipo`, `ideas_corcho` (+ votos/vistas) | [equipo.md](entidades/equipo.md) |
 | Economía | `economia_settings`, `economia_movimientos_reales`, `economia_gastos_mensuales` | [../02-modules/economia-gastos](../02-modules/economia-gastos/README.md) |

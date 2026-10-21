@@ -3,6 +3,8 @@ import { useToast } from '@/components/ui/use-toast';
 import { esTipoAlimento, type FresaTarget } from '@/lib/fresa/chequeoFresa';
 import { fetchSvgText } from '@/lib/fresa/useFresaReport';
 import { slugify } from '@/lib/vectorizacion/helpers';
+import { registrarEdicion } from '@/lib/supabase/services/vectorEdiciones.service';
+import type { EdicionOrigen } from '@/lib/vectorizacion/edicionesMetricas';
 import { FresaCheckDialog } from './FresaCheckDialog';
 
 /** Medidas de un sello, para decidir a qué escala se analiza su vector. */
@@ -52,10 +54,12 @@ interface Props {
    */
   onSaveCorrected?: (file: File, fabricationMm: { widthMm: number; heightMm: number }) => Promise<void>;
   saveHint?: string;
+  /** Para registrar la corrección en `vector_ediciones` (de qué sello y desde dónde). */
+  registro?: { selloId: string; origen: EdicionOrigen };
 }
 
 /** Chequeo de fresa de un vector ya guardado (por URL). */
-export function FresaVectorDialog({ open, onOpenChange, vectorUrl, title, size, onSaveCorrected, saveHint }: Props) {
+export function FresaVectorDialog({ open, onOpenChange, vectorUrl, title, size, onSaveCorrected, saveHint, registro }: Props) {
   const { toast } = useToast();
   const [svgText, setSvgText] = useState<string | null>(null);
   // En refs para que un re-render del padre (callbacks nuevos) no vuelva a
@@ -95,11 +99,28 @@ export function FresaVectorDialog({ open, onOpenChange, vectorUrl, title, size, 
       downloadName={slugify(title || 'vector')}
       onApply={
         onSaveCorrected
-          ? async (svg, _fix, opts) => {
+          ? async (svg, fix, opts) => {
               const file = new File([svg], `${slugify(title || 'vector')}-corregido.svg`, { type: 'image/svg+xml' });
               // Se guarda la medida del resultado: el gadget escala por el lado
               // largo, así que tiene que coincidir con el dibujo corregido.
               await onSaveCorrected(file, opts.fabricationMm);
+              const target = fresaTargetFor(size);
+              if (registro && svgText && target) {
+                // Registro para aprender de las ediciones (en segundo plano, no frena nada).
+                void registrarEdicion({
+                  origen: registro.origen,
+                  selloId: registro.selloId,
+                  original: svgText,
+                  final: svg,
+                  eleccion: fix.operations.some((o) => o.kind === 'manual') ? 'manual' : 'auto',
+                  operaciones: fix.operations,
+                  propuestaVista: true,
+                  target,
+                  targetFinal: fresaTargetFor({ ...size, fabricationWidthMm: opts.fabricationMm.widthMm, fabricationHeightMm: opts.fabricationMm.heightMm }) ?? undefined,
+                  tipoSello: size.stampType,
+                  alimento: esTipoAlimento(size.stampType),
+                });
+              }
               toast({ title: 'Vector corregido guardado', description: 'Reemplazó al anterior en el sello.' });
             }
           : undefined

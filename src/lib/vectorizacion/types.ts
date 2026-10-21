@@ -134,4 +134,6 @@ export interface ReviewItem {
   originalSvg?: string;
   /** Qué versión es `svg`: la original, la corrección automática o una edición a mano. */
   fresaChoice?: 'original' | 'auto' | 'manual';
+  /** Operaciones de la versión elegida (automáticas y registro del editor), para `vector_ediciones`. */
+  fresaOps?: import('@/lib/fresa/fix').FixOperation[];
 }

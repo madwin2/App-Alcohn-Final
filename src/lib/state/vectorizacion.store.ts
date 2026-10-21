@@ -66,6 +66,7 @@ interface VectorizacionStore {
     choice: NonNullable<ReviewItem['fresaChoice']>,
     svg: string,
     fabricationOverrideMm?: { widthMm: number; heightMm: number },
+    ops?: ReviewItem['fresaOps'],
   ) => void;
   removeReview: (id: string) => void;
   /** Carga inicial desde IndexedDB; fusiona con la cola en memoria (la sesión gana en conflictos). */
@@ -202,16 +203,18 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
     set({
       reviewQueue: get().reviewQueue.map((item) =>
         // Queda elegido tal cual: la corrección automática no lo reemplaza sola.
-        item.id === id ? { ...item, svg, fabricationOverrideMm, originalSvg: svg, fresaChoice: 'original' } : item,
+        item.id === id
+          ? { ...item, svg, fabricationOverrideMm, originalSvg: svg, fresaChoice: 'original', fresaOps: undefined }
+          : item,
       ),
     });
     schedulePersistReviewQueue(() => get().reviewQueue);
   },
-  chooseReviewSvg: (id, choice, svg, fabricationOverrideMm) => {
+  chooseReviewSvg: (id, choice, svg, fabricationOverrideMm, ops) => {
     set({
       reviewQueue: get().reviewQueue.map((item) =>
         item.id === id
-          ? { ...item, svg, fabricationOverrideMm, originalSvg: item.originalSvg ?? item.svg, fresaChoice: choice }
+          ? { ...item, svg, fabricationOverrideMm, originalSvg: item.originalSvg ?? item.svg, fresaChoice: choice, fresaOps: ops }
           : item,
       ),
     });

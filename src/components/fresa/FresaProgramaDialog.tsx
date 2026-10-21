@@ -154,6 +154,7 @@ export function FresaProgramaDialog({ open, onOpenChange, programName, stamps, o
           vectorUrl={vectorUrl(detail)}
           title={detail.designName}
           size={stampSize(detail)}
+          registro={{ selloId: detail.id, origen: 'programas' }}
           onSaveCorrected={async (file, fab) => {
             const url = await guardarVectorCorregido(detail.id, file, vectorUrl(detail), fab);
             setUrls((prev) => ({ ...prev, [detail.id]: url }));

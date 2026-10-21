@@ -16,6 +16,7 @@ import {
 import { FresaEditor } from './FresaEditor';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
 import type { ZoneSeverity } from '@/lib/fresa/analyze';
+import type { EditorLogEntry } from '@/lib/fresa/fix';
 import {
   KIND_HELP,
   DEPTH_BAND_FILL,
@@ -30,6 +31,8 @@ import {
   resumenOperaciones,
 } from '@/lib/fresa/textos';
 import { downloadSvg } from '@/lib/vectorizacion/zipResults';
+import { resumenDiferencias } from '@/lib/vectorizacion/comparacionOriginal';
+import { useComparacionOriginal, type OriginalSource } from '@/lib/vectorizacion/originalOverlay';
 import { FresaViewer, type FresaViewMode } from './FresaViewer';
 import { FresaPassesPanel } from './FresaPassesPanel';
 import { reportForPass, type PassView } from '@/lib/fresa/passReport';
@@ -73,6 +76,11 @@ interface Props {
   onUseOriginal?: () => void;
   /** Abrir directo en el editor del vector (por ejemplo, desde «Editar vector»). */
   startEditing?: boolean;
+  /**
+   * Imagen que se vectorizó: se compara con el vector (avisa si falta algo,
+   * como el punto de una i) y el editor la puede mostrar debajo.
+   */
+  original?: OriginalSource | null;
 }
 
 const DEFAULT_VISIBLE: ZoneSeverity[] = ['alta', 'media'];
@@ -129,6 +137,34 @@ function StatusSummary({ report, resolvedByRepaso = false }: { report: FresaRepo
   );
 }
 
+/** Si al vector le falta algo de la imagen original (o tiene algo de más). */
+function OriginalAviso({
+  svg,
+  original,
+  mmPerUnit,
+  onOpen,
+}: {
+  svg: string | null;
+  original: OriginalSource;
+  mmPerUnit: number;
+  onOpen: () => void;
+}) {
+  const cmp = useComparacionOriginal(svg, original, mmPerUnit);
+  if (!cmp || cmp.status !== 'diferencias') return null;
+  return (
+    <div className="flex shrink-0 items-start gap-2 rounded-md border border-fuchsia-300 bg-fuchsia-50 p-2 text-xs text-fuchsia-950 dark:bg-fuchsia-950/40 dark:text-fuchsia-100">
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1">
+        <strong>Comparado con el original:</strong> {resumenDiferencias(cmp.diferencias).toLowerCase()}. Revisalo con el
+        original debajo.
+      </span>
+      <Button type="button" size="sm" variant="outline" className="h-6 shrink-0 px-2 text-xs" onClick={onOpen}>
+        Ver
+      </Button>
+    </div>
+  );
+}
+
 /**
  * Chequeo de fresa de un vector: dónde no llega la fresa más fina, por qué, y
  * corrección automática con comparación antes/después.
@@ -146,6 +182,7 @@ export function FresaCheckDialog({
   initialFix = null,
   onUseOriginal,
   startEditing = false,
+  original = null,
 }: Props) {
   const { toast } = useToast();
   const report = useFresaReport(open ? svgText : null, open ? target : null);
@@ -217,12 +254,12 @@ export function FresaCheckDialog({
   };
 
   /** Termina la edición manual: el resultado queda como una corrección más. */
-  const finishEdit = async (edited: string, cambios: number) => {
+  const finishEdit = async (edited: string, cambios: number, extra: { registro: EditorLogEntry[]; segundos: number }) => {
     if (!report) return;
     setEditing(false);
     setFixing(true);
     try {
-      const res = await resultadoManual(edited, report, cambios);
+      const res = await resultadoManual(edited, report, cambios, undefined, extra);
       setFix(res);
       setMode('corregido');
       setSelected(null);
@@ -296,8 +333,9 @@ export function FresaCheckDialog({
           <FresaEditor
             svgText={editing === 'corregido' && fix ? fix.svg : svgText}
             report={report}
-            onDone={(edited, cambios) => void finishEdit(edited, cambios)}
+            onDone={(edited, cambios, extra) => void finishEdit(edited, cambios, extra)}
             onCancel={() => setEditing(false)}
+            original={original}
           />
         ) : (
         <div className="flex flex-col gap-3 md:min-h-0 md:flex-1 md:flex-row">
@@ -471,6 +509,15 @@ export function FresaCheckDialog({
               <p className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground">
                 {selectedGroup.kinds.map((k) => KIND_HELP[k]).join(' ')}
               </p>
+            ) : null}
+
+            {report && report.status !== 'error' && original ? (
+              <OriginalAviso
+                svg={mode !== 'original' && fix ? fix.svg : svgText}
+                original={original}
+                mmPerUnit={(mode !== 'original' && fix ? fix.after : report).mmPerUnit}
+                onOpen={() => setEditing(mode !== 'original' && fix ? 'corregido' : 'original')}
+              />
             ) : null}
 
             {report && report.status !== 'error' ? (

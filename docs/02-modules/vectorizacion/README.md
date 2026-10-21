@@ -28,6 +28,7 @@
 ### Revisión
 - ✅ Cola **persistida en este navegador** (IndexedDB): si cerrás o recargás la pestaña, los SVG de revisión se recuperan al volver a Vectorización. No se sincroniza entre PCs. Por cada resultado: antes/después, **Confirmar** (guarda), **Rechazar**, **Reemplazar con un SVG propio**, descargar todo. **Zoom**: clic en la comparación o botón Zoom abre un diálogo base|vector con zoom y pan sincronizados.
 - ✅ **Chequeo de fresa** (2026-10-14): chip por tarjeta y resumen arriba; simula el V-carve de Aspire y marca dónde se pierde el diseño (letras que se pegan y ojos tapados por debajo de 0,3 mm; Alimento 1 mm), con mapa de profundidad, **corrección automática** con comparación y "Usar el corregido". Confirmar con problemas pide confirmación; "Confirmar todos" ofrece confirmar solo los OK. Detalle en [chequeo-de-fresa.md](chequeo-de-fresa.md). También en **Asignar SVG** (una vez asignado el sello).
+- ✅ **Comparación con el original** (2026-10-21): cada vector se compara con la imagen vectorizada; chip violeta si falta algo (por ejemplo, el punto de una i), aviso al confirmar, y en el editor la imagen original debajo en violeta (casilla «Original», tecla O). Ver [chequeo-de-fresa.md §4 quinquies](chequeo-de-fresa.md#4-quinquies-comparación-con-el-original--2026-10-21-comparacionoriginalts-originaloverlayts).
 
 ## Pipeline (✅)
 

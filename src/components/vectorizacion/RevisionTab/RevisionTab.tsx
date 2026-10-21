@@ -4,6 +4,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/components/ui/use-toast';
 import { useVectorizacionStore } from '@/lib/state/vectorizacion.store';
 import { saveSelloVector } from '@/lib/vectorizacion/saveVector';
+import { registrarEdicion } from '@/lib/supabase/services/vectorEdiciones.service';
+import type { FixOperation } from '@/lib/fresa/fix';
 import { downloadSvg, downloadBlob, zipDownloadName, zipVectorResults } from '@/lib/vectorizacion/zipResults';
 import type { ReviewItem } from '@/lib/vectorizacion/types';
 import { Check, Download, Loader2, Replace, Search, Wand2, X } from 'lucide-react';
@@ -20,7 +22,11 @@ import {
   type FresaReport,
   type FresaTarget,
 } from '@/lib/fresa/chequeoFresa';
+import { machiningRecipe } from '@/lib/fresa/config';
 import { resumenOperaciones } from '@/lib/fresa/textos';
+import { OriginalChip } from '@/components/vectorizacion/shared/OriginalChip';
+import { resumenDiferencias } from '@/lib/vectorizacion/comparacionOriginal';
+import { compararConOriginal, useComparacionOriginal } from '@/lib/vectorizacion/originalOverlay';
 
 /** La medida con la que se va a guardar: la misma lógica que "Confirmar". */
 function reviewTarget(item: ReviewItem): FresaTarget {
@@ -69,20 +75,26 @@ function autoKey(item: ReviewItem): string {
   return fresaCacheKey(originalOf(item), autoTarget(item));
 }
 
+/**
+ * Sellos de 3 mm: la corrección automática se calcula y se puede elegir, pero
+ * nunca queda elegida sola (Q-VEC-016, 2026-10-21).
+ */
+const sinAutoSola = (item: ReviewItem) => machiningRecipe(item.stampType, item.alimento) === '3MM';
+
 const reviewById = (id: string) => useVectorizacionStore.getState().reviewQueue.find((r) => r.id === id) ?? null;
 
 /**
  * El ítem tal como se va a guardar, leído del store (no de un render viejo).
  * Si todavía no se eligió versión, queda la automática, igual que cuando la
- * corrección termina sola.
+ * corrección termina sola (salvo en los de 3 mm).
  */
 async function itemParaGuardar(id: string): Promise<ReviewItem | null> {
   const item = reviewById(id);
-  if (!item || item.fresaChoice) return item;
+  if (!item || item.fresaChoice || sinAutoSola(item)) return item;
   const res = await autoCorregir(originalOf(item), autoTarget(item));
   const current = reviewById(id);
   if (res.fix && current && !current.fresaChoice && autoKey(current) === autoKey(item)) {
-    useVectorizacionStore.getState().chooseReviewSvg(id, 'auto', res.fix.svg);
+    useVectorizacionStore.getState().chooseReviewSvg(id, 'auto', res.fix.svg, undefined, res.fix.operations);
   }
   return reviewById(id);
 }
@@ -124,7 +136,7 @@ function VersionPicker({
 }: {
   item: ReviewItem;
   auto: AutoState;
-  onChoose: (choice: NonNullable<ReviewItem['fresaChoice']>, svg: string) => void;
+  onChoose: (choice: NonNullable<ReviewItem['fresaChoice']>, svg: string, override?: undefined, ops?: FixOperation[]) => void;
   onOpen: () => void;
 }) {
   if (!auto) {
@@ -148,7 +160,7 @@ function VersionPicker({
           <VersionButton active={choice === 'original'} onClick={() => onChoose('original', originalOf(item))}>
             Original
           </VersionButton>
-          <VersionButton active={choice === 'auto'} onClick={() => onChoose('auto', fix.svg)}>
+          <VersionButton active={choice === 'auto'} onClick={() => onChoose('auto', fix.svg, undefined, fix.operations)}>
             <Wand2 className="mr-1 inline size-3" />
             Automático
           </VersionButton>
@@ -168,6 +180,7 @@ function VersionPicker({
             ? `Automático resuelve los ${antes} lugares. `
             : `Automático resuelve ${antes - despues} de ${antes} lugares. `
           : ''}
+        {sinAutoSola(item) ? 'Sello de 3 mm: el automático no se elige solo. ' : ''}
         {resumenOperaciones(fix.operations)}
       </p>
     </div>
@@ -199,13 +212,22 @@ function ReviewCard({
     choice: NonNullable<ReviewItem['fresaChoice']>,
     svg: string,
     fabricationOverrideMm?: { widthMm: number; heightMm: number },
+    ops?: FixOperation[],
   ) => void;
 }) {
   const [checker, setChecker] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [fresaOpen, setFresaOpen] = useState(false);
+  const [fresaEdit, setFresaEdit] = useState(false);
   const [guardOpen, setGuardOpen] = useState(false);
   const problemas = fresaProblemas(fresa);
+  // Comparación con la imagen que se vectorizó (por ejemplo, un punto de i que se borró).
+  const vsOriginal = useComparacionOriginal(item.svg, item.beforeDataUrl, fresa?.status === 'error' ? null : fresa?.mmPerUnit);
+  const faltas = vsOriginal?.status === 'diferencias' ? vsOriginal.diferencias : [];
+  const openFresa = (edit = false) => {
+    setFresaEdit(edit);
+    setFresaOpen(true);
+  };
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const svgUrl = `data:image/svg+xml;utf8,${encodeURIComponent(item.svg)}`;
@@ -262,7 +284,8 @@ function ReviewCard({
                 {(Math.max(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} ×{' '}
                 {(Math.min(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} cm
               </p>
-              <FresaChip report={fresa} onClick={() => setFresaOpen(true)} />
+              <FresaChip report={fresa} onClick={() => openFresa()} />
+              {fresa && fresa.status !== 'error' ? <OriginalChip result={vsOriginal} onClick={() => openFresa(true)} /> : null}
             </div>
           </div>
           <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
@@ -270,7 +293,7 @@ function ReviewCard({
             Damero
           </label>
         </div>
-        <VersionPicker item={item} auto={auto} onChoose={onChoose} onOpen={() => setFresaOpen(true)} />
+        <VersionPicker item={item} auto={auto} onChoose={onChoose} onOpen={() => openFresa()} />
         {item.mode !== 'production' ? (
           <p className="text-xs text-amber-600">Modo prueba: no se puede confirmar en pedidos.</p>
         ) : null}
@@ -290,7 +313,7 @@ function ReviewCard({
             size="sm"
             disabled={confirming || item.mode !== 'production' || !auto}
             title={!auto ? 'Esperá a que termine la corrección automática' : undefined}
-            onClick={() => (problemas > 0 ? setGuardOpen(true) : onConfirm())}
+            onClick={() => (problemas > 0 || faltas.length > 0 ? setGuardOpen(true) : onConfirm())}
           >
             <Check className="mr-1 size-3.5" />
             Confirmar
@@ -333,11 +356,13 @@ function ReviewCard({
         svgText={originalOf(item)}
         target={autoTarget(item)}
         downloadName={item.designName}
+        original={item.beforeDataUrl}
+        startEditing={fresaEdit}
         initialFix={auto?.fix ?? null}
         onUseOriginal={() => onChoose('original', originalOf(item))}
         onApply={(svg, fix, opts) => {
           const manual = fix.operations.some((o) => o.kind === 'manual');
-          onChoose(manual ? 'manual' : 'auto', svg, opts.scaledUp ? opts.fabricationMm : undefined);
+          onChoose(manual ? 'manual' : 'auto', svg, opts.scaledUp ? opts.fabricationMm : undefined, fix.operations);
           toast({
             title: opts.scaledUp ? 'Vector corregido y agrandado' : 'Vector corregido',
             description: opts.scaledUp
@@ -353,11 +378,19 @@ function ReviewCard({
       <ConfirmDialog
         open={guardOpen}
         onOpenChange={setGuardOpen}
-        title="La fresa no llega en todo el diseño"
-        description={`Hay ${problemas} lugar${problemas === 1 ? '' : 'es'} donde la fresa no llega a la profundidad mínima. Podés revisarlo y corregirlo antes, o confirmarlo igual.`}
+        title={problemas > 0 ? 'La fresa no llega en todo el diseño' : 'Puede faltar algo del original'}
+        description={[
+          problemas > 0
+            ? `Hay ${problemas} lugar${problemas === 1 ? '' : 'es'} donde la fresa no llega a la profundidad mínima.`
+            : '',
+          faltas.length ? `Comparado con la imagen original: ${resumenDiferencias(faltas).toLowerCase()}.` : '',
+          'Podés revisarlo y corregirlo antes, o confirmarlo igual.',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         cancelLabel="Revisar"
         confirmLabel="Confirmar igual"
-        onCancel={() => setFresaOpen(true)}
+        onCancel={() => openFresa(problemas === 0 && faltas.length > 0)}
         onConfirm={onConfirm}
       />
     </div>
@@ -393,7 +426,7 @@ export function RevisionTab() {
   }, [store.reviewQueue, fresaKeys]);
 
   // Corrección automática de cada vector que llega (de a uno, en segundo plano).
-  // Si todavía no se eligió versión y la automática cambia algo, queda elegida.
+  // Si todavía no se eligió versión y la automática cambia algo, queda elegida (salvo en los de 3 mm).
   const chooseReviewSvg = store.chooseReviewSvg;
   useEffect(() => {
     let alive = true;
@@ -403,8 +436,8 @@ export function RevisionTab() {
         if (!alive) return;
         setAutos((prev) => (prev[key] === res ? prev : { ...prev, [key]: res }));
         const current = useVectorizacionStore.getState().reviewQueue.find((r) => r.id === item.id);
-        if (res.fix && current && !current.fresaChoice && autoKey(current) === key) {
-          chooseReviewSvg(item.id, 'auto', res.fix.svg);
+        if (res.fix && current && !current.fresaChoice && !sinAutoSola(current) && autoKey(current) === key) {
+          chooseReviewSvg(item.id, 'auto', res.fix.svg, undefined, res.fix.operations);
         }
       });
     }
@@ -446,6 +479,21 @@ export function RevisionTab() {
       });
       store.removeReview(item.id);
       store.removeLocal(item.selloId);
+      // Registro para aprender de las ediciones (en segundo plano, no frena nada).
+      void registrarEdicion({
+        origen: 'revision',
+        selloId: item.selloId,
+        ordenId: item.orderId,
+        original: originalOf(item),
+        final: item.svg,
+        eleccion: item.fresaChoice ?? 'original',
+        operaciones: item.fresaChoice === 'original' ? null : item.fresaOps,
+        propuestaVista: true,
+        target: autoTarget(item),
+        targetFinal: reviewTarget(item),
+        tipoSello: item.stampType,
+        alimento: item.alimento,
+      });
       if (saved.needsReview) {
         store.setFabricationReviews([
           ...useVectorizacionStore.getState().fabricationReviews,
@@ -486,7 +534,10 @@ export function RevisionTab() {
     );
     const items = resolved.filter((i): i is ReviewItem => Boolean(i));
     const reports = await Promise.all(items.map((i) => chequearSvg(i.svg, reviewTarget(i))));
-    const withIssues = items.filter((_, k) => fresaProblemas(reports[k]) > 0);
+    const vsOriginal = await Promise.all(
+      items.map((i, k) => (reports[k].status === 'error' ? null : compararConOriginal(i.svg, i.beforeDataUrl, reports[k].mmPerUnit))),
+    );
+    const withIssues = items.filter((_, k) => fresaProblemas(reports[k]) > 0 || vsOriginal[k]?.status === 'diferencias');
     if (withIssues.length) {
       setBulkGuard({ ok: items.filter((i) => !withIssues.includes(i)), withIssues });
       return;
@@ -565,18 +616,18 @@ export function RevisionTab() {
               store.removeLocal(item.selloId);
             }}
             onChangeSvg={(svg) => store.updateReviewSvg(item.id, svg)}
-            onChoose={(choice, svg, override) => store.chooseReviewSvg(item.id, choice, svg, override)}
+            onChoose={(choice, svg, override, ops) => store.chooseReviewSvg(item.id, choice, svg, override, ops)}
           />
         ))}
       </div>
       <Dialog open={Boolean(bulkGuard)} onOpenChange={(o) => !o && setBulkGuard(null)}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Hay vectores donde la fresa no llega</DialogTitle>
+            <DialogTitle>Hay vectores para revisar</DialogTitle>
             <DialogDescription>
               {bulkGuard?.withIssues.length} de {(bulkGuard?.ok.length ?? 0) + (bulkGuard?.withIssues.length ?? 0)}{' '}
-              tienen lugares donde la fresa no llega a la profundidad mínima:{' '}
-              {bulkGuard?.withIssues.map((i) => i.designName).join(', ')}.
+              tienen lugares donde la fresa no llega a la profundidad mínima o algo que puede faltar respecto de la
+              imagen original: {bulkGuard?.withIssues.map((i) => i.designName).join(', ')}.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-row">

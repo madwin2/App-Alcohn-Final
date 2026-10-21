@@ -17,6 +17,8 @@ import { FresaChip } from '@/components/fresa/FresaChip';
 import { FresaCheckDialog } from '@/components/fresa/FresaCheckDialog';
 import { chequearSvg, esTipoAlimento, type FresaTarget } from '@/lib/fresa/chequeoFresa';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
+import type { FixOperation } from '@/lib/fresa/fix';
+import { registrarEdicion } from '@/lib/supabase/services/vectorEdiciones.service';
 
 interface LocalSvg {
   fileName: string;
@@ -24,6 +26,10 @@ interface LocalSvg {
   previewUrl: string;
   /** Medida elegida al agrandar el sello desde el chequeo de fresa (mm). */
   fabricationOverrideMm?: { widthMm: number; heightMm: number };
+  /** El SVG como se subió, si después se corrigió (para `vector_ediciones`). */
+  originalSvg?: string;
+  /** Correcciones aplicadas desde el chequeo de fresa, en orden. */
+  ops?: FixOperation[];
 }
 
 function selloTarget(
@@ -59,7 +65,7 @@ function AsignacionFresa({
 }: {
   file: LocalSvg;
   sello: PendingSello | undefined;
-  onReplaceSvg: (svg: string, fabricationOverrideMm?: { widthMm: number; heightMm: number }) => void;
+  onReplaceSvg: (svg: string, fabricationOverrideMm: { widthMm: number; heightMm: number } | undefined, ops: FixOperation[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const target = selloTarget(sello, file.fabricationOverrideMm);
@@ -74,7 +80,7 @@ function AsignacionFresa({
         svgText={file.svg}
         target={target}
         downloadName={file.fileName.replace(/\.svg$/i, '')}
-        onApply={(svg, _fix, opts) => onReplaceSvg(svg, opts.scaledUp ? opts.fabricationMm : undefined)}
+        onApply={(svg, fix, opts) => onReplaceSvg(svg, opts.scaledUp ? opts.fabricationMm : undefined, fix.operations)}
         applyLabel="Usar el corregido"
         applyHint="Reemplaza este SVG en la lista. Se guarda en el pedido al confirmar las asignaciones."
       />
@@ -129,13 +135,20 @@ export function AsignarTab() {
   const [saving, setSaving] = useState(false);
   const [fresaGuard, setFresaGuard] = useState<string[] | null>(null);
 
-  const replaceFileSvg = (fileName: string, svg: string, fabricationOverrideMm?: { widthMm: number; heightMm: number }) => {
+  const replaceFileSvg = (
+    fileName: string,
+    svg: string,
+    fabricationOverrideMm: { widthMm: number; heightMm: number } | undefined,
+    ops: FixOperation[],
+  ) => {
     setFiles((prev) =>
       prev.map((f) => {
         if (f.fileName !== fileName) return f;
         URL.revokeObjectURL(f.previewUrl);
         return {
           ...f,
+          originalSvg: f.originalSvg ?? f.svg,
+          ops: [...(f.ops ?? []), ...ops],
           svg,
           fabricationOverrideMm,
           previewUrl: URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' })),
@@ -232,6 +245,26 @@ export function AsignarTab() {
           mode: 'production',
           fabricationOverrideMm: file.fabricationOverrideMm,
         });
+        // Registro para aprender de las ediciones (en segundo plano, no frena nada).
+        const target = selloTarget(sello);
+        if (target) {
+          const corregido = file.originalSvg != null && file.originalSvg !== file.svg;
+          void registrarEdicion({
+            origen: 'asignar',
+            selloId: sello.id,
+            ordenId: sello.orderId,
+            original: file.originalSvg ?? file.svg,
+            final: file.svg,
+            eleccion: !corregido ? 'original' : file.ops?.some((o) => o.kind === 'manual') ? 'manual' : 'auto',
+            operaciones: corregido ? file.ops : null,
+            // Acá la automática no se muestra sola: solo cuenta si se pidió y se usó.
+            propuestaVista: corregido,
+            target,
+            targetFinal: selloTarget(sello, file.fabricationOverrideMm) ?? undefined,
+            tipoSello: sello.tipo,
+            alimento: esTipoAlimento(sello.tipo),
+          });
+        }
         if (saved.needsReview) {
           reviews.push({
             selloId: sello.id,
@@ -293,7 +326,7 @@ export function AsignarTab() {
                 <AsignacionFresa
                   file={file}
                   sello={sellos.find((x) => x.id === assignment[file.fileName])}
-                  onReplaceSvg={(svg, override) => replaceFileSvg(file.fileName, svg, override)}
+                  onReplaceSvg={(svg, override, ops) => replaceFileSvg(file.fileName, svg, override, ops)}
                 />
               </div>
             </div>

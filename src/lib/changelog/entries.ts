@@ -1182,6 +1182,52 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 65,
+    date: '2026-10-21',
+    title: 'Editor de vectores con herramientas y sellos de 3 mm',
+    version: '1.83',
+    slides: [
+      {
+        heading: 'Herramientas como en Illustrator',
+        body: 'Al editar un vector a mano, a la izquierda hay una barra: selección, selección directa, añadir y borrar nodos, rectángulo, elipse, cuchillo, girar, medir, mano y zoom, con las mismas teclas que Illustrator.',
+        icon: MousePointerClick,
+      },
+      {
+        heading: 'Buscatrazos y selección dentro de un aro',
+        body: 'Con dos piezas elegidas podés unir, restar, intersecar, excluir o dividir. Y arrastrar adentro de un aro ahora hace el rectángulo de selección en vez de mover el aro.',
+        icon: Spline,
+      },
+      {
+        heading: 'Calidad del automático',
+        body: 'Cada vector que se guarda queda anotado solo (cómo salió, qué propuso la automática y qué quedó). En Vectorización, «Calidad del automático» muestra cuánto acierta por tipo de caso. No cambia nada de cómo trabajás.',
+        icon: BarChart3,
+      },
+      {
+        heading: 'Los sellos de 3 mm no se corrigen solos',
+        body: 'En Revisión, la corrección automática de un sello de 3 mm se puede ver y elegir, pero nunca queda elegida sola: se guarda el original salvo que elijas otra versión.',
+        icon: Wand2,
+      },
+    ],
+  },
+  {
+    id: 66,
+    date: '2026-10-21',
+    title: 'Comparar el vector con el original',
+    version: '1.84',
+    slides: [
+      {
+        heading: 'Avisa si al vector le falta algo del original',
+        body: 'En Revisión, cada vector se compara solo con la imagen que se vectorizó. Si se perdió algo (por ejemplo, el punto de una i), aparece el chip violeta «Falta un punto de i» o «Puede faltar algo», y al confirmar te lo recuerda.',
+        icon: ScanSearch,
+      },
+      {
+        heading: 'El original debajo, en el editor',
+        body: 'Al editar el vector, la imagen original se ve debajo en violeta: lo que se ve en color quedó afuera del vector. Se prende y apaga con «Original» (o la tecla O) y tiene opacidad. Las letras A, B… te llevan a cada lugar marcado.',
+        icon: Layers,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

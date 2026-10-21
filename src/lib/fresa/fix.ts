@@ -68,6 +68,18 @@ export interface PieceMove {
   dy: number;
 }
 
+/** Una acción hecha en el editor manual (se guarda con la versión «A mano»). */
+export interface EditorLogEntry {
+  /** Segundos desde que se abrió el editor. */
+  s: number;
+  herramienta: string;
+  /** Piezas y nodos elegidos en ese momento. */
+  piezas: number;
+  nodos: number;
+  /** Lo que se hizo, como lo muestra el aviso del editor. */
+  accion: string;
+}
+
 export type FixOperation =
   | { kind: 'separar'; axis: SeparationAxis; mm: number }
   /** Espacio extra entre todas las letras de un renglón (`arco`: de un texto en arco). */
@@ -76,8 +88,11 @@ export type FixOperation =
   | { kind: 'acompanar'; renglones: number }
   | { kind: 'agrandar_ojo'; mm: number }
   | { kind: 'ensanchar'; mm: number }
-  /** Cambios hechos a mano en el editor (mover, escalar, offsets, nodos). */
-  | { kind: 'manual'; cambios: number }
+  /**
+   * Cambios hechos a mano en el editor (mover, escalar, offsets, nodos), con
+   * el registro de cada acción y el tiempo de edición (se guarda en `vector_ediciones`).
+   */
+  | { kind: 'manual'; cambios: number; registro?: EditorLogEntry[]; segundos?: number }
   /** Nodos de más que se sacaron sin cambiar el diseño (`tolMm`: cuánto se movió la forma como mucho). */
   | { kind: 'simplificar'; antes: number; despues: number; tolMm: number };
 

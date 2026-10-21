@@ -67,7 +67,11 @@ Apenas un vector llega a Revisión, la app **lo corrige sola** en segundo plano 
 - Si la fresa no llega en algún lugar, aplica la **corrección automática** (ver abajo).
 - Siempre **simplifica los nodos sin cambiar el diseño**: las rectas llenas de nodos quedan con un nodo por esquina y las curvas con pocos nodos. Prueba sacar todo lo posible (la forma se mueve como mucho 0,02 mm, mucho menos de lo que marca la fresa más fina) y, si eso cambiara la medida o empeorara el chequeo de fresa, prueba con 0,01 mm; si tampoco, no simplifica.
 
-En la tarjeta aparece **Guardar: Original | Automático** (y **A mano** si lo editaste), con lo que hizo la corrección (por ejemplo, "Se simplificó de 776 a 508 nodos sin cambiar el diseño"). Si la automática cambió algo, **queda elegida**; tocá **Original** para guardar el vector tal como salió. **Ver / editar** abre el chequeo con la corrección ya hecha, donde podés compararla, **Editar el corregido** o **Editar el original** a mano, o **Usar el original**. El original nunca se pierde: lo podés volver a elegir hasta que confirmás. **Cambiar** (cargar otro SVG) lo toma como nuevo original y lo vuelve a corregir.
+En la tarjeta aparece **Guardar: Original | Automático** (y **A mano** si lo editaste), con lo que hizo la corrección (por ejemplo, "Se simplificó de 776 a 508 nodos sin cambiar el diseño"). Si la automática cambió algo, **queda elegida** (salvo en los sellos de **3 mm**: ahí nunca se elige sola, se guarda el original salvo que elijas otra cosa); tocá **Original** para guardar el vector tal como salió. **Ver / editar** abre el chequeo con la corrección ya hecha, donde podés compararla, **Editar el corregido** o **Editar el original** a mano, o **Usar el original**. El original nunca se pierde: lo podés volver a elegir hasta que confirmás. **Cambiar** (cargar otro SVG) lo toma como nuevo original y lo deja elegido tal cual: la corrección automática de ese archivo se puede ver y elegir, pero no lo reemplaza sola.
+
+#### Calidad del automático
+
+Cada vector que se guarda (en Revisión, en Asignar SVG o con «Guardar el corregido» desde el chequeo) queda anotado solo: cómo salió, qué propuso la automática y qué se guardó al final. No hay que hacer nada distinto. Arriba a la derecha, **Calidad del automático** muestra, por tipo de caso (letras pegadas, ojos tapados, 3 mm, Alimento…), qué porcentaje de las propuestas se guardó tal cual, cuántas se volvieron al original o se editaron a mano, y cuántos sellos se rehicieron por error en el vector. Sirve para saber cuándo se le puede tener confianza (ver el plan de corrección autónoma).
 
 Tocá el chip para abrir el **Chequeo de fresa**:
 
@@ -105,7 +109,18 @@ Tocá el chip para abrir el **Chequeo de fresa**:
    - **El panel no se mueve**: todos los controles están siempre en el mismo lugar (apagados cuando no se pueden usar, por ejemplo Alinear con una sola pieza) y lo que hiciste aparece en un aviso que flota arriba del dibujo y se va solo. Así podés tocar **+1 %** o una flecha varias veces seguidas sin que el botón se corra. Mientras la fresa se vuelve a chequear, se sigue viendo el último resultado con «actualizando». Los atajos de teclado (Ctrl+Z, flechas, Supr) funcionan aunque hayas tocado un botón del panel. Solo funciona con vectores de rellenos negros (sin blancos ni trazos).
 7. **Usar el corregido** elige esa versión para guardar; **Usar el original**, el vector como salió. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
 
-Si confirmás un vector con lugares donde la fresa no llega, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.
+### Comparación con el original
+
+Al lado del chip **Fresa** aparece un chip que compara el vector con la imagen que se vectorizó:
+
+| Chip | Qué significa |
+|---|---|
+| **Original** (verde) | No se perdió nada |
+| **Falta un punto de i** / **Puede faltar algo · N** (violeta) | Al vector le falta algo del original (un punto de i, una pieza, una parte) o tiene algo que el original no (un ojo tapado) |
+
+Tocalo y se abre el editor con la **imagen original debajo, en violeta**: todo lo que se ve violeta quedó afuera del vector. Las letras **A, B…** del panel te llevan a cada lugar. Arreglalo (por ejemplo, con la **elipse** sobre el punto que falta) y el panel pasa a **No falta nada del original**. La casilla **Original** (o la tecla **O**) prende y apaga la imagen, y al lado se regula la opacidad. Es una sugerencia: si el cambio es a propósito (algo que se rehízo a mano), confirmalo igual.
+
+Si confirmás un vector con lugares donde la fresa no llega o con algo que puede faltar del original, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.
 
 🤖 Al confirmar, la app escala el vector a la medida pedida y lo mide:
 - Si entra bien en la planchuela y no se desvía más de 6 mm de lo pedido, se guarda directo.
