@@ -109,7 +109,18 @@ Tocá el chip para abrir el **Chequeo de fresa**:
    - **El panel no se mueve**: todos los controles están siempre en el mismo lugar (apagados cuando no se pueden usar, por ejemplo Alinear con una sola pieza) y lo que hiciste aparece en un aviso que flota arriba del dibujo y se va solo. Así podés tocar **+1 %** o una flecha varias veces seguidas sin que el botón se corra. Mientras la fresa se vuelve a chequear, se sigue viendo el último resultado con «actualizando». Los atajos de teclado (Ctrl+Z, flechas, Supr) funcionan aunque hayas tocado un botón del panel. Solo funciona con vectores de rellenos negros (sin blancos ni trazos).
 7. **Usar el corregido** elige esa versión para guardar; **Usar el original**, el vector como salió. Se guarda en el pedido cuando tocás **Confirmar**. También podés **Descargar** el corregido para terminarlo en Illustrator.
 
-Si confirmás un vector con lugares donde la fresa no llega, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.
+### Comparación con el original
+
+Al lado del chip **Fresa** aparece un chip que compara el vector con la imagen que se vectorizó:
+
+| Chip | Qué significa |
+|---|---|
+| **Original** (verde) | No se perdió nada |
+| **Falta un punto de i** / **Puede faltar algo · N** (violeta) | Al vector le falta algo del original (un punto de i, una pieza, una parte) o tiene algo que el original no (un ojo tapado) |
+
+Tocalo y se abre el editor con la **imagen original debajo, en violeta**: todo lo que se ve violeta quedó afuera del vector. Las letras **A, B…** del panel te llevan a cada lugar. Arreglalo (por ejemplo, con la **elipse** sobre el punto que falta) y el panel pasa a **No falta nada del original**. La casilla **Original** (o la tecla **O**) prende y apaga la imagen, y al lado se regula la opacidad. Es una sugerencia: si el cambio es a propósito (algo que se rehízo a mano), confirmalo igual.
+
+Si confirmás un vector con lugares donde la fresa no llega o con algo que puede faltar del original, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.
 
 🤖 Al confirmar, la app escala el vector a la medida pedida y lo mide:
 - Si entra bien en la planchuela y no se desvía más de 6 mm de lo pedido, se guarda directo.

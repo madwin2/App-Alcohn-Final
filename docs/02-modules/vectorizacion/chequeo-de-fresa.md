@@ -156,6 +156,19 @@ Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo p
 - **Copiar / cortar / pegar / duplicar** (Ctrl+C/X/V/D, Ctrl+Shift+V en el mismo lugar), también entre sellos (se reescala a mm). Los agujeros de cada pieza se buscan **solo en su propio trazado** (`computePieces`): pegar una letra encima de otra (por ejemplo un «4» corrido 0,5 mm) ya no le pasa el agujero de la de abajo ni mezcla las dos.
 - **Girar** (90° o libre) y **espejar**; **unir** lo que se pisa (Ctrl+G).
 
+## 4 quinquies. Comparación con el original (✅ 2026-10-21, `comparacionOriginal.ts`, `originalOverlay.ts`)
+
+Pedido del equipo: Vectorizer.AI borró el punto de algunas «i» y en la revisión no se vio. Ahora el vector se compara con la imagen que se vectorizó.
+
+- **Máscara del original**: luminancia con umbral de Otsu (acotado 60–200), transparente = fondo; si el borde queda casi todo negro, se invierte (negativo).
+- **Alineación** (`alignOriginal`): escala uniforme + corrimiento. Arranca de las cajas (ancho, alto y media) y busca la superposición máxima (F1) con una muestra de 4000 píxeles de tinta contra el vector rasterizado, en tres pasadas cada vez más finas. No depende del recorte, del achique en la hoja ni del «se achicó 3 %» de la corrección, y una pieza perdida en el borde no la corre. Con F1 < 0,6 queda «sin alinear» y no se afirma nada (vector rehecho a mano, otro diseño).
+- **Diferencias** (`compararMascaras`), con tolerancias en mm (escala del chequeo de fresa): pieza del original cubierta < 35 % por el vector → **falta una pieza**; si es chica, redonda y tiene un trazo angosto debajo → **punto de una i** (con más de 4 piezas perdidas se considera un patrón —manchas, puntillado— y no se llama «punto de i»). Lo que queda afuera con 0,15 mm de tolerancia y tiene al menos 0,1 mm de grosor y 0,12 mm² → **falta una parte** o, al revés, **algo que no está en el original** (ojo tapado). Así no cuentan los bordes ni lo que corrige la fresa.
+- No hay OCR: el «punto de i» se reconoce por la forma (punto + palito debajo), no leyendo la palabra.
+- **Dónde**: chip violeta en cada tarjeta de **Revisión** («Falta un punto de i», «Puede faltar algo · N»; verde «Original» si coincide); clic → abre el editor. Confirmar (uno o todos) con diferencias pregunta antes. En el diálogo del chequeo, aviso «Comparado con el original» con **Ver**. En el **editor**, casilla **Original** (tecla O) con opacidad: la imagen en violeta debajo del vector (lo que se ve en color quedó afuera); marcas A, B… con **Ir a** y un panel que se actualiza al soltar cada cambio («No falta nada del original» cuando se arregla).
+- Solo donde se conoce la imagen vectorizada: hoy **Revisión** (la imagen preparada de la hoja). Pedidos, Producción, Programas y Asignar SVG no pasan el original todavía.
+- Rendimiento: ~0,5 s por vector en el navegador (en cola, de a uno); en el editor solo se recompara (~60 ms) 300 ms después de cada cambio.
+- Prueba con 13 vectores reales guardados (2026-10-21): 8 OK, 2 sin alinear (vector distinto del base), y 4 con diferencias reales: punto de la i perdido en «Calandria Mall» y en «Piletón», manchas de la trucha de «Río Manso», y «MADERAS» corrido en RV Maderas.
+
 ## 5. Dónde aparece en la app
 
 | Pantalla | Qué se ve | Qué se puede hacer |
@@ -186,4 +199,4 @@ Cada vector que entra a **Revisión** pasa solo por `autoCorregir` (en segundo p
 
 ## Implementación relacionada
 
-`src/lib/fresa/{editDoc,editTools,vcarveRelief,curveFit,config,pathData,svgShapes,geometry,analyze,layout,fix,moveSvg,engine,exportSvg,chequeoFresa,useFresaReport,guardarCorregido,textos,fresa.worker,workerProtocol}.ts`, `src/components/fresa/{FresaEditor,FresaChip,FresaCheckDialog,FresaViewer,FresaVectorDialog,FresaProgramaDialog}.tsx`, integración en `RevisionTab.tsx`, `AsignarTab.tsx`, `pedidos|produccion/Table/cells/CellVector.tsx`, `ProgramCardDesign.tsx`, `ProgramContextMenu.tsx`. Tests: `src/lib/fresa/fresa.test.ts`. Dependencia: `clipper2-ts` (BSL-1.0).
+`src/lib/vectorizacion/{comparacionOriginal,originalOverlay}.ts`, `src/components/vectorizacion/shared/OriginalChip.tsx`, `src/lib/fresa/{editDoc,editTools,vcarveRelief,curveFit,config,pathData,svgShapes,geometry,analyze,layout,fix,moveSvg,engine,exportSvg,chequeoFresa,useFresaReport,guardarCorregido,textos,fresa.worker,workerProtocol}.ts`, `src/components/fresa/{FresaEditor,FresaChip,FresaCheckDialog,FresaViewer,FresaVectorDialog,FresaProgramaDialog}.tsx`, integración en `RevisionTab.tsx`, `AsignarTab.tsx`, `pedidos|produccion/Table/cells/CellVector.tsx`, `ProgramCardDesign.tsx`, `ProgramContextMenu.tsx`. Tests: `src/lib/fresa/fresa.test.ts`. Dependencia: `clipper2-ts` (BSL-1.0).

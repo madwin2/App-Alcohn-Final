@@ -1210,6 +1210,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 66,
+    date: '2026-10-21',
+    title: 'Comparar el vector con el original',
+    version: '1.84',
+    slides: [
+      {
+        heading: 'Avisa si al vector le falta algo del original',
+        body: 'En Revisión, cada vector se compara solo con la imagen que se vectorizó. Si se perdió algo (por ejemplo, el punto de una i), aparece el chip violeta «Falta un punto de i» o «Puede faltar algo», y al confirmar te lo recuerda.',
+        icon: ScanSearch,
+      },
+      {
+        heading: 'El original debajo, en el editor',
+        body: 'Al editar el vector, la imagen original se ve debajo en violeta: lo que se ve en color quedó afuera del vector. Se prende y apaga con «Original» (o la tecla O) y tiene opacidad. Las letras A, B… te llevan a cada lugar marcado.',
+        icon: Layers,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

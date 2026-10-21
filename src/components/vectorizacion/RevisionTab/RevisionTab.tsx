@@ -24,6 +24,9 @@ import {
 } from '@/lib/fresa/chequeoFresa';
 import { machiningRecipe } from '@/lib/fresa/config';
 import { resumenOperaciones } from '@/lib/fresa/textos';
+import { OriginalChip } from '@/components/vectorizacion/shared/OriginalChip';
+import { resumenDiferencias } from '@/lib/vectorizacion/comparacionOriginal';
+import { compararConOriginal, useComparacionOriginal } from '@/lib/vectorizacion/originalOverlay';
 
 /** La medida con la que se va a guardar: la misma lógica que "Confirmar". */
 function reviewTarget(item: ReviewItem): FresaTarget {
@@ -215,8 +218,16 @@ function ReviewCard({
   const [checker, setChecker] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [fresaOpen, setFresaOpen] = useState(false);
+  const [fresaEdit, setFresaEdit] = useState(false);
   const [guardOpen, setGuardOpen] = useState(false);
   const problemas = fresaProblemas(fresa);
+  // Comparación con la imagen que se vectorizó (por ejemplo, un punto de i que se borró).
+  const vsOriginal = useComparacionOriginal(item.svg, item.beforeDataUrl, fresa?.status === 'error' ? null : fresa?.mmPerUnit);
+  const faltas = vsOriginal?.status === 'diferencias' ? vsOriginal.diferencias : [];
+  const openFresa = (edit = false) => {
+    setFresaEdit(edit);
+    setFresaOpen(true);
+  };
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const svgUrl = `data:image/svg+xml;utf8,${encodeURIComponent(item.svg)}`;
@@ -273,7 +284,8 @@ function ReviewCard({
                 {(Math.max(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} ×{' '}
                 {(Math.min(item.requestedWidthMm, item.requestedHeightMm) / 10).toFixed(1)} cm
               </p>
-              <FresaChip report={fresa} onClick={() => setFresaOpen(true)} />
+              <FresaChip report={fresa} onClick={() => openFresa()} />
+              {fresa && fresa.status !== 'error' ? <OriginalChip result={vsOriginal} onClick={() => openFresa(true)} /> : null}
             </div>
           </div>
           <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
@@ -281,7 +293,7 @@ function ReviewCard({
             Damero
           </label>
         </div>
-        <VersionPicker item={item} auto={auto} onChoose={onChoose} onOpen={() => setFresaOpen(true)} />
+        <VersionPicker item={item} auto={auto} onChoose={onChoose} onOpen={() => openFresa()} />
         {item.mode !== 'production' ? (
           <p className="text-xs text-amber-600">Modo prueba: no se puede confirmar en pedidos.</p>
         ) : null}
@@ -301,7 +313,7 @@ function ReviewCard({
             size="sm"
             disabled={confirming || item.mode !== 'production' || !auto}
             title={!auto ? 'Esperá a que termine la corrección automática' : undefined}
-            onClick={() => (problemas > 0 ? setGuardOpen(true) : onConfirm())}
+            onClick={() => (problemas > 0 || faltas.length > 0 ? setGuardOpen(true) : onConfirm())}
           >
             <Check className="mr-1 size-3.5" />
             Confirmar
@@ -344,6 +356,8 @@ function ReviewCard({
         svgText={originalOf(item)}
         target={autoTarget(item)}
         downloadName={item.designName}
+        original={item.beforeDataUrl}
+        startEditing={fresaEdit}
         initialFix={auto?.fix ?? null}
         onUseOriginal={() => onChoose('original', originalOf(item))}
         onApply={(svg, fix, opts) => {
@@ -364,11 +378,19 @@ function ReviewCard({
       <ConfirmDialog
         open={guardOpen}
         onOpenChange={setGuardOpen}
-        title="La fresa no llega en todo el diseño"
-        description={`Hay ${problemas} lugar${problemas === 1 ? '' : 'es'} donde la fresa no llega a la profundidad mínima. Podés revisarlo y corregirlo antes, o confirmarlo igual.`}
+        title={problemas > 0 ? 'La fresa no llega en todo el diseño' : 'Puede faltar algo del original'}
+        description={[
+          problemas > 0
+            ? `Hay ${problemas} lugar${problemas === 1 ? '' : 'es'} donde la fresa no llega a la profundidad mínima.`
+            : '',
+          faltas.length ? `Comparado con la imagen original: ${resumenDiferencias(faltas).toLowerCase()}.` : '',
+          'Podés revisarlo y corregirlo antes, o confirmarlo igual.',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         cancelLabel="Revisar"
         confirmLabel="Confirmar igual"
-        onCancel={() => setFresaOpen(true)}
+        onCancel={() => openFresa(problemas === 0 && faltas.length > 0)}
         onConfirm={onConfirm}
       />
     </div>
@@ -512,7 +534,10 @@ export function RevisionTab() {
     );
     const items = resolved.filter((i): i is ReviewItem => Boolean(i));
     const reports = await Promise.all(items.map((i) => chequearSvg(i.svg, reviewTarget(i))));
-    const withIssues = items.filter((_, k) => fresaProblemas(reports[k]) > 0);
+    const vsOriginal = await Promise.all(
+      items.map((i, k) => (reports[k].status === 'error' ? null : compararConOriginal(i.svg, i.beforeDataUrl, reports[k].mmPerUnit))),
+    );
+    const withIssues = items.filter((_, k) => fresaProblemas(reports[k]) > 0 || vsOriginal[k]?.status === 'diferencias');
     if (withIssues.length) {
       setBulkGuard({ ok: items.filter((i) => !withIssues.includes(i)), withIssues });
       return;
@@ -598,11 +623,11 @@ export function RevisionTab() {
       <Dialog open={Boolean(bulkGuard)} onOpenChange={(o) => !o && setBulkGuard(null)}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Hay vectores donde la fresa no llega</DialogTitle>
+            <DialogTitle>Hay vectores para revisar</DialogTitle>
             <DialogDescription>
               {bulkGuard?.withIssues.length} de {(bulkGuard?.ok.length ?? 0) + (bulkGuard?.withIssues.length ?? 0)}{' '}
-              tienen lugares donde la fresa no llega a la profundidad mínima:{' '}
-              {bulkGuard?.withIssues.map((i) => i.designName).join(', ')}.
+              tienen lugares donde la fresa no llega a la profundidad mínima o algo que puede faltar respecto de la
+              imagen original: {bulkGuard?.withIssues.map((i) => i.designName).join(', ')}.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-row">

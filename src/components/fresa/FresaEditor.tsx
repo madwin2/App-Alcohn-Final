@@ -107,6 +107,16 @@ import {
 import type { Pt } from '@/lib/fresa/pathData';
 import { renderRelief } from '@/lib/fresa/vcarveRelief';
 import { SEVERITY_FILL, mm } from '@/lib/fresa/textos';
+import {
+  alignOriginal,
+  compararConDoc,
+  resumenDiferencias,
+  textoDiferencia,
+  type ComparacionOriginal,
+  type Diferencia,
+  type Placement,
+} from '@/lib/vectorizacion/comparacionOriginal';
+import { cargarOriginal, ORIGINAL_COLOR, type OriginalCargado, type OriginalSource } from '@/lib/vectorizacion/originalOverlay';
 
 interface Props {
   /** SVG de partida (el original o el corregido). */
@@ -116,7 +126,15 @@ interface Props {
   /** `extra`: registro de lo que se hizo y segundos de edición (se guardan en `vector_ediciones`). */
   onDone: (svg: string, cambios: number, extra: { registro: EditorLogEntry[]; segundos: number }) => void;
   onCancel: () => void;
+  /**
+   * Imagen original (la que se vectorizó). Si está, se puede ver debajo del
+   * vector en otro color y se marca lo que falta o sobra respecto de ella.
+   */
+  original?: OriginalSource | null;
 }
+
+/** Color de las marcas de lo que sobra (lo que falta usa el color del original). */
+const SOBRA_COLOR = '#0284c7';
 
 /** Herramienta del clic izquierdo (barra de la izquierda, como en Illustrator). */
 type Tool =
@@ -255,7 +273,7 @@ const iconBtn =
  * alinearlas y distribuirlas, mover y borrar nodos, simplificar, borrar motas.
  * El chequeo de fresa se recalcula al soltar cada cambio.
  */
-export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
+export function FresaEditor({ svgText, report, onDone, onCancel, original = null }: Props) {
   const k = report.mmPerUnit;
   const built = useMemo(() => buildEditDoc(svgText), [svgText]);
   const [history, setHistory] = useState<EditDoc[]>(() => (built.ok ? [built.doc] : []));
@@ -517,6 +535,36 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       700,
     );
   }, [showRelief, doc, reliefBox, k, report.profile]);
+
+  // ------------------------------------------------------------ original debajo
+  // Se alinea una vez con el vector de partida; después se compara cada
+  // versión (al soltar cada cambio) para marcar lo que falta o sobra.
+  const [orig, setOrig] = useState<OriginalCargado | null>(null);
+  const [origError, setOrigError] = useState<string | null>(null);
+  const [showOriginal, setShowOriginal] = useState(true);
+  const [showDiffs, setShowDiffs] = useState(true);
+  const [origOpacity, setOrigOpacity] = useState(0.6);
+  useEffect(() => {
+    setOrig(null);
+    setOrigError(null);
+    if (!original) return;
+    let alive = true;
+    cargarOriginal(original).then(
+      (o) => alive && setOrig(o),
+      (e: unknown) => alive && setOrigError(e instanceof Error ? e.message : 'No se pudo cargar el original.'),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [original]);
+  const placement = useMemo<Placement | null>(() => (orig && built.ok ? alignOriginal(orig.ink, built.doc) : null), [orig, built]);
+  const [comparison, setComparison] = useState<ComparacionOriginal | null>(null);
+  useEffect(() => {
+    if (!orig || !doc) return;
+    const t = window.setTimeout(() => setComparison(compararConDoc(orig.ink, doc, k, placement)), 300);
+    return () => window.clearTimeout(t);
+  }, [orig, placement, doc, k]);
+  const diffs: Diferencia[] = comparison?.diferencias ?? [];
 
   // ------------------------------------------------------------ nodos
   const nodeRefs = useMemo(() => {
@@ -1557,6 +1605,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
       }
     }
     if (!mod && key === 'g') setSnapOn((v) => !v);
+    if (!mod && key === 'o' && original) setShowOriginal((v) => !v);
     if (!mod && key === 'f') frameSelection();
     if (key === '0') fitAll();
   };
@@ -1737,6 +1786,27 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             <Checkbox checked={showZones} onCheckedChange={(v) => setShowZones(Boolean(v))} />
             Lugares
           </label>
+          {original ? (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <label className="flex items-center gap-1" title="Muestra la imagen original debajo del vector, en color (tecla O). Lo que se ve en color quedó afuera del vector.">
+                <Checkbox checked={showOriginal} onCheckedChange={(v) => setShowOriginal(Boolean(v))} />
+                <span className="inline-block size-2.5 rounded-sm" style={{ background: ORIGINAL_COLOR }} aria-hidden />
+                Original
+              </label>
+              <input
+                type="range"
+                min={0.15}
+                max={1}
+                step={0.05}
+                value={origOpacity}
+                disabled={!showOriginal}
+                onChange={(e) => setOrigOpacity(Number(e.target.value))}
+                className="h-1 w-16 accent-fuchsia-500 disabled:opacity-40"
+                title="Opacidad del original"
+                aria-label="Opacidad del original"
+              />
+            </span>
+          ) : null}
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
             <Checkbox checked={showAllNodes} onCheckedChange={(v) => setShowAllNodes(Boolean(v))} />
             Todos los nodos
@@ -1812,21 +1882,45 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
             preserveAspectRatio="xMidYMid meet"
           >
-            {relief && dragging !== 'move' && dragging !== 'node' ? (
-              <image
-                href={relief.href}
-                x={relief.x}
-                y={relief.y}
-                width={relief.w}
-                height={relief.h}
-                preserveAspectRatio="none"
-                style={{ imageRendering: 'auto' }}
-              />
-            ) : (
-              shown?.paths.map((p, pi) => (
-                <path key={pi} d={p.subs.map(subToD).join('')} fill="#111" fillRule={p.fillRule} />
-              ))
-            )}
+            {(() => {
+              // El original va debajo del vector (lo que se ve en color quedó afuera);
+              // con el relieve, encima de él (el relieve es opaco).
+              const showRel = relief && dragging !== 'move' && dragging !== 'node';
+              const overlay =
+                showOriginal && orig && placement ? (
+                  <image
+                    href={orig.overlayUrl}
+                    x={placement.x}
+                    y={placement.y}
+                    width={orig.ink.width * placement.scale}
+                    height={orig.ink.height * placement.scale}
+                    preserveAspectRatio="none"
+                    opacity={showRel ? Math.min(origOpacity, 0.5) : origOpacity}
+                    style={{ pointerEvents: 'none' }}
+                  />
+                ) : null;
+              return showRel ? (
+                <>
+                  <image
+                    href={relief.href}
+                    x={relief.x}
+                    y={relief.y}
+                    width={relief.w}
+                    height={relief.h}
+                    preserveAspectRatio="none"
+                    style={{ imageRendering: 'auto' }}
+                  />
+                  {overlay}
+                </>
+              ) : (
+                <>
+                  {overlay}
+                  {shown?.paths.map((p, pi) => (
+                    <path key={pi} d={p.subs.map(subToD).join('')} fill="#111" fillRule={p.fillRule} />
+                  ))}
+                </>
+              );
+            })()}
 
             {/* Lo que se va a agarrar (hover) y lo elegido */}
             {hovered ? (
@@ -1925,6 +2019,37 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
                     </text>
                   </g>
                 ))}
+              </g>
+            ) : null}
+
+            {/* Lo que falta o sobra respecto del original */}
+            {showDiffs && diffs.length ? (
+              <g style={{ pointerEvents: 'none' }}>
+                {diffs.map((d, di) => {
+                  const color = d.kind === 'sobra' ? SOBRA_COLOR : ORIGINAL_COLOR;
+                  const pad = 4 * u;
+                  return (
+                    <g key={d.id}>
+                      <rect
+                        x={d.box.minX - pad}
+                        y={d.box.minY - pad}
+                        width={d.box.maxX - d.box.minX + 2 * pad}
+                        height={d.box.maxY - d.box.minY + 2 * pad}
+                        rx={3 * u}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={2 * u}
+                        strokeDasharray={`${5 * u} ${3 * u}`}
+                      />
+                      <g transform={`translate(${d.box.minX - pad} ${d.box.minY - pad})`}>
+                        <rect x={-8 * u} y={-8 * u} width={16 * u} height={16 * u} rx={3 * u} fill={color} />
+                        <text textAnchor="middle" dominantBaseline="central" fontSize={10 * u} fontWeight={700} fill="#fff">
+                          {String.fromCharCode(65 + (di % 26))}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
               </g>
             ) : null}
 
@@ -2282,7 +2407,7 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
               <b>Flechas</b> mover ({mm(step)} mm; Shift ×10) · <b>Supr</b> borrar
             </li>
             <li>
-              Al arrastrar: <b>Shift</b> un solo eje · <b>Ctrl</b> sin imán · <b>G</b> imán sí/no
+              Al arrastrar: <b>Shift</b> un solo eje · <b>Ctrl</b> sin imán · <b>G</b> imán sí/no{original ? <> · <b>O</b> original sí/no</> : null}
             </li>
             <li>
               <b>V</b> selección · <b>A</b> directa (nodos) · <b>+</b> / <b>−</b> añadir / borrar nodo · <b>Shift+C</b> convertir
@@ -2382,6 +2507,80 @@ export function FresaEditor({ svgText, report, onDone, onCancel }: Props) {
             {sizeChanged ? <span className="truncate font-normal opacity-80">antes {mm(sizeBefore.w, 1)} × {mm(sizeBefore.h, 1)}</span> : null}
           </p>
         </div>
+
+        {original ? (
+          <div
+            className={cn(
+              'space-y-1 rounded-md border p-2.5 text-xs',
+              comparison?.status === 'diferencias'
+                ? 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-950 dark:bg-fuchsia-950/40 dark:text-fuchsia-100'
+                : comparison?.status === 'ok'
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
+                  : 'bg-muted/40',
+            )}
+          >
+            <p className="flex h-5 items-center gap-1.5 font-medium">
+              {origError || comparison?.status === 'sin-alinear' || comparison?.status === 'error' ? (
+                <AlertTriangle className="size-3.5 shrink-0" />
+              ) : !comparison ? (
+                <Loader2 className="size-3.5 shrink-0 animate-spin" />
+              ) : comparison.status === 'ok' ? (
+                <CheckCircle2 className="size-3.5 shrink-0" />
+              ) : (
+                <AlertTriangle className="size-3.5 shrink-0" />
+              )}
+              <span className="truncate" title={comparison?.status === 'diferencias' ? resumenDiferencias(diffs) : undefined}>
+                {origError
+                  ? 'No se pudo cargar el original'
+                  : !comparison
+                    ? 'Comparando con el original…'
+                    : comparison.status === 'ok'
+                      ? 'No falta nada del original'
+                      : comparison.status === 'sin-alinear'
+                        ? 'No se pudo alinear con el original'
+                        : comparison.status === 'error'
+                          ? 'No se pudo comparar con el original'
+                          : `Revisar: ${resumenDiferencias(diffs).toLowerCase()}`}
+              </span>
+              {diffs.length ? (
+                <label className="ml-auto flex shrink-0 items-center gap-1 font-normal" title="Mostrar las marcas sobre el dibujo">
+                  <Checkbox checked={showDiffs} onCheckedChange={(v) => setShowDiffs(Boolean(v))} />
+                  Marcas
+                </label>
+              ) : null}
+            </p>
+            <div className="flex h-6 items-center gap-1 overflow-x-auto">
+              {diffs.length ? (
+                <>
+                  <span className="shrink-0 opacity-80">Ir a:</span>
+                  {diffs.map((d, di) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      className="flex size-5 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white hover:opacity-80"
+                      style={{ background: d.kind === 'sobra' ? SOBRA_COLOR : ORIGINAL_COLOR }}
+                      onClick={() => {
+                        setShowOriginal(true);
+                        zoomTo(d.box, 3);
+                      }}
+                      title={`${textoDiferencia(d)} (${mm(d.areaMm2, 2)} mm²). Clic: acercar.`}
+                    >
+                      {String.fromCharCode(65 + (di % 26))}
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <span className="truncate opacity-70">
+                  {comparison?.status === 'sin-alinear'
+                    ? 'El original no coincide con este vector: revisalo a ojo con la capa.'
+                    : comparison?.status === 'error' || origError
+                      ? (comparison?.error ?? origError)
+                      : 'Lo que se ve en color quedó afuera del vector (tecla O).'}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : null}
 
         <Section
           title={nSel > 1 ? `${nSel} piezas elegidas` : nSel ? 'Pieza elegida' : 'Pieza'}
