@@ -51,3 +51,5 @@
 ## Fronteras
 
 ❓ Compra y recepción física de insumos, adaptación de soldadores, stock de bronce/planchuelas y de packaging (no se trackean) → [FR-11](../../10-operational-boundaries/README.md#fr-11), [Q-STK-001](../../14-open-questions/stock.md#q-stk-001).
+
+📐 Stock de bronce por pieza: [propuesta](propuesta-stock-bronce.md) (2026-10-22, sin implementar; POL-091…095).

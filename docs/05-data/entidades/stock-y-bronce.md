@@ -7,4 +7,4 @@
 | `stock_alert_assignments` | Qué usuarios son responsables de reponer cada ítem | |
 | `bronce_consumo` | Consumo de planchuela de bronce por sello al marcar `Hecho`: `tipo_planchuela_ref`, `largo_cm` (lado mayor + pérdida), `costo_pesos` | 737 filas; lo inserta un trigger |
 
-🔶 El **bronce no tiene stock**: solo se registra consumo. ❓ [Q-STK-001](../../14-open-questions/stock.md#q-stk-001).
+🔶 El **bronce no tiene stock**: solo se registra consumo. ❓ [Q-STK-001](../../14-open-questions/stock.md#q-stk-001). Tablas de stock por pieza propuestas (sin migración) en la [propuesta de stock de bronce](../../02-modules/stock/propuesta-stock-bronce.md#6-datos-borrador-sin-migración).

@@ -115,7 +115,7 @@ flowchart LR
 ## FR-11 · Compras e insumos
 
 - **Dentro** ✅: stock de 15 insumos, descuento al despachar, tareas de reposición.
-- **Externo** 👥: planchuelas desde Buenos Aires (2–3 días). Controlar stock de **bronce y packaging** es el próximo paso deseado. ❓ Proveedores y quién compra cada insumo.
+- **Externo** 👥: planchuelas desde Buenos Aires (2–3 días). Controlar stock de **bronce y packaging** es el próximo paso deseado; el bronce se compra por metro con el corte pedido (POL-091) y ya tiene [propuesta](../02-modules/stock/propuesta-stock-bronce.md). ❓ Proveedores y quién compra cada insumo.
 
 <a id="fr-12"></a>
 
