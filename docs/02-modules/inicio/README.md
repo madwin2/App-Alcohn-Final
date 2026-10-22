@@ -29,7 +29,7 @@
 Orden de las listas: con fecha límite primero (vencidos arriba), después del más viejo al más nuevo.
 
 **Home nueva — panel de área** (`src/components/home-nueva/PanelArea.tsx` + `area/*`): pestañas Producción · Ventas · Logística · Administración · Equipo. Abre en el `area_principal` del perfil y recuerda la última pestaña (localStorage). **Administración** solo la ve el dueño (mismo email que habilita Economía).
-- **Producción**: cola de fabricación por estado (sellos no Hechos y no despachados), programas de hoy o en fabricación, **bronce usado en el mes** (`bronce_consumo`). ❓ El stock de bronce **disponible** no se registra (FR-11); solo el consumo.
+- **Producción**: cola de fabricación por estado (sellos no Hechos y no despachados), programas de hoy o en fabricación, **bronce usado en el mes** (`bronce_consumo`). El stock de bronce por pieza vive en [Stock](../stock/propuesta-stock-bronce.md) ; al abrir el Inicio se sincroniza el aviso de compra `p8_bronce_comprar`.
 - **Ventas**: Esperando pago (Hecho + Foto enviada) y Deudores, por pedido con el saldo; mockups de la app sin terminar (últimos 14 días; los web en `procesando` se ignoran, Q-MOCK-001); seguimientos a clientes.
 - **Logística**: pedidos por etapa de envío (Para enviar, Hacer etiqueta, Error de etiqueta —incluye `labelState=error` de MiCorreo—, Etiqueta lista, Despachado) por transporte, y la lista de errores de etiqueta con su mensaje.
 - **Administración**: pedidos cargados del mes (🔶 aproximado; el exacto es el de Economía), por cobrar (solo pedidos en Esperando pago o Deudores), publicidad del mes (Control de gastos) y publicidad por sello vendido, pedidos por día (14 días).

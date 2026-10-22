@@ -29,6 +29,7 @@ import {
   syncStockReplenishTasksForCurrentUser,
   type StockReplenishPayload,
 } from '@/lib/supabase/services/stock.service';
+import { syncBronceCompraAvisos } from '@/lib/supabase/services/bronceStock.service';
 import { StockReplenishSection, StockAlDiaCard } from '@/components/home/StockReplenishSection';
 import stickyNoteAddSvg from '@/assets/sticky-notes/sticky-note-add.svg';
 import stickyNoteTaskSvg from '@/assets/sticky-notes/sticky-note-task.svg';
@@ -232,6 +233,7 @@ export default function HomePage() {
   const fetchColleagueTasks = useCallback(async () => {
     if (!user?.id || !isAuthenticated) return;
     await syncStockReplenishTasksForCurrentUser();
+    void syncBronceCompraAvisos();
     const tasks = await getDashboardTasksForUser(user.id);
     setColleagueTasks(tasks);
     setStockReplenishSyncedAt(new Date());

@@ -30,7 +30,7 @@ Surgido de la auditoría (2026-09-27) y de las respuestas del equipo (2026-09-28
 | ID | Qué | Evidencia | Esfuerzo |
 |---|---|---|---|
 | B-14 | Recordatorio automático a deudores cada ~15 días | POL-008 | S–M |
-| B-15 | Stock de **bronce (planchuelas) y packaging** | Q-STK-001 ("próximo paso"); bronce diseñado en la [propuesta](../02-modules/stock/propuesta-stock-bronce.md) (POL-091…095, Q-STK-007/008) | L |
+| B-15 | Stock de **bronce (planchuelas) y packaging** | Q-STK-001 ("próximo paso"); bronce implementado ([propuesta](../02-modules/stock/propuesta-stock-bronce.md), migración aplicada 2026-10-22); falta packaging | L |
 | B-16 | Subir trayectorias a la app y descargarlas desde la PC de la CNC (reemplaza el pendrive) | Q-CNC-002, ADR-010 | M–L |
 | B-17 | Metas de venta configurables y escalonadas (equilibrio / bueno / objetivo) | Q-GEN-004 | S–M |
 | B-18 | Mensaje automático pidiendo los datos de envío (Correo) al pasar a Transferido | Q-ENV-002, Q-ENV-009 | S–M |

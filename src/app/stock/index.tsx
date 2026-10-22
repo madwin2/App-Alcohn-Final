@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/components/ui/use-toast';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { BronceStockPanel } from '@/components/stock/BronceStockPanel';
 import { PLANCHUELA_REF_ORDER } from '@/lib/bronce/planchuelaRef';
 import { getApprovedUsers } from '@/lib/supabase/services/auth.service';
 import {
@@ -178,6 +179,8 @@ export default function StockPage() {
         </div>
 
         <div className="p-6 space-y-4">
+          <BronceStockPanel />
+
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/20 px-4 py-3">
               <div>

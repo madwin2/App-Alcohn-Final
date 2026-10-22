@@ -63,7 +63,7 @@ const isDirty = (p: MesaProgram) => JSON.stringify(p.doc) !== JSON.stringify(p.s
  */
 export function MesaArmado({
   machine, onMachine, programs, programId, onProgram, onNewProgram, queue, soldSizes, stampInfo = {}, today, machinesFor,
-  legacyAspire, checking, onChange, onSave, onAspire, onFabricated, onStart, starting = false, onSetup, onOpenBoard, onOpenHistory,
+  legacyAspire, checking, onChange, onSave, onAspire, onFabricated, onStart, starting = false, onSetup, onOpenBoard, onOpenHistory, broncePiezas,
 }: {
   machine: PreparationMachine;
   onMachine: (m: PreparationMachine) => void;
@@ -95,6 +95,8 @@ export function MesaArmado({
   onOpenHistory?: () => void;
   /** Abre el tablero con todos los programas (ABC, terminados, papelera…). */
   onOpenBoard?: () => void;
+  /** Largos de las piezas de bronce útiles por ancho (stock); solo informativo. */
+  broncePiezas?: Partial<Record<number, number[]>>;
 }) {
   // Mensajes en la pantalla (los toasts tapaban el botón principal).
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -445,7 +447,7 @@ export function MesaArmado({
                   onFresa={() => void openFresa(selected)}
                   onClose={() => setSelectedId(null)} />
               ) : (
-                <MesaSummary doc={doc} readOnly={readOnly} warnings={warnings} info={stampInfo} today={today} onPick={pick} onShortcuts={() => setShortcuts(true)}
+                <MesaSummary doc={doc} readOnly={readOnly} warnings={warnings} info={stampInfo} today={today} piezas={broncePiezas} onPick={pick} onShortcuts={() => setShortcuts(true)}
                   onToggleMaterial={(columnId) => commit({ ...doc, columns: doc.columns.map((c) => c.id === columnId ? { ...c, available: !c.available } : c) })} />
               )}
             </Panel>

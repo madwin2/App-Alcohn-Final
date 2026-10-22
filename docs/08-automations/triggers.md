@@ -26,6 +26,7 @@
 | `trigger_foto_sello_subida` | AFTER UPD | `trigger_foto_sello_subida` | Foto nueva/cambiada → WhatsApp `pedido_listo` |
 | `trigger_accesorio_listo` | AFTER UPD OF `estado_fabricacion` | `trigger_accesorio_listo` | Accesorio → `Hecho` → WhatsApp `accesorio_listo` (una vez) |
 | `trigger_registrar_bronce_consumo` | AFTER INS/UPD | `registrar_bronce_consumo_sello` | Entrada a `Hecho` (SELLO, desde otro estado) → `bronce_consumo` + `tipo_planchuela` |
+| `trigger_zz_bronce_descontar_programa` | AFTER UPD OF `estado_fabricacion` | `trg_bronce_descontar_programa` | Último sello del programa a `Hecho`/`Verificar`/`Rehacer` → descuenta piezas de bronce por fila (BR-STK-008) |
 | `trigger_confirm_web_order_on_sellos_insert` | AFTER INS | `trg_confirm_web_order_on_sellos_insert` | Orden web pagada → edge `confirm-web-order` |
 
 ## `ordenes`

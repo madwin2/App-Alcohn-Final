@@ -1,6 +1,6 @@
 import { Keyboard, StickyNote } from 'lucide-react';
 import type { PreparationDocument, Recipe } from '@/lib/programas/preparation';
-import { columnStamps, columnUsage, dueText, type StampInfo } from '@/lib/programas/mesa';
+import { columnStamps, columnUsage, dueText, MESA_GAP_MM, type StampInfo } from '@/lib/programas/mesa';
 import { cn } from '@/lib/utils/cn';
 import { Dot, FOCUS, Label, PILL_GHOST } from './mesaUi';
 
@@ -10,12 +10,26 @@ const RECIPES: { id: Recipe; label: string }[] = [{ id: 'CLASICO', label: 'Clás
  * Sin sello elegido, la columna derecha resume el programa: qué lleva, cuánto
  * queda en cada planchuela (y si hay material) y la lista de sellos para ir a uno.
  */
-export function MesaSummary({ doc, readOnly, warnings, info = {}, today, onPick, onToggleMaterial, onShortcuts }: {
+/** Dato de stock de bronce bajo cada planchuela: qué piezas hay y si alguna alcanza. No bloquea. */
+function PiezasHint({ largos, needMm }: { largos: number[] | undefined; needMm: number }) {
+  if (!largos?.length) return <p className="ml-11 text-[12px] text-zinc-500">Sin piezas cargadas en stock</p>;
+  const sorted = [...largos].sort((a, b) => b - a);
+  const alcanza = needMm <= 0 || sorted.some((l) => l >= needMm);
+  return (
+    <p className={cn('ml-11 text-[12px]', alcanza ? 'text-zinc-500' : 'text-amber-300')}>
+      {alcanza ? 'Piezas' : `Ninguna pieza alcanza (${Math.round(needMm)} mm) ·`} {sorted.slice(0, 6).map((l) => Math.round(l)).join(' · ')}{sorted.length > 6 ? ' …' : ''}
+    </p>
+  );
+}
+
+export function MesaSummary({ doc, readOnly, warnings, info = {}, today, piezas, onPick, onToggleMaterial, onShortcuts }: {
   doc: PreparationDocument;
   readOnly: boolean;
   warnings: Set<string>;
   info?: Record<string, StampInfo>;
   today: Date;
+  /** Largos de piezas útiles por ancho; sin dato (stock no iniciado) no se muestra nada. */
+  piezas?: Partial<Record<number, number[]>>;
   onPick: (instanceId: string) => void;
   onToggleMaterial: (columnId: string) => void;
   onShortcuts: () => void;
@@ -23,6 +37,8 @@ export function MesaSummary({ doc, readOnly, warnings, info = {}, today, onPick,
   const stamps = doc.stamps.filter((s) => !s.excluded);
   const usage = new Map(columnUsage(doc).map((u) => [u.columnId, u]));
   const cols = [...doc.columns].sort((a, b) => a.centerX - b.centerX);
+  const showPiezas = !!piezas && Object.keys(piezas).length > 0;
+  const needMm = (columnId: string) => columnStamps(doc, columnId).reduce((sum, s) => sum + s.heightMm + MESA_GAP_MM, 0);
 
   return (
     <section className="space-y-6" aria-label="Resumen del programa">
@@ -57,6 +73,7 @@ export function MesaSummary({ doc, readOnly, warnings, info = {}, today, onPick,
                 <div className="ml-11 h-1 rounded-full bg-white/[0.07]">
                   <div className={cn('h-full rounded-full transition-[width] duration-500', c.available ? 'bg-white/60' : 'bg-transparent')} style={{ width: `${pct}%` }} />
                 </div>
+                {showPiezas && c.available ? <PiezasHint largos={piezas?.[c.nominalMm]} needMm={needMm(c.id)} /> : null}
               </li>
             );
           })}

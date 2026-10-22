@@ -42,6 +42,7 @@
 
 - Stock del sistema como texto (rojo + badge **Negativo** si < 0). Al lado, input **Conteo físico** + **Guardar conteo** → RPC `adjust_stock_count` (movimiento `ADJUSTMENT`, BR-STK-006).
 - Responsables por ítem (multi-usuario).
+- **Stock de bronce** (`BronceStockPanel`): piezas útiles por ancho, filas completas/parciales por máquina, cobertura y pedido sugerido; botones **Llegó bronce** (compra) y **Contar** (conteo de un ancho). Badge **Contar** si una fila terminó sin pieza que alcanzara; **Pedir** si hay que comprar.
 - **Consumo de bronce** por mes y por planchuela (`bronce_consumo`: se registra al marcar un SELLO `Hecho`, con largo en cm y costo en pesos según `fabricacion_parametros`), navegación por mes.
 
 ## Tablas
@@ -52,4 +53,4 @@
 
 ❓ Compra y recepción física de insumos, adaptación de soldadores, stock de bronce/planchuelas y de packaging (no se trackean) → [FR-11](../../10-operational-boundaries/README.md#fr-11), [Q-STK-001](../../14-open-questions/stock.md#q-stk-001).
 
-📐 Stock de bronce por pieza: [propuesta](propuesta-stock-bronce.md) (2026-10-22, sin implementar; POL-091…095).
+📐 Stock de bronce por pieza: [propuesta e implementación](propuesta-stock-bronce.md) (2026-10-22; migración `migration_bronce_stock_piezas.sql` aplicada; POL-091…095, BR-STK-008…011).

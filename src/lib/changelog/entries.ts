@@ -1228,6 +1228,29 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 67,
+    date: '2026-10-22',
+    title: 'Stock de bronce por pieza',
+    version: '1.85',
+    slides: [
+      {
+        heading: 'El bronce ahora tiene stock, pieza por pieza',
+        body: 'En Stock se ve cada planchuela con su largo y cuántas filas se pueden armar en cada máquina. Cuando llega bronce, tocá «Llegó bronce» y escribí los cortes como los pediste (2x400 + 200).',
+        icon: Package,
+      },
+      {
+        heading: 'Se descuenta solo al terminar el programa',
+        body: 'Cada fila se descuenta de la pieza más corta en la que entra; si queda menos de 25 mm pasa a retazo. Solo hay que contar cuando llega una compra o cuando la app lo pide.',
+        icon: Ruler,
+      },
+      {
+        heading: 'Aviso para pedir',
+        body: 'Cuando el bronce útil de un ancho alcanza para pocos días, Julián y Producción reciben un aviso con el pedido sugerido. En la mesa, debajo de cada planchuela, se ven las piezas que hay.',
+        icon: Bell,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

@@ -12,6 +12,7 @@ export type NotificacionTipo =
   | 'p4_vencimiento_vencido'
   | 'p6_stock_bajo'
   | 'p7_sello_no_importado'
+  | 'p8_bronce_comprar'
   | 'l1_direccion_post_etiqueta'
   | 'l1_etiqueta_duplicada'
   | 'l2_despacho_proximo'
@@ -74,6 +75,7 @@ export const AUTO_TIPOS = new Set<string>([
   'p4_vencimiento_proximo',
   'p4_vencimiento_vencido',
   'p6_stock_bajo',
+  'p8_bronce_comprar',
   'l2_despacho_proximo',
   'l2_despacho_vencido',
   'v4_deudor',

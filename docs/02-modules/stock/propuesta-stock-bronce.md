@@ -1,6 +1,6 @@
 # Propuesta: stock de planchuelas de bronce
 
-Fecha: 2026-10-22. **Diseño, nada implementado.** Responde [Q-STK-001](../../14-open-questions/stock.md#q-stk-001) en la parte de bronce (packaging sigue pendiente) y detalla el ítem B-15 del [backlog](../../16-backlog/README.md).
+Fecha: 2026-10-22. **Implementado (2026-10-22).** Migración `migration_bronce_stock_piezas.sql` aplicada en Supabase el 2026-10-22 (con autorización del usuario); el stock arranca con el conteo inicial. Responde [Q-STK-001](../../14-open-questions/stock.md#q-stk-001) en la parte de bronce (packaging sigue pendiente) y detalla el ítem B-15 del [backlog](../../16-backlog/README.md).
 
 ## 1. Problema
 
@@ -65,24 +65,27 @@ Cuidados que salen del código:
 - El descuento es **idempotente** por programa: si después se edita o se vuelve a marcar, no se descuenta dos veces.
 - ✅ Sellos `Hecho` **sin programa** (confirmado 2026-10-22): no descuentan pieza; siguen en `bronce_consumo` (costo) y la diferencia se corrige en el próximo conteo.
 
-## 6. Datos (borrador, sin migración)
+## 6. Datos e implementación
 
-🔶 Propuesta a validar al implementar:
+✅ Aplicado en la base (2026-10-22). Verificado con transacciones revertidas: compra, conteo (retazo < 25 mm), descuento de un programa C real (filas iguales a Σ lado mayor + 8 mm), G con pieza que sobresale, fila sin pieza, idempotencia y trigger ejecutado como usuario `authenticated`. Advisors: `trg_bronce_descontar_programa` sin `EXECUTE` público y `search_path` fijo.
 
-- `bronce_piezas`: `ancho_ref` (12/19/25/38/63), `largo_mm` actual, `largo_inicial_mm`, `estado` (`disponible` / `retazo` / `baja`), `compra_id`, fechas.
-- `bronce_movimientos`: ingreso, consumo (con `programa_id` y fila), ajuste por conteo y retazo, con `pieza_id` y mm.
-- `bronce_consumo` sigue como está: es el registro de costo por sello y la base de la compra sugerida.
-
-Antes de usarse hace falta **un conteo inicial** de todas las piezas que hay en el taller.
+- `migration_bronce_stock_piezas.sql`: `bronce_compras`, `bronce_piezas` (`ancho_ref`, `largo_mm`, `largo_inicial_mm`, `estado` `disponible`/`retazo`/`baja`), `bronce_movimientos` (`INGRESO`, `CONSUMO`, `AJUSTE`, `RETAZO`, `BAJA`, `CONTEO`; `sobresale`, `sin_pieza`). RLS: lectura para logueados; escritura solo por RPC.
+- Trigger `trigger_zz_bronce_descontar_programa` → `bronce_descontar_programa` (sección 5; idempotente por `(programa_id, ancho_ref)`). Corre después de `trigger_registrar_bronce_consumo`. Mientras no exista ninguna pieza cargada, no registra nada: **el stock arranca con el conteo inicial**.
+- RPC `bronce_registrar_compra` (ingreso) y `bronce_guardar_conteo` (lista completa de un ancho; lo que falta se da de baja).
+- Lógica pura: `src/lib/bronce/stock.ts` (misma regla de asignación que el SQL, resumen por máquina, compra sugerida, lectura de cortes) con tests en `stock.test.ts`.
+- Servicio `src/lib/supabase/services/bronceStock.service.ts`; panel `src/components/stock/BronceStockPanel.tsx` en `/stock`; dato en la mesa (`MesaSummary`, vía `MesaProgramas`); aviso `p8_bronce_comprar` (`notifyBronceComprar`) a Producción + admin, sincronizado al abrir Stock o el Inicio, con `dedup` por ancho.
+- 🔶 Valores iniciales a ajustar con el uso: aviso si el bronce útil alcanza para **menos de 7 días** (envío 2–3 días + margen), compra sugerida para **30 días**, consumo promedio de los **últimos 60 días** (`bronce_consumo`). Corte pedido: 400 mm para anchos que usa la C; 250 mm para 63.
 
 ## 7. Etapas
 
+Las tres etapas están implementadas:
+
 1. **Inventario por pieza**: carga de compra, conteo, descuento automático por fila, retazos, pantalla en Stock.
-2. **Mesa**: dato y aviso de material en el encabezado de cada planchuela.
+2. **Mesa**: dato y aviso de material bajo cada planchuela del resumen.
 3. **Compra sugerida** y aviso a Julián y Producción (Fede).
 
 ## 8. Preguntas resueltas y pendientes
 
 - ✅ [Q-STK-007](../../14-open-questions/stock.md#q-stk-007): descuento al terminar el programa; sellos sin programa no descuentan pieza.
 - ✅ [Q-STK-008](../../14-open-questions/stock.md#q-stk-008): el aviso de compra va a **Julián y Producción (Fede)**.
-- Pendiente: conteo inicial de todas las piezas. Efectos a revisar: triggers de `sellos` (`registrar_bronce_consumo_sello`) y estado derivado del programa (BR-PROG-010); no se tocan sin migración autorizada (la base es producción).
+- Pendiente: hacer el **conteo inicial** de todas las piezas y publicar el frontend. No se modificaron `registrar_bronce_consumo_sello` ni el estado derivado del programa (BR-PROG-010).

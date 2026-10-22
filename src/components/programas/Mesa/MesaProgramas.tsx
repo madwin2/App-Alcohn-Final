@@ -11,6 +11,7 @@ import { missingForRecipe, sortTemplateFiles } from '@/lib/programas/templateSor
 import {
   getProgramPreparation, inheritMachineSetup, peekMachineSetup, saveProgramPreparation, uploadPreparationTemplates, type MachineSetup as StoredSetup,
 } from '@/lib/supabase/services/programPreparation.service';
+import { getBroncePiezasUtiles } from '@/lib/supabase/services/bronceStock.service';
 import { getEligibleStamps } from '@/lib/supabase/services/programs.service';
 import type { usePrograms } from '@/lib/hooks/usePrograms';
 import type { FabricationState, Program, ProgramStamp } from '@/lib/types/index';
@@ -76,6 +77,13 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
   const [setupOpen, setSetupOpen] = useState(false);
   const [eligible, setEligible] = useState<Record<PreparationMachine, ProgramStamp[]> | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [broncePiezas, setBroncePiezas] = useState<Partial<Record<number, number[]>>>({});
+  // Dato informativo del stock de bronce; se refresca al cambiar de máquina.
+  useEffect(() => {
+    let cancelled = false;
+    void getBroncePiezasUtiles().then((p) => { if (!cancelled) setBroncePiezas(p); });
+    return () => { cancelled = true; };
+  }, [machine]);
   /** Programas viejos abiertos desde el historial (no vienen con la lista de trabajo). */
   const [fromHistory, setFromHistory] = useState<Program[]>([]);
   const [starting, setStarting] = useState<string | null>(null);
@@ -386,6 +394,7 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
         onOpenHistory={() => setHistoryOpen(true)}
         onSetup={() => setSetupOpen(true)}
         onOpenBoard={onOpenBoard}
+        broncePiezas={broncePiezas}
       />
       <MesaHistory open={historyOpen} onOpenChange={setHistoryOpen} machine={machine} onOpenProgram={openFromHistory} />
       {program && setup ? (

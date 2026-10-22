@@ -6,6 +6,7 @@
 - **Impacto**: medio.
 - Respuesta: Si, queremos hacerlo a futuro. Es el siguiente paso aunque es medio complejo.
 - **Respuesta (usuario, 2026-10-21), bronce**: hay que saber cuánto se gasta, cuánto queda y cuánto queda **para mecanizar**: 400 mm en dos piezas no son 400 mm usables, porque una fila no se arma con dos piezas. Se compra por metro pidiendo el corte (p. ej. 1 m = 2 × 400 + 1 × 200). Máximo por fila: C 400, G 250, XL 250; se usan piezas más cortas y restos de otra máquina; en la G se evita que sobresalga salvo que no haya otra. No se pierde nada al principio ni al final de la pieza. Sirve hasta 25 mm. No unir piezas. El registro **no debe ser una tarea más** ni obligar a elegir la pieza. → POL-091…095, [propuesta](../02-modules/stock/propuesta-stock-bronce.md). Las medidas de referencia (19 → 20, 38 → 40) se mantienen.
+- **Implementación (2026-10-22)**: `migration_bronce_stock_piezas.sql` aplicada el 2026-10-22, BR-STK-008…011. Falta el conteo inicial.
 
 ### Q-STK-002
 - **Módulo**: Stock · **Estado**: documentada (2026-09-28)

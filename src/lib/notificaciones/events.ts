@@ -4,6 +4,8 @@ import {
 } from '@/lib/supabase/services/notificaciones.service';
 import { fraseTipoFeedbackNotificacion } from '@/lib/equipo/feedback';
 import { fraseEstadoIdeaNotificacion } from '@/lib/equipo/corcho';
+import { planchuelaRefLabel } from '@/lib/bronce/planchuelaRef';
+import { formatCortes, type CompraSugerida } from '@/lib/bronce/stock';
 import { clienteNombreFromParts, formatMoneyArs, joinCampos, shortPedidoId } from './format';
 
 export function notifySelloModificado(params: {
@@ -150,6 +152,29 @@ export function notifyStockBajo(params: { itemKey: string; itemName: string; sho
 
 export function notifyStockBajoResuelto(itemKey: string): void {
   void clearNotificacionDedup(`p6:${itemKey}`);
+}
+
+/** Aviso de compra de bronce a Julián y Producción (Q-STK-008). */
+export function notifyBronceComprar(compra: CompraSugerida, userIds: string[]): void {
+  const ancho = planchuelaRefLabel(compra.anchoRef);
+  const dias = compra.coberturaDias == null ? null : Math.max(0, Math.floor(compra.coberturaDias));
+  emitNotificacionSafe({
+    tipo: 'p8_bronce_comprar',
+    area: 'produccion',
+    titulo: `Pedir planchuela de ${ancho}`,
+    cuerpo: `${dias === 0 ? 'Queda menos de un día' : `Quedan ~${dias} días`} de bronce útil. Sugerido: ${compra.metros} m → ${formatCortes(compra.cortes)}`,
+    entidadTipo: 'bronce',
+    entidadId: String(compra.anchoRef),
+    linkPath: '/stock',
+    severidad: 'warning',
+    includeAutor: false,
+    dedupKey: `p8:bronce:${compra.anchoRef}`,
+    userIds: userIds.length ? userIds : null,
+  });
+}
+
+export function notifyBronceComprarResuelto(anchoRef: number): void {
+  void clearNotificacionDedup(`p8:bronce:${anchoRef}`);
 }
 
 export function notifyDireccionPostEtiqueta(params: {
