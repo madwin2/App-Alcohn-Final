@@ -18,7 +18,8 @@ export function StampTypeIcon({ stampType, className = "w-4 h-4" }: StampTypeIco
     'ABC': '/icons/ABC.svg',
     'LACRE': '/icons/LACRE.svg',
     'ALIMENTO': '/icons/ABC.svg', // ALIMENTO usa el mismo icono que ABC
-    'CLASICO': '' // No se mostrará, pero necesario para el tipo
+    'CLASICO': '', // No se mostrará, pero necesario para el tipo
+    'PERSONALIZADO': '/icons/PERSONALIZADO.svg',
   };
 
   const iconPath = iconMap[stampType];

@@ -1127,6 +1127,10 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
         if (item.stampType !== undefined) {
           selloData.tipo = mapStampTypeToDB(item.stampType);
         }
+        // Se combina con lo guardado: item_config también trae datos de la tienda web y del abecedario.
+        if (item.itemConfig !== undefined) {
+          selloData.item_config = { ...((currentSello?.item_config as Record<string, unknown> | null) ?? {}), ...item.itemConfig };
+        }
         if (item.designName !== undefined) {
           selloData.diseno = item.designName;
           if (currentSello && !valuesEqual(currentSello.diseno, item.designName)) {

@@ -40,6 +40,7 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 | [Q-VEC-009](vectorizacion.md#q-vec-009) | ¿Confirmar con problemas de fresa debe bloquearse? | Decisión del dueño |
 | [Q-VEC-015](vectorizacion.md#q-vec-015) | Prueba de mecanizado: cómo medir la profundidad en bronce | Respuesta del taller |
 | [Q-PROG-013](programas.md#q-prog-013) | Soportes fijos y uso parcial aclarados; faltan geometría útil y márgenes | Respuesta de operación (parcial, 2026-10-15) |
+| [Q-PROG-025](programas.md#q-prog-025) | Gadget aplica solo el mecanizado Personalizado: profundidad exterior de Clásico, plantillas M5/M4 y perfilado recto 1 mm | Respuesta de operación + prueba en Aspire |
 | [Q-PROG-019](programas.md#q-prog-019) | Base C y Aspire 10.514 identificados; calificar recetas y después G/XL | Prueba nativa local |
 | [Q-PROG-015](programas.md#q-prog-015) | Conservar ajustes y preguntar solo por conflictos de la misma propiedad; implementado el retorno SVG y conflicto de fuente/geometría | Documentada; pendiente calificación en Aspire (2026-10-15) |
 

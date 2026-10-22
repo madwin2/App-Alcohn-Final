@@ -25,13 +25,16 @@ import { OrderTypeBadge } from '@/components/pedidos/OrderTypeBadge';
 import { esOrdenSinCargo } from '@/lib/pedidos/tipoPedido';
 import { NonSvgVectorConfirmDialog } from '@/components/shared/NonSvgVectorConfirmDialog';
 import { isSvgFileName } from '@/lib/utils/vectorFileFormat';
+import { MecanizadoPersonalizadoDialog } from '@/components/pedidos/MecanizadoPersonalizadoDialog';
+import { describeMecanizado, readMecanizado, type MecanizadoPersonalizado } from '@/lib/pedidos/mecanizadoPersonalizado';
 
 const addStampSchema = z.object({
   itemType: z.enum(['SELLO', 'ABECEDARIO', 'SOLDADOR', 'MANGO_GOLPE', 'BASE_REMACHADORA']),
   designName: z.string().optional(),
   requestedWidthMm: z.number().min(1, 'La medida debe ser mayor a 0'),
   requestedHeightMm: z.number().min(1, 'La medida debe ser mayor a 0'),
-  stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
+  stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE', 'PERSONALIZADO']),
+  mecanizado: z.custom<MecanizadoPersonalizado>().optional(),
   soldadorPower: z.enum(['100W', '200W']).optional(),
   abecedarioTipografia: z.string().optional(),
   abecedarioAlturaMm: z.number().optional(),
@@ -78,6 +81,7 @@ const stampTypeOptions = [
   { value: 'CLASICO', label: 'Clásico' },
   { value: 'ABC', label: 'ABC' },
   { value: 'LACRE', label: 'Lacre' },
+  { value: 'PERSONALIZADO', label: 'Personalizado' },
 ];
 
 const itemTypeOptions: { value: ItemType; label: string }[] = [
@@ -121,6 +125,7 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp, forceGif
     photo?: File;
   }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mecanizadoOpen, setMecanizadoOpen] = useState(false);
   const [measureInput, setMeasureInput] = useState('');
   const [pendingNonSvgFileName, setPendingNonSvgFileName] = useState<string | null>(null);
   const pendingAddStampRef = useRef<AddStampFormData | null>(null);
@@ -456,7 +461,14 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp, forceGif
                 {selectedItemType === 'SELLO' && (
                   <>
                     <Label htmlFor="stampType">Tipo de sello</Label>
-                    <Select onValueChange={(value) => setValue('stampType', value as StampType)}>
+                    <Select
+                      value={watch('stampType')}
+                      onValueChange={(value) => {
+                        // Personalizado se confirma en el modal; cancelar deja el tipo anterior.
+                        if (value === 'PERSONALIZADO') setMecanizadoOpen(true);
+                        else setValue('stampType', value as StampType);
+                      }}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar tipo" />
                       </SelectTrigger>
@@ -468,6 +480,23 @@ export function AddStampDialog({ open, onOpenChange, order, onAddStamp, forceGif
                         ))}
                       </SelectContent>
                     </Select>
+                    {watch('stampType') === 'PERSONALIZADO' && (
+                      <button type="button" onClick={() => setMecanizadoOpen(true)}
+                        className="mt-1 block text-left text-[11px] text-muted-foreground underline-offset-2 hover:underline">
+                        {describeMecanizado(readMecanizado(watch('mecanizado')))} · Editar
+                      </button>
+                    )}
+                    <MecanizadoPersonalizadoDialog
+                      open={mecanizadoOpen}
+                      value={watch('stampType') === 'PERSONALIZADO' ? readMecanizado(watch('mecanizado')) : undefined}
+                      designName={watch('designName')}
+                      onCancel={() => setMecanizadoOpen(false)}
+                      onSave={(m) => {
+                        setValue('mecanizado', m);
+                        setValue('stampType', 'PERSONALIZADO');
+                        setMecanizadoOpen(false);
+                      }}
+                    />
                   </>
                 )}
                 {selectedItemType === 'SOLDADOR' && (

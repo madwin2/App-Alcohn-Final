@@ -668,6 +668,7 @@ const TIPO_SELLO: Record<string, string> = {
   ALIMENTO: 'Alimento',
   LACRE: 'Lacre',
   ABC: 'Abecedario',
+  PERSONALIZADO: 'Personalizado',
 }
 
 /**

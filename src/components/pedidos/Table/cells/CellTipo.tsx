@@ -2,30 +2,50 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Order, StampType } from '@/lib/types/index';
 import { getStampTypeIcon } from '@/lib/utils/format';
 import { SvgIcon } from '@/components/ui/SvgIcon';
+import { useState } from 'react';
+import { MecanizadoPersonalizadoDialog } from '@/components/pedidos/MecanizadoPersonalizadoDialog';
+import { describeMecanizado, MecanizadoPersonalizado, readMecanizado } from '@/lib/pedidos/mecanizadoPersonalizado';
 
 interface CellTipoProps {
   order: Order;
   onTipoChange?: (orderId: string, newTipo: StampType) => void;
+  /** Pasa a Personalizado (o edita) los sellos de la fila con esa configuración. */
+  onMecanizadoChange?: (orderId: string, itemIds: string[], mecanizado: MecanizadoPersonalizado) => Promise<void> | void;
 }
+
+const EDIT_MECANIZADO = '__editar_mecanizado__';
 
 const tipoOptions: { value: StampType; iconName: string; label: string }[] = [
   { value: '3MM', iconName: '3mm', label: '3MM' },
   { value: 'ALIMENTO', iconName: 'Hamburguesa', label: 'Alimento' },
   { value: 'CLASICO', iconName: 'CLASICO', label: 'Clásico' },
   { value: 'ABC', iconName: 'ABC', label: 'ABC' },
-  { value: 'LACRE', iconName: 'LACRE', label: 'Lacre' }
+  { value: 'LACRE', iconName: 'LACRE', label: 'Lacre' },
+  { value: 'PERSONALIZADO', iconName: 'PERSONALIZADO', label: 'Personalizado' }
 ];
 
-export function CellTipo({ order, onTipoChange }: CellTipoProps) {
+export function CellTipo({ order, onTipoChange, onMecanizadoChange }: CellTipoProps) {
+  const [dialogOpen, setDialogOpen] = useState(false);
   const item = order.items[0];
   
   if (!item) return null;
 
   const handleValueChange = (value: string) => {
-    // Pasar el ID del item si existe (para items individuales en filas expandidas)
-    const itemId = item.id;
+    // Personalizado pide la configuración antes de guardar el tipo.
+    if ((value === 'PERSONALIZADO' || value === EDIT_MECANIZADO) && onMecanizadoChange) {
+      setDialogOpen(true);
+      return;
+    }
     onTipoChange?.(order.id, value as StampType);
   };
+
+  const saveMecanizado = async (mecanizado: MecanizadoPersonalizado) => {
+    // Igual que el cambio de tipo: la fila resumen aplica a todos sus sellos; la expandida, a uno.
+    await onMecanizadoChange?.(order.id, order.items.filter((i) => !i.itemType || i.itemType === 'SELLO').map((i) => i.id), mecanizado);
+    setDialogOpen(false);
+  };
+  const isPersonalizado = item.stampType === 'PERSONALIZADO';
+  const mecanizado = isPersonalizado ? readMecanizado(item.itemConfig?.mecanizado) : undefined;
 
   if (item.itemType && item.itemType !== 'SELLO') {
     return (
@@ -42,8 +62,9 @@ export function CellTipo({ order, onTipoChange }: CellTipoProps) {
   }
 
   return (
+    <>
     <Select value={item.stampType} onValueChange={handleValueChange}>
-        <SelectTrigger className="w-full h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors">
+        <SelectTrigger title={mecanizado ? describeMecanizado(mecanizado) : undefined} className="w-full h-8 text-xs [&>svg]:hidden border-none bg-transparent hover:bg-gray-200/10 rounded-lg transition-colors">
           <SelectValue>
             <span className="flex items-center justify-center">
               {item.stampType !== 'CLASICO' && (
@@ -69,7 +90,18 @@ export function CellTipo({ order, onTipoChange }: CellTipoProps) {
             </span>
           </SelectItem>
         ))}
+        {isPersonalizado && onMecanizadoChange && (
+          <SelectItem value={EDIT_MECANIZADO} className="text-xs">Editar personalización…</SelectItem>
+        )}
       </SelectContent>
     </Select>
+    <MecanizadoPersonalizadoDialog
+      open={dialogOpen}
+      value={mecanizado}
+      designName={item.designName}
+      onCancel={() => setDialogOpen(false)}
+      onSave={saveMecanizado}
+    />
+    </>
   );
 }

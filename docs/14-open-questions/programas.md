@@ -199,3 +199,10 @@
 - **Por qué importa**: la simulación de la mesa no muestra el taladrado (si fuera del frente atravesaría el diseño) y dibuja el corte como ranura hasta −9 mm sobre una planchuela de 11,13 mm. Sin la respuesta, la vista puede mostrar un material o una separación que no es la real.
 - **Impacto**: medio (solo visualización; no cambia trayectorias ni reglas de armado).
 - **Relacionado**: POL-089, ADR-027.
+
+### Q-PROG-025
+- **Módulo**: Programas / gadget · sello tipo Personalizado · **Estado**: abierta (2026-10-22)
+- **Pregunta**: Para que el gadget aplique solo el mecanizado de un sello Personalizado: (a) ¿cuál es la profundidad del exterior («1 Cajeado 6MM») en Clásico? (b) ¿Fede puede exportar plantillas nativas de taladrado y roscado para M5 y M4, y una de perfilado recto con fresa de 1 mm (con su etapa y profundidad)? (c) ¿Se puede probar en la PC de la C que Aspire acepte una plantilla con la profundidad cambiada y una capa propia por sello?
+- **Contexto**: el tipo y su configuración ya se guardan desde Pedidos y se ven en la mesa ([mecanizado personalizado](../02-modules/pedidos/mecanizado-personalizado.md)). La base solo tiene la rosca M6, y no tiene perfilado recto de 1 mm. La profundidad de cada trayectoria está fija en su plantilla.
+- **Impacto**: alto para automatizar; mientras tanto Fede ajusta esas trayectorias a mano en Aspire.
+- **Relacionado**: Q-PROG-018, Q-PROG-024, [gadget-aspire](../02-modules/programas/gadget-aspire.md).

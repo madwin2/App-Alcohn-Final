@@ -62,7 +62,7 @@ Cada **fila** es un pedido. Si el pedido tiene varios ítems, tocá la celda **D
 | **Fecha** | Día en que se cargó | — |
 | **Cliente** | Nombre y apellido | Clic: abre la [ficha del cliente](#ficha-del-cliente) |
 | **Contacto** | Teléfono | Clic: copia el número |
-| **Tipo** | Tipo de sello: Clásico, 3MM, Alimento, Lacre, ABC (o el accesorio) | Cambiar el tipo |
+| **Tipo** | Tipo de sello: Clásico, 3MM, Alimento, Lacre, ABC, Personalizado (o el accesorio) | Cambiar el tipo. «Personalizado» abre una ventana para elegir rosca, profundidades y perfilado recto; en un sello Personalizado, «Editar personalización…» la vuelve a abrir |
 | **Diseño** | Nombre del diseño | Clic: abre los ítems |
 | **Empresa** | Transportista y modalidad (Andreani, Correo Argentino, Vía Cargo, DHL, Retiro en Persona) | Cambiarla. Con Andreani muestra el link asignado (clic para copiarlo); con DHL, un botón para copiar la dirección |
 | **Seña** | Lo que pagó de seña | Editar (en modo edición) |
@@ -119,6 +119,7 @@ Si el cliente ya existía y cambiaste su nombre, teléfono o email, la app **act
    - **Nombre del Diseño** (obligatorio). Usá un nombre que lo identifique (la marca del cliente, por ejemplo).
    - **Medida** en milímetros: `40×40`, o un solo número (`35`) si es cuadrado o redondo. Siempre largo × corto.
    - **Tipo de Sello**: Clásico, Alimento, Lacre o ABC. (El tipo **3MM** no está en el alta: se cambia después en la columna **Tipo**).
+   - **Personalizado**: para un mecanizado a medida. Se abre una ventana con **Rosca** (M6, M5, M4 o sin rosca), profundidad del **Exterior** (fresa de 6; vacío = como Clásico), profundidad del **Grabado** (una sola para las cónicas de 1 y 0,6) y **Perfilado recto con fresa de 1 mm**. Arranca con los valores de Clásico. Debajo del tipo queda el resumen y «Editar».
    - Con la medida cargada, la app **sugiere el valor** según la lista de precios (precio con transferencia). Si hacés un descuento, cambialo.
 3. Para un **soldador**, elegí la **Potencia** (100 W o 200 W). Para un **abecedario**, completá tipografía, altura de letra, mayúsculas/minúsculas y letras extras. En soldadores, mangos y bases el valor lo pone la lista de precios.
 4. **Notas**: cualquier aclaración para Producción.

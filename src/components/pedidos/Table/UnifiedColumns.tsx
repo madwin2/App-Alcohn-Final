@@ -22,9 +22,11 @@ import { CellDeadline } from './cells/CellDeadline';
 import { CellRehacerCargo } from './cells/CellRehacerCargo';
 import { CellPrioridad } from './cells/CellPrioridad';
 import { CompactProgressIndicator } from './cells/CellProgressIndicator';
+import type { MecanizadoPersonalizado } from '@/lib/pedidos/mecanizadoPersonalizado';
 
 interface UnifiedColumnsProps {
   onTipoChange?: (orderId: string, newTipo: any, itemId?: string) => void;
+  onMecanizadoChange?: (orderId: string, itemIds: string[], mecanizado: MecanizadoPersonalizado) => Promise<void> | void;
   onFabricacionChange?: (orderId: string, newState: any, itemId?: string) => void;
   onRequestRehacer?: (selloIds: string[]) => void;
   onVentaChange?: (orderId: string, newState: any, itemId?: string) => void;
@@ -45,6 +47,7 @@ interface UnifiedColumnsProps {
 
 export function createUnifiedColumns({
   onTipoChange,
+  onMecanizadoChange,
   onFabricacionChange,
   onRequestRehacer,
   onVentaChange,
@@ -115,6 +118,7 @@ export function createUnifiedColumns({
       <CellTipo
         order={row.original}
         onTipoChange={onTipoChange}
+        onMecanizadoChange={onMecanizadoChange}
       />
     ),
     

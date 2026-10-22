@@ -1270,6 +1270,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 69,
+    date: '2026-10-22',
+    title: 'Pedidos: tipo de sello Personalizado',
+    version: '1.87',
+    slides: [
+      {
+        heading: 'Nuevo tipo: Personalizado',
+        body: 'En la columna Tipo, en el alta y al agregar un sello aparece «Personalizado». Al elegirlo se abre una ventana para la rosca (M6, M5, M4 o sin rosca), la profundidad del exterior con la fresa de 6, la profundidad del grabado con las cónicas de 1 y 0,6, y si lleva perfilado recto con fresa de 1 mm. Arranca con los valores de Clásico.',
+        icon: PencilRuler,
+      },
+      {
+        heading: 'Se ve en Programas',
+        body: 'En la mesa de armado, el detalle del sello muestra su configuración. Por ahora el gadget no la aplica solo: hay que ajustar esas trayectorias en Aspire.',
+        icon: Layers,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

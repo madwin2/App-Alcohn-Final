@@ -157,6 +157,8 @@ export const getStampTypeIcon = (stampType: string): string => {
       return 'ABC';
     case 'LACRE':
       return 'LACRE';
+    case 'PERSONALIZADO':
+      return 'PERSONALIZADO';
     default:
       return '3mm';
   }

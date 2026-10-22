@@ -84,3 +84,7 @@ Ver [04-business-rules/pedidos-y-venta.md](../../04-business-rules/pedidos-y-ven
 - `src/lib/context/OrdersProvider.tsx`, `src/lib/hooks/useOrders.ts`, `src/lib/state/orders.store.ts`
 - `src/lib/abecedario/*`, `src/lib/precios/cotizacionMedida.ts` (cotización automática en el alta)
 - Documento previo: `info_de_pagina_pedidos.md` (raíz; 2025-11, parcialmente desactualizado)
+
+## Tipo Personalizado (2026-10-22)
+
+Tipo de sello con mecanizado a medida (rosca, profundidad exterior y de grabado, perfilado recto 1 mm), elegido en un modal y guardado en `item_config.mecanizado`. Ver [mecanizado personalizado](mecanizado-personalizado.md). Migración `migration_sello_tipo_personalizado.sql` aplicada el 2026-10-22.

@@ -4,7 +4,7 @@ import { es } from 'date-fns/locale';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { checkPreparation } from '@/lib/programas/checkPreparation';
-import { emptyDocument, reconcileMesa as reconcile, reflowMesa, type MesaPending as Pending, type MesaSource } from '@/lib/programas/mesa';
+import { emptyDocument, reconcileMesa as reconcile, reflowMesa, type MesaPending as Pending, type MesaSource, type StampInfo } from '@/lib/programas/mesa';
 import { type PreparationDocument, type PreparationMachine, type PreparationRecord } from '@/lib/programas/preparation';
 import { generateProgramName } from '@/lib/programas/programName';
 import { missingForRecipe, sortTemplateFiles } from '@/lib/programas/templateSort';
@@ -161,8 +161,8 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
   }, [queue, programs]);
 
   const stampInfo = useMemo(() => {
-    const out: Record<string, { notes?: string | null; isPriority?: boolean; deadlineAt?: string }> = {};
-    for (const s of [...queue, ...programs.flatMap((p) => p.stamps)] as ProgramStamp[]) out[s.id] = { notes: s.notes, isPriority: s.isPriority, deadlineAt: s.deadlineAt };
+    const out: Record<string, StampInfo> = {};
+    for (const s of [...queue, ...programs.flatMap((p) => p.stamps)] as ProgramStamp[]) out[s.id] = { notes: s.notes, isPriority: s.isPriority, deadlineAt: s.deadlineAt, mecanizado: s.mecanizado };
     return out;
   }, [queue, programs]);
 

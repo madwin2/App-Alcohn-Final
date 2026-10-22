@@ -7,7 +7,7 @@
 | Grupo | Campos | Notas |
 |---|---|---|
 | Identidad | `id`, `orden_id`, `fecha`, `created_at` | `fecha` = fecha del pedido |
-| Producto | `item_type` (`SELLO`, `ABECEDARIO`, `SOLDADOR`, `MANGO_GOLPE`, `BASE_REMACHADORA`), `tipo` (`Clasico`, `3mm`, `Lacre`, `Alimento`, `ABC`), `diseno` (nombre), `item_config` (JSON: potencia, datos de abecedario; en web: origen, slug, colección, variante), `nota` | |
+| Producto | `item_type` (`SELLO`, `ABECEDARIO`, `SOLDADOR`, `MANGO_GOLPE`, `BASE_REMACHADORA`), `tipo` (`Clasico`, `3mm`, `Lacre`, `Alimento`, `ABC`, `Personalizado` desde 2026-10-22), `diseno` (nombre), `item_config` (JSON: potencia, datos de abecedario, `mecanizado` del tipo Personalizado; en web: origen, slug, colección, variante), `nota` | |
 | Medidas | `ancho_real`, `largo_real` (**cm**, pedida; ancho = mayor), `ancho_fabricacion_mm`, `largo_fabricacion_mm` (**mm**, confirmada), `tipo_planchuela` (12/19/25/38/63, 100 legado) | Ver [medida](../../02-modules/vectorizacion/medida-de-fabricacion.md) |
 | Dinero | `valor`, `senia`, `restante` (trigger), `costo_fabricacion`, `margen_fabricacion` (trigger), `es_regalo` (ítem sin cargo; fuerza valor/seña = 0) | Inmutable después del INSERT |
 | Estados | `estado_fabricacion`, `estado_fabricacion_previo`, `es_prioritario`, `estado_venta`, `estado_vectorizacion`, `estado_aspire` | Ver [06-state-machines](../../06-state-machines/README.md) |

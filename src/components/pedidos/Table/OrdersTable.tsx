@@ -14,6 +14,7 @@ import {
 import { Order, OrderItem, FabricationState, SaleState, ShippingState, StampType } from '@/lib/types/index';
 import { filterOrders } from '@/lib/utils/orders.utils';
 import { createUnifiedColumns } from './UnifiedColumns';
+import type { MecanizadoPersonalizado } from '@/lib/pedidos/mecanizadoPersonalizado';
 import { useOrdersStore } from '@/lib/state/orders.store';
 import { useToast } from '@/components/ui/use-toast';
 import { useSound } from '@/lib/hooks/useSound';
@@ -204,6 +205,13 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
       const updatedItems = order.items.map(item => ({ id: item.id, stampType: newTipo }));
       await handleUpdate(orderId, { items: updatedItems as any });
     }
+  };
+
+  const handleMecanizadoChange = async (orderId: string, itemIds: string[], mecanizado: MecanizadoPersonalizado) => {
+    if (!itemIds.length) return;
+    await handleUpdate(orderId, {
+      items: itemIds.map((id) => ({ id, stampType: 'PERSONALIZADO', itemConfig: { mecanizado } })) as any,
+    });
   };
 
   const handleFabricacionChange = async (orderId: string, newState: FabricationState, itemId?: string) => {
@@ -458,6 +466,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   const tableColumns = useMemo(() => {
     return createUnifiedColumns({
       onTipoChange: handleTipoChange,
+      onMecanizadoChange: handleMecanizadoChange,
       onFabricacionChange: handleFabricacionChange,
       onRequestRehacer: handleRequestRehacer,
       onVentaChange: handleVentaChange,
@@ -479,6 +488,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   const subitemColumns = useMemo(() => {
     return createUnifiedColumns({
       onTipoChange: handleTipoChange,
+      onMecanizadoChange: handleMecanizadoChange,
       onFabricacionChange: handleFabricacionChange,
       onRequestRehacer: handleRequestRehacer,
       onVentaChange: handleVentaChange,

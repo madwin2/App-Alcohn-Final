@@ -135,6 +135,7 @@ const mapStampType = (tipo: string | null): StampType => {
     'Lacre': 'LACRE',
     'Alimento': 'ALIMENTO',
     'ABC': 'ABC',
+    'Personalizado': 'PERSONALIZADO',
   };
   return tipo ? (mapping[tipo] || 'CLASICO') : 'CLASICO';
 };
@@ -157,6 +158,7 @@ export const mapStampTypeToDB = (tipo: StampType): string => {
     'LACRE': 'Lacre',
     'ALIMENTO': 'Alimento',
     'ABC': 'ABC',
+    'PERSONALIZADO': 'Personalizado',
   };
   return mapping[tipo];
 };

@@ -1,4 +1,5 @@
 import { supabase } from '../client';
+import { readMecanizado } from '@/lib/pedidos/mecanizadoPersonalizado';
 import {
   FabricationState,
   PlanchuelaSize,
@@ -80,6 +81,7 @@ const mapStampType = (tipo: string | null): ProgramStamp['stampType'] => {
     Lacre: 'LACRE',
     Alimento: 'ALIMENTO',
     ABC: 'ABC',
+    Personalizado: 'PERSONALIZADO',
   };
   return tipo ? mapping[tipo] || 'CLASICO' : 'CLASICO';
 };
@@ -190,6 +192,9 @@ function mapSelloToProgramStamp(sello: SelloRow, perdidaCorteCm: number): Progra
     fabricationWidthMm: anchoFabricacionMm,
     fabricationHeightMm: largoFabricacionMm,
     stampType: mapStampType(sello.tipo),
+    ...(sello.tipo === 'Personalizado'
+      ? { mecanizado: readMecanizado((sello.item_config as Record<string, unknown> | null)?.mecanizado) }
+      : {}),
     previewUrl: sello.archivo_vector_preview || sello.foto_sello || undefined,
     vectorPreviewUrl: sello.archivo_vector_preview || undefined,
     photoUrl: sello.foto_sello || undefined,

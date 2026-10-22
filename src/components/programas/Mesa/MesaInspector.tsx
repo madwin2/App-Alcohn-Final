@@ -3,6 +3,7 @@ import type { PreparationDocument, Recipe, StampPlacement } from '@/lib/programa
 import { columnStamps, columnUsage, dueText, type StampInfo } from '@/lib/programas/mesa';
 import { PASS_OUTCOME_LABEL, type PassOutcome } from '@/lib/fresa/passes';
 import { cn } from '@/lib/utils/cn';
+import { describeMecanizado } from '@/lib/pedidos/mecanizadoPersonalizado';
 import { DesignTile, Dot, FOCUS, Kbd, Label, PILL_GHOST, PILL_SOFT, Segmented } from './mesaUi';
 
 type FineMode = NonNullable<StampPlacement['fine']>['mode'];
@@ -68,6 +69,14 @@ export function MesaInspector({ doc, stamp, sold, info, today, readOnly, grow, s
           <Dot tone={fineTone} />{outcome ? PASS_OUTCOME_LABEL[outcome as PassOutcome] ?? outcome : 'fresa sin chequear'}
         </p>
       </div>
+
+      {info?.mecanizado ? (
+        <div className="rounded-2xl bg-amber-400/10 px-3 py-2 text-[13px] text-amber-100" title="Configuración pedida en Pedidos">
+          <p className="font-medium text-amber-200">Mecanizado personalizado</p>
+          <p>{describeMecanizado(info.mecanizado)}</p>
+          <p className="mt-1 text-[12px] text-amber-200/70">El gadget todavía no lo aplica solo: ajustá esas trayectorias en Aspire.</p>
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <Label>mecanizado</Label>

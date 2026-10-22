@@ -38,6 +38,8 @@ import {
 import { NewOrderDesignTabs } from './NewOrderDesignTabs';
 import { measureInputFromDesign, type SavedDesignData } from './newOrderDesignUtils';
 import type { SaveDesignOptions } from './NewOrderDialog';
+import { MecanizadoPersonalizadoDialog } from '../MecanizadoPersonalizadoDialog';
+import { describeMecanizado, readMecanizado, type MecanizadoPersonalizado } from '@/lib/pedidos/mecanizadoPersonalizado';
 
 const internationalCountryIso2Schema = z.enum(['MX', 'CO', 'PE', 'CL']);
 
@@ -99,7 +101,8 @@ const orderSchema = z.object({
     designName: z.string().optional(),
     requestedWidthMm: z.number().min(1, 'La medida debe ser mayor a 0'),
     requestedHeightMm: z.number().min(1, 'La medida debe ser mayor a 0'),
-    stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
+    stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE', 'PERSONALIZADO']),
+    mecanizado: z.custom<MecanizadoPersonalizado>().optional(),
     soldadorPower: z.enum(['100W', '200W']).optional(),
     abecedarioTipografia: z.string().optional(),
     abecedarioAlturaMm: z.number().optional(),
@@ -206,6 +209,7 @@ const stampTypeOptions = [
   { value: 'CLASICO', label: 'Clásico' },
   { value: 'ABC', label: 'ABC' },
   { value: 'LACRE', label: 'Lacre' },
+  { value: 'PERSONALIZADO', label: 'Personalizado' },
 ];
 
 const itemTypeOptions: { value: ItemType; label: string }[] = [
@@ -267,6 +271,7 @@ export function NewOrderStepForm({
     photo?: File;
   }>({});
   const [activeSlot, setActiveSlot] = useState<number | 'new'>('new');
+  const [mecanizadoOpen, setMecanizadoOpen] = useState(false);
   const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
   const phoneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emailTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1187,7 +1192,11 @@ export function NewOrderStepForm({
             {selectedItemType === 'SELLO' && (
               <Select 
                 value={orderForm.watch('order.stampType') || 'CLASICO'}
-                onValueChange={(value) => orderForm.setValue('order.stampType', value as StampType)}
+                onValueChange={(value) => {
+                  // Personalizado se confirma en el modal; cancelar deja el tipo anterior.
+                  if (value === 'PERSONALIZADO') setMecanizadoOpen(true);
+                  else orderForm.setValue('order.stampType', value as StampType);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Tipo de Sello" />
@@ -1201,6 +1210,23 @@ export function NewOrderStepForm({
                 </SelectContent>
               </Select>
             )}
+            {selectedItemType === 'SELLO' && orderForm.watch('order.stampType') === 'PERSONALIZADO' && (
+              <button type="button" onClick={() => setMecanizadoOpen(true)}
+                className="mt-1 block text-left text-[11px] text-muted-foreground underline-offset-2 hover:underline">
+                {describeMecanizado(readMecanizado(orderForm.watch('order.mecanizado')))} · Editar
+              </button>
+            )}
+            <MecanizadoPersonalizadoDialog
+              open={mecanizadoOpen}
+              value={orderForm.watch('order.stampType') === 'PERSONALIZADO' ? readMecanizado(orderForm.watch('order.mecanizado')) : undefined}
+              designName={orderForm.watch('order.designName')}
+              onCancel={() => setMecanizadoOpen(false)}
+              onSave={(m) => {
+                orderForm.setValue('order.mecanizado', m);
+                orderForm.setValue('order.stampType', 'PERSONALIZADO');
+                setMecanizadoOpen(false);
+              }}
+            />
             {selectedItemType === 'SOLDADOR' && (
               <Select
                 value={orderForm.watch('order.soldadorPower') || '100W'}

@@ -1,3 +1,5 @@
+import type { MecanizadoPersonalizado } from '@/lib/pedidos/mecanizadoPersonalizado';
+
 // Enums
 export type FabricationState = 'SIN_HACER' | 'HACIENDO' | 'VERIFICAR' | 'HECHO' | 'REHACER' | 'RETOCAR' | 'PROGRAMADO';
 export type SaleState = 'SEÑADO' | 'FOTO_ENVIADA' | 'TRANSFERIDO' | 'DEUDOR';
@@ -22,7 +24,7 @@ export type ShippingOption =
   | 'DHL'
   | 'NONE';
 export type ShippingOriginMethod = 'RETIRO_EN_ORIGEN' | 'ENTREGA_EN_SUCURSAL';
-export type StampType = '3MM' | 'ALIMENTO' | 'CLASICO' | 'ABC' | 'LACRE';
+export type StampType = '3MM' | 'ALIMENTO' | 'CLASICO' | 'ABC' | 'LACRE' | 'PERSONALIZADO';
 export type ItemType = 'SELLO' | 'ABECEDARIO' | 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA';
 export type SoldadorPower = '100W' | '200W';
 export type AbecedarioCase = 'MAYUSCULA' | 'MINUSCULA' | 'AMBAS';
@@ -30,6 +32,8 @@ export type AbecedarioExtraLetterCounts = Record<string, number>;
 
 export interface ItemConfig {
   soldadorPower?: SoldadorPower;
+  /** Solo tipo PERSONALIZADO: rosca, profundidades y perfilado recto. */
+  mecanizado?: MecanizadoPersonalizado;
   abecedarioTipografia?: string;
   abecedarioAlturaMm?: number;
   abecedarioMayusculas?: number;
@@ -329,6 +333,8 @@ export interface ProgramStamp {
   fabricationWidthMm?: number | null;
   fabricationHeightMm?: number | null;
   stampType: StampType;
+  /** Solo PERSONALIZADO: configuración elegida en Pedidos. */
+  mecanizado?: MecanizadoPersonalizado;
   previewUrl?: string;
   vectorPreviewUrl?: string;
   /** Foto del sello (fallback visual si el vector no es imagen). */
@@ -425,6 +431,8 @@ export interface NewOrderFormData {
     requestedWidthMm: number;
     requestedHeightMm: number;
     stampType: StampType;
+    /** Solo stampType PERSONALIZADO. */
+    mecanizado?: MecanizadoPersonalizado;
     soldadorPower?: SoldadorPower;
     abecedarioTipografia?: string;
     abecedarioAlturaMm?: number;

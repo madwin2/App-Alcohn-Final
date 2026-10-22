@@ -3,6 +3,7 @@
  * máquina. Funciones puras sobre el documento de preparación; las reglas de
  * validación son las mismas del servidor (validatePreparation).
  */
+import type { MecanizadoPersonalizado } from '@/lib/pedidos/mecanizadoPersonalizado';
 import {
   createPreparation, validatePreparation, PREPARATION_RULES,
   type PreparationDocument, type PreparationIssue, type PreparationMachine, type PreparationSource,
@@ -214,7 +215,11 @@ export function moveToNeighbor(doc: PreparationDocument, instanceId: string, dir
 }
 
 /** Lo del pedido que importa al armar: nota del cliente, prioridad y vencimiento. */
-export interface StampInfo { notes?: string | null; isPriority?: boolean; deadlineAt?: string }
+export interface StampInfo {
+  notes?: string | null; isPriority?: boolean; deadlineAt?: string;
+  /** Sello Personalizado: rosca, profundidades y perfilado pedidos (Pedidos). */
+  mecanizado?: MecanizadoPersonalizado;
+}
 
 /** Texto corto del vencimiento («vence hoy», «venció ayer»…), o null si no tiene. */
 export function dueText(info: StampInfo, today: Date): { text: string; urgent: boolean } | null {

@@ -119,7 +119,7 @@ export interface Database {
           programa_id: string | null;
           programa_nombre?: string | null;
           fecha: string | null;
-          tipo: 'Clasico' | '3mm' | 'Lacre' | 'Alimento' | 'ABC' | null;
+          tipo: 'Clasico' | '3mm' | 'Lacre' | 'Alimento' | 'ABC' | 'Personalizado' | null;
           senia: number | null;
           fecha_limite: string | null;
           diseno: string | null;

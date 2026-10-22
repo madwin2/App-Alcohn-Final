@@ -61,7 +61,7 @@ const filtersSchema = z.object({
       ])
     )
     .optional(),
-  types: z.array(z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE'] as any)).optional(),
+  types: z.array(z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE', 'PERSONALIZADO'] as any)).optional(),
   channels: z
     .array(z.enum(['WHATSAPP', 'INSTAGRAM', 'FACEBOOK', 'MAIL', 'WEB'] as any))
     .optional(),
@@ -109,6 +109,7 @@ const typeOptions: { value: StampType; label: string }[] = [
   { value: 'CLASICO' as any, label: 'Clásico' },
   { value: 'ABC' as any, label: 'ABC' },
   { value: 'LACRE' as any, label: 'Lacre' },
+  { value: 'PERSONALIZADO' as any, label: 'Personalizado' },
 ];
 
 const channelOptions = [

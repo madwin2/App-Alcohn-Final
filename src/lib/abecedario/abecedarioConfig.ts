@@ -5,7 +5,9 @@ import type {
   ItemType,
   Order,
   OrderItem,
+  StampType,
 } from '@/lib/types';
+import { readMecanizado } from '@/lib/pedidos/mecanizadoPersonalizado';
 import { getOrderItemDisplayName } from '@/lib/utils/itemDisplayName';
 
 export const ABECEDARIO_LETTERS = [
@@ -138,10 +140,17 @@ export function buildAbecedarioItemConfig(
 
 export function itemConfigFromForm(
   itemType: ItemType | undefined,
-  fields: AbecedarioFormFields & { soldadorPower?: ItemConfig['soldadorPower'] },
+  fields: AbecedarioFormFields & {
+    soldadorPower?: ItemConfig['soldadorPower'];
+    stampType?: StampType;
+    mecanizado?: ItemConfig['mecanizado'];
+  },
 ): ItemConfig {
   if (itemType === 'ABECEDARIO') {
     return buildAbecedarioItemConfig(fields, { soldadorPower: fields.soldadorPower });
+  }
+  if ((itemType ?? 'SELLO') === 'SELLO' && fields.stampType === 'PERSONALIZADO') {
+    return { soldadorPower: fields.soldadorPower, mecanizado: readMecanizado(fields.mecanizado) };
   }
   return { soldadorPower: fields.soldadorPower };
 }

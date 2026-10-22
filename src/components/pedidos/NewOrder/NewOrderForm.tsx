@@ -22,7 +22,7 @@ const newOrderSchema = z.object({
     designName: z.string().min(1, 'El nombre del diseño es requerido'),
     requestedWidthMm: z.number().min(1, 'El ancho debe ser mayor a 0'),
     requestedHeightMm: z.number().min(1, 'La altura debe ser mayor a 0'),
-    stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE']),
+    stampType: z.enum(['3MM', 'ALIMENTO', 'CLASICO', 'ABC', 'LACRE', 'PERSONALIZADO']),
     notes: z.string().optional(),
   }),
   values: z.object({

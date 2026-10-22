@@ -147,3 +147,9 @@ Hallazgos detectados durante la documentación (2026-09-27). **No se corrigió n
 - **Alcance**: confirmado en `equipo*.service.ts`; **probable** en otros módulos con el mismo patrón (`tareas_dashboard`, innovación, etc.).
 - **Mitigación en curso**: helper `asegurarFilaAfectada` + `.select('id')` en writes del equipo; mapear `PGRST116` a mensaje legible; no optimizar la UI hasta confirmar en servidor.
 - **Impacto**: el usuario cree que borró o cambió algo y no ocurrió; datos inconsistentes con lo mostrado.
+
+<a id="aud-inc-027"></a>
+
+### AUD-INC-027 · Cambiar el tipo en una fila expandida cambia todos los sellos del pedido
+- **Evidencia** (2026-10-22): la fila expandida de Pedidos arma `{ ...order, items: [item] }`, pero `CellTipo` llama `onTipoChange(order.id, tipo)` sin `itemId`. Entonces `OrdersTable.handleTipoChange` busca el pedido real y actualiza **todos** sus ítems. El tipo Personalizado nuevo no tiene este problema: aplica a los ítems de la fila.
+- **Impacto**: en un pedido con varios sellos, cambiar el tipo de uno solo los cambia a todos. No se corrigió de paso (AGENTS §4).

@@ -6,7 +6,7 @@ import type { PreparationMachine } from '@/lib/programas/preparation';
 import { cn } from '@/lib/utils/cn';
 import { DesignTile, Dot, FOCUS, PILL_GHOST, PILL_PRIMARY, PILL_SOFT, Panel } from './mesaUi';
 
-export const RECIPE_LABEL: Record<string, string> = { CLASICO: 'Clásico', '3MM': '3 mm', ALIMENTO: 'Alimento' };
+export const RECIPE_LABEL: Record<string, string> = { CLASICO: 'Clásico', '3MM': '3 mm', ALIMENTO: 'Alimento', PERSONALIZADO: 'Personalizado' };
 const SECTIONS: QueueSection[] = ['urgentes', 'semana', 'despues'];
 
 function dueLabel(s: MesaSource, today: Date): string | null {
