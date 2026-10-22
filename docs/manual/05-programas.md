@@ -22,6 +22,13 @@ La barra de abajo muestra las etapas **Armado → Revisado → En Aspire → Par
 
 ⚠️ **Empezar a fabricar** aparece recién cuando Aspire devolvió la revisión guardada y su archivo. Antes, la base de datos no deja pasar los sellos a Haciendo.
 
+### Nombre, fecha y eliminar
+
+El botón **⋯** al lado del selector de programa tiene:
+
+- **Cambiar nombre o fecha…**: el **nombre automático** (por ejemplo *20 OCT x7 C*) se actualiza solo con la fecha y la cantidad de sellos. Si escribís otro nombre, queda fijo; la varita lo vuelve al automático. Si el programa ya estaba en Aspire con el gadget anterior, cambiar la fecha lo vuelve a **Borrador** y hay que correr el gadget de nuevo.
+- **Eliminar programa…**: si tiene sellos, elegí **Mantener el estado anterior** (normalmente Sin Hacer) o **Elegir un estado nuevo**; los sellos vuelven a la cola. No se puede eliminar un programa **bloqueado** (desbloquealo en «Todos los programas») ni uno **ya fabricado**: queda en el historial para saber en qué corrida se hizo cada sello.
+
 ### Programas terminados en la mesa
 
 El selector de programas (arriba, al lado de la máquina) separa **En curso** de **Terminados hace poco**: un programa fabricado sigue ahí **dos días** desde que se marcó el último sello como Hecho. Los anteriores no se borran: están en **Historial de terminados…** (al final del mismo selector), agrupados por mes, con buscador por nombre y filtro por máquina; **Cargar más** trae los anteriores. Tocá uno para verlo en la mesa en solo lectura.

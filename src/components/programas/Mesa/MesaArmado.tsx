@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Archive, ChevronDown, Keyboard, LayoutGrid, Lock, Magnet, Plus, Redo2, ScanSearch, SlidersHorizontal, Undo2 } from 'lucide-react';
+import { Archive, CalendarDays, ChevronDown, Keyboard, LayoutGrid, Lock, Magnet, MoreHorizontal, Plus, Redo2, ScanSearch, SlidersHorizontal, Trash2, Undo2 } from 'lucide-react';
 import { FresaCheckDialog } from '@/components/fresa/FresaCheckDialog';
 import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { DoneReviewDialog } from '@/components/programas/DoneReview/DoneReviewDialog';
@@ -22,6 +22,7 @@ import { MesaSummary } from './MesaSummary';
 import { MesaActionBar, type FabricatingRecord, type FabricationRecord } from './MesaActionBar';
 import { STEP_LABEL } from './MesaChecklist';
 import { ShortcutsDialog, StampContextMenu } from './MesaOverlays';
+import { MesaProgramEdit, type ProgramEditTarget } from './MesaProgramEdit';
 
 export interface MesaProgram {
   id: string;
@@ -46,6 +47,8 @@ export interface MesaProgram {
   fromHistory?: boolean;
   /** Todavía no se leyó su armado (solo se carga el programa elegido). */
   loading?: boolean;
+  /** Fecha de fabricación 'YYYY-MM-DD' (para cambiarla). */
+  productionDate?: string;
 }
 
 export const MACHINE_LABEL: Record<PreparationMachine, string> = { C: 'Chica', G: 'Grande', XL: 'XL' };
@@ -63,7 +66,7 @@ const isDirty = (p: MesaProgram) => JSON.stringify(p.doc) !== JSON.stringify(p.s
  */
 export function MesaArmado({
   machine, onMachine, programs, programId, onProgram, onNewProgram, queue, soldSizes, stampInfo = {}, today, machinesFor,
-  legacyAspire, checking, onChange, onSave, onAspire, onFabricated, onStart, starting = false, onSetup, onOpenBoard, onOpenHistory, broncePiezas,
+  legacyAspire, checking, onChange, onSave, onAspire, onFabricated, onStart, starting = false, onSetup, onOpenBoard, onOpenHistory, onEditProgram, onDeleteProgram, broncePiezas,
 }: {
   machine: PreparationMachine;
   onMachine: (m: PreparationMachine) => void;
@@ -93,6 +96,10 @@ export function MesaArmado({
   onSetup: () => void;
   /** Abre el historial de programas terminados. */
   onOpenHistory?: () => void;
+  /** Cambia nombre y/o fecha de fabricación. */
+  onEditProgram?: (programId: string, updates: { name?: string; productionDate?: string }) => Promise<void>;
+  /** Pide confirmación (y qué hacer con los sellos) y borra el programa. */
+  onDeleteProgram?: (programId: string) => void;
   /** Abre el tablero con todos los programas (ABC, terminados, papelera…). */
   onOpenBoard?: () => void;
   /** Largos de las piezas de bronce útiles por ancho (stock); solo informativo. */
@@ -121,6 +128,7 @@ export function MesaArmado({
   const [waiting, setWaiting] = useState<Record<string, number>>({});
   const [fabAsk, setFabAsk] = useState(false);
   const [fabReview, setFabReview] = useState(false);
+  const [editing, setEditing] = useState<ProgramEditTarget | null>(null);
 
   // El selector separa lo que está en curso de lo recién terminado; lo viejo vive en el historial.
   const inProgress = machinePrograms.filter((p) => !p.fabricated);
@@ -372,6 +380,39 @@ export function MesaArmado({
             {onOpenHistory ? <DropdownMenuItem onSelect={onOpenHistory}><Archive className="mr-2 size-4" />Historial de terminados…</DropdownMenuItem> : null}
           </DropdownMenuContent>
         </DropdownMenu>
+        {program && (onEditProgram || onDeleteProgram) ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={cn(PILL_GHOST, 'px-2')} aria-label="Opciones del programa" title="Nombre, fecha o eliminar el programa">
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[240px]">
+              {onEditProgram ? (
+                <DropdownMenuItem disabled={!program.productionDate}
+                  onSelect={() => program.productionDate && setEditing({ id: program.id, name: program.name, productionDate: program.productionDate, machine: program.machine,
+                    stampCount: countOf(program), inAspire: !!program.legacy && !!progress?.done.aspire })}>
+                  <CalendarDays className="mr-2 size-4" />Cambiar nombre o fecha…
+                </DropdownMenuItem>
+              ) : null}
+              {onDeleteProgram ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled={!!program.locked || !!program.fabricated}
+                    className="text-red-300 focus:text-red-200"
+                    onSelect={() => onDeleteProgram(program.id)}>
+                    <Trash2 className="mr-2 size-4" />Eliminar programa…
+                  </DropdownMenuItem>
+                  {program.locked || program.fabricated ? (
+                    <p className="px-2 pb-1.5 text-[12px] text-zinc-500">
+                      {program.locked ? 'Está bloqueado: desbloquealo en «Todos los programas».' : 'Ya se fabricó: queda en el historial.'}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
         <div className="ml-auto flex items-center gap-1">
           <button type="button" className={cn(PILL_GHOST, 'px-2')} onClick={() => setShortcuts(true)} aria-label="Atajos de teclado" title="Atajos de teclado (?)"><Keyboard className="size-4" /></button>
           {onOpenBoard ? <button type="button" className={PILL_GHOST} onClick={onOpenBoard} title="Tablero con todos los programas: ABC, terminados, papelera, bloqueo e historial"><LayoutGrid className="size-4" />Todos los programas</button> : null}
@@ -479,6 +520,10 @@ export function MesaArmado({
           onRecipe: (recipe) => patch(menuStamp.instanceId, { recipe }), onRemove: () => remove(menuStamp.instanceId),
         } : null} />
       <ShortcutsDialog open={shortcuts} onOpenChange={setShortcuts} />
+      {onEditProgram ? (
+        <MesaProgramEdit target={editing} onOpenChange={(o) => { if (!o) setEditing(null); }}
+          onSave={async (id, updates) => { await onEditProgram(id, updates); setNotice({ text: 'Programa actualizado', tone: 'ok' }); }} />
+      ) : null}
 
       <ConfirmDialog open={fabAsk} onOpenChange={setFabAsk}
         title="¿Algún sello salió mal?" description="¿Hay que rehacer o retocar alguno de este programa?"

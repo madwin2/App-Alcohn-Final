@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Archive,
+  Trash2,
   Bell,
   FileText,
   Filter,
@@ -1248,6 +1249,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Aviso para pedir',
         body: 'Cuando el bronce útil de un ancho alcanza para pocos días, Julián y Producción reciben un aviso con el pedido sugerido. En la mesa, debajo de cada planchuela, se ven las piezas que hay.',
         icon: Bell,
+      },
+    ],
+  },
+  {
+    id: 68,
+    date: '2026-10-22',
+    title: 'Programas: nombre, fecha y eliminar desde la mesa',
+    version: '1.86',
+    slides: [
+      {
+        heading: 'Cambiá el nombre o la fecha del programa',
+        body: 'En la mesa, el botón «⋯» al lado del programa tiene «Cambiar nombre o fecha…». Si dejás el nombre automático, se actualiza solo con la fecha nueva.',
+        icon: CalendarDays,
+      },
+      {
+        heading: 'Eliminar un programa',
+        body: 'En el mismo menú está «Eliminar programa…». Como en el tablero, te pregunta a qué estado vuelven los sellos y vuelven a la cola. Los programas ya fabricados no se borran: quedan en el historial.',
+        icon: Trash2,
       },
     ],
   },

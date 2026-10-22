@@ -18,6 +18,8 @@ import type { FabricationState, Program, ProgramStamp } from '@/lib/types/index'
 import { todayArgentinaDateKey } from '@/lib/utils/argentinaDate';
 import { MACHINE_LABEL, MesaArmado, type MesaProgram } from './MesaArmado';
 import { MesaHistory } from './MesaHistory';
+import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
+import { RemoveStampDialog, type RemoveStampChoice } from '@/components/programas/RemoveStamp/RemoveStampDialog';
 import { MachineSetupSheet, type MachineSetup } from './MachineSetupSheet';
 import { Panel } from './mesaUi';
 
@@ -87,6 +89,7 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
   /** Programas viejos abiertos desde el historial (no vienen con la lista de trabajo). */
   const [fromHistory, setFromHistory] = useState<Program[]>([]);
   const [starting, setStarting] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<Program | null>(null);
   const setups = useRef<Partial<Record<PreparationMachine, Promise<StoredSetup | null>>>>({});
   const pending = useRef<Pending>({ adding: new Set(), removing: new Set() });
   const setupFor = (m: PreparationMachine) => (setups.current[m] ??= peekMachineSetup(m).catch(() => null));
@@ -171,7 +174,7 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
       rehacer: p.stamps.filter((s) => s.fabricationState === 'REHACER').length,
     } : null;
     const fabricating = isFabricating(p) ? { since: p.fabricationStartedAt ? format(parseISO(p.fabricationStartedAt), "HH:mm 'del' d MMM", { locale: es }) : null } : null;
-    const base = { id: p.id, name: p.name, machine: p.machine, stampCount: p.stamps.length, fabricated, fabricating, fromHistory: fromHistory.some((x) => x.id === p.id) };
+    const base = { id: p.id, name: p.name, machine: p.machine, stampCount: p.stamps.length, productionDate: p.productionDate, fabricated, fabricating, fromHistory: fromHistory.some((x) => x.id === p.id) };
     // Sin cargar todavía (solo se carga el elegido): alcanza para la lista de programas.
     if (!l) return [{ ...base, doc: emptyDocument(p.id, p.machine), savedRevision: null, savedDoc: null, syncedRevision: null, fileRevision: null, locked: p.bloqueado, loading: true }];
     const locked = p.bloqueado;
@@ -346,6 +349,24 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
     setHistoryOpen(false);
   };
 
+  const onEditProgram = async (id: string, updates: { name?: string; productionDate?: string }) => {
+    await api.updateProgram(id, updates);
+    await api.fetchPrograms({ silent: true });
+  };
+
+  /** Igual que la papelera del tablero: libera los sellos (estado anterior o uno elegido) y borra el programa. */
+  const deleteProgram = async (p: Program, choice: RemoveStampChoice) => {
+    try {
+      await api.deleteProgram(p.id, { restoreMode: choice.mode, newFabricationState: choice.mode === 'NEW' ? choice.state : undefined });
+      setSelected((s) => { const { [p.machine as PreparationMachine]: _, ...rest } = s; return rest; });
+      setLoaded(({ [p.id]: _, ...rest }) => rest);
+      setFromHistory((list) => list.filter((x) => x.id !== p.id));
+      toast({ title: 'Programa eliminado', description: p.stamps.length ? `${p.stamps.length} ${p.stamps.length === 1 ? 'sello volvió' : 'sellos volvieron'} a la cola.` : undefined });
+    } catch (e) {
+      toast({ title: 'No se pudo eliminar el programa', description: e instanceof Error ? e.message : undefined, variant: 'destructive' });
+    } finally { void refreshQueue(); }
+  };
+
   const onFabricated = async (id: string, states: { instanceId: string; state: FabricationState }[]) => {
     const doc = loaded[id]?.draft;
     if (!doc) return;
@@ -392,10 +413,27 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
         onFabricated={(id, states) => void onFabricated(id, states)}
         onStart={onStart} starting={!!program && starting === program.id}
         onOpenHistory={() => setHistoryOpen(true)}
+        onEditProgram={onEditProgram}
+        onDeleteProgram={(id) => setDeleting(mesaPrograms.find((p) => p.id === id) ?? null)}
         onSetup={() => setSetupOpen(true)}
         onOpenBoard={onOpenBoard}
         broncePiezas={broncePiezas}
       />
+      <RemoveStampDialog
+        open={!!deleting && deleting.stamps.length > 0}
+        onOpenChange={(o) => { if (!o) setDeleting(null); }}
+        bulkCount={deleting?.stamps.length || 1}
+        title="Eliminar programa"
+        description={deleting ? `¿Eliminar «${deleting.name}»? Se liberarán ${deleting.stamps.length} sello${deleting.stamps.length === 1 ? '' : 's'} y vuelven a la cola.` : ''}
+        confirmLabel="Eliminar" confirmVariant="destructive"
+        onConfirm={(choice) => { const p = deleting; setDeleting(null); if (p) void deleteProgram(p, choice); }} />
+      <ConfirmDialog
+        open={!!deleting && deleting.stamps.length === 0}
+        onOpenChange={(o) => { if (!o) setDeleting(null); }}
+        title="Eliminar programa"
+        description={deleting ? `¿Eliminar «${deleting.name}»? No tiene sellos. Esta acción no se puede deshacer.` : ''}
+        confirmLabel="Eliminar" variant="destructive"
+        onConfirm={() => { const p = deleting; setDeleting(null); if (p) void deleteProgram(p, { mode: 'PREVIOUS' }); }} />
       <MesaHistory open={historyOpen} onOpenChange={setHistoryOpen} machine={machine} onOpenProgram={openFromHistory} />
       {program && setup ? (
         <MachineSetupSheet open={setupOpen} onOpenChange={setSetupOpen} machine={machine} machineLabel={MACHINE_LABEL[machine]} setup={setup}

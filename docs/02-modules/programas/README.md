@@ -193,3 +193,5 @@ La [revisión de código](../../audits/programas-automatizacion-2026-10-15.md) p
 
 UI: `MesaActionBar` (acciones), `MesaChecklist` (`MesaSteps`, 6 etapas), `MesaArmado` (selector «En curso» / «Terminados hace poco» / «Historial de terminados…»), `MesaHistory` (historial por mes, buscador, filtro por máquina, «Cargar más»).
 
+✅ **Nombre, fecha y eliminar en la mesa (2026-10-22).** Menú «⋯» junto al selector (`MesaArmado`): «Cambiar nombre o fecha…» (`MesaProgramEdit` → `updateProgram`; con nombre automático solo se manda la fecha y el servidor lo recalcula, BR-PROG-005) y «Eliminar programa…» (`RemoveStampDialog`/`ConfirmDialog` → `deleteProgram`, igual que la papelera del tablero; la preparación se borra en cascada). La mesa no ofrece eliminar programas bloqueados ni fabricados (el tablero sigue permitiendo los fabricados).
+
