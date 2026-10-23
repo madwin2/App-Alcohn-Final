@@ -355,6 +355,51 @@ class FullFlowTests(unittest.TestCase):
           sync.run(ctx)
           assert(state.recalculations==3); assert(state.uploads==1)
           assert(state.reports[2]:find('WIDTH',1,true)); assert(state.reports[2]:find('"recalculated":false',1,true))
+          assert(state.message:find('No se generaron ni recalcularon',1,true), state.message)
+        ''')
+
+    def test_failing_stamp_is_left_out_and_the_rest_is_recalculated(self):
+        # Q-PROG-024: un sello fuera del ancho queda afuera; el resto sigue.
+        self.run_lua('''
+          doc.stamps[2]={instanceId='program:t',selloId='t',name='Ancho',columnId='p38',centerX=235,topY=-9,widthMm=12,heightMm=30,recipe='CLASICO',fine={mode='whole'}}
+          ctx,state,entries,tm=sdk.setup(sync,doc,EXECUTION_RULES)
+          local function layerOf(o) return ctx.job.LayerManager:GetLayerWithId(o.RawLayerId).Name end
+          sync.run(ctx); assert(state.uploads==1, state.message)
+          local recalcs=state.recalculations
+          entries('program:t','design')[1]:Transform(TranslationMatrix2D(Vector2D(50,0)))
+          sync.run(ctx)
+          assert(state.uploads==1, 'con un sello afuera no se habilita la fabricacion')
+          assert(state.recalculations>recalcs, 'el resto tiene que recalcularse')
+          assert(state.reports[2]:find('"recalculated":true',1,true))
+          assert(state.reports[2]:find('WIDTH',1,true))
+          assert(state.message:find('QUEDARON AFUERA',1,true), state.message)
+          assert(state.message:find('Ancho',1,true))
+          assert(layerOf(entries('program:t','design')[1])==sync.PARKING_LAYER)
+          assert(#entries('program:t','cut')==0 and #entries('program:t','drill')==0 and #entries('program:t','offset')==0)
+          assert(#entries('program:t','fine')==0)
+          assert(#entries('program:s','cut')==1 and #entries('program:s','drill')==1)
+          -- Se saca de la mesa: la corrida siguiente lo borra de Aspire y habilita.
+          table.remove(doc.stamps,2)
+          sync.run(ctx); assert(state.uploads==2, state.message)
+          assert(#entries('program:t')==0)
+          assert(#ctx.job.LayerManager:GetLayerWithName(sync.PARKING_LAYER).items==0)
+        ''')
+
+    def test_left_out_stamp_returns_to_its_layer_when_fixed(self):
+        self.run_lua('''
+          local function layerOf(o) return ctx.job.LayerManager:GetLayerWithId(o.RawLayerId).Name end
+          doc.stamps[2]={instanceId='program:t',selloId='t',name='Ancho',columnId='p38',centerX=235,topY=-9,widthMm=12,heightMm=30,recipe='CLASICO',fine={mode='whole'}}
+          ctx,state,entries,tm=sdk.setup(sync,doc,EXECUTION_RULES)
+          sync.run(ctx)
+          local shape=entries('program:t','design')[1]
+          shape:Transform(TranslationMatrix2D(Vector2D(50,0)))
+          sync.run(ctx); assert(layerOf(entries('program:t','design')[1])==sync.PARKING_LAYER)
+          -- Corregido en Aspire: vuelve a su capa, recupera auxiliares y se habilita.
+          entries('program:t','design')[1]:Transform(TranslationMatrix2D(Vector2D(-50,0)))
+          sync.run(ctx); assert(state.uploads==2, state.message)
+          assert(layerOf(entries('program:t','design')[1])=='VECTOR')
+          assert(#entries('program:t','cut')==1 and #entries('program:t','drill')==1)
+          assert(state.imports==2, 'no tiene que reimportar el vector')
         ''')
 
     def test_failed_cam_keeps_saved_report_and_does_not_upload(self):

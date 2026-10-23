@@ -99,3 +99,4 @@ Reglas que el equipo **confirmó** (respuestas a `14-open-questions`, 2026-09-28
 | POL-093 | **No se unen dos piezas** de bronce en una misma fila. | Q-STK-001 · usuario 2026-10-21 | No: propuesta |
 | POL-094 | Las piezas usadas **quedan más cortas y se siguen usando**. No se pierde nada al principio ni al final: una fila gasta Σ (lado mayor + 8 mm). Amplía POL-079. | Q-STK-001 · usuario 2026-10-21 | Consumo sí (BR-MAT-002); stock por pieza propuesto |
 | POL-095 | Una pieza de bronce **se puede volver a usar hasta 25 mm**; por debajo es retazo. | Q-STK-001 · usuario 2026-10-21 | No: propuesta |
+| POL-096 | Si al sincronizar con Aspire **un sello falla**, el gadget **sigue con el resto** y deja ese sello afuera (sin trayectorias), avisando claramente. Los errores generales siguen frenando todo. | Q-PROG-024 · usuario 2026-10-23 | Sí: `SyncPreparation.run` (capa «FUERA DEL PROGRAMA») |

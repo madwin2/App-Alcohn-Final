@@ -184,6 +184,14 @@ El gadget está instalado en la PC de cada CNC (uno por máquina).
 
 ⚠️ Solo se importan vectores **SVG** (o DXF). Los EPS viejos fallan: hay que re-vectorizarlos.
 
+🤖 El gadget **saca los objetos ocultos** del SVG antes de importarlo (los que Illustrator deja con `display:none` o en capas apagadas). La app no los dibuja, pero Aspire los importaba y el sello quedaba más ancho que la planchuela.
+
+⚠️ El gadget arma la **última revisión guardada** en la mesa. Si sacaste o sumaste sellos, tocá **Guardar y chequear** antes de correrlo; si no, el gadget avisa «El programa cambió en la app…» y no hace nada. El selector de carpeta aparece solo cuando no hay conexión con la app.
+
+⚠️ Si **un sello** da error (por ejemplo, fuera del ancho útil), el gadget **lo deja afuera y sigue con el resto**: ese sello pasa a la capa **FUERA DEL PROGRAMA** (no se mecaniza) y las trayectorias de los demás se recalculan. Al final te muestra **QUEDARON AFUERA: …**. Para que la app habilite la fabricación, sacá ese sello de la mesa (vuelve a la cola), tocá **Guardar y chequear** y corré el gadget de nuevo. Si lo corregís en Aspire, en la próxima corrida vuelve solo a su lugar.
+
+Los errores **generales** (por ejemplo, dibujos sin identidad en el archivo) siguen frenando todo: no se genera ninguna trayectoria.
+
 ## Fabricar y marcar el avance
 
 Lo que pasa fuera de la app: guardar las trayectorias, pasarlas por **pendrive** a la CNC, preparar la planchuela y correr la máquina.

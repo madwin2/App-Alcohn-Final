@@ -81,7 +81,7 @@ export function MesaActionBar({
   } else if (locked) {
     status = 'Programa bloqueado: solo lectura.';
   } else if (mustSave) {
-    status = dirty && savedRevision !== null ? <><Dot tone="warning" className="mr-2 align-middle" />Cambios sin guardar · la revisión {savedRevision} quedó atrás</> : progress.blocking;
+    status = dirty && savedRevision !== null ? <><Dot tone="warning" className="mr-2 align-middle" />Cambios sin guardar · Aspire no los toma hasta que guardes (sigue en la revisión {savedRevision})</> : progress.blocking;
     action = (
       <button type="button" className={cn(PILL_PRIMARY, 'min-w-[13rem] py-2.5')} disabled={checking || readOnly || !hasStamps} onClick={onSave}
         title="Guardar y chequear (Ctrl+S)">

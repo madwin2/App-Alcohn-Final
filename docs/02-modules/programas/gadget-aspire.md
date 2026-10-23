@@ -95,3 +95,14 @@ Evidencia y límites previos: [auditoría de automatización](../../audits/progr
 - La clave de instalación (`PROGRAMA_SYNC_KEY`) es única para todas las PCs y máquinas; se guarda en el Registry de cada PC.
 - `listar` devuelve el **token de cada programa** a quien tenga la clave de instalación; con ese token se puede reportar/subir archivos a ese programa.
 - Los buckets `programas-aspire` y `programas-preview` aceptan INSERT/UPDATE del rol `anon` (políticas `programas_aspire_anon_insert`, `programas_preview_anon_insert`). Ver [audits/seguridad.md](../../audits/seguridad.md).
+
+## Objetos ocultos, rechazos del servidor y resumen (2026-10-23)
+
+✅ `stripHiddenSvg` / `stripHiddenSvgFile` (en los tres gadgets) quitan del SVG los elementos ocultos —clases CSS con `display:none` o `visibility:hidden`, atributo `display="none"`/`visibility="hidden"` o `style` equivalente, incluidos grupos anidados— al bajar el paquete y justo antes de cada `ImportSVG` (también cubre la carpeta local del ZIP). Caso real: «Superflag» (Illustrator) traía un círculo oculto fuera del dibujo; Aspire lo importaba y el sello daba «fuera del ancho útil». Pruebas: `aspire-gadgets/preparation/test_strip_hidden.py`.
+
+✅ `downloadProgramPackage` distingue un rechazo del servidor (HTTP 4xx) de un fallo de conexión: con 4xx muestra el motivo (`packageRefusal`, con indicación cuando la revisión guardada no coincide con los sellos del programa) y no abre el selector de carpeta. El selector queda solo para errores de red o 5xx.
+
+✅ **Un sello que falla queda afuera y el resto sigue** (POL-096, Q-PROG-024). Los errores con sello (importación, actualización, `WIDTH`, `LENGTH`, `TOOL_ENVELOPE`, `SEPARATION`, `RECIPE_TEMPLATE`…) marcan ese sello; el plan de ejecución se vuelve a armar sin él hasta que no falle ninguno más. Sus dibujos pasan a la capa **«FUERA DEL PROGRAMA»** (ninguna plantilla la selecciona) y pierde auxiliares y repaso; los demás reciben auxiliares, rectángulos y trayectorias recalculadas. El informe lleva esos errores, así que la app **no** lo habilita para fabricar ni se sube el `.crv3d`: hay que sacar el sello de la mesa, guardar y volver a correr el gadget (la pieza se borra de Aspire). Si en cambio se corrige, en la corrida siguiente vuelve sola a su capa de receta (`unpark`) sin reimportar. Los errores generales (vectores sin identidad, conflictos de piezas quitadas, plantillas) y el caso en que fallan todos los sellos siguen frenando todo. El resumen final lista «QUEDARON AFUERA» y qué hacer. Pruebas: `test_failing_stamp_is_left_out_and_the_rest_is_recalculated`, `test_left_out_stamp_returns_to_its_layer_when_fixed`.
+
+⚠️ Hay que reinstalar los gadgets en las PCs para que tomen estos cambios.
+

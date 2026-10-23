@@ -1311,6 +1311,29 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 71,
+    date: '2026-10-23',
+    title: 'Gadget de Aspire: objetos ocultos y mensajes claros',
+    version: '1.89',
+    slides: [
+      {
+        heading: 'Aspire ya no importa lo que está oculto en el vector',
+        body: 'Algunos SVG de Illustrator traen objetos ocultos (un círculo, una capa apagada). La app no los muestra, pero Aspire los importaba y el sello se pasaba del ancho de la planchuela. El gadget nuevo los saca antes de importar.',
+        icon: AlertTriangle,
+      },
+      {
+        heading: 'Si sacás un sello, guardá antes de correr el gadget',
+        body: 'Aspire trabaja con la última revisión guardada en la mesa. Si la app cambió, el gadget ahora te dice qué pasó y que toques «Guardar y chequear», en vez de abrir el selector de carpeta.',
+        icon: Layers,
+      },
+      {
+        heading: 'Un sello con error ya no frena todo el programa',
+        body: 'Si un sello falla en Aspire, queda afuera en la capa «FUERA DEL PROGRAMA» y los demás se recalculan igual. Para fabricar desde la app, sacalo de la mesa, guardá y volvé a correr el gadget.',
+        icon: Scaling,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

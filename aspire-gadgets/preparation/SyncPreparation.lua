@@ -403,6 +403,32 @@ local function importStamp(ctx, s)
 end
 
 local function baseKey(s, key) return "PREP:" .. s.instanceId .. ":" .. key end
+
+-- Q-PROG-024: un sello que falla queda afuera y el resto sigue. Su dibujo pasa
+-- a una capa que ninguna plantilla selecciona (asi no se mecaniza) y pierde
+-- sus auxiliares. En la corrida siguiente vuelve a su capa de receta, o se
+-- borra si se saco del programa en la app.
+local PARKING_LAYER = "FUERA DEL PROGRAMA"
+PreparationSync.PARKING_LAYER = PARKING_LAYER
+local function park(ctx, s, entries)
+  for _, entry in ipairs(entries or {}) do
+    if entry.role == "design" then
+      if entry.layer.Name ~= PARKING_LAYER then
+        addTagged(ctx.job, PARKING_LAYER, entry.object:Clone(), s, "design"); entry.layer:RemoveObject(entry.object)
+      end
+    else entry.layer:RemoveObject(entry.object) end
+  end
+end
+local function unpark(ctx, s, entries)
+  local moved = false
+  local recipe = str(ctx.job.JobParameters, baseKey(s, "recipe"))
+  if recipe == "" then recipe = s.recipe end
+  for _, entry in ipairs(entries) do if entry.role == "design" and entry.layer.Name == PARKING_LAYER then
+    addTagged(ctx.job, vectorLayer(recipe), entry.object:Clone(), s, "design"); entry.layer:RemoveObject(entry.object); moved = true
+  end end
+  if not moved then return entries end
+  local all = scan(ctx.job); return all[s.instanceId]
+end
 local function remember(ctx, s, entries, sourceHash, actualRecipe)
   local b = bbox(entries); local _, hash = svg(entries, true); local params = ctx.job.JobParameters
   set(params,baseKey(s,"planX"),s.centerX); set(params,baseKey(s,"planY"),s.topY)
@@ -776,7 +802,7 @@ function PreparationSync.run(ctx)
     for _, s in ipairs(doc.stamps) do if not s.excluded then
       local ok, entries, sourceHash, actualRecipe = pcall(function()
         local existing=inventory[s.instanceId]
-        if existing then return updateStamp(ctx,s,existing) end
+        if existing then return updateStamp(ctx,s,unpark(ctx,s,existing)) end
         if str(job.JobParameters,baseKey(s,"hash"))~="" then
           local decision=choose("Pieza ausente",s.name .. ": estaba en el ultimo armado y falta. No se reinsertara sin decision.",{"Reinsertar desde el vector fuente","Dejar pendiente y revisar en la app"})
           if decision~=1 then error("Pieza ausente pendiente de decision") end
@@ -799,11 +825,46 @@ function PreparationSync.run(ctx)
   set(job.JobParameters,"ALCOHN_PREPARATION_PROGRAM_ID",doc.programId)
   local _,afterUnknown=scan(job)
   for _,text in ipairs(unidentifiedIssues(afterUnknown)) do issue("UNIDENTIFIED",text) end
-  local execution=ExecutionPlan.build(doc,observed,RULES)
-  for _,item in ipairs(execution.issues) do issues[#issues+1]=item end
+  -- Los errores de un sello lo dejan afuera; los generales frenan todo.
+  local parked={}
+  local function parkFrom(list)
+    local more=false
+    for _,item in ipairs(list) do
+      if item.severity=="error" and item.instanceId and wanted[item.instanceId] and not parked[item.instanceId] then parked[item.instanceId]=true; more=true end
+    end
+    return more
+  end
+  parkFrom(issues)
+  local execution
+  while true do
+    local planStamps={}
+    for _,st in ipairs(doc.stamps) do
+      if parked[st.instanceId] then local copy={}; for k,v in pairs(st) do copy[k]=v end; copy.excluded=true; planStamps[#planStamps+1]=copy
+      else planStamps[#planStamps+1]=st end
+    end
+    local planDoc={}; for k,v in pairs(doc) do planDoc[k]=v end; planDoc.stamps=planStamps
+    local planObserved={}; for _,row in ipairs(observed) do if not parked[row.instanceId] then planObserved[#planObserved+1]=row end end
+    execution=ExecutionPlan.build(planDoc,planObserved,RULES)
+    for _,item in ipairs(execution.issues) do
+      local dup=false
+      for _,prev in ipairs(issues) do if prev.code==item.code and prev.instanceId==item.instanceId and prev.message==item.message then dup=true end end
+      if not dup then issues[#issues+1]=item end
+    end
+    if not parkFrom(execution.issues) then break end
+  end
+  local function hasGlobalErrors()
+    for _,item in ipairs(issues) do if item.severity=="error" and not (item.instanceId and parked[item.instanceId]) then return true end end
+    return false
+  end
+  local parkedNames={}
+  for _,st in ipairs(doc.stamps) do if parked[st.instanceId] then parkedNames[#parkedNames+1]=st.name end end
   local recalculated=false
   local executionVerified=false
-  if not hasErrors() then
+  if not hasGlobalErrors() and #execution.stamps>0 then
+    if #parkedNames>0 then
+      local all=scan(job)
+      for id in pairs(parked) do park(ctx,wanted[id],all[id]) end
+    end
     local ok,err=pcall(function()
       -- Los rectangulos globales se derivan del montaje, no de rayitas huerfanas.
       ctx.clearLayer(job,"Planeado"); ctx.clearLayer(job,"Rectangulo exterior")
@@ -843,8 +904,17 @@ function PreparationSync.run(ctx)
     if not uploaded then error("Informe enviado; falta subir Aspire: " .. tostring(uploadError)) end
   end
   local lines={"Revision " .. tostring(prep.revision) .. ": " .. tostring(#observed) .. " sellos observados."}
+  if recalculated and #parkedNames>0 then
+    lines[#lines+1]="QUEDARON AFUERA (sin trayectorias, en la capa " .. PARKING_LAYER .. "): " .. table.concat(parkedNames,", ") .. "."
+    lines[#lines+1]="Se recalcularon las trayectorias de los otros " .. tostring(#execution.stamps) .. " sellos."
+    lines[#lines+1]=""
+  end
   for _,item in ipairs(issues) do lines[#lines+1]=item.message end
-  if not hasErrors() then lines[#lines+1]="Sincronizado. Revisa las trayectorias y guarda los TXT." end
+  if not hasErrors() then lines[#lines+1]="Sincronizado. Revisa las trayectorias y guarda los TXT."
+  elseif recalculated then
+    lines[#lines+1]=""
+    lines[#lines+1]="Para habilitar la fabricacion en la app: saca de la mesa los sellos que quedaron afuera (vuelven a la cola), toca Guardar y chequear y corre el gadget de nuevo."
+  else lines[#lines+1]="No se generaron ni recalcularon trayectorias: corregi lo de arriba (en la app o en Aspire) y volve a correr el gadget." end
   ctx.message(table.concat(lines,"\n")); return true
 end
 

@@ -37,7 +37,7 @@ for (const machine of ['Chica', 'Grande', 'XL']) {
         job.Selection:Clear()
         local before, counts = snapshotLayerNames(job), snapshotLayerObjectCounts(job)
         local imported
-        if path:lower():match("%.svg$") then imported = job:ImportSVG(path)
+        if path:lower():match("%.svg$") then stripHiddenSvgFile(path); imported = job:ImportSVG(path)
         else imported = job:ImportDxfDwg(path) end
         if not imported or not selectImportedSvg(job, before, counts) then error("No se pudo importar/seleccionar el vector") end
       end,

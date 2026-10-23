@@ -1,5 +1,14 @@
 # Preguntas abiertas — Programas
 
+### Q-PROG-024
+- **Módulo**: Programas / gadget Aspire · **Estado**: documentada (2026-10-23)
+- **Pregunta**: Si al sincronizar un sello da error (por ejemplo «fuera del ancho útil»), ¿el gadget debe frenar todo (como hoy: no genera ni recalcula ninguna trayectoria) o seguir con el resto y dejar ese sello sin trayectorias para revisarlo?
+- **Contexto**: hoy es todo o nada (`SyncPreparation.run`). Con un sello mal, nada del programa queda listo para la CNC.
+- **Por qué importa**: seguir parcialmente acelera el día, pero arriesga mecanizar con un sello fuera de la planchuela o mandar a fabricar un programa incompleto que después se marca Hecho entero.
+- **Impacto**: alto.
+- **Respuesta (2026-10-23)**: «Que siga con el resto de los sellos y deje afuera el que falla, avisando claramente».
+- **Documentado en**: POL-096 y [gadget Aspire](../02-modules/programas/gadget-aspire.md). Para evitar los dos riesgos: el sello afuera pasa a una capa que ninguna plantilla toma (no se mecaniza) y el programa **no queda habilitado para fabricar en la app** hasta sacarlo de la mesa, guardar y volver a correr el gadget (así no se marca Hecho junto con los demás).
+
 ### Q-PROG-023
 - **Módulo**: Programas / mesa de armado · **Estado**: documentada (2026-10-17)
 - **Pregunta**: Para una excepción por sello, ¿se modifica la separación entre diseños o el margen del diseño a ambos cortes? ¿Se permite bajar del mínimo vigente de 8 mm entre diseños?
