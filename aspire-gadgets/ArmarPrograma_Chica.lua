@@ -2240,6 +2240,8 @@ local function number(object, key, default)
 end
 local function fmt(n) return string.format("%.6f", n):gsub(",", ".") end
 local function close(a, b) return math.abs(a - b) <= 0.02 end
+-- Hasta aca una diferencia es redondeo, no un ajuste hecho en Aspire.
+local SNAP_MM = 0.05
 local function escape(text)
   return tostring(text):gsub("&", "&amp;"):gsub('"', "&quot;"):gsub("<", "&lt;"):gsub(">", "&gt;")
 end
@@ -2731,6 +2733,20 @@ local function updateStamp(ctx, s, entries)
       local clone = entry.object:Clone(); addTagged(ctx.job,vectorLayer(effectiveRecipe),clone,s,"design"); entry.layer:RemoveObject(entry.object)
     end end
     local all = scan(ctx.job); entries = all[s.instanceId]
+  end
+  -- Diferencias de redondeo (hasta 0,05 mm) entre corridas no son ajustes de
+  -- Aspire: se lleva el sello a la medida y posicion exactas de la app. Si no,
+  -- 0,02 mm de deriva dejan 7,98 mm entre sellos y la separacion de 8 falla.
+  local now = bbox(entries)
+  local h = now.maxY - now.minY
+  if math.abs(h - s.heightMm) <= SNAP_MM and h > 0 and h ~= s.heightMm then
+    local factor = s.heightMm / h
+    transform(entries,ScalingMatrix2D(Point2D((now.minX+now.maxX)/2,now.maxY),Vector2D(factor,factor)),false)
+    now = bbox(entries)
+  end
+  local sx, sy = s.centerX-(now.minX+now.maxX)/2, s.topY-now.maxY
+  if math.abs(sx) <= SNAP_MM and math.abs(sy) <= SNAP_MM and (sx ~= 0 or sy ~= 0) then
+    transform(entries,TranslationMatrix2D(Vector2D(sx,sy)),false)
   end
   -- Todos los auxiliares se derivan juntos DESPUES de validar las poses finales.
   return entries,sourceHash,effectiveRecipe

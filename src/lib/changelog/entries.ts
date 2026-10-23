@@ -1329,7 +1329,7 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
       {
         heading: 'Un sello con error ya no frena todo el programa',
-        body: 'Si un sello falla en Aspire, queda afuera en la capa «FUERA DEL PROGRAMA» y los demás se recalculan igual. Para fabricar desde la app, sacalo de la mesa, guardá y volvé a correr el gadget.',
+        body: 'Si un sello falla en Aspire, queda afuera en la capa «FUERA DEL PROGRAMA» y los demás se recalculan igual. Además, el gadget ya no deja sellos corridos unas centésimas: eso daba «Dos sellos no respetan la separación» sin motivo real.',
         icon: Scaling,
       },
     ],

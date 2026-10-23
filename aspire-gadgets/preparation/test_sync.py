@@ -385,6 +385,26 @@ class FullFlowTests(unittest.TestCase):
           assert(#ctx.job.LayerManager:GetLayerWithName(sync.PARKING_LAYER).items==0)
         ''')
 
+    def test_rounding_drift_is_snapped_to_the_app_plan(self):
+        # Caso real: Prueba y Rustika Sil quedaron 0,02 mm abajo y la separacion daba 7,98.
+        self.run_lua('''
+          doc.stamps[2]={instanceId='program:t',selloId='t',name='Rustika',columnId='p25',centerX=50,topY=-47,widthMm=12,heightMm=30,recipe='CLASICO',fine={mode='whole'}}
+          ctx,state,entries,tm=sdk.setup(sync,doc,EXECUTION_RULES)
+          sync.run(ctx); assert(state.uploads==1, state.message)
+          for _,o in ipairs(entries('program:s','design')) do o:Transform(TranslationMatrix2D(Vector2D(0.01,-0.02))) end
+          sync.run(ctx); assert(state.uploads==2, state.message)
+          local b=entries('program:s','design')[1]:GetBoundingBox()
+          assert(b.MaxY==-9 and (b.MinX+b.MaxX)/2==50, 'tiene que volver a la posicion exacta de la app')
+        ''')
+
+    def test_real_move_in_aspire_is_kept(self):
+        self.run_lua('''
+          sync.run(ctx)
+          entries('program:s','design')[1]:Transform(TranslationMatrix2D(Vector2D(0,-5)))
+          sync.run(ctx)
+          assert(entries('program:s','design')[1]:GetBoundingBox().MaxY==-14, 'un ajuste real de Aspire se conserva')
+        ''')
+
     def test_left_out_stamp_returns_to_its_layer_when_fixed(self):
         self.run_lua('''
           local function layerOf(o) return ctx.job.LayerManager:GetLayerWithId(o.RawLayerId).Name end
