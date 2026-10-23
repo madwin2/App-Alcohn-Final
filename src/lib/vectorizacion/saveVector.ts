@@ -2,7 +2,7 @@ import { generateFilePath, uploadFile } from '@/lib/supabase/services/storage.se
 import { measureSvgString } from '@/lib/utils/svgBoundingBox';
 import { resolveFabricationSize, type FabricationSizeResolution } from '@/lib/programas/fabricationSize';
 import { slugify } from './helpers';
-import { applyPhysicalSize, parseViewBoxAspect } from './svgSize';
+import { applyPhysicalSize, declaredSizeMm, parseViewBoxAspect } from './svgSize';
 import { setSelloVectorState } from './vectorizacion.service';
 import type { VectorizeMode } from './vectorizerPreset';
 
@@ -32,19 +32,28 @@ export async function saveSelloVector(params: {
     throw new Error('No se puede guardar un vector generado en modo test/preview.');
   }
 
-  const sized = applyPhysicalSize(params.svgText, params.requestedWidthMm, params.requestedHeightMm);
+  const override = params.fabricationOverrideMm;
+  // Con medida elegida a mano, el archivo queda a esa medida (si no, a lo pedido).
+  const sized = override
+    ? applyPhysicalSize(params.svgText, override.widthMm, override.heightMm)
+    : applyPhysicalSize(params.svgText, params.requestedWidthMm, params.requestedHeightMm);
   const fileName = `${slugify(params.designName || 'vector')}.svg`;
   const path = generateFilePath(params.orderId, 'vector', fileName, params.selloId);
   const file = new File([sized], fileName, { type: 'image/svg+xml' });
   const url = await uploadFile('vector', file, path);
 
-  const measurement = measureSvgString(sized);
+  // El lienzo ya quedó ajustado al dibujo: su medida es la del dibujo. Medir
+  // el bbox en el navegador queda de respaldo (SVG que no se pudo leer).
+  const declared = declaredSizeMm(sized);
+  const fallback = declared ? null : measureSvgString(sized);
+  const measurement = declared
+    ? { ...declared, aspectRatio: declared.widthMm / declared.heightMm }
+    : fallback;
   const measured = resolveFabricationSize(
     params.requestedWidthMm,
     params.requestedHeightMm,
     measurement ? { widthMm: measurement.widthMm, heightMm: measurement.heightMm } : null,
   );
-  const override = params.fabricationOverrideMm;
   const resolution = override
     ? { ...measured, widthMm: override.widthMm, heightMm: override.heightMm, needsReview: false, reviewReason: null }
     : measured;

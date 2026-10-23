@@ -80,8 +80,7 @@ function AsignacionFresa({
         svgText={file.svg}
         target={target}
         downloadName={file.fileName.replace(/\.svg$/i, '')}
-        onApply={(svg, fix, opts) => onReplaceSvg(svg, opts.scaledUp ? opts.fabricationMm : undefined, fix.operations)}
-        applyLabel="Usar el corregido"
+        onApply={(svg, fix, opts) => onReplaceSvg(svg, opts.scaledUp || opts.customSize ? opts.fabricationMm : undefined, fix.operations)}
         applyHint="Reemplaza este SVG en la lista. Se guarda en el pedido al confirmar las asignaciones."
       />
     </>

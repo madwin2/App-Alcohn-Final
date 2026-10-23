@@ -1288,6 +1288,29 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 70,
+    date: '2026-10-23',
+    title: 'Vectorización: versiones separadas, medida exacta y giro',
+    version: '1.88',
+    slides: [
+      {
+        heading: 'Original, Automático y Editado a mano, cada uno aparte',
+        body: 'En el chequeo elegís arriba qué versión ver, y los botones trabajan sobre esa: editarla, usarla o descargarla. Lo que editás a mano ya no pisa al automático, y si cerrás sin elegirlo te pregunta.',
+        icon: Layers,
+      },
+      {
+        heading: 'Medida exacta y giro libre en el editor',
+        body: 'En «Diseño entero» escribís el ancho y alto en mm (con candado de proporción) y girás todo el diseño con un deslizador o los grados exactos. El sello se guarda con la medida nueva.',
+        icon: Ruler,
+      },
+      {
+        heading: 'La medida ya no se achica por el margen de la imagen',
+        body: 'Al guardar se encaja el dibujo en la medida pedida, no el lienzo con el blanco de alrededor. Un diseño 40×10 ahora queda 40×9 como el dibujo real, en vez de quedar más chico y pedir revisión.',
+        icon: Scaling,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

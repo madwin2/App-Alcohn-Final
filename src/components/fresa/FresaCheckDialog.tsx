@@ -16,7 +16,7 @@ import {
 import { FresaEditor } from './FresaEditor';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
 import type { ZoneSeverity } from '@/lib/fresa/analyze';
-import type { EditorLogEntry } from '@/lib/fresa/fix';
+import type { EditorLogEntry, FixOperation } from '@/lib/fresa/fix';
 import {
   KIND_HELP,
   DEPTH_BAND_FILL,
@@ -36,6 +36,7 @@ import { useComparacionOriginal, type OriginalSource } from '@/lib/vectorizacion
 import { FresaViewer, type FresaViewMode } from './FresaViewer';
 import { FresaPassesPanel } from './FresaPassesPanel';
 import { reportForPass, type PassView } from '@/lib/fresa/passReport';
+import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 
 /** Cómo se aplica la corrección. */
 export interface FresaApplyOptions {
@@ -46,7 +47,33 @@ export interface FresaApplyOptions {
   fabricationMm: { widthMm: number; heightMm: number };
   /** true = se eligió agrandar el sello (cambia la medida de fabricación). */
   scaledUp: boolean;
+  /**
+   * true = la medida se cambió a mano en el editor (agrandar, achicar o girar
+   * el diseño): `fabricationMm` es la medida elegida y hay que respetarla.
+   */
+  customSize: boolean;
 }
+
+/** Las versiones que se pueden elegir: cada una por separado, ninguna pisa a otra. */
+export type FresaVersion = 'original' | 'auto' | 'manual';
+
+const VERSION_LABEL: Record<FresaVersion, string> = {
+  original: 'Original',
+  auto: 'Automático',
+  manual: 'Editado a mano',
+};
+
+const VERSION_USE: Record<FresaVersion, string> = {
+  original: 'Usar el original',
+  auto: 'Usar el automático',
+  manual: 'Usar el editado a mano',
+};
+
+const EDIT_LABEL: Record<FresaVersion, string> = {
+  original: 'Editar el original',
+  auto: 'Editar el automático',
+  manual: 'Seguir editando a mano',
+};
 
 interface Props {
   open: boolean;
@@ -61,7 +88,7 @@ interface Props {
    * descargarlo.
    */
   onApply?: (svg: string, fix: FresaFixResult, opts: FresaApplyOptions) => Promise<void> | void;
-  /** Texto del botón de aplicar (por defecto "Usar el corregido"). */
+  /** Texto del botón de aplicar (por defecto, «Usar el automático» / «Usar el editado a mano»). */
   applyLabel?: string;
   /** Aclaración debajo del botón de aplicar. */
   applyHint?: string;
@@ -81,6 +108,13 @@ interface Props {
    * como el punto de una i) y el editor la puede mostrar debajo.
    */
   original?: OriginalSource | null;
+  /**
+   * Edición a mano hecha antes (por ejemplo, la que quedó en Revisión): aparece
+   * como «Editado a mano» para verla, seguir editándola o volver a elegirla.
+   */
+  initialManual?: { svg: string; ops?: FixOperation[] } | null;
+  /** Qué versión está elegida ahora para guardar (se marca en las pestañas). */
+  chosen?: FresaVersion | null;
 }
 
 const DEFAULT_VISIBLE: ZoneSeverity[] = ['alta', 'media'];
@@ -176,13 +210,15 @@ export function FresaCheckDialog({
   svgText,
   target,
   onApply,
-  applyLabel = 'Usar el corregido',
+  applyLabel,
   applyHint,
   downloadName = 'vector',
   initialFix = null,
   onUseOriginal,
   startEditing = false,
   original = null,
+  initialManual = null,
+  chosen = null,
 }: Props) {
   const { toast } = useToast();
   const report = useFresaReport(open ? svgText : null, open ? target : null);
@@ -190,32 +226,68 @@ export function FresaCheckDialog({
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [focusNonce, setFocusNonce] = useState(0);
-  const [fix, setFix] = useState<FresaFixResult | null>(null);
+  /** Corrección automática y edición a mano: cada una en su lugar. */
+  const [autoFix, setAutoFix] = useState<FresaFixResult | null>(null);
+  const [manualFix, setManualFix] = useState<FresaFixResult | null>(null);
+  /** Medida de la versión de la que partió la edición a mano (para saber si se cambió la medida). */
+  const [manualBaseMm, setManualBaseMm] = useState<{ widthMm: number; heightMm: number } | null>(null);
+  /** La versión que se ve (y la que se usa o se edita con los botones). */
+  const [version, setVersion] = useState<FresaVersion>('original');
+  /** Ver «Qué cambia» respecto del original. */
+  const [diff, setDiff] = useState(false);
+  /** Hay una edición a mano terminada que todavía no se eligió. */
+  const [manualPending, setManualPending] = useState(false);
+  const [closeGuard, setCloseGuard] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [applying, setApplying] = useState(false);
-  const [mode, setMode] = useState<FresaViewMode>('original');
   /** Editor abierto, y sobre qué versión. */
-  const [editing, setEditing] = useState<false | 'original' | 'corregido'>(false);
+  const [editing, setEditing] = useState<false | FresaVersion>(false);
   const [showDepth, setShowDepth] = useState(true);
   const [passView, setPassView] = useState<PassView>('fine');
 
-  // Al abrir otro diseño, empezar de cero (o de la corrección ya hecha).
+  const fix = version === 'auto' ? autoFix : version === 'manual' ? manualFix : null;
+  const mode: FresaViewMode = !fix ? 'original' : diff ? 'diferencias' : 'corregido';
+
+  // Al abrir otro diseño, empezar de cero (o de las versiones ya hechas).
   useEffect(() => {
-    setFix(open ? initialFix : null);
-    // Si solo se simplificó, «Qué cambia» no muestra nada: se abre en «Corregido».
-    setMode(
-      open && initialFix
-        ? initialFix.operations.some((o) => o.kind !== 'simplificar')
-          ? 'diferencias'
-          : 'corregido'
-        : 'original',
-    );
+    setAutoFix(open ? initialFix : null);
+    setManualFix(null);
+    setManualBaseMm(null);
+    setManualPending(false);
+    const start: FresaVersion =
+      chosen === 'manual' && initialManual ? 'manual' : chosen === 'original' || !initialFix ? 'original' : 'auto';
+    setVersion(open ? start : 'original');
+    // Si solo se simplificó, «Qué cambia» no muestra nada.
+    setDiff(start === 'auto' && !!initialFix?.operations.some((o) => o.kind !== 'simplificar'));
     setSelected(null);
     setVisible(new Set(DEFAULT_VISIBLE));
-    setEditing(open && startEditing ? 'original' : false);
+    setEditing(open && startEditing ? start : false);
     setPassView('fine');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al abrir o cambiar de diseño
   }, [svgText, open]);
+
+  // La edición a mano anterior se vuelve a chequear contra el original.
+  useEffect(() => {
+    if (!open || !initialManual || !report || report.status === 'error') return;
+    let alive = true;
+    void resultadoManual(initialManual.svg, report, 0).then((r) => {
+      if (alive) setManualFix((prev) => prev ?? { ...r, operations: initialManual.ops ?? r.operations });
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- por contenido: el padre arma el objeto en cada render
+  }, [open, initialManual?.svg, report]);
+
+  /** Lo que se edita: siempre la versión que se está viendo. */
+  const editSvg =
+    editing === 'manual' ? (manualFix?.svg ?? initialManual?.svg ?? null) : editing === 'auto' ? (autoFix?.svg ?? null) : svgText;
+
+  const show = (v: FresaVersion) => {
+    setVersion(v);
+    setDiff(false);
+    setSelected(null);
+  };
 
   // Con repaso, lo útil es ver qué deja la 0,6 y qué saca la 0,2: se abre ahí.
   useEffect(() => {
@@ -223,7 +295,7 @@ export function FresaCheckDialog({
     if (p?.primary && p.outcome !== 'sin_repaso' && p.outcome !== 'sin_receta') setPassView('primary');
   }, [report?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeSource = mode !== 'original' && fix ? fix.after : report;
+  const activeSource = fix ? fix.after : report;
   const passes = activeSource?.passes;
   /** Zonas de la 0,6 que saca el repaso (se tocan con un lugar de repaso y la 0,2 no falla ahí). */
   const resolvedZones = useMemo(() => {
@@ -253,15 +325,27 @@ export function FresaCheckDialog({
     if (id) setFocusNonce((n) => n + 1);
   };
 
-  /** Termina la edición manual: el resultado queda como una corrección más. */
+  /** Termina la edición manual: queda como «Editado a mano» (reemplaza la anterior). */
   const finishEdit = async (edited: string, cambios: number, extra: { registro: EditorLogEntry[]; segundos: number }) => {
     if (!report) return;
+    const from = editing;
     setEditing(false);
     setFixing(true);
     try {
       const res = await resultadoManual(edited, report, cambios, undefined, extra);
-      setFix(res);
-      setMode('corregido');
+      // Lo que ya tenía la versión de partida queda en el registro.
+      const base = from === 'auto' ? autoFix : from === 'manual' ? manualFix : null;
+      setManualFix(base ? { ...res, operations: [...base.operations, ...res.operations] } : res);
+      if (from !== 'manual' || !manualBaseMm) {
+        setManualBaseMm(
+          from === 'auto' && autoFix
+            ? { widthMm: autoFix.after.widthMm, heightMm: autoFix.after.heightMm }
+            : { widthMm: report.widthMm, heightMm: report.heightMm },
+        );
+      }
+      setVersion('manual');
+      setDiff(false);
+      setManualPending(true);
       setSelected(null);
     } finally {
       setFixing(false);
@@ -277,8 +361,9 @@ export function FresaCheckDialog({
         toast({ title: 'No hay nada para corregir ni simplificar sin cambiar el diseño.' });
         return;
       }
-      setFix(res);
-      setMode('diferencias');
+      setAutoFix(res);
+      setVersion('auto');
+      setDiff(true);
       setSelected(null);
     } catch (error) {
       toast({
@@ -291,14 +376,17 @@ export function FresaCheckDialog({
     }
   };
 
-  const apply = async (scaledUp = false) => {
-    if (!fix || !onApply) return;
-    const fabricationMm = scaledUp && fix.scaleUp
-      ? { widthMm: fix.scaleUp.widthMm, heightMm: fix.scaleUp.heightMm }
-      : fix.fabricationMm;
+  const apply = async (v: 'auto' | 'manual', scaledUp = false) => {
+    const chosenFix = v === 'auto' ? autoFix : manualFix;
+    if (!chosenFix || !onApply) return;
+    const fabricationMm = scaledUp && chosenFix.scaleUp
+      ? { widthMm: chosenFix.scaleUp.widthMm, heightMm: chosenFix.scaleUp.heightMm }
+      : chosenFix.fabricationMm;
+    const customSize = v === 'manual' && manualSizeChanged;
     setApplying(true);
     try {
-      await onApply(fix.svg, fix, { fabricationMm, scaledUp });
+      await onApply(chosenFix.svg, chosenFix, { fabricationMm, scaledUp, customSize });
+      setManualPending(false);
       onOpenChange(false);
     } catch (error) {
       toast({
@@ -311,11 +399,51 @@ export function FresaCheckDialog({
     }
   };
 
+  const chooseOriginal = () => {
+    onUseOriginal?.();
+    setManualPending(false);
+    onOpenChange(false);
+  };
+
+  /** Cerrar con una edición a mano sin elegir: se pregunta (si no, se perdía). */
+  const requestOpenChange = (next: boolean) => {
+    if (!next && manualPending && manualFix && onApply && !editing) {
+      setCloseGuard(true);
+      return;
+    }
+    onOpenChange(next);
+  };
+
+  /** Sacar una versión (vuelve a mostrar el original). */
+  const discard = (v: 'auto' | 'manual') => {
+    if (v === 'auto') setAutoFix(null);
+    else {
+      setManualFix(null);
+      setManualPending(false);
+    }
+    show('original');
+  };
+
+  /** La edición a mano cambió la medida (agrandar, achicar o girar el diseño entero). */
+  const manualBase = manualBaseMm ?? (report ? { widthMm: report.widthMm, heightMm: report.heightMm } : null);
+  const manualSizeChanged =
+    !!manualFix &&
+    !!manualBase &&
+    (Math.abs(manualFix.after.widthMm - manualBase.widthMm) > 0.05 ||
+      Math.abs(manualFix.after.heightMm - manualBase.heightMm) > 0.05);
+
+  const versions: FresaVersion[] = [
+    'original',
+    ...(autoFix ? (['auto'] as const) : []),
+    ...(manualFix ? (['manual'] as const) : []),
+  ];
+  const canUse = version === 'original' ? !!onUseOriginal : !!onApply && !!fix;
+
   const remaining = fix ? fix.after.groupCounts.alta + fix.after.groupCounts.media : 0;
   const before = report ? report.groupCounts.alta + report.groupCounts.media : 0;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={requestOpenChange}>
       <DialogContent
         onEscapeKeyDown={(e) => editing && e.preventDefault()}
         className="flex h-[92vh] w-[min(1280px,97vw)] max-w-none flex-col gap-3 overflow-y-auto p-4 sm:max-w-none md:overflow-hidden">
@@ -329,9 +457,9 @@ export function FresaCheckDialog({
           ) : null}
         </DialogHeader>
 
-        {editing && svgText && report && report.status !== 'error' ? (
+        {editing && editSvg && report && report.status !== 'error' ? (
           <FresaEditor
-            svgText={editing === 'corregido' && fix ? fix.svg : svgText}
+            svgText={editSvg}
             report={report}
             onDone={(edited, cambios, extra) => void finishEdit(edited, cambios, extra)}
             onCancel={() => setEditing(false)}
@@ -341,35 +469,38 @@ export function FresaCheckDialog({
         <div className="flex flex-col gap-3 md:min-h-0 md:flex-1 md:flex-row">
           <div className="flex h-[55vh] min-w-0 flex-col gap-2 md:h-auto md:min-h-[300px] md:flex-1">
             {activeSource && activeSource.status !== 'error' ? <FresaPassesPanel report={activeSource} view={passView} onView={(view) => { setPassView(view); setSelected(null); }} /> : null}
-            {fix ? (
-              <div className="flex shrink-0 items-center gap-1 self-start rounded-md border bg-muted/40 p-0.5 text-xs">
-                {(
-                  [
-                    ['original', 'Original'],
-                    ['corregido', 'Corregido'],
-                    ['diferencias', 'Qué cambia'],
-                  ] as const
-                ).map(([m, label]) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={cn(
-                      'rounded px-2.5 py-1 transition-colors',
-                      mode === m ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                    )}
-                    onClick={() => {
-                      setMode(m);
-                      setSelected(null);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-                {mode === 'diferencias' ? (
-                  <span className="px-2 text-muted-foreground">
-                    <span className="mr-1 inline-block size-2.5 rounded-sm bg-cyan-400 align-middle" />
-                    negro que se saca
-                  </span>
+            {versions.length > 1 ? (
+              <div className="flex shrink-0 flex-wrap items-center gap-2 text-xs">
+                <div className="flex items-center gap-1 rounded-md border bg-muted/40 p-0.5" role="group" aria-label="Versión que se ve">
+                  {versions.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      aria-pressed={version === v}
+                      className={cn(
+                        'rounded px-2.5 py-1 transition-colors',
+                        version === v ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                      )}
+                      onClick={() => show(v)}
+                      title={chosen === v ? 'Es la versión elegida ahora para guardar' : undefined}
+                    >
+                      {VERSION_LABEL[v]}
+                      {chosen === v ? <CheckCircle2 className="ml-1 inline size-3 text-emerald-600 dark:text-emerald-400" /> : null}
+                      {v === 'manual' && manualPending ? <span className="ml-1 inline-block size-1.5 rounded-full bg-amber-500 align-middle" /> : null}
+                    </button>
+                  ))}
+                </div>
+                {fix ? (
+                  <label className="flex items-center gap-1.5 text-muted-foreground">
+                    <Checkbox checked={diff} onCheckedChange={(v) => { setDiff(v === true); setSelected(null); }} />
+                    Qué cambia
+                    {diff ? (
+                      <span className="ml-1">
+                        <span className="mr-1 inline-block size-2.5 rounded-sm bg-cyan-400 align-middle" />
+                        negro que se saca
+                      </span>
+                    ) : null}
+                  </label>
                 ) : null}
               </div>
             ) : null}
@@ -513,35 +644,37 @@ export function FresaCheckDialog({
 
             {report && report.status !== 'error' && original ? (
               <OriginalAviso
-                svg={mode !== 'original' && fix ? fix.svg : svgText}
+                svg={fix ? fix.svg : svgText}
                 original={original}
-                mmPerUnit={(mode !== 'original' && fix ? fix.after : report).mmPerUnit}
-                onOpen={() => setEditing(mode !== 'original' && fix ? 'corregido' : 'original')}
+                mmPerUnit={(fix ? fix.after : report).mmPerUnit}
+                onOpen={() => setEditing(version)}
               />
             ) : null}
 
             {report && report.status !== 'error' ? (
               <div className="shrink-0 space-y-1">
-                {fix ? (
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditing('corregido')} title="Editar a mano partiendo de la corrección: mover, escalar, afinar, nodos. La fresa se re-chequea con cada cambio.">
-                      <PencilRuler className="mr-1.5 size-4" />
-                      Editar el corregido
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditing('original')} title="Editar a mano partiendo del vector original, sin la corrección automática.">
-                      Editar el original
-                    </Button>
-                  </div>
-                ) : (
-                  <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setEditing('original')} title="Mover, escalar, afinar o engordar letras, editar nodos y simplificar. La fresa se re-chequea con cada cambio.">
-                    <PencilRuler className="mr-1.5 size-4" />
-                    Editar a mano
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setEditing(version)}
+                  title={
+                    manualFix && version !== 'manual'
+                      ? `Editar a mano partiendo de «${VERSION_LABEL[version]}». Reemplaza la edición a mano anterior.`
+                      : 'Mover, escalar, girar, afinar o engordar letras, editar nodos y simplificar. La fresa se re-chequea con cada cambio.'
+                  }
+                >
+                  <PencilRuler className="mr-1.5 size-4" />
+                  {versions.length > 1 ? EDIT_LABEL[version] : 'Editar a mano'}
+                </Button>
+                {manualFix && version !== 'manual' ? (
+                  <p className="text-[11px] text-muted-foreground">Se edita la versión que estás viendo y reemplaza la edición a mano anterior.</p>
+                ) : null}
               </div>
             ) : null}
             <div className="shrink-0 space-y-2 border-t pt-3">
-              {!fix ? (
+              {!autoFix && !manualFix ? (
                 <>
                   <Button
                     type="button"
@@ -561,29 +694,37 @@ export function FresaCheckDialog({
                 </>
               ) : (
                 <>
-                  <p className="text-xs">
-                    {before === 0 ? null : remaining === 0 ? (
-                      <span className="text-emerald-700 dark:text-emerald-300">
-                        Listo: se resolvieron los {before} lugares.
-                      </span>
-                    ) : (
-                      <span>
-                        Se resolvieron {Math.max(0, before - remaining)} de {before} lugares.{' '}
-                        <strong>
-                          Queda{remaining === 1 ? '' : 'n'} {remaining} para editar a mano
-                        </strong>{' '}
-                        (se ven en «Corregido»).
-                      </span>
-                    )}{' '}
-                    <span className="text-muted-foreground">{resumenOperaciones(fix.operations)}</span>
-                    {fix.fitScale < 0.999 ? (
-                      <span className="block text-muted-foreground">
-                        Para no cambiar la medida, todo el diseño se achicó {mm((1 - fix.fitScale) * 100, 1)} % dentro
-                        de la misma caja ({mm(fix.fabricationMm.widthMm, 1)} × {mm(fix.fabricationMm.heightMm, 1)} mm).
-                      </span>
-                    ) : null}
-                  </p>
-                  {fix.scaleUp && remaining > 0 ? (
+                  {fix ? (
+                    <p className="text-xs">
+                      {before === 0 ? null : remaining === 0 ? (
+                        <span className="text-emerald-700 dark:text-emerald-300">
+                          Listo: se resolvieron los {before} lugares.
+                        </span>
+                      ) : (
+                        <span>
+                          Se resolvieron {Math.max(0, before - remaining)} de {before} lugares.{' '}
+                          <strong>
+                            Queda{remaining === 1 ? '' : 'n'} {remaining} para editar a mano
+                          </strong>
+                          .
+                        </span>
+                      )}{' '}
+                      <span className="text-muted-foreground">{resumenOperaciones(fix.operations)}</span>
+                      {fix.fitScale < 0.999 ? (
+                        <span className="block text-muted-foreground">
+                          Para no cambiar la medida, todo el diseño se achicó {mm((1 - fix.fitScale) * 100, 1)} % dentro
+                          de la misma caja ({mm(fix.fabricationMm.widthMm, 1)} × {mm(fix.fabricationMm.heightMm, 1)} mm).
+                        </span>
+                      ) : null}
+                      {version === 'manual' && manualSizeChanged && manualBase ? (
+                        <span className="block font-medium text-amber-700 dark:text-amber-300">
+                          Medida nueva: {mm(fix.fabricationMm.widthMm, 1)} × {mm(fix.fabricationMm.heightMm, 1)} mm (antes{' '}
+                          {mm(manualBase.widthMm, 1)} × {mm(manualBase.heightMm, 1)}). Se guarda con esta medida.
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
+                  {fix?.scaleUp && remaining > 0 ? (
                     <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
                       <p>
                         <strong>Último recurso:</strong> agrandar el sello un {mm((fix.scaleUp.factor - 1) * 100, 0)} % (
@@ -591,47 +732,48 @@ export function FresaCheckDialog({
                         {mm(fix.scaleUp.widthMm, 1)} × {mm(fix.scaleUp.heightMm, 1)} mm) resuelve lo que queda. Cambia
                         la medida de fabricación: usalo solo si es imprescindible.
                       </p>
-                      {onApply ? (
-                        <Button type="button" size="sm" variant="outline" disabled={applying} onClick={() => void apply(true)}>
+                      {onApply && version !== 'original' ? (
+                        <Button type="button" size="sm" variant="outline" disabled={applying} onClick={() => void apply(version, true)}>
                           Agrandar a {mm(fix.scaleUp.widthMm, 1)} × {mm(fix.scaleUp.heightMm, 1)} mm y usar
                         </Button>
                       ) : null}
                     </div>
                   ) : null}
+                  {manualPending && onApply ? (
+                    <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                      La edición a mano todavía <strong>no está elegida</strong>
+                      {chosen ? <> (sigue elegido «{VERSION_LABEL[chosen]}»)</> : null}. Para guardarla, mirá «Editado a mano» y
+                      apretá «{VERSION_USE.manual}».
+                    </p>
+                  ) : chosen ? (
+                    <p className="text-xs text-muted-foreground">
+                      Elegido ahora para guardar: <strong className="text-foreground">{VERSION_LABEL[chosen]}</strong>
+                    </p>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
-                    {onApply && fix.operations.length ? (
-                      <Button type="button" disabled={applying} onClick={() => void apply()}>
-                        {applying ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
-                        {applyLabel}
-                      </Button>
-                    ) : null}
-                    {onUseOriginal ? (
+                    {canUse ? (
                       <Button
                         type="button"
-                        variant="outline"
-                        onClick={() => {
-                          onUseOriginal();
-                          onOpenChange(false);
-                        }}
+                        disabled={applying || (version !== 'original' && !fix?.operations.length)}
+                        onClick={() => (version === 'original' ? chooseOriginal() : void apply(version))}
                       >
-                        Usar el original
+                        {applying ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                        {version === 'original' ? VERSION_USE.original : (applyLabel ?? VERSION_USE[version])}
                       </Button>
                     ) : null}
-                    <Button type="button" variant="outline" onClick={() => downloadSvg(fix.svg, `${downloadName}-corregido`)}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => downloadSvg(fix ? fix.svg : (svgText ?? ''), fix ? `${downloadName}-${version === 'auto' ? 'automatico' : 'editado'}` : downloadName)}
+                    >
                       <Download className="mr-1.5 size-4" />
                       Descargar
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => {
-                        setFix(null);
-                        setMode('original');
-                        setSelected(null);
-                      }}
-                    >
-                      Descartar
-                    </Button>
+                    {version !== 'original' ? (
+                      <Button type="button" variant="ghost" onClick={() => discard(version)} title={`Saca la versión «${VERSION_LABEL[version]}» de este chequeo`}>
+                        Descartar
+                      </Button>
+                    ) : null}
                   </div>
                   {applyHint && onApply ? <p className="text-[11px] text-muted-foreground">{applyHint}</p> : null}
                 </>
@@ -640,6 +782,19 @@ export function FresaCheckDialog({
           </aside>
         </div>
         )}
+        <ConfirmDialog
+          open={closeGuard}
+          onOpenChange={setCloseGuard}
+          title="¿Usar lo editado a mano?"
+          description={`Terminaste una edición a mano pero no la elegiste. Si cerrás sin usarla, se pierde${chosen ? ` y queda elegido «${VERSION_LABEL[chosen]}»` : ''}.`}
+          cancelLabel="Cerrar sin usarla"
+          confirmLabel={VERSION_USE.manual}
+          onCancel={() => {
+            setManualPending(false);
+            onOpenChange(false);
+          }}
+          onConfirm={() => void apply('manual')}
+        />
       </DialogContent>
     </Dialog>
   );

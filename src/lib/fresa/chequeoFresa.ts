@@ -30,7 +30,7 @@ import { buildCorrectedSvg, wrapFit } from './exportSvg';
 import type { EditorLogEntry, FixOperation } from './fix';
 import { applyPieceMoves } from './moveSvg';
 import { buildEditDoc, countNodes, removeRedundant, serializeEditDoc, simplifyDoc } from './editDoc';
-import { parseSvgShapes, type ParsedSvg } from './svgShapes';
+import { geometryBox, parseSvgShapes, type GeometryBox, type ParsedSvg } from './svgShapes';
 import type { WorkerRequest, WorkerResponse } from './workerProtocol';
 
 /**
@@ -118,32 +118,6 @@ export interface FresaFixResult {
 
 // ---------------------------------------------------------------- escala
 
-interface GeometryBox {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}
-
-/** Caja de toda la geometría (cualquier color), como la mide Aspire al importar. */
-function geometryBox(parsed: ParsedSvg): GeometryBox | null {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const s of parsed.shapes) {
-    if (s.fill === 'none' && s.stroke === 'none') continue;
-    for (const r of s.rings)
-      for (const p of r) {
-        if (p.x < minX) minX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y > maxY) maxY = p.y;
-      }
-  }
-  return Number.isFinite(minX) && maxX > minX && maxY > minY ? { minX, minY, maxX, maxY } : null;
-}
-
 function resolveScale(
   parsed: ParsedSvg,
   box: GeometryBox,
@@ -156,13 +130,10 @@ function resolveScale(
     case 'fabricacion':
       return { mmPerUnit: target.longSideMm / longUnits, source: 'fabricacion' };
     case 'pedido': {
-      // Igual que saveSelloVector: applyPhysicalSize encaja el viewBox en lo
-      // pedido; después resolveFabricationSize decide la medida final.
-      const vbW = parsed.viewBox?.w ?? box.maxX - box.minX;
-      const vbH = parsed.viewBox?.h ?? box.maxY - box.minY;
-      const size = containSize(vbW, vbH, target.requestedWidthMm, target.requestedHeightMm);
-      const k0 = size.widthMm / vbW;
-      const measured = { widthMm: (box.maxX - box.minX) * k0, heightMm: (box.maxY - box.minY) * k0 };
+      // Igual que saveSelloVector: applyPhysicalSize encaja el DIBUJO (no el
+      // lienzo, que puede traer margen) en lo pedido; después
+      // resolveFabricationSize decide la medida final.
+      const measured = containSize(box.maxX - box.minX, box.maxY - box.minY, target.requestedWidthMm, target.requestedHeightMm);
       const res = resolveFabricationSize(target.requestedWidthMm, target.requestedHeightMm, measured);
       const targetLong = Math.max(res.widthMm, res.heightMm);
       return { mmPerUnit: targetLong / longUnits, source: res.needsReview ? 'sugerida' : 'pedida' };

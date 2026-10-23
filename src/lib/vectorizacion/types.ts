@@ -136,4 +136,14 @@ export interface ReviewItem {
   fresaChoice?: 'original' | 'auto' | 'manual';
   /** Operaciones de la versión elegida (automáticas y registro del editor), para `vector_ediciones`. */
   fresaOps?: import('@/lib/fresa/fix').FixOperation[];
+  /**
+   * Última edición a mano, guardada aparte: elegir «Original» o «Automático»
+   * no la borra (se puede volver a elegir). Se borra con «Cambiar».
+   */
+  manual?: {
+    svg: string;
+    ops?: import('@/lib/fresa/fix').FixOperation[];
+    /** Medida si se cambió en el editor (mm). */
+    fabricationOverrideMm?: { widthMm: number; heightMm: number };
+  };
 }

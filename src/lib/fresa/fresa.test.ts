@@ -441,6 +441,14 @@ describe('chequearSvg / corregirSvg', () => {
     expect(r.heightMm).toBeCloseTo(20, 2);
   });
 
+  it('modo pedido mide el dibujo, no el lienzo con margen (40 × 9 en lienzo 40 × 16)', async () => {
+    const body = `<path d="${rectD(0, 3.5, 40, 9)}"/>`;
+    const r = await chequearSvg(svg(body, 40, 16), { mode: 'pedido', requestedWidthMm: 40, requestedHeightMm: 10 });
+    expect(r.widthMm).toBeCloseTo(40, 2);
+    expect(r.heightMm).toBeCloseTo(9, 2);
+    expect(r.sizeSource).toBe('pedida');
+  });
+
   /** Rectángulo con un nodo cada 0,2 mm en cada lado (como sale de la vectorización). */
   const denseRectD = (x: number, y: number, w: number, h: number) => {
     const pts: Array<[number, number]> = [];

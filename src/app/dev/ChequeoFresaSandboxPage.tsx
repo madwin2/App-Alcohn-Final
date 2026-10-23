@@ -183,7 +183,6 @@ export default function ChequeoFresaSandboxPage() {
         onApply={(next, fix) =>
           setChosen({ label: fix.operations.some((o) => o.kind === 'manual') ? 'A mano' : 'Automático', svg: next })
         }
-        applyLabel="Usar el corregido"
         applyHint="En el sandbox solo cambia la vista previa de esta página."
       />
     </div>

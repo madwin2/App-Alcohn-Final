@@ -320,6 +320,32 @@ const SKIP_TAGS = new Set([
  * @param tolUnits tolerancia ya en unidades del viewBox: se usa cuando se sabe la medida
  *   real de fabricación (la declarada suele ser mucho más grande y aplanaría de más).
  */
+export interface GeometryBox {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** Caja de toda la geometría (cualquier color), como la mide Aspire al importar. */
+export function geometryBox(parsed: Pick<ParsedSvg, 'shapes'>): GeometryBox | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const s of parsed.shapes) {
+    if (s.fill === 'none' && s.stroke === 'none') continue;
+    for (const r of s.rings)
+      for (const p of r) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+  }
+  return Number.isFinite(minX) && maxX > minX && maxY > minY ? { minX, minY, maxX, maxY } : null;
+}
+
 export function parseSvgShapes(svgText: string, tolMm = 0.004, tolUnits?: number): ParsedSvg {
   const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
   const root = doc.documentElement;

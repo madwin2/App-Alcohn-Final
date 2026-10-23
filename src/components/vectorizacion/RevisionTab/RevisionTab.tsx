@@ -54,10 +54,19 @@ function reviewKey(item: ReviewItem): string {
   return fresaCacheKey(item.svg, reviewTarget(item));
 }
 
+const mmTxt = (v: number) => v.toFixed(1).replace('.', ',');
+
 const fresaProblemas = (r: FresaReport | null | undefined) => (r ? r.groupCounts.alta + r.groupCounts.media : 0);
 
 /** El vector como salió de la vectorización (o el que se cargó con «Cambiar»). */
 const originalOf = (item: ReviewItem) => item.originalSvg ?? item.svg;
+
+/** La última edición a mano (las revisiones viejas solo la tienen si quedó elegida). */
+const manualOf = (item: ReviewItem): ReviewItem['manual'] =>
+  item.manual ??
+  (item.fresaChoice === 'manual'
+    ? { svg: item.svg, ops: item.fresaOps, fabricationOverrideMm: item.fabricationOverrideMm }
+    : undefined);
 
 /** Corrección automática de un ítem: null = todavía corriendo. */
 type AutoState = { report: FresaReport; fix: FresaFixResult | null } | null;
@@ -136,9 +145,15 @@ function VersionPicker({
 }: {
   item: ReviewItem;
   auto: AutoState;
-  onChoose: (choice: NonNullable<ReviewItem['fresaChoice']>, svg: string, override?: undefined, ops?: FixOperation[]) => void;
+  onChoose: (
+    choice: NonNullable<ReviewItem['fresaChoice']>,
+    svg: string,
+    override?: { widthMm: number; heightMm: number },
+    ops?: FixOperation[],
+  ) => void;
   onOpen: () => void;
 }) {
+  const manual = manualOf(item);
   if (!auto) {
     return (
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -148,10 +163,10 @@ function VersionPicker({
     );
   }
   const fix = auto.fix;
-  if (!fix) return null;
+  if (!fix && !manual) return null;
   const choice = item.fresaChoice ?? 'original';
   const antes = fresaProblemas(auto.report);
-  const despues = fresaProblemas(fix.after);
+  const despues = fix ? fresaProblemas(fix.after) : antes;
   return (
     <div className="space-y-1 rounded-md border bg-muted/30 p-2">
       <div className="flex flex-wrap items-center gap-1">
@@ -160,12 +175,17 @@ function VersionPicker({
           <VersionButton active={choice === 'original'} onClick={() => onChoose('original', originalOf(item))}>
             Original
           </VersionButton>
-          <VersionButton active={choice === 'auto'} onClick={() => onChoose('auto', fix.svg, undefined, fix.operations)}>
-            <Wand2 className="mr-1 inline size-3" />
-            Automático
-          </VersionButton>
-          {choice === 'manual' ? (
-            <VersionButton active onClick={() => undefined}>
+          {fix ? (
+            <VersionButton active={choice === 'auto'} onClick={() => onChoose('auto', fix.svg, undefined, fix.operations)}>
+              <Wand2 className="mr-1 inline size-3" />
+              Automático
+            </VersionButton>
+          ) : null}
+          {manual ? (
+            <VersionButton
+              active={choice === 'manual'}
+              onClick={() => onChoose('manual', manual.svg, manual.fabricationOverrideMm, manual.ops)}
+            >
               A mano
             </VersionButton>
           ) : null}
@@ -175,13 +195,16 @@ function VersionPicker({
         </Button>
       </div>
       <p className="text-[11px] leading-snug text-muted-foreground">
-        {antes > 0
+        {choice === 'manual' && item.fabricationOverrideMm
+          ? `A mano con medida nueva: ${mmTxt(item.fabricationOverrideMm.widthMm)} × ${mmTxt(item.fabricationOverrideMm.heightMm)} mm. `
+          : ''}
+        {!fix ? '' : antes > 0
           ? despues === 0
             ? `Automático resuelve los ${antes} lugares. `
             : `Automático resuelve ${antes - despues} de ${antes} lugares. `
           : ''}
         {sinAutoSola(item) ? 'Sello de 3 mm: el automático no se elige solo. ' : ''}
-        {resumenOperaciones(fix.operations)}
+        {fix ? resumenOperaciones(fix.operations) : ''}
       </p>
     </div>
   );
@@ -359,21 +382,24 @@ function ReviewCard({
         original={item.beforeDataUrl}
         startEditing={fresaEdit}
         initialFix={auto?.fix ?? null}
-        onUseOriginal={() => onChoose('original', originalOf(item))}
+        initialManual={manualOf(item) ?? null}
+        chosen={item.fresaChoice ?? 'original'}
+        onUseOriginal={() => {
+          onChoose('original', originalOf(item));
+          toast({ title: 'Elegido: original', description: 'Se guarda en el pedido cuando lo confirmás.' });
+        }}
         onApply={(svg, fix, opts) => {
           const manual = fix.operations.some((o) => o.kind === 'manual');
-          onChoose(manual ? 'manual' : 'auto', svg, opts.scaledUp ? opts.fabricationMm : undefined, fix.operations);
+          const sizeChosen = opts.scaledUp || opts.customSize;
+          onChoose(manual ? 'manual' : 'auto', svg, sizeChosen ? opts.fabricationMm : undefined, fix.operations);
           toast({
-            title: opts.scaledUp ? 'Vector corregido y agrandado' : 'Vector corregido',
-            description: opts.scaledUp
-              ? `Se guarda con ${opts.fabricationMm.widthMm.toFixed(1).replace('.', ',')} × ${opts.fabricationMm.heightMm
-                  .toFixed(1)
-                  .replace('.', ',')} mm cuando lo confirmás.`
+            title: `Elegido: ${manual ? 'editado a mano' : 'automático'}${opts.scaledUp ? ' y agrandado' : ''}`,
+            description: sizeChosen
+              ? `Se guarda con ${mmTxt(opts.fabricationMm.widthMm)} × ${mmTxt(opts.fabricationMm.heightMm)} mm cuando lo confirmás.`
               : 'Se guarda en el pedido cuando lo confirmás.',
           });
         }}
-        applyLabel="Usar el corregido"
-        applyHint="Elige esta versión para guardar (se guarda en el pedido al apretar Confirmar). El original se conserva y lo podés volver a elegir."
+        applyHint="Elige la versión que estás viendo para guardar (se guarda en el pedido al apretar Confirmar). Las otras se conservan y las podés volver a elegir."
       />
       <ConfirmDialog
         open={guardOpen}

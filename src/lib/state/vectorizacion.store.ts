@@ -204,7 +204,7 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
       reviewQueue: get().reviewQueue.map((item) =>
         // Queda elegido tal cual: la corrección automática no lo reemplaza sola.
         item.id === id
-          ? { ...item, svg, fabricationOverrideMm, originalSvg: svg, fresaChoice: 'original', fresaOps: undefined }
+          ? { ...item, svg, fabricationOverrideMm, originalSvg: svg, fresaChoice: 'original', fresaOps: undefined, manual: undefined }
           : item,
       ),
     });
@@ -214,7 +214,15 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
     set({
       reviewQueue: get().reviewQueue.map((item) =>
         item.id === id
-          ? { ...item, svg, fabricationOverrideMm, originalSvg: item.originalSvg ?? item.svg, fresaChoice: choice, fresaOps: ops }
+          ? {
+              ...item,
+              svg,
+              fabricationOverrideMm,
+              originalSvg: item.originalSvg ?? item.svg,
+              fresaChoice: choice,
+              fresaOps: ops,
+              manual: choice === 'manual' ? { svg, ops, fabricationOverrideMm } : item.manual,
+            }
           : item,
       ),
     });

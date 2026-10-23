@@ -22,6 +22,8 @@ import {
   FlipVertical2,
   Focus,
   Hand,
+  Link2,
+  Link2Off,
   Keyboard,
   Loader2,
   Magnet,
@@ -48,7 +50,7 @@ import { cn } from '@/lib/utils/cn';
 import type { FresaReport } from '@/lib/fresa/chequeoFresa';
 import type { EditorLogEntry } from '@/lib/fresa/fix';
 import { useFresaReport } from '@/lib/fresa/useFresaReport';
-import { copyRefs, cornerInfo, internalCorners, mirrorRefs, pasteClip, rotateRefs, roundCorner, roundCorners, type VectorClip } from '@/lib/fresa/editCorners';
+import { copyRefs, cornerInfo, internalCorners, mapRefs, mirrorRefs, pasteClip, rotateRefs, roundCorner, roundCorners, type VectorClip } from '@/lib/fresa/editCorners';
 import {
   addShape,
   booleanPieces,
@@ -264,6 +266,9 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+/** Todos los contornos del dibujo (para cambiar la medida o girar el diseño entero). */
+const allRefs = (d: EditDoc): SubRef[] => d.paths.flatMap((p, path) => p.subs.map((_, sub) => ({ path, sub })));
+
 const iconBtn =
   'inline-flex size-7 items-center justify-center rounded border bg-background text-foreground hover:bg-muted disabled:opacity-40';
 
@@ -337,6 +342,12 @@ export function FresaEditor({ svgText, report, onDone, onCancel, original = null
   const [showInner, setShowInner] = useState(false);
   /** Se toca al copiar: el portapapeles es del módulo y no hace re-render solo. */
   const [, setClipTick] = useState(0);
+  /** Medida exacta del diseño entero (mm), si respeta la proporción, y giro libre. */
+  const [sizeW, setSizeW] = useState('');
+  const [sizeH, setSizeH] = useState('');
+  const [sizeLock, setSizeLock] = useState(true);
+  const [allAngle, setAllAngle] = useState('0');
+  const [allAngleText, setAllAngleText] = useState('15');
 
   const tolUnits = 0.004 / k; // aplanado para piezas y toques
   const pieces = useMemo(() => (shown ? computePieces(shown, tolUnits) : []), [shown, tolUnits]);
@@ -361,6 +372,14 @@ export function FresaEditor({ svgText, report, onDone, onCancel, original = null
     [k, report.target.alimento, report.target.stampType],
   );
   const fresh = useFresaReport(docSvg, target);
+  // Caja del dibujo confirmado: la medida que se ve en «Diseño entero».
+  const docBox = useMemo(() => (doc ? docBounds(doc, tolUnits) : null), [doc, tolUnits]);
+  const docMm = docBox ? { w: (docBox.maxX - docBox.minX) * k, h: (docBox.maxY - docBox.minY) * k } : null;
+  useEffect(() => {
+    if (!docBox) return;
+    setSizeW(mm((docBox.maxX - docBox.minX) * k));
+    setSizeH(mm((docBox.maxY - docBox.minY) * k));
+  }, [docBox, k]);
   // Mientras se re-chequea se sigue mostrando el último resultado (sin
   // "Chequeando…" que cambie el alto del panel y corra los botones).
   const [lastLive, setLastLive] = useState<FresaReport | null>(null);
@@ -425,7 +444,8 @@ export function FresaEditor({ svgText, report, onDone, onCancel, original = null
   const hostRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [aspect, setAspect] = useState(1.4);
-  const designBox = useMemo(() => (built.ok ? docBounds(built.doc, tolUnits) : null), [built, tolUnits]);
+  // El dibujo como está ahora (si se agrandó o giró, «Ver todo» lo encuadra entero).
+  const designBox = docBox;
   const base = useMemo<Box>(() => {
     const b = designBox;
     if (!b) return report.viewBox;
@@ -1356,6 +1376,50 @@ export function FresaEditor({ svgText, report, onDone, onCancel, original = null
     if (!nSel || !doc || !selBox || !deg) return;
     const g = Math.abs(deg);
     commit(rotateRefs(doc, selRefs, selBox, deg), `${what} girada${nSel > 1 ? 's' : ''} ${Number.isInteger(g) ? g : mm(g, 1)}° ${deg > 0 ? 'a la derecha' : 'a la izquierda'}.`);
+  };
+  /** Diseño entero a una medida exacta (mm), desde el centro. */
+  const resizeAll = () => {
+    if (!doc || !docBox || !docMm) return;
+    const w = num(sizeW);
+    const h = num(sizeH);
+    if (!(w > 0) || !(h > 0)) {
+      say('Escribí el ancho y el alto en mm.');
+      return;
+    }
+    const fx = w / docMm.w;
+    const fy = sizeLock ? fx : h / docMm.h;
+    if (Math.abs(fx - 1) < 1e-6 && Math.abs(fy - 1) < 1e-6) return;
+    const cx = (docBox.minX + docBox.maxX) / 2;
+    const cy = (docBox.minY + docBox.maxY) / 2;
+    commit(
+      mapRefs(doc, allRefs(doc), (q) => ({ x: cx + (q.x - cx) * fx, y: cy + (q.y - cy) * fy })),
+      `Diseño a ${mm(docMm.w * fx)} × ${mm(docMm.h * fy)} mm${sizeLock ? '' : ': se deformó (sin respetar la proporción)'}.`,
+      sizeLock ? 'ok' : 'warn',
+    );
+  };
+  const onSizeText = (axis: 'w' | 'h', raw: string) => {
+    if (axis === 'w') setSizeW(raw);
+    else setSizeH(raw);
+    const v = num(raw);
+    if (!sizeLock || !docMm || !(v > 0)) return;
+    if (axis === 'w') setSizeH(mm((v * docMm.h) / docMm.w));
+    else setSizeW(mm((v * docMm.w) / docMm.h));
+  };
+  /** Gira el diseño entero sobre el centro de su caja (positivo = horario). */
+  const rotateAll = (deg: number) => {
+    setAllAngle('0');
+    if (!doc || !docBox || !deg || !Number.isFinite(deg)) {
+      setTemp(null);
+      return;
+    }
+    const g = Math.abs(deg);
+    commit(rotateRefs(doc, allRefs(doc), docBox, deg), `Diseño girado ${Number.isInteger(g) ? g : mm(g, 1)}° ${deg > 0 ? 'a la derecha' : 'a la izquierda'}.`);
+  };
+  /** Mientras se arrastra el control de giro: se ve girado, se confirma al soltar. */
+  const previewRotateAll = (raw: string) => {
+    setAllAngle(raw);
+    const deg = num(raw);
+    setTemp(doc && docBox && deg ? rotateRefs(doc, allRefs(doc), docBox, deg) : null);
   };
   const doMirror = (axis: 'x' | 'y') => {
     if (!nSel || !doc || !selBox) return;
@@ -2581,6 +2645,95 @@ export function FresaEditor({ svgText, report, onDone, onCancel, original = null
             </div>
           </div>
         ) : null}
+
+        <Section title="Diseño entero" extra={docMm ? `${mm(docMm.w)} × ${mm(docMm.h)} mm` : undefined}>
+          <Row label="Medida">
+            <input
+              className="h-7 w-16 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
+              inputMode="decimal"
+              value={sizeW}
+              onChange={(e) => onSizeText('w', e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') resizeAll();
+              }}
+              aria-label="Ancho del diseño en mm"
+              title="Ancho del diseño entero (mm). Enter para aplicar"
+            />
+            <span className="text-xs text-muted-foreground">×</span>
+            <input
+              className="h-7 w-16 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
+              inputMode="decimal"
+              value={sizeH}
+              onChange={(e) => onSizeText('h', e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') resizeAll();
+              }}
+              aria-label="Alto del diseño en mm"
+              title="Alto del diseño entero (mm). Enter para aplicar"
+            />
+            <span className="text-xs text-muted-foreground">mm</span>
+            <button
+              type="button"
+              className={cn(iconBtn, !sizeLock && 'text-amber-600 dark:text-amber-400')}
+              aria-pressed={sizeLock}
+              onClick={() => {
+                const next = !sizeLock;
+                setSizeLock(next);
+                // Al volver a trabar, el alto sigue al ancho.
+                if (next && docMm && num(sizeW) > 0) setSizeH(mm((num(sizeW) * docMm.h) / docMm.w));
+              }}
+              title={sizeLock ? 'Respeta la proporción (tocá para poder deformar)' : 'Sin respetar la proporción: deforma el diseño'}
+            >
+              {sizeLock ? <Link2 className="size-3.5" /> : <Link2Off className="size-3.5" />}
+            </button>
+            <Button type="button" size="sm" variant="ghost" className="h-7 px-2" disabled={!docBox} onClick={resizeAll}>
+              Aplicar
+            </Button>
+          </Row>
+          <Row label="Girar">
+            <input
+              type="range"
+              min={-180}
+              max={180}
+              step={0.5}
+              className="h-7 min-w-0 flex-1 accent-primary"
+              value={num(allAngle) || 0}
+              disabled={!docBox}
+              onChange={(e) => previewRotateAll(e.target.value)}
+              onPointerUp={() => rotateAll(num(allAngle))}
+              onKeyUp={() => rotateAll(num(allAngle))}
+              aria-label="Girar el diseño entero"
+              title="Arrastrá para girar todo el diseño (se aplica al soltar)"
+            />
+            <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{mm(num(allAngle) || 0, 1)}°</span>
+          </Row>
+          <div className="flex flex-wrap items-center gap-1.5 pl-[3.375rem]">
+            <button type="button" className={iconBtn} disabled={!docBox} onClick={() => rotateAll(-90)} title="Girar todo 90° a la izquierda">
+              <RotateCcw className="size-3.5" />
+            </button>
+            <button type="button" className={iconBtn} disabled={!docBox} onClick={() => rotateAll(90)} title="Girar todo 90° a la derecha">
+              <RotateCw className="size-3.5" />
+            </button>
+            <input
+              className="h-7 w-12 rounded border bg-background px-1.5 text-right text-xs tabular-nums"
+              inputMode="decimal"
+              value={allAngleText}
+              onChange={(e) => setAllAngleText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') rotateAll(num(allAngleText));
+              }}
+              aria-label="Grados para girar el diseño entero"
+              title="Grados a girar todo el diseño (negativo: a la izquierda). Enter para aplicar"
+            />
+            <span className="text-xs text-muted-foreground">°</span>
+            <Button type="button" size="sm" variant="ghost" className="h-7 px-2" disabled={!docBox} onClick={() => rotateAll(num(allAngleText))}>
+              Girar todo
+            </Button>
+          </div>
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            Cambia la medida con la que se fabrica. Si cambiás la medida o lo girás, se guarda con la medida nueva.
+          </p>
+        </Section>
 
         <Section
           title={nSel > 1 ? `${nSel} piezas elegidas` : nSel ? 'Pieza elegida' : 'Pieza'}

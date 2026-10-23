@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { containSize } from './svgSize';
+import { applyPhysicalSize, containSize, declaredSizeMm, fitViewBoxToDesign } from './svgSize';
 
 describe('containSize', () => {
   it('diseño acostado en pedido 50×10 → 50×10', () => {
@@ -19,5 +20,25 @@ describe('containSize', () => {
   it('diseño o pedido cuadrado → sin cambios', () => {
     expect(containSize(100, 100, 50, 10)).toEqual({ widthMm: 10, heightMm: 10 });
     expect(containSize(100, 500, 40, 40)).toEqual({ widthMm: 8, heightMm: 40 });
+  });
+});
+
+describe('applyPhysicalSize: encaja el dibujo, no el lienzo', () => {
+  // Dibujo de 40 × 9 en un lienzo de 40 × 16 (margen blanco de la imagen recortada).
+  const conMargen =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 160"><path d="M0 35H400V125H0Z"/></svg>';
+
+  it('pedido 40×10 con lienzo 40×16 → el dibujo queda 40 × 9 (no 25 × 5,6)', () => {
+    const size = declaredSizeMm(applyPhysicalSize(conMargen, 40, 10));
+    expect(size?.widthMm).toBeCloseTo(40, 4);
+    expect(size?.heightMm).toBeCloseTo(9, 4);
+  });
+
+  it('lo que el editor dejó afuera del lienzo entra (no se recorta)', () => {
+    const afuera = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M-20 10H120V40H-20Z"/></svg>';
+    const vb = new DOMParser()
+      .parseFromString(fitViewBoxToDesign(afuera), 'image/svg+xml')
+      .documentElement.getAttribute('viewBox');
+    expect(vb).toBe('-20 10 140 30');
   });
 });
