@@ -2,7 +2,7 @@
 import { analyzeBlackRegion, buildBlackRegion, type PaintShape, type FresaZone } from './analyze';
 import { groupZones, type CheckOutput } from './engine';
 import { REPASO_DEPTH_STEP_MM, REPASO_MIN_GAIN_MM, REPASO_MIN_RELATIVE, cutRadiusAtDepth, primaryProfile, type FresaAnalysisOptions, type FresaProfile, type MachiningRecipe } from './config';
-import { UM, bounds, components, difference, intersect, offset, opening, rect, regionArea, toPath64, union, type Paths64 } from './geometry';
+import { UM, bounds, components, difference, intersect, offset, opening, rect, regionArea, simplify, toPath64, union, type Paths64 } from './geometry';
 import type { Pt } from './pathData';
 
 export type PassOutcome = 'sin_repaso' | 'repaso_sugerido' | 'revisar_rango' | 'revisar_diseno' | 'revisar_principal' | 'sin_receta';
@@ -59,9 +59,14 @@ function check(black: Paths64, profile: FresaProfile, options: FresaAnalysisOpti
  */
 export function fineGainRegion(white: Paths64, primary: FresaProfile, fine: FresaProfile, minGainMm = REPASO_MIN_GAIN_MM): Paths64 {
   const reach = (p: FresaProfile, d: number) => opening(white, Math.round(cutRadiusAtDepth(p, d) * UM));
+  // Clipper2 entra en un bucle sin fin (hasta quedarse sin memoria y romper la
+  // pestaña) al unir algunos de estos contornos encadenados: pasó con «ALQUIMIA»
+  // (2026-10-23) a una escala exacta. Limpiarlos a medio micrón lo evita y para
+  // la fresa no cambia nada.
+  const clean = (paths: Paths64) => simplify(paths, 0.5);
   let gain: Paths64 = [];
   for (let d = minGainMm + REPASO_DEPTH_STEP_MM; d <= fine.finalDepthMm + 1e-9; d += REPASO_DEPTH_STEP_MM) {
-    gain = union(gain, difference(reach(fine, d), reach(primary, d - minGainMm)));
+    gain = union(clean(gain), clean(difference(reach(fine, d), reach(primary, d - minGainMm))));
   }
   // Sin astillas de redondeo entre niveles.
   return opening(gain, Math.round(0.01 * UM));
