@@ -1334,6 +1334,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 72,
+    date: '2026-10-26',
+    title: 'Programas: registrar lo mecanizado y el repaso',
+    version: '1.90',
+    slides: [
+      {
+        heading: 'Si no se subió el archivo, igual podés fabricar',
+        body: 'Cuando Aspire ya tiene el programa pero el archivo no se subió (por ejemplo, se cortó internet), «Empezar a fabricar» ya no se traba. La barra te sigue recordando que falta subir el archivo.',
+        icon: Upload,
+      },
+      {
+        heading: '«Ya lo mecanicé…» y «Falta repaso»',
+        body: 'Si mecanizaste sin tocar «Empezar a fabricar», tocá «Ya lo mecanicé…» y marcá cada sello o cada planchuela entera: Hecho, Falta repaso, Retocar o Rehacer. Lo que falta repasar queda en Fabricando hasta que lo marques hecho.',
+        icon: ListTodo,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

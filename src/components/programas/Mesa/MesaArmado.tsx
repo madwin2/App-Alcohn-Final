@@ -43,6 +43,8 @@ export interface MesaProgram {
   fabricated?: FabricationRecord | null;
   /** En la máquina: algún sello Haciendo (queda en solo lectura). */
   fabricating?: FabricatingRecord | null;
+  /** Estado de fabricación de cada sello, por id de sello. */
+  stampStates?: Record<string, FabricationState>;
   /** Abierto desde el historial de terminados. */
   fromHistory?: boolean;
   /** Todavía no se leyó su armado (solo se carga el programa elegido). */
@@ -55,6 +57,14 @@ export const MACHINE_LABEL: Record<PreparationMachine, string> = { C: 'Chica', G
 const MACHINES = (Object.keys(MACHINE_LABEL) as PreparationMachine[]).map((id) => ({ id, label: MACHINE_LABEL[id] }));
 type FineMode = NonNullable<StampPlacement['fine']>['mode'];
 type Notice = { text: string; tone: 'ok' | 'error' | 'info'; undo?: boolean };
+
+/** Sellos por planchuela, para marcar una entera (p. ej. la que quedó para el repaso). */
+function fabSections(doc: PreparationDocument) {
+  const sections = doc.columns.map((c) => ({ label: `Planchuela ${c.nominalMm}`, stampIds: columnStamps(doc, c.id).map((s) => s.instanceId) }));
+  const placed = new Set(sections.flatMap((x) => x.stampIds));
+  const rest = doc.stamps.filter((s) => !placed.has(s.instanceId)).map((s) => s.instanceId);
+  return rest.length ? [...sections, { label: 'Fuera de las planchuelas', stampIds: rest }] : sections;
+}
 
 const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]');
 const countOf = (p: MesaProgram) => p.loading ? p.stampCount ?? 0 : p.doc.stamps.length;
@@ -497,7 +507,7 @@ export function MesaArmado({
           <MesaActionBar progress={progress} groups={groups} checking={checking} dirty={dirty} savedRevision={program.savedRevision}
             hasStamps={doc.stamps.length > 0} readOnly={readOnly} locked={!!program.locked} legacyAspire={legacy}
             waitingSince={waitingSince} fabricated={program.fabricated ?? null} fabricating={program.fabricating ?? null} starting={starting}
-            onSave={save} onAspire={toAspire} onFabricated={() => setFabAsk(true)} onPick={pick} onSetup={onSetup}
+            onSave={save} onAspire={toAspire} onFabricated={() => setFabAsk(true)} onMachined={() => setFabAsk(true)} onPick={pick} onSetup={onSetup}
             onStart={() => { if (onStart) void onStart(program.id).then((ok) => ok && setNotice({ text: 'Programa en la máquina: todos los sellos pasaron a Haciendo', tone: 'ok' })); }} />
         </>
       )}
@@ -526,14 +536,21 @@ export function MesaArmado({
       ) : null}
 
       <ConfirmDialog open={fabAsk} onOpenChange={setFabAsk}
-        title="¿Algún sello salió mal?" description="¿Hay que rehacer o retocar alguno de este programa?"
-        confirmLabel="Sí" cancelLabel="No"
+        title="¿Quedó todo terminado?" description="Si alguna planchuela sigue en la máquina para el repaso, o hay sellos para retocar o rehacer, marcalos uno por uno."
+        confirmLabel="Marcar uno por uno" cancelLabel="Sí, todo hecho"
         onConfirm={() => { setFabAsk(false); setFabReview(true); }}
         onCancel={() => {
           setFabAsk(false);
           if (program && doc) { onFabricated(program.id, doc.stamps.map((s) => ({ instanceId: s.instanceId, state: 'HECHO' }))); setNotice({ text: 'Sellos marcados como Hecho', tone: 'ok' }); }
         }} />
       <DoneReviewDialog open={fabReview} onOpenChange={setFabReview} programName={program?.name ?? ''}
+        title="¿Cómo quedó cada sello?" allowPending
+        description="«Falta repaso»: sigue en la máquina y el programa queda en Fabricando. El resto pasa a Hecho, Retocar o Rehacer."
+        sections={doc ? fabSections(doc) : undefined}
+        initial={doc && program?.stampStates ? Object.fromEntries(doc.stamps.flatMap((s) => {
+          const st = program.stampStates?.[s.selloId];
+          return st === 'RETOCAR' || st === 'REHACER' ? [[s.instanceId, st]] : [];
+        })) : undefined}
         stamps={(doc?.stamps ?? []).map((s): ProgramStamp => ({ id: s.instanceId, designName: s.name, widthMm: s.widthMm, heightMm: s.heightMm, stampType: s.recipe, vectorPreviewUrl: s.sourceUrl }))}
         onConfirm={(assignments) => {
           if (!program) return;

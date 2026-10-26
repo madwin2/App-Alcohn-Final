@@ -18,9 +18,12 @@ La barra de abajo muestra las etapas **Armado → Revisado → En Aspire → Par
 
 1. Cuando Aspire devolvió el programa (etapa **Para fabricar**), pasá las trayectorias a la CNC. Al dejarla corriendo tocá **Empezar a fabricar**: todos los sellos pasan a **Haciendo** y el armado queda en solo lectura.
 2. Mientras está **Fabricando**, la barra dice desde qué hora está en la máquina.
-3. Al terminar, cortar y **probar en cuero**, tocá **Marcar fabricado**. Te pregunta si algún sello salió mal: **No** marca todos **Hecho**; **Sí** te deja elegir **Hecho**, **Retocar** o **Rehacer** por sello.
+3. Al terminar, cortar y **probar en cuero**, tocá **Marcar fabricado**. Te pregunta si quedó todo terminado: **Sí, todo hecho** marca todos **Hecho**; **Marcar uno por uno** te deja elegir por sello —o por planchuela entera— **Hecho**, **Falta repaso**, **Retocar** o **Rehacer**.
+4. **Falta repaso**: la planchuela quedó en la máquina para un repaso. Esos sellos siguen en **Haciendo** y el programa queda en **Fabricando** («8 sellos siguen en la máquina · 15 ya terminados»). Al terminar el repaso, tocá de nuevo **Marcar fabricado**.
 
-⚠️ **Empezar a fabricar** aparece recién cuando Aspire devolvió la revisión guardada y su archivo. Antes, la base de datos no deja pasar los sellos a Haciendo.
+**Ya lo mecanicé…** (en **Para fabricar**): si mecanizaste sin tocar **Empezar a fabricar**, registrá ahí lo que pasó, con las mismas opciones.
+
+⚠️ **Empezar a fabricar** aparece cuando Aspire devolvió la revisión guardada. Si el archivo de Aspire no se subió (p. ej. se cortó internet), no frena: la barra muestra «falta subir el archivo de Aspire» hasta que se suba.
 
 ### Nombre, fecha y eliminar
 

@@ -173,8 +173,13 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
       retocar: p.stamps.filter((s) => s.fabricationState === 'RETOCAR').length,
       rehacer: p.stamps.filter((s) => s.fabricationState === 'REHACER').length,
     } : null;
-    const fabricating = isFabricating(p) ? { since: p.fabricationStartedAt ? format(parseISO(p.fabricationStartedAt), "HH:mm 'del' d MMM", { locale: es }) : null } : null;
-    const base = { id: p.id, name: p.name, machine: p.machine, stampCount: p.stamps.length, productionDate: p.productionDate, fabricated, fabricating, fromHistory: fromHistory.some((x) => x.id === p.id) };
+    const fabricating = isFabricating(p) ? {
+      since: p.fabricationStartedAt ? format(parseISO(p.fabricationStartedAt), "HH:mm 'del' d MMM", { locale: es }) : null,
+      pending: p.stamps.filter((s) => !DONE_STATES.has(s.fabricationState ?? 'SIN_HACER')).length,
+      done: p.stamps.filter((s) => DONE_STATES.has(s.fabricationState ?? 'SIN_HACER')).length,
+    } : null;
+    const stampStates = Object.fromEntries(p.stamps.map((s) => [s.id, s.fabricationState ?? 'SIN_HACER'])) as Record<string, FabricationState>;
+    const base = { id: p.id, name: p.name, machine: p.machine, stampCount: p.stamps.length, productionDate: p.productionDate, fabricated, fabricating, stampStates, fromHistory: fromHistory.some((x) => x.id === p.id) };
     // Sin cargar todavía (solo se carga el elegido): alcanza para la lista de programas.
     if (!l) return [{ ...base, doc: emptyDocument(p.id, p.machine), savedRevision: null, savedDoc: null, syncedRevision: null, fileRevision: null, locked: p.bloqueado, loading: true }];
     const locked = p.bloqueado;
@@ -370,12 +375,17 @@ export function MesaProgramas({ programs: api, onOpenBoard }: { programs: Progra
   const onFabricated = async (id: string, states: { instanceId: string; state: FabricationState }[]) => {
     const doc = loaded[id]?.draft;
     if (!doc) return;
+    const current = new Map((programs.find((p) => p.id === id)?.stamps ?? []).map((s) => [s.id, s.fabricationState ?? 'SIN_HACER']));
+    const all = states.flatMap(({ instanceId, state }) => {
+      const selloId = doc.stamps.find((s) => s.instanceId === instanceId)?.selloId;
+      return selloId ? [{ stampId: selloId, state }] : [];
+    });
+    // Solo los que cambian: un sello que ya estaba Hecho no se vuelve a avisar.
+    const changed = all.filter((a) => current.get(a.stampId) !== a.state);
+    if (!changed.length) return;
     try {
-      if (states.every((s) => s.state === 'HECHO')) await api.setFabricationStateForProgram(id, 'HECHO');
-      else await api.setStampFabricationStates(id, states.flatMap(({ instanceId, state }) => {
-        const selloId = doc.stamps.find((s) => s.instanceId === instanceId)?.selloId;
-        return selloId ? [{ stampId: selloId, state }] : [];
-      }));
+      if (changed.length === all.length && all.every((s) => s.state === 'HECHO')) await api.setFabricationStateForProgram(id, 'HECHO');
+      else await api.setStampFabricationStates(id, changed);
     } catch (e) { toast({ title: 'No se pudo marcar como fabricado', description: e instanceof Error ? e.message : undefined, variant: 'destructive' }); }
   };
 

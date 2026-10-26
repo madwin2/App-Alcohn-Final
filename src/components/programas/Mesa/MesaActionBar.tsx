@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CheckCheck, ChevronUp, Download, Loader2, Play, RotateCw, Save } from 'lucide-react';
+import { CheckCheck, ChevronUp, Download, Hammer, Loader2, Play, RotateCw, Save } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { CheckGroup, MesaProgress } from '@/lib/programas/mesa';
 import { cn } from '@/lib/utils/cn';
@@ -17,6 +17,9 @@ export interface FabricationRecord {
 export interface FabricatingRecord {
   /** Hora en que se tocó «Empezar a fabricar» (null si no quedó registrada). */
   since: string | null;
+  /** Sellos que siguen en la máquina (p. ej. falta el repaso) y los ya terminados. */
+  pending: number;
+  done: number;
 }
 
 function elapsed(since: number, now: number) {
@@ -30,7 +33,7 @@ function elapsed(since: number, now: number) {
  */
 export function MesaActionBar({
   progress, groups, checking, dirty, savedRevision, hasStamps, readOnly, locked, legacyAspire, waitingSince, fabricated, fabricating, starting,
-  onSave, onAspire, onStart, onFabricated, onPick, onSetup,
+  onSave, onAspire, onStart, onFabricated, onMachined, onPick, onSetup,
 }: {
   progress: MesaProgress;
   groups: CheckGroup[];
@@ -52,6 +55,8 @@ export function MesaActionBar({
   /** Todos los sellos a Haciendo: la máquina quedó corriendo. */
   onStart: () => void;
   onFabricated: () => void;
+  /** Ya se mecanizó sin pasar por «Empezar a fabricar»: registrar qué quedó hecho y qué falta. */
+  onMachined: () => void;
   onPick: (instanceId: string) => void;
   onSetup: () => void;
 }) {
@@ -65,16 +70,22 @@ export function MesaActionBar({
   const summary = checkSummary(groups, checking);
 
   const mustSave = !fabricating && (dirty || progress.step === 'armado' || progress.step === 'revisar');
+  // Aspire ya tiene la revisión pero no se subió el archivo: no bloquea, queda como pendiente.
+  const fileMissing = progress.done.aspire && !progress.done.fabricar;
+  const fileNote = fileMissing ? <span className="text-amber-200/90"> · falta subir el archivo de Aspire</span> : null;
   let status: ReactNode = progress.blocking;
   let action: ReactNode = null;
   if (fabricated) {
     const bad = [fabricated.retocar && `${fabricated.retocar} para retocar`, fabricated.rehacer && `${fabricated.rehacer} para rehacer`].filter(Boolean).join(' · ');
-    status = <>Fabricado el {fabricated.at}{bad ? <span className="text-amber-200/90"> · {bad}</span> : ' · todo salió bien'}</>;
+    status = <>Fabricado el {fabricated.at}{bad ? <span className="text-amber-200/90"> · {bad}</span> : ' · todo salió bien'}{fileNote}</>;
   } else if (fabricating) {
     status = (
       <span className="flex items-center gap-2">
         <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-300/60 motion-reduce:animate-none" /><span className="relative inline-flex size-2 rounded-full bg-emerald-300" /></span>
-        En la máquina{fabricating.since ? <> desde las {fabricating.since}</> : null} · cuando termine y lo pruebes en cuero, marcalo fabricado.
+        {fabricating.done > 0
+          ? <>{fabricating.pending} {fabricating.pending === 1 ? 'sello sigue' : 'sellos siguen'} en la máquina · {fabricating.done} ya {fabricating.done === 1 ? 'terminado' : 'terminados'} · al terminar el repaso, marcalo fabricado.</>
+          : <>En la máquina{fabricating.since ? <> desde las {fabricating.since}</> : null} · cuando termine y lo pruebes en cuero, marcalo fabricado.</>}
+        {fileNote}
       </span>
     );
     action = <button type="button" className={cn(PILL_PRIMARY, 'min-w-[13rem] py-2.5')} onClick={onFabricated}><CheckCheck className="size-4" />Marcar fabricado</button>;
@@ -107,12 +118,19 @@ export function MesaActionBar({
         </button>
       );
     }
-  } else if (progress.done.fabricar) {
-    status = 'Listo para la máquina. Pasá las trayectorias a la CNC y, cuando la dejes corriendo, tocá «Empezar a fabricar».';
+  } else if (progress.done.aspire) {
+    status = fileMissing
+      ? <>Aspire ya lo tiene, pero <span className="text-amber-200/90">falta subir el archivo</span> (no frena). Tocá «Empezar a fabricar» al dejar la CNC corriendo; si ya lo mecanizaste, registralo.</>
+      : 'Listo para la máquina. Pasá las trayectorias a la CNC y, cuando la dejes corriendo, tocá «Empezar a fabricar».';
     action = (
-      <button type="button" className={cn(PILL_PRIMARY, 'min-w-[13rem] py-2.5')} disabled={starting} onClick={onStart}>
-        {starting ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}Empezar a fabricar
-      </button>
+      <span className="flex flex-wrap items-center gap-2">
+        <button type="button" className={PILL_GHOST} disabled={starting} onClick={onMachined} title="Marcar qué quedó hecho y qué falta repasar">
+          <Hammer className="size-4" />Ya lo mecanicé…
+        </button>
+        <button type="button" className={cn(PILL_PRIMARY, 'min-w-[13rem] py-2.5')} disabled={starting} onClick={onStart}>
+          {starting ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}Empezar a fabricar
+        </button>
+      </span>
     );
   }
 

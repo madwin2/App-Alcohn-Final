@@ -48,3 +48,4 @@ En programas con preparación, la comprobación de auxiliares (`execution.verifi
 
 Etapas visibles: Armado → Revisado → En Aspire → Para fabricar → **Fabricando** (algún sello `Haciendo`, botón «Empezar a fabricar») → Fabricado (botón «Marcar fabricado»). Un fabricado queda en la mesa 2 días desde el último paso a `Hecho` (`estado_historial`) y después solo en el historial. Ver [módulo](../02-modules/programas/README.md#fabricación-y-archivo-en-la-mesa-2026-10-20).
 
+**2026-10-26:** el inicio (`Haciendo`) ya no exige el archivo de Aspire de la revisión; queda pendiente y se avisa en la mesa. Un programa puede quedar en **Fabricando** con parte de los sellos `Hecho` y el resto `Haciendo` («Falta repaso»). Ver [módulo](../02-modules/programas/README.md).
