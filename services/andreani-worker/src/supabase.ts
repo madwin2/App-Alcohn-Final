@@ -80,6 +80,9 @@ export type LabelMatchCandidate = {
   ordenId: string;
   customerName: string;
   shippingName: string | null;
+  /** Nombre y seguimiento leídos del link completado (check-links). */
+  linkName: string | null;
+  linkTracking: string | null;
   designNames: string[];
   caption: string;
   imageUrls: string[][];
@@ -135,6 +138,8 @@ export async function listAssignedLinkCandidates(): Promise<LabelMatchCandidate[
     .select(
       `
       orden_id,
+      tracking,
+      destinatario,
       ordenes (
         id,
         seguimiento,
@@ -159,10 +164,16 @@ export async function listAssignedLinkCandidates(): Promise<LabelMatchCandidate[
   };
 
   const ordenes: OrdenLite[] = [];
+  const linkByOrden = new Map<string, { name: string | null; tracking: string | null }>();
   for (const row of data ?? []) {
     const ordenRaw = (row as { ordenes?: unknown }).ordenes;
     const orden = (Array.isArray(ordenRaw) ? ordenRaw[0] : ordenRaw) as OrdenLite | null;
     if (!orden?.id) continue;
+    const link = row as { tracking?: string | null; destinatario?: string | null };
+    linkByOrden.set(orden.id, {
+      name: link.destinatario?.trim() || null,
+      tracking: link.tracking?.trim() || null,
+    });
     // Ya avisados / cerrados: no volver a matchear etiquetas (aunque seguimiento esté vacío).
     if (orden.estado_envio === 'Seguimiento Enviado') continue;
     if (orden.seguimiento && orden.seguimiento.trim()) continue;
@@ -196,10 +207,13 @@ export async function listAssignedLinkCandidates(): Promise<LabelMatchCandidate[
       if (urls.length) imageUrls.push(urls);
     }
 
+    const link = linkByOrden.get(orden.id);
     out.push({
       ordenId: orden.id,
       customerName: `${cliente?.nombre ?? ''} ${cliente?.apellido ?? ''}`.trim(),
       shippingName: dir ? `${dir.nombre ?? ''} ${dir.apellido ?? ''}`.trim() : null,
+      linkName: link?.name ?? null,
+      linkTracking: link?.tracking ?? null,
       designNames: sellos.map((s) => s.diseno?.trim() || '').filter(Boolean),
       caption: captionFromSellos(sellos),
       imageUrls: imageUrls.slice(0, 3),
@@ -267,6 +281,8 @@ export async function loadEnrichInputByTracking(tracking: string): Promise<Label
     ordenId: orden.id,
     customerName: `${cliente?.nombre ?? ''} ${cliente?.apellido ?? ''}`.trim(),
     shippingName: null,
+    linkName: null,
+    linkTracking: null,
     designNames: sellos.map((s) => s.diseno?.trim() || '').filter(Boolean),
     caption: captionFromSellos(sellos),
     imageUrls: imageUrls.slice(0, 3),
@@ -485,3 +501,86 @@ export async function markOrderDespachado(ordenId: string): Promise<boolean> {
   return true;
 }
 
+
+export type LinkToCheck = {
+  id: string;
+  url: string;
+  ordenId: string;
+  usadoEn: string | null;
+};
+
+/**
+ * Links asignados cuyo pedido todavía no tiene seguimiento (los que sirven para emparejar).
+ * Los que ya mostraron su seguimiento no se vuelven a abrir.
+ */
+export async function listLinksToCheck(): Promise<LinkToCheck[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('envios_andreani_links')
+    .select('id, url, orden_id, usado_en, ordenes ( seguimiento, estado_envio )')
+    .eq('estado', 'asignado')
+    .is('tracking', null)
+    .not('orden_id', 'is', null)
+    .order('asignado_en', { ascending: true });
+  if (error) throw error;
+
+  type OrdenLite = { seguimiento: string | null; estado_envio: string | null };
+  const out: LinkToCheck[] = [];
+  for (const row of data ?? []) {
+    const ordenRaw = (row as { ordenes?: unknown }).ordenes;
+    const orden = (Array.isArray(ordenRaw) ? ordenRaw[0] : ordenRaw) as OrdenLite | null;
+    if (!orden || !row.orden_id || !row.url) continue;
+    if (orden.estado_envio === 'Seguimiento Enviado') continue;
+    if (orden.seguimiento && orden.seguimiento.trim()) continue;
+    out.push({
+      id: row.id as string,
+      url: row.url as string,
+      ordenId: row.orden_id as string,
+      usadoEn: (row.usado_en as string | null) ?? null,
+    });
+  }
+  return out;
+}
+
+export async function saveLinkRevision(
+  link: LinkToCheck,
+  result:
+    | { usado: false }
+    | { usado: true; pedidoAndreaniId: string; destinatario: string | null; tracking: string | null },
+): Promise<void> {
+  const supabase = getSupabase();
+  const now = new Date().toISOString();
+  const patch: Record<string, string | null> = { revisado_en: now };
+  if (result.usado) {
+    patch.usado_en = link.usadoEn ?? now;
+    patch.pedido_andreani_id = result.pedidoAndreaniId;
+    if (result.destinatario) patch.destinatario = result.destinatario;
+    if (result.tracking) patch.tracking = result.tracking;
+  }
+  const { error } = await supabase.from('envios_andreani_links').update(patch).eq('id', link.id);
+  if (error) throw error;
+}
+
+export async function findEtiquetaByTracking(
+  tracking: string,
+): Promise<{ id: string; estado: string; ordenId: string | null } | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('envios_andreani_etiquetas')
+    .select('id, estado, orden_id')
+    .eq('tracking', tracking)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { id: data.id as string, estado: data.estado as string, ordenId: (data.orden_id as string | null) ?? null };
+}
+
+/** Mismas validaciones que "Asignar" en el panel (BR-AND-005). */
+export async function assignEtiquetaToOrden(etiquetaId: string, ordenId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('asignar_etiqueta_andreani', {
+    p_etiqueta_id: etiquetaId,
+    p_orden_id: ordenId,
+  });
+  if (error) throw error;
+}

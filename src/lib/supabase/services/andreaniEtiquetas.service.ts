@@ -336,7 +336,14 @@ export const downloadMergedAndreaniEtiquetasPdfs = async (
   }
 };
 
-export const andreaniAssignCandidatesFromOrders = (orders: Order[]): Array<{ id: string; label: string }> =>
+export type AndreaniAssignCandidate = {
+  id: string;
+  label: string;
+  /** Seguimiento que mostró el link del cliente (revisión de links); sugiere el pedido de una huérfana. */
+  linkTracking: string | null;
+};
+
+export const andreaniAssignCandidatesFromOrders = (orders: Order[]): AndreaniAssignCandidate[] =>
   orders
     .filter((order) => {
       if (!order.andreaniLinkUrl) return false;
@@ -350,9 +357,11 @@ export const andreaniAssignCandidatesFromOrders = (orders: Order[]): Array<{ id:
         order.items.length > 0
           ? order.items.map((item) => getOrderItemDisplayName(item)).join(', ')
           : order.id.slice(0, 8);
+      const linkName = order.andreaniLinkRevision?.destinatario?.trim();
       return {
         id: order.id,
-        label: `${order.customer.firstName} ${order.customer.lastName} · ${itemsLabel}`,
+        label: `${order.customer.firstName} ${order.customer.lastName}${linkName ? ` (link: ${linkName})` : ''} · ${itemsLabel}`,
+        linkTracking: order.andreaniLinkRevision?.tracking?.trim() || null,
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label, 'es'));

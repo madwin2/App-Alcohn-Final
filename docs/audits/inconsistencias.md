@@ -153,3 +153,15 @@ Hallazgos detectados durante la documentación (2026-09-27). **No se corrigió n
 ### AUD-INC-027 · Cambiar el tipo en una fila expandida cambia todos los sellos del pedido
 - **Evidencia** (2026-10-22): la fila expandida de Pedidos arma `{ ...order, items: [item] }`, pero `CellTipo` llama `onTipoChange(order.id, tipo)` sin `itemId`. Entonces `OrdersTable.handleTipoChange` busca el pedido real y actualiza **todos** sus ítems. El tipo Personalizado nuevo no tiene este problema: aplica a los ítems de la fila.
 - **Impacto**: en un pedido con varios sellos, cambiar el tipo de uno solo los cambia a todos. No se corrigió de paso (AGENTS §4).
+
+<a id="aud-inc-029"></a>
+
+### AUD-INC-029 · Reasignar un link Andreani vencido no mira si el cliente ya lo completó
+- **Evidencia** (2026-10-27): `asignar_link_andreani` reutiliza el link asignado solo si tiene ≤30 h; si tiene más, lo marca `descartado` y toma uno nuevo del pool, aunque el cliente ya lo haya completado y pagado (ahora se sabe por `envios_andreani_links.usado_en`).
+- **Impacto**: si se vuelve a mandar la foto (o se reasigna) más de 30 h después, el cliente puede recibir un link nuevo y pagar el envío dos veces. No se corrigió de paso (AGENTS §4); posible arreglo: si `usado_en` no es NULL, devolver el mismo link.
+
+<a id="aud-inc-030"></a>
+
+### AUD-INC-030 · `npm run lint` no corre
+- **Evidencia** (2026-10-27): `.eslintrc.cjs` extiende `'@typescript-eslint/recommended'`; ESLint 8.57 responde "couldn't find the config". El nombre válido es `'plugin:@typescript-eslint/recommended'`.
+- **Impacto**: el lint de AGENTS §3 no se puede correr; los cambios se validan solo con `typecheck` y `test` (y `typecheck` ya tiene errores previos en archivos de Pedidos/Producción). No se corrigió de paso.

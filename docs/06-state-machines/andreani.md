@@ -9,7 +9,8 @@ stateDiagram-v2
   disponible --> [*]: purga (>30 h)
   asignado --> asignado: reusar si ≤30 h
   asignado --> descartado: vencido al reasignar / liberar con descartar
-  asignado --> disponible: liberar (≤30 h)
+  asignado --> disponible: liberar (≤30 h, sin usar)
+  asignado --> descartado: liberar un link ya completado (usado_en)
   asignado --> [*]: liberar (>30 h) / eliminar
 ```
 

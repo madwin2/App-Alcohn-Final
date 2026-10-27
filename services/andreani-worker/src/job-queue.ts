@@ -1,6 +1,7 @@
 import { runGenerateJob, runRefillJob } from './generate-service.js';
 import { runSyncLabelsJob } from './sync-labels-service.js';
 import { runSyncTrackingJob } from './sync-tracking-service.js';
+import { runCheckLinksJob } from './check-links-service.js';
 import {
   bumpQueueDepth,
   markJobFinished,
@@ -8,7 +9,7 @@ import {
   markJobRunning,
   type WorkerJobKind,
 } from './job-status.js';
-import type { GenerateResult, SyncLabelsResult, SyncTrackingResult } from './types.js';
+import type { CheckLinksResult, GenerateResult, SyncLabelsResult, SyncTrackingResult } from './types.js';
 
 /** Pausa entre jobs para no saturar el portal. */
 const GAP_BETWEEN_JOBS_MS = 5_000;
@@ -91,5 +92,22 @@ export function enqueueSyncTrackingJob(): Promise<SyncTrackingResult> {
     'Revisando estados en portal Andreani…',
     () => runSyncTrackingJob(),
     (r) => ({ ok: r.status === 'ok', message: r.message }),
+  );
+}
+
+/**
+ * `programada`: si Andreani no responde (túnel de oficina cerrado) se da por salteada,
+ * sin marcar error en el panel; la próxima corrida (o "Traer etiquetas") lo vuelve a intentar.
+ */
+export function enqueueCheckLinksJob(origen: 'manual' | 'programada'): Promise<CheckLinksResult> {
+  return enqueue(
+    'check-links',
+    'En cola: revisar links de clientes',
+    'Revisando links de clientes…',
+    () => runCheckLinksJob(),
+    (r) =>
+      origen === 'programada' && r.unreachable
+        ? { ok: true, message: `Revisión programada salteada: ${r.message}` }
+        : { ok: r.status === 'ok', message: r.message },
   );
 }

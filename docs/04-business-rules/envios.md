@@ -22,3 +22,5 @@
 | BR-AND-005 | Asignar una etiqueta exige que la orden tenga link asignado, que no tenga otro seguimiento y que el tracking no esté en otra orden; deja la orden en `Etiqueta Lista`. | `asignar_etiqueta_andreani` | DB |
 | BR-AND-006 | Una etiqueta asignada no puede marcarse errónea sin liberarla antes; solo las erróneas se restauran a huérfano. | `marcar_etiqueta_andreani_erronea`, `restaurar_etiqueta_andreani_huerfano` | DB |
 | BR-AND-007 | Al liberar/eliminar una etiqueta asignada se elige qué pasa con la orden: `Sin envio` o `Seguimiento Enviado` (con seguimiento manual). | `liberar_etiqueta_andreani`, `eliminar_etiqueta_andreani` | DB |
+| BR-AND-008 | Una etiqueta del portal se empareja primero con el pedido cuyo link mostró ese mismo seguimiento; si no hay, por nombre (cliente, dirección o nombre con el que se completó el link), y un pedido cuyo link ya apunta a otro seguimiento no entra en el emparejamiento por nombre. | worker `matchEtiqueta`, `check-links` | Servicio |
+| BR-AND-009 | Un link que el cliente ya completó no vuelve al pool al liberarlo: se descarta (conserva nombre y seguimiento). | `liberar_link_andreani` | DB |

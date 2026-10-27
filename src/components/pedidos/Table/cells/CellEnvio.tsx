@@ -72,11 +72,20 @@ const getIconForOption = (option: ShippingOption): string | null => {
   return found?.iconName || null;
 };
 
+/** Qué vio la revisión de links del worker (Envíos → Andreani). */
+const andreaniLinkRevisionNote = (revision: Order['andreaniLinkRevision']): string | null => {
+  if (!revision?.revisadoEn) return null;
+  if (!revision.usadoEn) return 'El cliente todavía no completó el link';
+  const nombre = revision.destinatario ? `a nombre de ${revision.destinatario}` : 'completado';
+  return revision.tracking ? `Etiqueta ${nombre} · ${revision.tracking}` : `Link ${nombre}`;
+};
+
 export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
   const { shipping } = order;
   const { toast } = useToast();
   const currentOption = getCurrentShippingOption(shipping.carrier, shipping.service);
   const hasAndreaniLink = Boolean(order.andreaniLinkUrl);
+  const andreaniLinkNote = andreaniLinkRevisionNote(order.andreaniLinkRevision);
   const isDhl = shipping.carrier === 'DHL';
   const dhlAddress = order.internationalAddress ? formatDhlAddress(order.internationalAddress) : '';
   
@@ -182,7 +191,8 @@ export function CellEnvio({ order, onEnvioChange }: CellEnvioProps) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs text-xs">
-              Link Andreani asignado — click para copiar
+              <div>Link Andreani asignado — click para copiar</div>
+              {andreaniLinkNote ? <div className="mt-0.5 font-medium">{andreaniLinkNote}</div> : null}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

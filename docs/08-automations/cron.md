@@ -12,6 +12,12 @@
 | `reintentar-webhooks-fallidos` | `*/5 * * * *` | `reintentar_webhooks_fallidos()` | Reenvía (máx. 3, solo < 1 h, 10 por corrida) **directo** al bot |
 | `gastos-sync-diario` | `0 10 * * *` (07:00 AR) | edge `gastos-sync` vía `pg_net` | Cotización blue → recurrentes del mes → Meta Ads → OpenAI ([gastos-automaticos](../07-integrations/gastos-automaticos.md)) |
 
+## Tareas programadas fuera de pg_cron
+
+| Dónde | Horario | Qué hace |
+|---|---|---|
+| andreani-worker (`check-links-schedule.ts`) | **Apagada** (`ANDREANI_CHECK_LINKS_HOURS` vacío u `off`) | Revisión de links Andreani por horario. No se usa: el túnel de oficina se abre a mano y a veces se cae ([Q-AND-005](../14-open-questions/envios.md#q-and-005)); la revisión corre como primer paso de "Traer etiquetas" ([ADR-029](../13-decisions/ADR-029-revision-de-links-andreani.md)). Si se configuran horas y el túnel está cerrado, la corrida se saltea |
+
 ## No existe (pero se sugiere en documentación)
 
 - Refill automático del pool de Andreani (`POST /refill`, "cron sugerido cada 6–12 h" en el README del worker). ❓ [Q-AND-002](../14-open-questions/envios.md#q-and-002)

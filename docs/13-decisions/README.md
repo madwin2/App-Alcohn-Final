@@ -39,4 +39,6 @@ Decisiones de producto/arquitectura **reconstruidas** a partir de los planes en 
 
 [ADR-028 · Registro de ediciones de vectores](ADR-028-registro-de-ediciones-de-vectores.md): cada vector que se guarda queda anotado (original, automática, final, operaciones) en `vector_ediciones` para medir y mejorar la corrección automática.
 
+[ADR-029 · Revisión de links Andreani](ADR-029-revision-de-links-andreani.md): el worker abre los links de los clientes y guarda nombre y **seguimiento**; las etiquetas se emparejan por seguimiento antes que por nombre.
+
 1. Contexto (qué problema), 2. Decisión, 3. Alternativas descartadas, 4. Consecuencias (qué módulos cambian), 5. Fuente (issue, plan, conversación), 6. Fecha. Actualizar módulos, reglas y estados afectados.

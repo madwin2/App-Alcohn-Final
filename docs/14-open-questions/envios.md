@@ -106,6 +106,13 @@
 - **Impacto**: medio.
 - Respuesta: Lo tiene que hacer, no se manda hasta que no lo complete y pague.
 
+### Q-AND-005
+- **Módulo**: Andreani · **Estado**: documentada (2026-10-27)
+- **Pregunta**: ¿A qué horas tiene que correr la revisión automática de links? Depende de cuándo suele estar abierto el túnel de la oficina.
+- **Por qué importa**: si corre cuando el túnel está cerrado, se saltea; "Traer etiquetas" la corre igual, así que solo cambia cuán temprano se ve quién no completó el link.
+- **Impacto**: bajo.
+- Respuesta: Solo manual, como paso previo a "Traer etiquetas": el túnel se abre a mano y a veces se cae. La revisión por horario queda apagada (`ANDREANI_CHECK_LINKS_HOURS` vacío u `off`). Documentado en [WF-07](../03-workflows/WF-07-envio-andreani.md) y [ADR-029](../13-decisions/ADR-029-revision-de-links-andreani.md).
+
 ### Q-ENV-009
 - **Módulo**: Envíos · **Estado**: pendiente
 - **Pregunta**: ¿Cuál es el texto del mensaje estándar con el que se le piden los datos de envío (Correo) al cliente? ¿Conviene que lo mande el bot automáticamente al pasar a Transferido?

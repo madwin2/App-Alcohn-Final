@@ -1,7 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 import { envFileExists, loadConfig } from './config.js';
-import { enqueueGenerateJob, enqueueRefillJob, enqueueSyncLabelsJob, enqueueSyncTrackingJob } from './job-queue.js';
+import {
+  enqueueCheckLinksJob,
+  enqueueGenerateJob,
+  enqueueRefillJob,
+  enqueueSyncLabelsJob,
+  enqueueSyncTrackingJob,
+} from './job-queue.js';
+import { parseScheduleHours, startCheckLinksSchedule } from './check-links-schedule.js';
 import { shutdownWorker } from './generate-service.js';
 import { getWorkerJobSnapshot } from './job-status.js';
 import { countDisponibles } from './supabase.js';
@@ -198,6 +205,32 @@ async function handleSyncTracking(_req: IncomingMessage, res: ServerResponse): P
   });
 }
 
+async function handleCheckLinks(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const config = loadConfig();
+  if (!isAuthorized(req, config.apiKey)) {
+    sendJson(res, 401, { status: 'system_error', message: 'No autorizado' });
+    return;
+  }
+
+  void enqueueCheckLinksJob('manual')
+    .then((result) => {
+      console.log(`[andreani-worker] check-links fin: ${result.message}`);
+    })
+    .catch((error) => {
+      console.error(
+        '[andreani-worker] check-links error:',
+        error instanceof Error ? error.message : error,
+      );
+    });
+
+  sendJson(res, 202, {
+    status: 'accepted',
+    message: 'Revisando links de clientes en background.',
+    httpStatus: 202,
+    details: { async: true },
+  });
+}
+
 export function startServer(): void {
   const config = loadConfig();
 
@@ -255,6 +288,11 @@ export function startServer(): void {
         return;
       }
 
+      if (req.method === 'POST' && pathname === '/check-links') {
+        await handleCheckLinks(req, res);
+        return;
+      }
+
       sendJson(res, 404, { status: 'system_error', message: 'Ruta no encontrada' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -266,7 +304,9 @@ export function startServer(): void {
   server.timeout = 0;
   server.listen(config.port, () => {
     console.log(`[andreani-worker] escuchando en http://0.0.0.0:${config.port}`);
-    console.log('[andreani-worker] GET /health | GET /jobs | POST /generate | POST /refill | POST /sync-labels | POST /sync-tracking');
+    console.log(
+      '[andreani-worker] GET /health | GET /jobs | POST /generate | POST /refill | POST /sync-labels | POST /sync-tracking | POST /check-links',
+    );
     if (!envFileExists()) {
       console.warn('[andreani-worker] No hay .env — copiá .env.example → .env');
     }
@@ -277,6 +317,10 @@ export function startServer(): void {
     await shutdownWorker();
     server.close(() => process.exit(0));
   };
+
+  startCheckLinksSchedule(parseScheduleHours(process.env.ANDREANI_CHECK_LINKS_HOURS), () =>
+    enqueueCheckLinksJob('programada'),
+  );
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

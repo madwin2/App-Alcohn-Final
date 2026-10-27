@@ -56,7 +56,10 @@ export async function closeBrowser(): Promise<void> {
   }
 }
 
-async function newContext(config: WorkerConfig): Promise<BrowserContext> {
+async function newContext(
+  config: WorkerConfig,
+  options: { withSession?: boolean } = {},
+): Promise<BrowserContext> {
   const opts: Parameters<Browser['newContext']>[0] = {
     locale: 'es-AR',
     viewport: { width: 1400, height: 900 },
@@ -64,7 +67,7 @@ async function newContext(config: WorkerConfig): Promise<BrowserContext> {
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
   };
-  if (existsSync(config.storageStatePath)) {
+  if (options.withSession !== false && existsSync(config.storageStatePath)) {
     opts.storageState = config.storageStatePath;
   }
 
@@ -87,6 +90,20 @@ export async function saveStorageState(
 ): Promise<void> {
   await mkdir(path.dirname(config.storageStatePath), { recursive: true });
   await context.storageState({ path: config.storageStatePath });
+}
+
+/**
+ * Página sin sesión, para los links públicos que completan los clientes.
+ * Sale por el mismo proxy/túnel que el resto. El caller debe cerrar `page` + `context`.
+ */
+export async function openPublicPage(config: WorkerConfig): Promise<{
+  page: Page;
+  context: BrowserContext;
+}> {
+  const context = await newContext(config, { withSession: false });
+  const page = await context.newPage();
+  page.setDefaultTimeout(config.andreani.timeoutMs);
+  return { page, context };
 }
 
 /**

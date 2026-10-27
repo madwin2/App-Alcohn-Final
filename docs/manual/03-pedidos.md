@@ -64,7 +64,7 @@ Cada **fila** es un pedido. Si el pedido tiene varios ítems, tocá la celda **D
 | **Contacto** | Teléfono | Clic: copia el número |
 | **Tipo** | Tipo de sello: Clásico, 3MM, Alimento, Lacre, ABC, Personalizado (o el accesorio) | Cambiar el tipo. «Personalizado» abre una ventana para elegir rosca, profundidades y perfilado recto; en un sello Personalizado, «Editar personalización…» la vuelve a abrir |
 | **Diseño** | Nombre del diseño | Clic: abre los ítems |
-| **Empresa** | Transportista y modalidad (Andreani, Correo Argentino, Vía Cargo, DHL, Retiro en Persona) | Cambiarla. Con Andreani muestra el link asignado (clic para copiarlo); con DHL, un botón para copiar la dirección |
+| **Empresa** | Transportista y modalidad (Andreani, Correo Argentino, Vía Cargo, DHL, Retiro en Persona) | Cambiarla. Con Andreani muestra el link asignado (clic para copiarlo; al pasar el mouse dice si el cliente ya lo completó y a nombre de quién); con DHL, un botón para copiar la dirección |
 | **Seña** | Lo que pagó de seña | Editar (en modo edición) |
 | **Valor** | Precio total | Editar (en modo edición) |
 | **Restante** | Lo que falta pagar, **incluido el envío** si corresponde. "(envío pendiente)" = todavía no se sabe el costo del envío | — |

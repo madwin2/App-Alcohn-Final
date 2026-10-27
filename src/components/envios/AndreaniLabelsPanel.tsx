@@ -194,6 +194,16 @@ export function AndreaniLabelsPanel({
 
   const candidates = useMemo(() => andreaniAssignCandidatesFromOrders(orders), [orders]);
 
+  /** Seguimiento → pedido, según lo que mostró el link del cliente (revisión de links). */
+  const suggestedOrderByTracking = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of candidates) if (c.linkTracking) map.set(c.linkTracking, c.id);
+    return map;
+  }, [candidates]);
+
+  const pickFor = (row: AndreaniEtiquetaRow): string =>
+    assignPick[row.id] || suggestedOrderByTracking.get(row.tracking) || '';
+
   const phoneByOrderId = useMemo(() => {
     const map = new Map<string, string>();
     for (const order of orders) {
@@ -369,8 +379,7 @@ export function AndreaniLabelsPanel({
     }
   };
 
-  const handleAssign = async (etiquetaId: string) => {
-    const ordenId = assignPick[etiquetaId];
+  const handleAssign = async (etiquetaId: string, ordenId: string) => {
     if (!ordenId) {
       toast({ title: 'Elegí un pedido', variant: 'destructive' });
       return;
@@ -856,7 +865,7 @@ export function AndreaniLabelsPanel({
                 <td className={`${enviosTd} font-mono text-xs tabular-nums`}>{row.tracking}</td>
                 <td className={`${enviosTd} min-w-[180px]`}>
                   <Select
-                    value={assignPick[row.id] || ''}
+                    value={pickFor(row)}
                     onValueChange={(value) => setAssignPick((prev) => ({ ...prev, [row.id]: value }))}
                   >
                     <SelectTrigger className="h-8 text-xs">
@@ -870,6 +879,11 @@ export function AndreaniLabelsPanel({
                       ))}
                     </SelectContent>
                   </Select>
+                  {!assignPick[row.id] && suggestedOrderByTracking.has(row.tracking) ? (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      Sugerido: el cliente completó el link con este seguimiento
+                    </div>
+                  ) : null}
                 </td>
                 <td className={`${enviosTd} text-right`}>
                   <div className="inline-flex items-center gap-1">
@@ -894,8 +908,8 @@ export function AndreaniLabelsPanel({
                       type="button"
                       size="sm"
                       className="h-7"
-                      disabled={!assignPick[row.id] || assigningId === row.id}
-                      onClick={() => void handleAssign(row.id)}
+                      disabled={!pickFor(row) || assigningId === row.id}
+                      onClick={() => void handleAssign(row.id, pickFor(row))}
                     >
                       {assigningId === row.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Asignar'}
                     </Button>

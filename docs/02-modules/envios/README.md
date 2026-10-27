@@ -47,7 +47,7 @@ Contadores por empresa en el header (`EnviosHeader`, `EnviosHub`). Changelog #5:
 | **Quitar datos de envío** | `direccion_id = NULL`. | — |
 | **Reiniciar "Sin envío"** (masivo) | Todas las órdenes de la tabla vuelven a `Sin envio` ("si hubo error en el CSV"). | — |
 | **Copiar teléfono** | Portapapeles. | 🔶 Para contactar al cliente por fuera. |
-| **Andreani**: generar links, traer etiquetas, actualizar seguimientos, asignar/liberar/marcar errónea, descargar PDF unido (100×152) | Ver [07-integrations/andreani.md](../../07-integrations/andreani.md). | `AndreaniPoolCard`, `AndreaniLabelsPanel` |
+| **Andreani**: generar links, revisar links de clientes (automático, [ADR-029](../../13-decisions/ADR-029-revision-de-links-andreani.md)), traer etiquetas, actualizar seguimientos, asignar/liberar/marcar errónea, descargar PDF unido (100×152) | Ver [07-integrations/andreani.md](../../07-integrations/andreani.md). | `AndreaniPoolCard`, `AndreaniLabelsPanel` |
 
 ## Pedidos web
 

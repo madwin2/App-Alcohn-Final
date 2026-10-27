@@ -720,6 +720,12 @@ export interface Database {
           creado_en: string;
           asignado_en: string | null;
           nota: string | null;
+          /** Revisión de links (andreani-worker check-links). */
+          revisado_en: string | null;
+          usado_en: string | null;
+          pedido_andreani_id: string | null;
+          destinatario: string | null;
+          tracking: string | null;
         };
         Insert: {
           id?: string;
@@ -729,6 +735,11 @@ export interface Database {
           creado_en?: string;
           asignado_en?: string | null;
           nota?: string | null;
+          revisado_en?: string | null;
+          usado_en?: string | null;
+          pedido_andreani_id?: string | null;
+          destinatario?: string | null;
+          tracking?: string | null;
         };
         Update: Partial<Database['public']['Tables']['envios_andreani_links']['Insert']>;
       };

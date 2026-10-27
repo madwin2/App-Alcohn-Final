@@ -109,6 +109,16 @@ export interface ReworkCharge {
 
 export type OrderType = 'VENTA' | 'PRUEBA' | 'REGALO' | 'GARANTIA';
 
+/** Revisión del link Andreani asignado (`envios_andreani_links`, worker check-links). */
+export interface AndreaniLinkRevision {
+  revisadoEn: string | null;
+  /** Cuándo se vio completado por primera vez; null = sin usar a la fecha de `revisadoEn`. */
+  usadoEn: string | null;
+  /** Nombre con el que se completó (puede no ser el cliente). */
+  destinatario: string | null;
+  tracking: string | null;
+}
+
 export interface Order {
   id: string;
   customer: Customer;
@@ -161,6 +171,8 @@ export interface Order {
   };
   /** Link Andreani de pago asignado desde el pool (`envios_andreani_links`). */
   andreaniLinkUrl?: string | null;
+  /** Lo que leyó la revisión de links del worker sobre el link asignado (null = nunca revisado). */
+  andreaniLinkRevision?: AndreaniLinkRevision | null;
   /**
    * True si la orden tiene o tuvo un link Andreani con `orden_id`
    * (estado `asignado` o `descartado`). Economía no imputa ese envío a ventas.

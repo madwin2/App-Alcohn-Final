@@ -51,3 +51,23 @@ export interface SyncTrackingResult {
   pending: number;
   notFound: number;
 }
+
+export interface CheckLinksResult {
+  status: GenerateStatus;
+  message: string;
+  httpStatus: number;
+  checked: number;
+  sinUsar: number;
+  usados: number;
+  conSeguimiento: number;
+  /** Etiquetas huérfanas que se asignaron solas por el seguimiento del link. */
+  asignadas: number;
+  /** Andreani no respondió (túnel de oficina cerrado / IP bloqueada): no se revisó nada más. */
+  unreachable?: boolean;
+  details?: {
+    /** Seguimientos que el link atribuye a un pedido pero ya están asignados a otro. */
+    conflictos?: string[];
+    errores?: number;
+    artifactDir?: string;
+  };
+}

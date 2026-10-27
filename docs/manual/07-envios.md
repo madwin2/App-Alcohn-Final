@@ -126,7 +126,7 @@ Cuando los clientes completan y pagan, sus etiquetas aparecen en el portal. En e
 
 | Botón | Qué hace |
 |---|---|
-| **Traer etiquetas** | Baja del portal las etiquetas nuevas (las pendientes de ingreso), lee el seguimiento y el destinatario, y las empareja con los pedidos por nombre. Si alguna que ya tenías **ya no** está pendiente de ingreso (la llevaron a Andreani), la saca de la lista activa y el pedido pasa a **Despachado** (el cliente recibe el seguimiento) |
+| **Traer etiquetas** | Primero revisa los links que les mandaste a los clientes (ver abajo). Después baja del portal las etiquetas nuevas (las pendientes de ingreso), lee el seguimiento y el destinatario, y las empareja con los pedidos: primero por el seguimiento que mostró el link y, si no, por nombre. Si alguna que ya tenías **ya no** está pendiente de ingreso (la llevaron a Andreani), la saca de la lista activa y el pedido pasa a **Despachado** (el cliente recibe el seguimiento) |
 | **Cargar PDF** | Subir etiquetas bajadas a mano del portal |
 | **Actualizar seguimientos** | Revisa en el portal si Andreani ya recibió los paquetes. Los que ya no están "Pendiente de ingreso" pasan a **Despachado**. Sirve si no corriste Traer etiquetas después del ingreso |
 | **Descargar todas (N)** | Une en un PDF (hojas 100 × 152 mm) todas las etiquetas listas para despachar |
@@ -134,8 +134,10 @@ Cuando los clientes completan y pagan, sus etiquetas aparecen en el portal. En e
 Las etiquetas se ven en tres grupos:
 
 - **Asignadas**: emparejadas con un pedido. Muestran destinatario, seguimiento, pedido, diseño, venta y si ya bajaste el PDF.
-- **Huérfanos**: no se pudieron emparejar. Elegí el pedido (**Elegir pedido…**) y tocá **Asignar**. El pedido pasa a **Etiqueta Lista** (la venta no cambia).
+- **Huérfanos**: no se pudieron emparejar. Elegí el pedido (**Elegir pedido…**) y tocá **Asignar**. El pedido pasa a **Etiqueta Lista** (la venta no cambia). Si el link de un cliente mostró ese seguimiento, el pedido ya aparece elegido (dice **Sugerido: el cliente completó el link con este seguimiento**). En la lista **Elegir pedido…**, al lado del cliente aparece **(link: …)** con el nombre que puso en Andreani.
 - **Erróneas**: duplicadas, mal generadas o que no vas a usar. No vuelven a aparecer en Huérfanos. Si más adelante corresponden a un pedido, se asignan desde acá.
+
+🤖 **Revisión de links**: a veces el cliente completa el link **a nombre de otra persona** y no avisa, y la etiqueta queda huérfana. Por eso la app abre sola los links de los pedidos que todavía no tienen etiqueta y anota a nombre de quién quedó el envío y con qué número de seguimiento. Lo hace al tocar **Traer etiquetas** (por eso necesita el **túnel de la oficina** abierto, igual que el resto del botón). Si la etiqueta ya estaba en Huérfanos, la asigna sola. En **Pedidos**, pasando el mouse por el ícono del link de Andreani ves **El cliente todavía no completó el link** o **Etiqueta a nombre de … · seguimiento**.
 
 Acciones sobre una etiqueta (menú **Más acciones**): **Liberar a huérfano**, **Marcar como errónea**, **Devolver a huérfanos**, **Eliminar PDF**. Al liberar una etiqueta, elegís qué hacer con el pedido: **Sin envío** (queda disponible para otra etiqueta) o **Seguimiento enviado** (cierra el envío, con número manual o en blanco).
 

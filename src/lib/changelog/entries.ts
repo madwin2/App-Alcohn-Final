@@ -1352,6 +1352,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 74,
+    date: '2026-10-27',
+    title: 'Links de Andreani a nombre de otra persona',
+    version: '1.92',
+    slides: [
+      {
+        heading: 'La app revisa los links de Andreani',
+        body: 'Si el cliente completa el link a nombre de otra persona, la app lo detecta: abre el link, anota a nombre de quién quedó y con qué seguimiento, y empareja la etiqueta por ese número. Lo hace solo al tocar «Traer etiquetas».',
+        icon: Link2,
+      },
+      {
+        heading: 'Mirá si el cliente ya completó el link',
+        body: 'En Pedidos, pasá el mouse por el ícono del link de Andreani: dice si todavía no lo completó o a nombre de quién está la etiqueta. En Huérfanos, el pedido sugerido ya aparece elegido.',
+        icon: Truck,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

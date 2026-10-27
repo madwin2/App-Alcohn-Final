@@ -1,5 +1,5 @@
 import { supabase } from '../client';
-import { Order, OrderItem, Customer, NewOrderFormData, Task, ShippingCarrier, ShippingServiceDest, ShippingState, ReworkCharge } from '../../types/index';
+import { Order, OrderItem, Customer, NewOrderFormData, Task, ShippingCarrier, ShippingServiceDest, ShippingState, ReworkCharge, AndreaniLinkRevision } from '../../types/index';
 import { 
   mapOrdenToOrder, 
   mapSelloToOrderItem, 
@@ -389,10 +389,12 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
 
   let andreaniUrlsByOrden = new Map<string, string>();
   let andreaniTuvoLink = new Set<string>();
+  let andreaniRevisiones = new Map<string, AndreaniLinkRevision>();
   try {
     const info = await getAndreaniLinksInfoByOrdenIds(ordenIds);
     andreaniUrlsByOrden = info.urlsAsignadas;
     andreaniTuvoLink = info.tuvoLink;
+    andreaniRevisiones = info.revisiones;
   } catch (error) {
     // Tabla/migración aún no aplicada: no bloquear listado de pedidos
     console.warn('Error fetching Andreani links:', error);
@@ -419,6 +421,7 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
         : null;
     const order = mapOrdenToOrder(orden, cliente, sellosDeOrden, tareasDeOrden, takenBy, shippingDataLoadedBy);
     order.andreaniLinkUrl = andreaniUrlsByOrden.get(orden.id) ?? null;
+    order.andreaniLinkRevision = andreaniRevisiones.get(orden.id) ?? null;
     order.andreaniTuvoLink = andreaniTuvoLink.has(orden.id);
     order.reworkCharges = reworkChargesByOrden.get(orden.id) ?? [];
     return order;
@@ -575,6 +578,7 @@ export const getOrderById = async (orderId: string): Promise<Order | null> => {
     try {
       const info = await getAndreaniLinksInfoByOrdenIds([orderId]);
       order.andreaniLinkUrl = info.urlsAsignadas.get(orderId) ?? null;
+      order.andreaniLinkRevision = info.revisiones.get(orderId) ?? null;
       order.andreaniTuvoLink = info.tuvoLink.has(orderId);
     } catch (linkError) {
       console.warn('Error fetching Andreani link for order:', linkError);

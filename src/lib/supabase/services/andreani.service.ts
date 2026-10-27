@@ -1,4 +1,5 @@
 import { supabase } from '../client';
+import type { AndreaniLinkRevision } from '@/lib/types';
 import {
   andreaniLinkFreshSinceIso,
   isEmpresaAndreani,
@@ -105,6 +106,36 @@ export type AndreaniLinksByOrden = {
    * cliente en Andreani y no entra a Alcohn.
    */
   tuvoLink: Set<string>;
+  /** Lo que leyó la revisión de links del worker sobre el link `asignado` (solo si se revisó). */
+  revisiones: Map<string, AndreaniLinkRevision>;
+};
+
+type LinkInfoRow = {
+  orden_id: string | null;
+  url: string;
+  estado: string;
+  revisado_en?: string | null;
+  usado_en?: string | null;
+  destinatario?: string | null;
+  tracking?: string | null;
+};
+
+const LINK_INFO_COLUMNS = 'orden_id, url, estado, revisado_en, usado_en, destinatario, tracking';
+
+const selectLinkInfo = async (chunk: string[]): Promise<LinkInfoRow[]> => {
+  const { data, error } = await supabase
+    .from('envios_andreani_links')
+    .select(LINK_INFO_COLUMNS)
+    .in('orden_id', chunk);
+  if (!error) return (data ?? []) as LinkInfoRow[];
+  // 42703 = columna inexistente: migración de revisión de links aún no aplicada.
+  if (error.code !== '42703') throw error;
+  const fallback = await supabase
+    .from('envios_andreani_links')
+    .select('orden_id, url, estado')
+    .in('orden_id', chunk);
+  if (fallback.error) throw fallback.error;
+  return (fallback.data ?? []) as LinkInfoRow[];
 };
 
 /** Links Andreani por orden: URL vigente + rastro histórico (asignado/descartado). */
@@ -113,26 +144,30 @@ export const getAndreaniLinksInfoByOrdenIds = async (
 ): Promise<AndreaniLinksByOrden> => {
   const urlsAsignadas = new Map<string, string>();
   const tuvoLink = new Set<string>();
+  const revisiones = new Map<string, AndreaniLinkRevision>();
   const ids = [...new Set(ordenIds.filter(Boolean))];
-  if (!ids.length) return { urlsAsignadas, tuvoLink };
+  if (!ids.length) return { urlsAsignadas, tuvoLink, revisiones };
 
   const CHUNK = 150;
   for (let i = 0; i < ids.length; i += CHUNK) {
     const chunk = ids.slice(i, i + CHUNK);
-    const { data, error } = await supabase
-      .from('envios_andreani_links')
-      .select('orden_id, url, estado')
-      .in('orden_id', chunk);
-    if (error) throw error;
-    for (const row of data ?? []) {
+    for (const row of await selectLinkInfo(chunk)) {
       if (!row.orden_id) continue;
       tuvoLink.add(row.orden_id);
       if (row.estado === 'asignado' && row.url) {
         urlsAsignadas.set(row.orden_id, row.url);
+        if (row.revisado_en) {
+          revisiones.set(row.orden_id, {
+            revisadoEn: row.revisado_en,
+            usadoEn: row.usado_en ?? null,
+            destinatario: row.destinatario ?? null,
+            tracking: row.tracking ?? null,
+          });
+        }
       }
     }
   }
-  return { urlsAsignadas, tuvoLink };
+  return { urlsAsignadas, tuvoLink, revisiones };
 };
 
 /** Mapa ordenId → url para links asignados (carga en lote de la tabla de pedidos). */

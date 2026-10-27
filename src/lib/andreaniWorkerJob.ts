@@ -1,6 +1,6 @@
 export type AndreaniWorkerJob = {
   phase: 'idle' | 'queued' | 'running' | 'done' | 'error';
-  kind: 'generate' | 'refill' | 'sync-labels' | 'sync-tracking' | null;
+  kind: 'generate' | 'refill' | 'sync-labels' | 'sync-tracking' | 'check-links' | null;
   detail: string;
   queueDepth: number;
   startedAt: string | null;
@@ -35,6 +35,8 @@ export function andreaniJobKindLabel(kind: AndreaniWorkerJob['kind']): string {
       return 'Traer etiquetas';
     case 'sync-tracking':
       return 'Actualizar seguimientos';
+    case 'check-links':
+      return 'Revisar links de clientes';
     default:
       return 'Worker';
   }

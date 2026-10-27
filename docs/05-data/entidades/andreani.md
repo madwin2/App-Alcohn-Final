@@ -8,8 +8,10 @@
 | `estado` | `disponible` → `asignado` → (`descartado`) |
 | `orden_id` | Orden que lo recibió (SET NULL al borrar la orden) |
 | `creado_en`, `asignado_en`, `nota` | Frescura: 30 h desde `creado_en` |
+| `revisado_en`, `usado_en` | Revisión de links (worker `check-links`): última consulta y primera vez que se vio completado (`usado_en` NULL = sin usar) |
+| `pedido_andreani_id`, `destinatario`, `tracking` | Del link completado: id del pedido en Andreani, **nombre con el que lo completó** (puede no ser el cliente) y número de seguimiento. `tracking` se usa para emparejar la etiqueta (BR-AND-008) |
 
-Creado por el **andreani-worker**. Asignado por `asignar_link_andreani` (edge `webhook-bot`/`confirm-web-order`). Liberado por `liberar_link_andreani`.
+Creado por el **andreani-worker**. Asignado por `asignar_link_andreani` (edge `webhook-bot`/`confirm-web-order`). Liberado por `liberar_link_andreani` (si `usado_en` no es NULL, lo descarta en vez de devolverlo al pool). Revisado por el worker (`check-links`); migración [`migration_envios_andreani_links_revision.sql`](../../../migration_envios_andreani_links_revision.sql).
 
 ## `envios_andreani_etiquetas` — etiquetas descargadas del portal (133 filas)
 

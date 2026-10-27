@@ -18,7 +18,8 @@ import {
   splitPdfPages,
 } from './pdf/enrich-zebra.js';
 import { shouldMarkDespachado, isPendienteIngreso } from './map-andreani-portal-estado.js';
-import { matchDestinatario, type MatchCandidate } from './match-names.js';
+import { matchEtiqueta, type MatchCandidate } from './match-names.js';
+import { runCheckLinksJob } from './check-links-service.js';
 import {
   applyTrackingToOrder,
   insertEtiqueta,
@@ -42,6 +43,8 @@ function toMatchCandidates(rows: LabelMatchCandidate[]): MatchCandidate[] {
     ordenId: r.ordenId,
     customerName: r.customerName,
     shippingName: r.shippingName,
+    linkName: r.linkName,
+    linkTracking: r.linkTracking,
   }));
 }
 
@@ -144,7 +147,7 @@ async function persistPage(
       if (existing) enrichInput = toEnrichInput(existing);
     } else {
       const openCandidates = candidates.filter((c) => !usedOrdenIds.has(c.ordenId));
-      const match = matchDestinatario(ship.destinatario, toMatchCandidates(openCandidates));
+      const match = matchEtiqueta(ship.tracking, ship.destinatario, toMatchCandidates(openCandidates));
       let ordenId: string | null = null;
       let estado: 'asignada' | 'huerfano' = 'huerfano';
       let nota: string | null = null;
@@ -241,6 +244,22 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
       assigned: 0,
       orphans: 0,
     };
+  }
+
+  // Antes de emparejar: a nombre de quién y con qué seguimiento quedó cada link.
+  // Si falla (p. ej. un link raro), se sigue igual con el emparejamiento por nombre.
+  let linkCheckNote = '';
+  try {
+    setJobDetail('Revisando links de clientes…');
+    const linkCheck = await runCheckLinksJob();
+    if (linkCheck.checked || linkCheck.unreachable || linkCheck.status !== 'ok') {
+      linkCheckNote = ` ${linkCheck.message}`;
+    }
+  } catch (error) {
+    console.warn(
+      '[andreani] sync-labels: revisión de links falló',
+      error instanceof Error ? error.message : error,
+    );
   }
 
   const known = await listKnownTrackings();
@@ -417,7 +436,7 @@ export async function runSyncLabelsJob(): Promise<SyncLabelsResult> {
 
     return {
       status: downloadFailedPages > 0 && !(assigned + orphans + refreshed) ? 'system_error' : 'ok',
-      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Reintento sin PDF: ${retriedMissingPdf}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}${dispatched ? `. → Despachado: ${dispatched}` : ''}. Páginas: ${pagesVisited}${portalTotal ? ` de ${Math.ceil(portalTotal / 10)} (${portalTotal} en portal)` : ''}.${failNote}`,
+      message: `Nuevos ${assigned + orphans} (${assigned} asignados, ${orphans} huérfanos). PDFs regenerados: ${refreshed}. Reintento sin PDF: ${retriedMissingPdf}. Omitidos: ${skipped}. Ya en camino/otro estado: ${skippedNotPendiente}${dispatched ? `. → Despachado: ${dispatched}` : ''}. Páginas: ${pagesVisited}${portalTotal ? ` de ${Math.ceil(portalTotal / 10)} (${portalTotal} en portal)` : ''}.${failNote}${linkCheckNote}`,
       httpStatus: downloadFailedPages > 0 && !(assigned + orphans + refreshed) ? 503 : 200,
       skipped,
       downloaded,
