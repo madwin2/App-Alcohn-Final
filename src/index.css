@@ -91,6 +91,26 @@
   }
 }
 
+/* —— Nuevo pedido dentro del panel lateral de la extensión de WhatsApp ——
+   El panel mide ~400 px: las grillas del formulario (2, 3 o 6 columnas)
+   pasan a una sola y las botoneras se acomodan en varias líneas. */
+@media (max-width: 640px) {
+  .pedido-en-panel .grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .pedido-en-panel .grid > * {
+    grid-column: auto !important;
+  }
+  .pedido-en-panel .justify-between {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .pedido-en-panel h1 {
+    font-size: 1.05rem;
+    line-height: 1.4;
+  }
+}
+
 /* —— Centro Alcohn: lectura del manual —— */
 .centro-md {
   max-width: 42rem;

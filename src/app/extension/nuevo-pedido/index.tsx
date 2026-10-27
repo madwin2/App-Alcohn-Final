@@ -18,6 +18,22 @@ import type { NewOrderFormData, Order } from '@/lib/types/index';
 
 const CLAVE_PREFILL = 'extension-nuevo-pedido';
 
+/** Abierta dentro del panel lateral de la extensión (iframe) y no en una pestaña. */
+const EN_PANEL = window.self !== window.top;
+
+/**
+ * Le avisa al panel de la extensión qué pasó (cancelado, creado, cerrar) para
+ * que vuelva al chat. Solo el evento: ningún dato del cliente sale de acá.
+ */
+function avisarPanel(evento: 'cancelado' | 'creado' | 'cerrar') {
+  window.parent.postMessage({ fuente: 'alcohn-app', tipo: 'nuevo-pedido', evento }, '*');
+}
+
+function cerrar(evento: 'cancelado' | 'cerrar') {
+  if (EN_PANEL) avisarPanel(evento);
+  else window.close();
+}
+
 /**
  * Lee los datos del chat del fragmento (#d=...) y los pasa a sessionStorage:
  * así sobreviven al login y no quedan en la barra de direcciones.
@@ -57,9 +73,11 @@ function Cargando({ texto }: { texto: string }) {
 }
 
 /**
- * "Nuevo pedido" abierto desde la extensión de WhatsApp, en una ventana aparte.
- * Es el mismo formulario de Pedidos (NewOrderDialog), con el cliente del chat
- * precargado. Va fuera del layout con menú: la ventana es solo para cargar.
+ * "Nuevo pedido" abierto desde la extensión de WhatsApp, dentro de su panel
+ * lateral (o en una pestaña, si se abre el link directo). Es el mismo
+ * formulario de Pedidos (NewOrderDialog), con el cliente del chat precargado.
+ * Va fuera del layout con menú. En el panel (~400 px) las grillas pasan a una
+ * columna (.pedido-en-panel, index.css).
  */
 export default function ExtensionNuevoPedidoPage() {
   const { isAuthenticated, loading, user } = useAuth();
@@ -137,7 +155,7 @@ function NuevoPedidoDesdeChat({ prefill }: { prefill: PrefillExtension | null })
             <h1 className="text-xl font-semibold">Pedido creado</h1>
             <p className="text-sm text-muted-foreground">{nombre ? `Para ${nombre}.` : null} Ya figura en Pedidos.</p>
           </div>
-          <div className="flex justify-center gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
             <Button
               variant="outline"
               onClick={() => {
@@ -148,7 +166,7 @@ function NuevoPedidoDesdeChat({ prefill }: { prefill: PrefillExtension | null })
             >
               Cargar otro para este cliente
             </Button>
-            <Button onClick={() => window.close()}>Cerrar ventana</Button>
+            <Button onClick={() => cerrar('cerrar')}>{EN_PANEL ? 'Volver al chat' : 'Cerrar ventana'}</Button>
           </div>
         </div>
       </Centrado>
@@ -156,8 +174,8 @@ function NuevoPedidoDesdeChat({ prefill }: { prefill: PrefillExtension | null })
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-4xl p-6 sm:p-8">
+    <div className="pedido-en-panel min-h-screen bg-background">
+      <div className="mx-auto max-w-4xl p-4 sm:p-8">
         {prefill && (
           <p className="mb-6 rounded-lg border border-white/15 bg-white/[0.03] px-4 py-3 text-sm text-muted-foreground">
             {yaEnLaApp
@@ -173,10 +191,11 @@ function NuevoPedidoDesdeChat({ prefill }: { prefill: PrefillExtension | null })
           onCreated={(order) => {
             creadoRef.current = true;
             setCreado(order);
+            if (EN_PANEL) avisarPanel('creado');
           }}
           onOpenChange={(abierto) => {
-            // Cancelar cierra la ventana; después de crear se muestra el aviso.
-            if (!abierto && !creadoRef.current) window.close();
+            // Cancelar vuelve al chat (o cierra la pestaña); después de crear se muestra el aviso.
+            if (!abierto && !creadoRef.current) cerrar('cancelado');
           }}
         />
       </div>

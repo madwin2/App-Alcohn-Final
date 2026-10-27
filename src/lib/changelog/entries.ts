@@ -1360,7 +1360,7 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
     slides: [
       {
         heading: 'Cargá el pedido desde el chat de WhatsApp',
-        body: 'En WhatsApp Web, con la extensión de Alcohn, tocá «Crear pedido» en el chat. Se abre el mismo formulario de Nuevo pedido con el teléfono, el nombre y el mail del cliente ya cargados. La primera vez te pide entrar con tu usuario de la app.',
+        body: 'En WhatsApp Web, con la extensión de Alcohn, tocá «Crear pedido» en el chat. En el panel lateral se abre el mismo formulario de Nuevo pedido con el teléfono, el nombre y el mail del cliente ya cargados. La primera vez te pide entrar con tu usuario de la app.',
         icon: MessageCircle,
       },
     ],

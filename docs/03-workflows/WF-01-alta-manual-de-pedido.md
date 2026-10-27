@@ -10,7 +10,7 @@
 ## Pasos
 
 1. ❓ Conversación de venta fuera de Alcohn AI (diseño, medida, precio, seña, envío) → [FR-01](../10-operational-boundaries/README.md#fr-01).
-2. Pedidos → **Nuevo pedido** (`NewOrderDialog`). Alternativa (2026-10-27): botón **Crear pedido** de la extensión en el chat de WhatsApp Web → ventana `/extension/nuevo-pedido` con el mismo formulario y el cliente precargado (ver [Pedidos](../02-modules/pedidos/README.md#nuevo-pedido-desde-whatsapp-2026-10-27)).
+2. Pedidos → **Nuevo pedido** (`NewOrderDialog`). Alternativa (2026-10-27): botón **Crear pedido** de la extensión en el chat de WhatsApp Web → `/extension/nuevo-pedido` dentro del panel lateral de la extensión, con el mismo formulario y el cliente precargado (ver [Pedidos](../02-modules/pedidos/README.md#nuevo-pedido-desde-whatsapp-2026-10-27)).
 3. **Paso 1 — Cliente**: nombre, apellido, teléfono, email, canal, casilla **pedido internacional** (si se marca, país obligatorio: México, Colombia, Perú o Chile), casilla "no enviar confirmación por WhatsApp".
 4. **Paso 2 — Diseños** (uno o más). Por cada uno: tipo de ítem, tipo de sello, nombre del diseño, medida, notas, **valor** y **seña** (se sugiere el precio desde la tabla de Precios según medida; en pedidos internacionales se convierte a la moneda local), empresa/servicio de envío (**DHL** por defecto si es internacional), estados iniciales (fabricación, venta, envío), prioridad, fecha límite, archivos (base, vector, foto). Para abecedarios: tipografía, altura, juegos de mayúsculas/minúsculas, letras extra, caracteres especiales. Para soldador: potencia.
 5. **Paso 3 — Resumen** → Crear. Si algún vector no es SVG, aparece la advertencia y hay que confirmar.
