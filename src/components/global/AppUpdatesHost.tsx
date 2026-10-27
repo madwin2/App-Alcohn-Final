@@ -17,7 +17,10 @@ import { isFbTestUser } from '@/lib/auth/access';
 export function AppUpdatesHost() {
   const location = useLocation();
   const { user } = useAuth();
-  const isSandboxRoute = location.pathname === '/login' || location.pathname === '/stock-pendiente';
+  const isSandboxRoute =
+    location.pathname === '/login' ||
+    location.pathname === '/stock-pendiente' ||
+    location.pathname.startsWith('/extension/');
   const isReviewerAccount = isFbTestUser(user);
 
   const { updateAvailable, isOutdated, dismiss, applyUpdate } = useAppVersionCheck();

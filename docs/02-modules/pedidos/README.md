@@ -85,6 +85,16 @@ Ver [04-business-rules/pedidos-y-venta.md](../../04-business-rules/pedidos-y-ven
 - `src/lib/abecedario/*`, `src/lib/precios/cotizacionMedida.ts` (cotización automática en el alta)
 - Documento previo: `info_de_pagina_pedidos.md` (raíz; 2025-11, parcialmente desactualizado)
 
+## Nuevo pedido desde WhatsApp (2026-10-27)
+
+✅ La extensión de Chrome de los vendedores (repo del bot, `extensiones/whatsapp-bot-labels`) tiene un botón **Crear pedido** en el chat abierto. Abre en una ventana aparte `/extension/nuevo-pedido` (`src/app/extension/nuevo-pedido/index.tsx`): el **mismo** `NewOrderDialog` en modo página (`layout="page"`), sin menú lateral.
+
+- **Datos precargados** (`src/lib/pedidos/prefillExtension.ts`): la extensión manda teléfono del chat, nombre/apellido (del cliente del bot o del contacto de WhatsApp) y mail en el fragmento `#d=` (no llega al servidor). La página lo pasa a `sessionStorage` y limpia la URL. Si el cliente ya existe en la app (`findCustomer`), **mandan los datos de la app**; el chat solo completa lo que falta. Todo editable.
+- **Login**: si no hay sesión, la página muestra el login de la app ahí mismo. Cada vendedor entra con su usuario, así `taken_by` queda bien. La sesión se comparte con la app abierta en el mismo Chrome.
+- Después de crear: pantalla "Pedido creado" con *Cerrar ventana* / *Cargar otro para este cliente*. Cancelar cierra la ventana. El resto (WhatsApp `pedido_registrado`, triggers) es igual que en Pedidos.
+- `vercel.json` reescribe `/extension/*` a `index.html` (las demás rutas no tienen esa regla: abrir `/pedidos` directo da 404 en Vercel, ver [audits](../../audits/README.md)).
+- No se muestran las notas de tareas ni las novedades en esa ventana (`OrderTasksOverlay`, `AppUpdatesHost`).
+
 ## Tipo Personalizado (2026-10-22)
 
 Tipo de sello con mecanizado a medida (rosca, profundidad exterior y de grabado, perfilado recto 1 mm), elegido en un modal y guardado en `item_config.mecanizado`. Ver [mecanizado personalizado](mecanizado-personalizado.md). Migración `migration_sello_tipo_personalizado.sql` aplicada el 2026-10-22.

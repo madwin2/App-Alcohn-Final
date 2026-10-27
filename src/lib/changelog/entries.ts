@@ -1353,6 +1353,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
     ],
   },
   {
+    id: 73,
+    date: '2026-10-27',
+    title: 'Pedidos desde WhatsApp',
+    version: '1.91',
+    slides: [
+      {
+        heading: 'Cargá el pedido desde el chat de WhatsApp',
+        body: 'En WhatsApp Web, con la extensión de Alcohn, tocá «Crear pedido» en el chat. Se abre el mismo formulario de Nuevo pedido con el teléfono, el nombre y el mail del cliente ya cargados. La primera vez te pide entrar con tu usuario de la app.',
+        icon: MessageCircle,
+      },
+    ],
+  },
+  {
     id: 74,
     date: '2026-10-27',
     title: 'Links de Andreani a nombre de otra persona',

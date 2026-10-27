@@ -25,7 +25,10 @@ export function OrderTasksOverlay() {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastPosRef = useRef({ x: 0, y: 0 });
 
-  const isLoginRoute = location.pathname === '/login' || location.pathname === '/stock-pendiente';
+  const isLoginRoute =
+    location.pathname === '/login' ||
+    location.pathname === '/stock-pendiente' ||
+    location.pathname.startsWith('/extension/');
   const isReviewerAccount = isFbTestUser(user);
 
   const fetchTasks = useCallback(async () => {

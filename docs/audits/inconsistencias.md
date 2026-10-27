@@ -154,6 +154,13 @@ Hallazgos detectados durante la documentación (2026-09-27). **No se corrigió n
 - **Evidencia** (2026-10-22): la fila expandida de Pedidos arma `{ ...order, items: [item] }`, pero `CellTipo` llama `onTipoChange(order.id, tipo)` sin `itemId`. Entonces `OrdersTable.handleTipoChange` busca el pedido real y actualiza **todos** sus ítems. El tipo Personalizado nuevo no tiene este problema: aplica a los ítems de la fila.
 - **Impacto**: en un pedido con varios sellos, cambiar el tipo de uno solo los cambia a todos. No se corrigió de paso (AGENTS §4).
 
+<a id="aud-inc-028"></a>
+
+### AUD-INC-028 · En Vercel, abrir una ruta directo (o recargar) da 404
+- **Evidencia** (2026-10-27): `GET https://app-alcohn-final.vercel.app/pedidos` responde 404; `/` responde 200. No hay `vercel.json` con la regla de SPA, así que solo funciona entrar por la raíz y navegar.
+- **Alcance**: todas las rutas de React Router. `/extension/*` sí tiene la regla (necesaria para la ventana de la extensión de WhatsApp).
+- **Impacto**: recargar la página en cualquier pantalla que no sea Inicio muestra 404. No se corrigió de paso (AGENTS §4): la regla general sería `/((?!api/).*)` → `/index.html`.
+
 <a id="aud-inc-029"></a>
 
 ### AUD-INC-029 · Reasignar un link Andreani vencido no mira si el cliente ya lo completó

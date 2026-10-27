@@ -35,6 +35,7 @@ import StockPendienteSandboxPage from './app/stock-pendiente/index'
 import CentroPage from './app/centro/index'
 import PerfilPage from './app/perfil/index'
 import CorchoPage from './app/corcho/index'
+import ExtensionNuevoPedidoPage from './app/extension/nuevo-pedido/index'
 import { AuthenticatedLayout } from './components/auth/AuthenticatedLayout'
 import { AppUpdatesHost } from './components/global/AppUpdatesHost'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
@@ -51,6 +52,8 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/stock-pendiente" element={<StockPendienteSandboxPage />} />
+          {/* Ventana que abre la extensión de WhatsApp: sin menú, con su propio login. */}
+          <Route path="/extension/nuevo-pedido" element={<ExtensionNuevoPedidoPage />} />
           {import.meta.env.DEV ? <Route path="/dev/corcho" element={<CorchoSandboxPage />} /> : null}
           <Route element={<AuthenticatedLayout />}>
             <Route element={<OrdersScopeLayout />}>

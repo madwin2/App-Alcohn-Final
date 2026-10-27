@@ -30,6 +30,12 @@ interface NewOrderDialogProps {
   fetchOrders?: () => Promise<void>;
   /** Pedidos cargados (para ofrecer sumar un regalo a un pedido abierto del cliente). Default: los del contexto. */
   orders?: Order[];
+  /** Datos precargados del paso 1 (p. ej. desde la extensión de WhatsApp). Siguen siendo editables. */
+  initialCustomer?: Partial<NewOrderFormData['customer']>;
+  /** Se llama con el pedido recién creado, antes de cerrar. */
+  onCreated?: (order: Order) => void;
+  /** 'page': mismo formulario sin la ventana modal (página `/extension/nuevo-pedido`). */
+  layout?: 'dialog' | 'page';
 }
 
 export type SaveDesignOptions = {
@@ -61,6 +67,9 @@ export function NewOrderDialog({
   addStampToOrder: addStampToOrderProp,
   fetchOrders: fetchOrdersProp,
   orders: ordersProp,
+  initialCustomer,
+  onCreated,
+  layout = 'dialog',
 }: NewOrderDialogProps) {
   const { toast } = useToast();
   const { playSound } = useSound();
@@ -261,6 +270,7 @@ export function NewOrderDialog({
         });
       }
 
+      onCreated?.(createdOrder);
       setCurrentStep(1);
       setCustomerData(null);
       setSkipConfirmationWebhook(false);
@@ -322,41 +332,60 @@ export function NewOrderDialog({
     handleFinalSubmit();
   };
 
+  const title = (
+    <>
+      Nuevo Pedido - Paso {currentStep} de {currentStep === 1 ? 3 : currentStep === 2 ? 3 : 'Final'}
+      {designs.length > 0 && (
+        <span className="ml-2 text-sm font-normal text-muted-foreground">
+          ({designs.length} diseño{designs.length > 1 ? 's' : ''} agregado{designs.length > 1 ? 's' : ''})
+        </span>
+      )}
+    </>
+  );
+
+  const stepForm = (
+    <NewOrderStepForm
+      currentStep={currentStep}
+      onStepSubmit={handleStepSubmit}
+      onDesignSave={handleDesignSave}
+      onCancel={handleCancel}
+      onBack={handleBack}
+      onCreateOrder={handleCreateOrder}
+      initialData={{
+        ...(customerData
+          ? { customer: customerData }
+          : initialCustomer
+            ? { customer: initialCustomer as NewOrderFormData['customer'] }
+            : {}),
+        skipConfirmationWebhook,
+        internationalCountryIso2,
+        orderType,
+        testReason,
+        attachGiftToOrderId,
+      }}
+      savedDesigns={designs}
+      isSubmitting={isSubmitting}
+      orders={ordersForGift}
+    />
+  );
+
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-8 border border-white/20 shadow-[0_0_80px_rgba(255,255,255,0.075),0_0_150px_rgba(255,255,255,0.05),0_0_220px_rgba(255,255,255,0.025)]">
-          <DialogHeader className="pb-6 border-b">
-            <DialogTitle className="text-xl">
-              Nuevo Pedido - Paso {currentStep} de {currentStep === 1 ? 3 : currentStep === 2 ? 3 : 'Final'}
-              {designs.length > 0 && (
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  ({designs.length} diseño{designs.length > 1 ? 's' : ''} agregado{designs.length > 1 ? 's' : ''})
-                </span>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          <NewOrderStepForm
-            currentStep={currentStep}
-            onStepSubmit={handleStepSubmit}
-            onDesignSave={handleDesignSave}
-            onCancel={handleCancel}
-            onBack={handleBack}
-            onCreateOrder={handleCreateOrder}
-            initialData={{
-              ...(customerData ? { customer: customerData } : {}),
-              skipConfirmationWebhook,
-              internationalCountryIso2,
-              orderType,
-              testReason,
-              attachGiftToOrderId,
-            }}
-            savedDesigns={designs}
-            isSubmitting={isSubmitting}
-            orders={ordersForGift}
-          />
-        </DialogContent>
-      </Dialog>
+      {layout === 'page' ? (
+        <div>
+          <h1 className="pb-6 mb-6 border-b text-xl font-semibold">{title}</h1>
+          {stepForm}
+        </div>
+      ) : (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-8 border border-white/20 shadow-[0_0_80px_rgba(255,255,255,0.075),0_0_150px_rgba(255,255,255,0.05),0_0_220px_rgba(255,255,255,0.025)]">
+            <DialogHeader className="pb-6 border-b">
+              <DialogTitle className="text-xl">{title}</DialogTitle>
+            </DialogHeader>
+            {stepForm}
+          </DialogContent>
+        </Dialog>
+      )}
       <NonSvgVectorConfirmDialog
         open={Boolean(pendingNonSvgFileName)}
         onOpenChange={(nextOpen) => {
