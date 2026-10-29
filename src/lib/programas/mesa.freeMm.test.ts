@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addStamp, columnUsage, emptyDocument, type MesaSource } from './mesa';
+import { addStamp, columnUsage, emptyDocument, maxAddableHeightMm, type MesaSource } from './mesa';
 
 const src = (id: string, w: number, h: number, extra: Partial<MesaSource> = {}): MesaSource => ({
   id,
@@ -49,5 +49,24 @@ describe('mesa freeMm vs soltar (regresión POL-097)', () => {
     expect(usage.freeMm).toBeGreaterThan(53.29);
     const r = addStamp(doc, src('rc', 36.5, 53.29));
     expect(r.added, r.added ? undefined : r.reason).toBe(true);
+  });
+
+  it('mm libres = lo que insertStamp permite (no huecos visuales ni cola de corte)', () => {
+    let doc = emptyDocument('p1', 'C');
+    for (const id of ['a', 'b', 'c']) {
+      doc = addStamp(doc, src(id, 36.5, 70)).doc;
+    }
+    // Espaciar a mano más de 8 mm: el ojo ve “aire”, pero al soltar se rearma a 8 mm.
+    const col = doc.columns.find((c) => c.id === 'p38')!;
+    doc = {
+      ...doc,
+      stamps: doc.stamps.map((s, i) =>
+        s.columnId === 'p38' ? { ...s, topY: col.topY - i * 100 } : s,
+      ),
+    };
+    const free = maxAddableHeightMm(doc, 'p38');
+    expect(columnUsage(doc).find((u) => u.columnId === 'p38')!.freeMm).toBe(free);
+    expect(addStamp(doc, src('ok', 36.5, free)).added).toBe(true);
+    expect(addStamp(doc, src('no', 36.5, free + 0.2)).added).toBe(false);
   });
 });

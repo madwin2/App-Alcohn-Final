@@ -38,7 +38,11 @@ export function MesaSummary({ doc, readOnly, warnings, info = {}, today, piezas,
   const usage = new Map(columnUsage(doc).map((u) => [u.columnId, u]));
   const cols = [...doc.columns].sort((a, b) => a.centerX - b.centerX);
   const showPiezas = !!piezas && Object.keys(piezas).length > 0;
-  const needMm = (columnId: string) => columnStamps(doc, columnId).reduce((sum, s) => sum + s.heightMm + MESA_GAP_MM, 0);
+  // Misma cuenta que el armado: Σ altos + 8 mm entre sellos (sin cola fantasma al final).
+  const needMm = (columnId: string) => {
+    const row = columnStamps(doc, columnId);
+    return row.reduce((sum, s, i) => sum + s.heightMm + (i < row.length - 1 ? MESA_GAP_MM : 0), 0);
+  };
 
   return (
     <section className="space-y-6" aria-label="Resumen del programa">

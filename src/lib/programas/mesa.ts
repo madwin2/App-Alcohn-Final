@@ -112,7 +112,12 @@ function insertStamp(doc: PreparationDocument, stamp: StampPlacement, col: Suppo
   // (MACHINING_LENGTH), no rechazo al soltar.
   const last = packed[packed.length - 1];
   if (last.topY - last.heightMm < col.bottomY - PREPARATION_RULES.coordinateToleranceMm) {
-    return { doc, added: false, reason: `No queda largo suficiente en la planchuela de ${col.nominalMm}.` };
+    const free = maxAddableHeightMm(doc, col.id);
+    return {
+      doc,
+      added: false,
+      reason: `No queda largo suficiente en la planchuela de ${col.nominalMm} (quedan ${free} mm libres, este sello pide ${Number(stamp.heightMm.toFixed(2))} mm).`,
+    };
   }
   const existing = doc.stamps.some((s) => s.instanceId === stamp.instanceId);
   const origin = existing && doc.columns.find((c) => c.id === stamp.columnId && c.id !== col.id);
@@ -315,9 +320,26 @@ export function reconcileMesa(doc: PreparationDocument, stamps: MesaSource[], pe
 export interface ColumnUsage { columnId: string; nominalMm: number; usedMm: number; freeMm: number; totalMm: number; count: number }
 
 /**
- * Ocupación de cada planchuela. `freeMm` = alto de diseño que todavía entra al
- * rearmar con la separación vigente (mismo criterio que `insertStamp` / POL-097).
- * No reserva el corte final: si el diseño entra, el sello se puede sumar.
+ * Alto de diseño (mm) que todavía entra en la planchuela al rearmar con 8 mm
+ * entre sellos. Es la misma cuenta que usa `insertStamp` al soltar: no mira
+ * huecos visuales ni reserva cola de corte (POL-097).
+ */
+export function maxAddableHeightMm(doc: PreparationDocument, columnId: string): number {
+  const col = doc.columns.find((c) => c.id === columnId);
+  if (!col) return 0;
+  const stamps = columnStamps(doc, columnId);
+  const totalMm = col.topY - col.bottomY;
+  const usedMm = stamps.reduce(
+    (sum, s, i) => sum + s.heightMm + (i < stamps.length - 1 ? MESA_GAP_MM : 0),
+    0,
+  );
+  const gapBeforeNext = stamps.length ? MESA_GAP_MM : 0;
+  // Floor: nunca mostrar más libres de los que al soltar se permiten.
+  return Math.max(0, Math.floor((totalMm - usedMm - gapBeforeNext) * 10) / 10);
+}
+
+/**
+ * Ocupación de cada planchuela. `freeMm` = `maxAddableHeightMm` (criterio del soltar).
  */
 export function columnUsage(doc: PreparationDocument): ColumnUsage[] {
   return doc.columns.map((c) => {
@@ -327,15 +349,13 @@ export function columnUsage(doc: PreparationDocument): ColumnUsage[] {
       (sum, s, i) => sum + s.heightMm + (i < stamps.length - 1 ? MESA_GAP_MM : 0),
       0,
     );
-    const gapBeforeNext = stamps.length ? MESA_GAP_MM : 0;
-    const freeMm = Math.max(0, Math.round((totalMm - usedMm - gapBeforeNext) * 10) / 10);
     return {
       columnId: c.id,
       nominalMm: c.nominalMm,
       count: stamps.length,
       totalMm,
       usedMm: Math.min(totalMm, usedMm),
-      freeMm,
+      freeMm: maxAddableHeightMm(doc, c.id),
     };
   });
 }
