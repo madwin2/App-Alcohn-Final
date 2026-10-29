@@ -6,6 +6,7 @@ import {
   Factory,
   Truck,
   Calendar,
+  MessageCircle,
   User,
   ChevronLeft,
   LogOut,
@@ -42,6 +43,7 @@ const sidebarItems = [
   { icon: Factory, label: 'Producción', path: '/produccion', disabled: false },
   { icon: Calendar, label: 'Programas', path: '/programas' },
   { icon: AlertTriangle, label: 'Errores', path: '/errores', disabled: false },
+  { icon: MessageCircle, label: 'WhatsApp Bot', path: '/whatsapp', disabled: false },
 ];
 
 function SidebarInner() {
@@ -141,7 +143,7 @@ function SidebarInner() {
       {/* Navigation Items */}
       <nav className="flex-1 flex flex-col p-3 space-y-1 items-stretch">
         {sidebarItems.map((item) => {
-          const disabled = Boolean(item.disabled) || isRestrictedUser;
+          const disabled = Boolean(item.disabled) || (isRestrictedUser && item.path !== '/whatsapp');
           return (
             <div key={item.path} className="flex justify-start">
               <SidebarItem

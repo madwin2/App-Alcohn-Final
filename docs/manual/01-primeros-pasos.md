@@ -37,6 +37,7 @@ A la izquierda está el menú. Está achicado (solo íconos): pasá el mouse por
 | **Producción** | Tabla de sellos para fabricar ([capítulo 6](06-produccion.md)) |
 | **Programas** | Programas de la CNC ([capítulo 5](05-programas.md)) |
 | **Errores** | Rehaceres: métricas y archivos del error ([capítulo 17](17-errores.md)) |
+| **WhatsApp Bot** | Conexión con WhatsApp Business / Meta ([capítulo 14](14-configuracion-y-whatsapp.md)) |
 | **Economía**, **Gastos**, **Precios** | Administración ([capítulos 12 y 13](13-economia-y-gastos.md)). Economía y Gastos solo los ve Julián |
 
 Abajo del menú está tu foto y nombre: tocá esa zona para ir a **Mi perfil** ([capítulo 18](18-mi-perfil.md)). Ahí mismo está **Cerrar Sesión**.

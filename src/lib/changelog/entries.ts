@@ -1422,6 +1422,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 78,
+    date: '2026-10-29',
+    title: 'WhatsApp Bot de nuevo en el menú',
+    version: '1.96',
+    slides: [
+      {
+        heading: 'WhatsApp Bot vuelve al menú',
+        body: 'Volvió la opción WhatsApp Bot en el menú lateral, para conectar o revisar la cuenta de WhatsApp Business de Alcohn con Meta.',
+        icon: MessageCircle,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */
