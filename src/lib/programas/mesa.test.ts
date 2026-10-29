@@ -12,7 +12,8 @@ const ready = () => {
   doc.recipes.ALIMENTO.perimeterTemplate = { name: 'Corte.ToolpathTemplate', path: 'p1/ALIMENTO/food_perimeter/x.ToolpathTemplate' };
   return doc;
 };
-const separationErrors = (doc: ReturnType<typeof ready>) => validatePreparation(doc).filter((i) => ['SEPARATION', 'LENGTH', 'MACHINING_LENGTH', 'WIDTH'].includes(i.code));
+const separationErrors = (doc: ReturnType<typeof ready>) =>
+  validatePreparation(doc).filter((i) => ['SEPARATION', 'LENGTH', 'WIDTH'].includes(i.code));
 const expectPacked = (doc: PreparationDocument) => {
   expect(doc.gapMm).toBe(8);
   for (const col of doc.columns) {
@@ -81,6 +82,29 @@ describe('mesa de armado', () => {
     expect(usage.every((u) => u.usedMm <= u.totalMm)).toBe(true);
   });
 
+  it('si el diseño entra se puede soltar aunque falte cola de corte; los mm libres coinciden', () => {
+    // Columna P38: deja ~60 mm libres de diseño (menos que diseño+cola vieja de 7 mm).
+    const col = ready().columns.find((c) => c.id === 'p38')!;
+    const span = col.topY - col.bottomY;
+    const h = 60;
+    const n = Math.floor((span + 8) / (h + 8)); // cuántos de 60 entran con gaps
+    let doc = ready();
+    for (let i = 0; i < n - 1; i++) {
+      const r = addStamp(doc, src(`p${i}`, 36.5, h, { tipoPlanchuela: 38 }));
+      expect(r.added).toBe(true);
+      doc = r.doc;
+    }
+    const usage = columnUsage(doc).find((u) => u.columnId === 'p38')!;
+    expect(usage.freeMm).toBeGreaterThanOrEqual(53.29);
+    const r = addStamp(doc, src('rc', 36.5, 53.29, { tipoPlanchuela: 38 }));
+    expect(r.added).toBe(true);
+    doc = r.doc;
+    const machining = buildExecutionPlan(doc).issues.filter((i) => i.code === 'MACHINING_LENGTH');
+    // Puede avisar si la cola no entra; nunca bloquea el soltar ni es error.
+    expect(machining.every((i) => i.severity === 'warning')).toBe(true);
+    expect(validatePreparation(doc).some((i) => i.code === 'LENGTH' && i.severity === 'error')).toBe(false);
+  });
+
   it('no repite un sello ni pierde la proporción al cambiar la medida', () => {
     let doc = addStamp(ready(), src('a', 12, 30)).doc;
     expect(addStamp(doc, src('a', 12, 30)).added).toBe(false);
@@ -138,10 +162,11 @@ describe('mesa de armado', () => {
     expect(columnStamps(moved.doc, 'p25').map((s) => s.selloId)).toEqual(['a', 'c']);
   });
 
-  it.each(['C', 'G', 'XL'] as const)('conserva el origen preciso y el corte final en %s; reordena aunque la fila esté llena', (machine) => {
+  it.each(['C', 'G', 'XL'] as const)('conserva el origen preciso y llena el largo útil en %s; reordena aunque la fila esté llena', (machine) => {
     let doc = emptyDocument('p1', machine);
     const col = doc.columns[0];
-    const height = (col.topY - col.bottomY - 7 - 16) / 3;
+    // 3 sellos + 2 gaps de 8 mm llenan el largo de diseño; la cola de corte no se reserva (POL-097).
+    const height = (col.topY - col.bottomY - 16) / 3;
     for (const id of ['a', 'b', 'c']) doc = addStamp(doc, src(id, 10, height), { columnId: col.id, topY: -999 }).doc;
     expectPacked(doc);
     const reordered = sendToEnd(doc, doc.stamps[0].instanceId);

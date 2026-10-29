@@ -2147,7 +2147,10 @@ function Plan.build(doc,actual,rules)
           local bottom=pose.topY-pose.heightMm
           if pose.topY>col.topY+tolerance or bottom<col.bottomY-tolerance then fail("LENGTH",stamp.name .. ": excede el largo util.",stamp.instanceId) end
           local cutY=bottom-rules.cutBelowDesignMm
-          if cutY-rules.rectangleBelowCutMm<col.bottomY-tolerance then fail("MACHINING_LENGTH",stamp.name .. ": falta espacio para corte y acabado.",stamp.instanceId) end
+          -- POL-097: el diseño ya entró (LENGTH). Falta de cola de corte = aviso, no bloqueo.
+          if cutY-rules.rectangleBelowCutMm<col.bottomY-tolerance then
+            out.issues[#out.issues+1]={code="MACHINING_LENGTH",message=stamp.name .. ": falta espacio para corte y acabado.",instanceId=stamp.instanceId,severity="warning"}
+          end
           local envelope=pose.recipe=="ALIMENTO" and rules.foodToolEnvelopeMm or 0
           if math.abs(pose.centerX-col.centerX)+pose.widthMm/2+envelope>col.toolEnvelopeMm/2+tolerance then fail("TOOL_ENVELOPE",stamp.name .. ": excede la envolvente.",stamp.instanceId) end
           rows[#rows+1]={pose=pose,columnId=col.id}

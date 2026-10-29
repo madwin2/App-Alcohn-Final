@@ -168,6 +168,8 @@ describe('operaciones del armado final', () => {
     expect(arranged.stamps.filter((s) => s.columnId === 'p19')).toHaveLength(1);
     expect(buildExecutionPlan(arranged).issues).toEqual([]);
     arranged.stamps[0].topY = -15; arranged.stamps[0].heightMm = 30;
-    expect(buildExecutionPlan(arranged).issues.some((i) => i.code === 'MACHINING_LENGTH')).toBe(true);
+    const machining = buildExecutionPlan(arranged).issues.filter((i) => i.code === 'MACHINING_LENGTH');
+    expect(machining.length).toBeGreaterThan(0);
+    expect(machining.every((i) => i.severity === 'warning')).toBe(true);
   });
 });

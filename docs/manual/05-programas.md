@@ -87,6 +87,8 @@ La primera vez que entrás aparece un recorrido guiado.
 
 Qué sellos pueden entrar a un programa: solo **sellos** (no accesorios), **con vector**, en estado **Sin Hacer** o **Rehacer**, cuya planchuela acepte esa máquina. Los que ya están en otro programa no entran, **salvo** si están en **Rehacer**: esos aparecen en Vectores con “Falló en …” y al agregarlos se mueven solos al programa nuevo.
 
+En la mesa, los **mm libres** de cada planchuela son el alto de diseño que todavía cabe (con los 8 mm entre sellos). Si el diseño entra, podés soltarlo aunque falte un poco para el corte final: la app avisa, pero no te frena.
+
 Criterio para armar: 1) los **prioritarios**, 2) los pedidos **más viejos**, 3) **aprovechar la planchuela** completa. Se pueden mezclar tipos de sello. Lo normal es **un programa por día por máquina**.
 
 ## La pantalla

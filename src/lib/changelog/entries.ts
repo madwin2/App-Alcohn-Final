@@ -1396,6 +1396,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 76,
+    date: '2026-10-29',
+    title: 'Mesa: si entra el diseño, se puede soltar',
+    version: '1.94',
+    slides: [
+      {
+        heading: 'Ya no frena por el corte final',
+        body: 'Si el diseño entra en la planchuela, lo podés soltar aunque falte un poco para el corte. Los “mm libres” son el alto de diseño que todavía cabe. Si falta cola de corte, la app avisa y no te bloquea.',
+        icon: Ruler,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

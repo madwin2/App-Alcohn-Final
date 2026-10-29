@@ -1,5 +1,14 @@
 # Preguntas abiertas — Programas
 
+### Q-PROG-025
+- **Módulo**: Programas / mesa de armado · **Estado**: documentada (2026-10-29)
+- **Pregunta**: Al soltar un sello, ¿hay que rechazarlo si el diseño entra pero no queda cola para el corte y el acabado final (4+3 mm)? Los “mm libres” de la planchuela ¿deben coincidir con lo que se puede soltar?
+- **Evidencia**: `insertStamp` y `arrangePreparation` reservaban `TAIL_MM`; `columnUsage.freeMm` restaba esa cola (y a veces no coincidía con el repack de 8 mm). Mensajes `No queda largo suficiente… incluyendo el corte final` / `MACHINING_LENGTH`.
+- **Por qué importa**: con ~79 mm libres un sello de 53 mm parecía caber y al soltar se rechazaba; Fede mecaniza igual si el diseño entra.
+- **Impacto**: alto.
+- **Respuesta (2026-10-29)**: si entra el **diseño**, se acepta. Si falta espacio para el corte/acabado, solo se **avisa** (no bloquea). Los mm libres = alto de diseño que todavía entra.
+- **Documentado en**: POL-097, BR-PROG-019 (ajuste), mesa / `executionPlan`.
+
 ### Q-PROG-024
 - **Módulo**: Programas / gadget Aspire · **Estado**: documentada (2026-10-23)
 - **Pregunta**: Si al sincronizar un sello da error (por ejemplo «fuera del ancho útil»), ¿el gadget debe frenar todo (como hoy: no genera ni recalcula ninguna trayectoria) o seguir con el resto y dejar ese sello sin trayectorias para revisarlo?

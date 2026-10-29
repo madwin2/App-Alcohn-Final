@@ -20,9 +20,6 @@ export interface MesaSource extends PreparationSource {
   notes?: string | null;
 }
 
-/** Lo que queda al final de cada planchuela para el corte y el acabado. */
-const TAIL_MM = PREPARATION_RULES.cutBelowDesignMm + PREPARATION_RULES.rectangleBelowCutMm;
-
 const active = (doc: PreparationDocument) => doc.stamps.filter((s) => !s.excluded);
 
 /** Ancho del sello sobre la planchuela (lado corto). */
@@ -94,9 +91,11 @@ function insertStamp(doc: PreparationDocument, stamp: StampPlacement, col: Suppo
   const packed = packColumn(col, row);
   const wide = packed.find((s) => s.widthMm > col.usableMm);
   if (wide) return { doc, added: false, reason: `${wide.name} no entra en la planchuela de ${col.nominalMm}: mide ${wide.widthMm} mm de ancho.` };
+  // Solo el diseño tiene que entrar (POL-097). Si el corte/acabado no caben, es aviso
+  // (MACHINING_LENGTH), no rechazo al soltar.
   const last = packed[packed.length - 1];
-  if (last.topY - last.heightMm - TAIL_MM < col.bottomY - PREPARATION_RULES.coordinateToleranceMm) {
-    return { doc, added: false, reason: `No queda largo suficiente en la planchuela de ${col.nominalMm}, incluyendo el corte final.` };
+  if (last.topY - last.heightMm < col.bottomY - PREPARATION_RULES.coordinateToleranceMm) {
+    return { doc, added: false, reason: `No queda largo suficiente en la planchuela de ${col.nominalMm}.` };
   }
   const existing = doc.stamps.some((s) => s.instanceId === stamp.instanceId);
   const origin = existing && doc.columns.find((c) => c.id === stamp.columnId && c.id !== col.id);
@@ -286,15 +285,29 @@ export function reconcileMesa(doc: PreparationDocument, stamps: MesaSource[], pe
 
 export interface ColumnUsage { columnId: string; nominalMm: number; usedMm: number; freeMm: number; totalMm: number; count: number }
 
-/** Ocupación de cada planchuela (sello + separación de corte). */
+/**
+ * Ocupación de cada planchuela. `freeMm` = alto de diseño que todavía entra al
+ * rearmar con la separación vigente (mismo criterio que `insertStamp` / POL-097).
+ * No reserva el corte final: si el diseño entra, el sello se puede sumar.
+ */
 export function columnUsage(doc: PreparationDocument): ColumnUsage[] {
   return doc.columns.map((c) => {
-    const stamps = active(doc).filter((s) => s.columnId === c.id);
-    const totalMm = c.topY - c.bottomY - TAIL_MM;
-    const lowest = stamps.length ? Math.min(...stamps.map((s) => s.topY - s.heightMm)) : c.topY;
-    const usedMm = stamps.reduce((sum, s) => sum + s.heightMm + doc.gapMm, 0);
-    return { columnId: c.id, nominalMm: c.nominalMm, count: stamps.length, totalMm, usedMm: Math.min(totalMm, usedMm),
-      freeMm: Math.max(0, Math.round((lowest - doc.gapMm - (c.bottomY + TAIL_MM)) * 10) / 10) };
+    const stamps = columnStamps(doc, c.id);
+    const totalMm = c.topY - c.bottomY;
+    const usedMm = stamps.reduce(
+      (sum, s, i) => sum + s.heightMm + (i < stamps.length - 1 ? doc.gapMm : 0),
+      0,
+    );
+    const gapBeforeNext = stamps.length ? doc.gapMm : 0;
+    const freeMm = Math.max(0, Math.round((totalMm - usedMm - gapBeforeNext) * 10) / 10);
+    return {
+      columnId: c.id,
+      nominalMm: c.nominalMm,
+      count: stamps.length,
+      totalMm,
+      usedMm: Math.min(totalMm, usedMm),
+      freeMm,
+    };
   });
 }
 

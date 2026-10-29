@@ -193,7 +193,6 @@ export function validatePreparation(doc: PreparationDocument, sources?: Preparat
 export function arrangePreparation(doc: PreparationDocument): PreparationDocument {
   const stamps = doc.stamps.map((s) => ({ ...s }));
   const placed = stamps.filter((s) => !s.excluded && s.pinned);
-  const tail = PREPARATION_RULES.cutBelowDesignMm + PREPARATION_RULES.rectangleBelowCutMm;
   for (const s of stamps.filter((s) => !s.excluded && !s.pinned)) {
     const candidates = doc.columns.filter((c) => c.available && s.widthMm <= c.usableMm)
       .sort((a, b) => Number(b.id === s.columnId) - Number(a.id === s.columnId) || a.nominalMm - b.nominalMm);
@@ -203,7 +202,8 @@ export function arrangePreparation(doc: PreparationDocument): PreparationDocumen
         if (top - s.heightMm - doc.gapMm >= blocker.topY) break;
         if (top > blocker.topY - blocker.heightMm - doc.gapMm) top = blocker.topY - blocker.heightMm - doc.gapMm;
       }
-      if (top - s.heightMm - tail < col.bottomY) continue;
+      // Solo el diseño (POL-097); el corte/acabado se avisa aparte como MACHINING_LENGTH.
+      if (top - s.heightMm < col.bottomY) continue;
       s.columnId = col.id; s.centerX = col.centerX; s.topY = top; break;
     }
     placed.push(s);

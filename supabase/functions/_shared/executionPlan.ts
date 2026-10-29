@@ -19,7 +19,8 @@ export interface ExecutionPlan {
 /** Operaciones derivadas del estado FINAL. Sin parámetros CAM inventados ni estado de venta. */
 export function buildExecutionPlan(doc: PreparationDocument, actual: ExecutionPose[] = doc.stamps.filter((s) => !s.excluded)): ExecutionPlan {
   const plan: ExecutionPlan = { rulesVersion: rules.version, stamps: [], columns: [], issues: [] };
-  const fail = (code: string, message: string, instanceId?: string) => plan.issues.push({ code, message, instanceId, severity: 'error' });
+  const fail = (code: string, message: string, instanceId?: string, severity: 'error' | 'warning' = 'error') =>
+    plan.issues.push({ code, message, instanceId, severity });
   const tolerance = rules.coordinateToleranceMm;
   const seen = new Set<string>();
   const rows: { pose: ExecutionPose; columnId: string }[] = [];
@@ -37,7 +38,10 @@ export function buildExecutionPlan(doc: PreparationDocument, actual: ExecutionPo
     if (pose.topY > col.topY + tolerance || pose.topY - pose.heightMm < col.bottomY - tolerance) fail('LENGTH', `${stamp.name}: excede el largo útil.`, stamp.instanceId);
     const bottom = pose.topY - pose.heightMm;
     const cutY = bottom - rules.cutBelowDesignMm;
-    if (cutY - rules.rectangleBelowCutMm < col.bottomY - tolerance) fail('MACHINING_LENGTH', `${stamp.name}: falta espacio al final para el corte y el acabado.`, stamp.instanceId);
+    // POL-097: el diseño ya entró (LENGTH). Falta de cola de corte/acabado = aviso, no bloqueo.
+    if (cutY - rules.rectangleBelowCutMm < col.bottomY - tolerance) {
+      fail('MACHINING_LENGTH', `${stamp.name}: falta espacio al final para el corte y el acabado.`, stamp.instanceId, 'warning');
+    }
     const envelope = pose.recipe === 'ALIMENTO' ? rules.foodToolEnvelopeMm : 0;
     if (Math.abs(pose.centerX - col.centerX) + pose.widthMm / 2 + envelope > col.toolEnvelopeMm / 2 + tolerance) fail('TOOL_ENVELOPE', `${stamp.name}: el mecanizado excede la envolvente útil.`, stamp.instanceId);
     rows.push({ pose, columnId: col.id });

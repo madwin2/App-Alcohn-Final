@@ -16,7 +16,7 @@ Objetivo confirmado: una app más simple e intuitiva que Aspire para decidir el 
 
 ✅ Antes de sincronizar se revisan pertenencia completa, duplicados, proporción, ancho útil, largo, separación de 8 mm, material, vector vigente, receta y plantillas cargadas. Las observaciones no impiden guardar un borrador estructuralmente válido, pero el servidor no entrega un manifest apto hasta resolverlas. Los problemas geométricos se resaltan en la mesa.
 
-✅ El armado inicial y **Reacomodar libres** pueden distribuir sellos en otras planchuelas disponibles compatibles cuando la elegida se llena; respetan los fijos. La separación se comprueba por planchuela aunque los dibujos no se toquen en X: el corte la atraviesa. Se reserva el espacio derivado del corte y del rectángulo de acabado al final.
+✅ El armado inicial y **Reacomodar libres** pueden distribuir sellos en otras planchuelas disponibles compatibles cuando la elegida se llena; respetan los fijos. La separación se comprueba por planchuela aunque los dibujos no se toquen en X: el corte la atraviesa. Si el diseño entra y falta cola de corte/acabado, se **avisa** (`MACHINING_LENGTH`) y no se rechaza el soltar (POL-097).
 
 ✅ «Dejar fuera» es una decisión de borrador. **Sacar del programa y devolver a pendientes** usa `removeStampFromProgram` y conserva su estado previo; luego se guarda nuevamente la preparación. No se deja un sello excluido asociado a un programa que después pueda marcarse fabricado en cascada.
 
