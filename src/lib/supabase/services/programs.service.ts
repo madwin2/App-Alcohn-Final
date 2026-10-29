@@ -12,14 +12,16 @@ import {
 import { Database } from '../types';
 import { todayArgentinaDateKey } from '../../utils/argentinaDate';
 import {
+  accumulateDesignByPlanchuela,
   accumulateLengthByPlanchuela,
+  stampDesignLengthMm,
+  validatePlanchuelaDesignFit,
   DEFAULT_PERDIDA_CORTE_CM,
   getMaxLengthMmForMachine,
   LARGO_MAXIMO_PLANCHUELA_MM,
   resolvePlanchuelaRef,
   stampLengthAlongMm,
   type StampDimsForMaterial,
-  validatePlanchuelaLengthLimit,
 } from '../../programas/material';
 import { deriveLifecycleFromStamps } from '../../programas/lifecycle';
 import { nextAutoProgramName } from '../../programas/programName';
@@ -620,21 +622,24 @@ export const createProgram = async (program: Partial<Program>): Promise<Program>
       .in('id', stampIds);
     if (checkErr) throw checkErr;
 
-    const lengthsPreview = accumulateLengthByPlanchuela(
-      (sellosCheck || []).map((s) => stampDimsFromSello(s)),
-      perdidaCorteCm,
-    );
-
-    for (const [refStr, used] of Object.entries(lengthsPreview)) {
-      const ref = Number(refStr) as PlanchuelaSize;
-      const errMsg = validatePlanchuelaLengthLimit({
+    const dimsList = (sellosCheck || []).map((s) => stampDimsFromSello(s));
+    // Alta inicial: ir sumando de a uno con el mismo criterio que la mesa (POL-097).
+    const running = accumulateDesignByPlanchuela([]);
+    for (const dims of dimsList) {
+      const ref = resolvePlanchuelaRef(dims);
+      const extra = stampDesignLengthMm(dims);
+      if (!ref || extra <= 0) continue;
+      const errMsg = validatePlanchuelaDesignFit({
         machine,
         tipoPlanchuela: ref,
-        currentMm: 0,
-        extraMm: used || 0,
+        currentDesignMm: running.lengths[ref] || 0,
+        currentCount: running.counts[ref] || 0,
+        extraDesignMm: extra,
         maxOverrides: maxMm,
       });
       if (errMsg) throw new ProgramServiceError(errMsg);
+      running.lengths[ref] = (running.lengths[ref] || 0) + extra;
+      running.counts[ref] = (running.counts[ref] || 0) + 1;
     }
   }
 
@@ -1103,10 +1108,7 @@ export const addStampsToProgram = async (
   const { perdidaCorteCm, maxMm } = await loadMaterialParams();
 
   const { data: existingSellos } = await supabase.from('sellos').select('*').eq('programa_id', programId);
-  const currentLengths = accumulateLengthByPlanchuela(
-    (existingSellos || []).map((s) => stampDimsFromSello(s)),
-    perdidaCorteCm,
-  );
+  const running = accumulateDesignByPlanchuela((existingSellos || []).map((s) => stampDimsFromSello(s)));
 
   const { data: newSellos, error: sellosErr } = await supabase
     .from('sellos')
@@ -1152,17 +1154,19 @@ export const addStampsToProgram = async (
 
     const dims = stampDimsFromSello(sello);
     const ref = resolvePlanchuelaRef(dims);
-    const extraMm = stampLengthAlongMm(dims, perdidaCorteCm);
+    const extraMm = stampDesignLengthMm(dims);
     if (ref && extraMm > 0) {
-      const errMsg = validatePlanchuelaLengthLimit({
+      const errMsg = validatePlanchuelaDesignFit({
         machine,
         tipoPlanchuela: ref,
-        currentMm: currentLengths[ref] || 0,
-        extraMm,
+        currentDesignMm: running.lengths[ref] || 0,
+        currentCount: running.counts[ref] || 0,
+        extraDesignMm: extraMm,
         maxOverrides: maxMm,
       });
       if (errMsg) throw new ProgramServiceError(errMsg);
-      currentLengths[ref] = (currentLengths[ref] || 0) + extraMm;
+      running.lengths[ref] = (running.lengths[ref] || 0) + extraMm;
+      running.counts[ref] = (running.counts[ref] || 0) + 1;
     }
   }
 

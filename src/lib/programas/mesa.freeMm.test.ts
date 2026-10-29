@@ -51,6 +51,30 @@ describe('mesa freeMm vs soltar (regresión POL-097)', () => {
     expect(r.added, r.added ? undefined : r.reason).toBe(true);
   });
 
+  it('C tiene 400 mm útiles desde el origen del primer sello (no ~391 por bottomY=-400)', () => {
+    const doc = emptyDocument('p1', 'C');
+    const col = doc.columns.find((c) => c.id === 'p38')!;
+    expect(col.topY - col.bottomY).toBeCloseTo(400, 5);
+    // 6 sellos reales del 29 OCT x19 C en P38 → ~59 mm libres; BG grande 55 entra.
+    let d = doc;
+    for (const [id, w, h] of [
+      ['Stella', 36.48, 58.71],
+      ['RC', 36.5, 53.29],
+      ['Aires', 34.66, 40],
+      ['Antonio', 30.65, 70.94],
+      ['Vaca', 25.66, 40],
+      ['SX', 26.42, 30],
+    ] as const) {
+      const r = addStamp(d, src(id, w, h));
+      expect(r.added, r.added ? undefined : r.reason).toBe(true);
+      d = r.doc;
+    }
+    const free = columnUsage(d).find((u) => u.columnId === 'p38')!.freeMm;
+    expect(free).toBeGreaterThanOrEqual(55);
+    expect(free).toBeLessThanOrEqual(60);
+    expect(addStamp(d, src('bg', 28.77, 55)).added).toBe(true);
+  });
+
   it('mm libres = lo que insertStamp permite (no huecos visuales ni cola de corte)', () => {
     let doc = emptyDocument('p1', 'C');
     for (const id of ['a', 'b', 'c']) {

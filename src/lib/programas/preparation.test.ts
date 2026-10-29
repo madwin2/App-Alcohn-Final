@@ -20,7 +20,7 @@ describe('preparación del soporte', () => {
   });
   it('no ocupa el largo completo al cargar pocos sellos', () => {
     const doc = ready(); expect(doc.stamps[2].topY).toBeCloseTo(doc.columns[2].topY - 76);
-    expect(doc.columns[2].bottomY).toBe(-400);
+    expect(doc.columns[2].bottomY).toBeCloseTo(doc.columns[2].topY - 400, 5);
   });
   it.each(['WIDTH', 'LENGTH', 'MATERIAL', 'SEPARATION', 'SOURCE_CHANGED', 'MISSING', 'DUPLICATE'] as const)('detecta %s antes del paquete', (code) => {
     const doc = ready();

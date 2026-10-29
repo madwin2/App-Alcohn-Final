@@ -4,6 +4,7 @@ import {
   MACHINE_SIZE_ELIGIBILITY,
   resolvePlanchuelaRef,
   validatePlanchuelaLengthLimit,
+  validatePlanchuelaDesignFit,
   computeProgramLoad,
 } from './material';
 import { isEligibleStampForMachine } from './eligibility';
@@ -119,6 +120,31 @@ describe('validatePlanchuelaLengthLimit', () => {
       extraMm: 1,
     });
     expect(err).toMatch(/Supera el largo máximo/);
+  });
+});
+
+describe('validatePlanchuelaDesignFit (POL-097)', () => {
+  it('acepta un sello de 55 mm con ~59 mm libres de diseño (6 sellos P38 del 29 OCT)', () => {
+    // Stella+RC+Aires+Antonio+Vaca+SX = 292.94; +5×8 gap = 332.94; libre = 400-332.94-8 = 59.06
+    const err = validatePlanchuelaDesignFit({
+      machine: 'C',
+      tipoPlanchuela: 38,
+      currentDesignMm: 292.94,
+      currentCount: 6,
+      extraDesignMm: 55,
+    });
+    expect(err).toBeNull();
+  });
+
+  it('rechaza si el diseño no entra aunque falte poco', () => {
+    const err = validatePlanchuelaDesignFit({
+      machine: 'C',
+      tipoPlanchuela: 38,
+      currentDesignMm: 292.94,
+      currentCount: 6,
+      extraDesignMm: 60,
+    });
+    expect(err).toMatch(/quedan .* mm libres/);
   });
 });
 

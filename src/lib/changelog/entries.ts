@@ -1409,6 +1409,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 77,
+    date: '2026-10-29',
+    title: 'Planchuela C: los 400 mm de verdad',
+    version: '1.95',
+    slides: [
+      {
+        heading: 'La Chica vuelve a tener 400 mm útiles',
+        body: 'Había un desfase de ~9 mm en el largo de las planchuelas de la C. Los “mm libres” ahora coinciden con lo que se puede soltar, y un sello que entra de diseño ya no se rechaza por la cola de corte al sumarlo al programa.',
+        icon: Ruler,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

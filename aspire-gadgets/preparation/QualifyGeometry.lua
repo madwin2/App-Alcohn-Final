@@ -13,8 +13,8 @@ function PreparationSync.qualify()
     note('Inicio geometria nativa; mm=' .. tostring(job.InMM))
     local s={instanceId='qualification:sample',selloId='sample',name='Muestra ficticia',columnId='p25',centerX=50.176,topY=-8.958,widthMm=12,heightMm=30,recipe='CLASICO'}
     local doc={programId='qualification',gapMm=8,stamps={s},columns={
-      {id='p25',nominalMm=25,usableMm=24,centerX=50.176,topY=-8.958,bottomY=-400,toolEnvelopeMm=39,available=true},
-      {id='p38',nominalMm=38,usableMm=36.5,centerX=235.351,topY=-8.958,bottomY=-400,toolEnvelopeMm=52,available=true}}}
+      {id='p25',nominalMm=25,usableMm=24,centerX=50.176,topY=-8.958,bottomY=-408.958,toolEnvelopeMm=39,available=true},
+      {id='p38',nominalMm=38,usableMm=36.5,centerX=235.351,topY=-8.958,bottomY=-408.958,toolEnvelopeMm=52,available=true}}}
     local shape=nil
     for _,entry in ipairs(inventory[s.instanceId] or {}) do if entry.role=='design' then shape=entry.object end end
     shape=shape or rectObject(s.centerX,s.topY,s.widthMm,s.topY-s.heightMm)

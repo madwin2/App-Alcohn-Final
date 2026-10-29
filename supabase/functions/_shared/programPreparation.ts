@@ -52,10 +52,13 @@ export interface PreparationSource {
 export function defaultColumns(machine: PreparationMachine): SupportColumn[] {
   const cols = machine === 'C' ? [[25, 24, 50.176], [12, 11.5, 87.776], [19, 18, 187.776], [38, 36.5, 235.351]]
     : machine === 'G' ? [[38, 36.5, 50.65], [12, 11.5, 94.4]] : [[63, 63, 31.5]];
+  // Largo útil desde el origen del primer sello (POL-018/092): C 400, G/XL 250.
+  // Antes C usaba bottomY=-400 absoluto con topY=-8.958 → solo ~391 mm y rechazaba sellos que sí entraban.
+  const topY = machine === 'C' ? -8.958 : machine === 'G' ? -9.788 : -1;
+  const usableLengthMm = machine === 'C' ? 400 : 250;
   return cols.map(([nominalMm, usableMm, centerX]) => ({
-    id: `p${nominalMm}`, nominalMm, usableMm, centerX, topY: machine === 'C' ? -8.958 : machine === 'G' ? -9.788 : -1,
-    // G y XL: 250 mm útiles desde donde empieza el primer sello (usuario, 2026-10-20).
-    bottomY: machine === 'C' ? -400 : machine === 'G' ? -9.788 - 250 : -1 - 250, toolEnvelopeMm: nominalMm + 14, available: true,
+    id: `p${nominalMm}`, nominalMm, usableMm, centerX, topY,
+    bottomY: topY - usableLengthMm, toolEnvelopeMm: nominalMm + 14, available: true,
   }));
 }
 

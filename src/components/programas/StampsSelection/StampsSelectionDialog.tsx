@@ -16,8 +16,8 @@ import { StampThumb } from '../StampThumb';
 import { getEligibleStamps } from '@/lib/supabase/services/programs.service';
 import {
   resolvePlanchuelaRef,
-  stampLengthAlongMm,
-  validatePlanchuelaLengthLimit,
+  stampDesignLengthMm,
+  validatePlanchuelaDesignFit,
 } from '@/lib/programas/material';
 import { toast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
@@ -55,13 +55,20 @@ const formatCreatedAt = (createdAt: string): string => {
   });
 };
 
-/** Recorre candidatos (ya ordenados) y arma una selección que respete el largo máximo. */
+/** Recorre candidatos (ya ordenados) y arma una selección que respete el largo de diseño (POL-097). */
 export function suggestStampSelection(
   candidates: ProgramStamp[],
   machine: ProgramMachineType,
   initialLengths: ProgramLengthByPlanchuela = {},
 ): string[] {
-  const acc: ProgramLengthByPlanchuela = { ...initialLengths };
+  // initialLengths puede traer pérdida de corte vieja: se usa como techo conservador.
+  // Si ya hay algo en la planchuela, contamos ≥1 sello para reservar el gap de 8 mm.
+  const acc = {
+    lengths: { ...initialLengths } as ProgramLengthByPlanchuela,
+    counts: Object.fromEntries(
+      Object.entries(initialLengths).map(([k, v]) => [Number(k), (v || 0) > 0 ? 1 : 0]),
+    ) as Partial<Record<PlanchuelaSize, number>>,
+  };
   const selected: string[] = [];
 
   for (const stamp of candidates) {
@@ -73,23 +80,25 @@ export function suggestStampSelection(
       tipoPlanchuela: stamp.tipoPlanchuela,
     };
     const ref = resolvePlanchuelaRef(dims);
-    const extraMm = stampLengthAlongMm(dims);
+    const extraMm = stampDesignLengthMm(dims);
 
     if (!ref || extraMm <= 0) {
       selected.push(stamp.id);
       continue;
     }
 
-    const err = validatePlanchuelaLengthLimit({
+    const err = validatePlanchuelaDesignFit({
       machine,
       tipoPlanchuela: ref,
-      currentMm: acc[ref] || 0,
-      extraMm,
+      currentDesignMm: acc.lengths[ref] || 0,
+      currentCount: acc.counts[ref] || 0,
+      extraDesignMm: extraMm,
     });
 
     if (err) continue;
 
-    acc[ref] = (acc[ref] || 0) + extraMm;
+    acc.lengths[ref] = (acc.lengths[ref] || 0) + extraMm;
+    acc.counts[ref] = (acc.counts[ref] || 0) + 1;
     selected.push(stamp.id);
   }
 

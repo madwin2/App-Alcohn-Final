@@ -85,15 +85,27 @@ export function isPlanchuelaEligibleForMachine(
   return MACHINE_SIZE_ELIGIBILITY[machine].includes(ref);
 }
 
-/** Largo a lo largo de la planchuela + pérdida de corte, en mm. */
+/** Separación entre diseños en la mesa (BR-PROG-019); misma cifra que `MESA_GAP_MM`. */
+export const PLANCHUELA_GAP_MM = 8;
+
+/** Solo el lado mayor del diseño (mm). Sin pérdida de corte (POL-097). */
+export function stampDesignLengthMm(stamp: StampDimsForMaterial): number {
+  const { anchoCm, largoCm } = effectiveStampDimsCm(stamp);
+  if (anchoCm <= 0 || largoCm <= 0) return 0;
+  return Math.max(anchoCm, largoCm) * 10;
+}
+
+/**
+ * Largo a lo largo de la planchuela + pérdida de corte, en mm.
+ * Sirve para estimar consumo de bronce; **no** para decidir si un sello entra (POL-097).
+ */
 export function stampLengthAlongMm(
   stamp: StampDimsForMaterial,
   perdidaCorteCm: number = DEFAULT_PERDIDA_CORTE_CM,
 ): number {
-  const { anchoCm, largoCm } = effectiveStampDimsCm(stamp);
-  if (anchoCm <= 0 || largoCm <= 0) return 0;
-  const majorCm = Math.max(anchoCm, largoCm);
-  return (majorCm + perdidaCorteCm) * 10;
+  const design = stampDesignLengthMm(stamp);
+  if (design <= 0) return 0;
+  return design + perdidaCorteCm * 10;
 }
 
 export function accumulateLengthByPlanchuela(
@@ -111,6 +123,24 @@ export function accumulateLengthByPlanchuela(
   return acc;
 }
 
+/** Suma de altos de diseño (sin cola) y cantidad por planchuela — criterio de la mesa. */
+export function accumulateDesignByPlanchuela(stamps: StampDimsForMaterial[]): {
+  lengths: ProgramLengthByPlanchuela;
+  counts: Partial<Record<PlanchuelaSize, number>>;
+} {
+  const lengths: ProgramLengthByPlanchuela = {};
+  const counts: Partial<Record<PlanchuelaSize, number>> = {};
+  for (const stamp of stamps) {
+    const ref = resolvePlanchuelaRef(stamp);
+    if (!ref) continue;
+    const mm = stampDesignLengthMm(stamp);
+    if (mm <= 0) continue;
+    lengths[ref] = (lengths[ref] || 0) + mm;
+    counts[ref] = (counts[ref] || 0) + 1;
+  }
+  return { lengths, counts };
+}
+
 export function getMaxLengthMmForMachine(
   machine: ProgramMachineType,
   overrides?: Partial<Record<'C' | 'G' | 'XL', number>>,
@@ -122,6 +152,7 @@ export function getMaxLengthMmForMachine(
 /**
  * Valida si agregar `extraMm` a un acumulado de planchuela supera el máximo de la máquina.
  * Retorna null si OK, o mensaje de error si bloquea.
+ * Preferí `validatePlanchuelaDesignFit` (diseño + 8 mm entre sellos, POL-097).
  */
 export function validatePlanchuelaLengthLimit(opts: {
   machine: ProgramMachineType;
@@ -135,6 +166,27 @@ export function validatePlanchuelaLengthLimit(opts: {
   const next = opts.currentMm + opts.extraMm;
   if (next <= maxMm + 1e-6) return null;
   return `Supera el largo máximo de planchuela ${opts.tipoPlanchuela}mm para máquina ${opts.machine} (${maxMm}mm). Usá otro programa para el excedente.`;
+}
+
+/**
+ * ¿Entra el diseño del sello nuevo? Misma cuenta que la mesa: Σ altos + 8 mm entre
+ * sellos, sin reservar cola de corte (POL-097 / BR-PROG-004).
+ */
+export function validatePlanchuelaDesignFit(opts: {
+  machine: ProgramMachineType;
+  tipoPlanchuela: PlanchuelaSize;
+  currentDesignMm: number;
+  currentCount: number;
+  extraDesignMm: number;
+  maxOverrides?: Partial<Record<'C' | 'G' | 'XL', number>>;
+}): string | null {
+  const maxMm = getMaxLengthMmForMachine(opts.machine, opts.maxOverrides);
+  if (maxMm == null) return null;
+  const used = opts.currentDesignMm + Math.max(0, opts.currentCount - 1) * PLANCHUELA_GAP_MM;
+  const need = opts.extraDesignMm + (opts.currentCount > 0 ? PLANCHUELA_GAP_MM : 0);
+  if (used + need <= maxMm + 1e-6) return null;
+  const free = Math.max(0, Math.floor((maxMm - used - (opts.currentCount > 0 ? PLANCHUELA_GAP_MM : 0)) * 10) / 10);
+  return `No queda largo suficiente en la planchuela de ${opts.tipoPlanchuela} (quedan ${free} mm libres, este sello pide ${Number(opts.extraDesignMm.toFixed(2))} mm).`;
 }
 
 export function formatLengthByPlanchuela(lengths: ProgramLengthByPlanchuela): string[] {

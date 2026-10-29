@@ -94,10 +94,30 @@ function placementFor(doc: PreparationDocument, source: PreparationSource): Stam
 
 export type AddResult = { doc: PreparationDocument; added: true; instanceId: string } | { doc: PreparationDocument; added: false; reason: string };
 
+/** Libre de diseño en una fila (sin contar `stamp`), misma cuenta que el resumen. */
+function freeForRow(col: SupportColumn, row: StampPlacement[]): number {
+  const totalMm = col.topY - col.bottomY;
+  const usedMm = row.reduce(
+    (sum, s, i) => sum + s.heightMm + (i < row.length - 1 ? MESA_GAP_MM : 0),
+    0,
+  );
+  const gapBeforeNext = row.length ? MESA_GAP_MM : 0;
+  return Math.max(0, Math.floor((totalMm - usedMm - gapBeforeNext) * 10) / 10);
+}
+
 /** Inserción atómica: valida toda la fila destino antes de cerrar la fila de origen. */
 function insertStamp(doc: PreparationDocument, stamp: StampPlacement, col: SupportColumn, index: number): AddResult {
   if (!col.available) return { doc, added: false, reason: `No hay material en la planchuela de ${col.nominalMm}.` };
   const row = columnStamps(doc, col.id).filter((s) => s.instanceId !== stamp.instanceId);
+  // Misma cuenta que “mm libres”: si el diseño entra, se suelta (POL-097; sin cola de corte).
+  const free = freeForRow(col, row);
+  if (stamp.heightMm > free + PREPARATION_RULES.coordinateToleranceMm) {
+    return {
+      doc,
+      added: false,
+      reason: `No queda largo suficiente en la planchuela de ${col.nominalMm} (quedan ${free} mm libres, este sello pide ${Number(stamp.heightMm.toFixed(2))} mm).`,
+    };
+  }
   row.splice(index, 0, stamp);
   const packed = packColumn(col, row);
   const wide = packed.find((s) => !fitsWidth(s.widthMm, col.usableMm));
@@ -106,17 +126,6 @@ function insertStamp(doc: PreparationDocument, stamp: StampPlacement, col: Suppo
       doc,
       added: false,
       reason: `${wide.name} no entra en la planchuela de ${col.nominalMm}: mide ${Number(wide.widthMm.toFixed(2))} mm de ancho (entra hasta ${col.usableMm} mm).`,
-    };
-  }
-  // Solo el diseño tiene que entrar (POL-097). Si el corte/acabado no caben, es aviso
-  // (MACHINING_LENGTH), no rechazo al soltar.
-  const last = packed[packed.length - 1];
-  if (last.topY - last.heightMm < col.bottomY - PREPARATION_RULES.coordinateToleranceMm) {
-    const free = maxAddableHeightMm(doc, col.id);
-    return {
-      doc,
-      added: false,
-      reason: `No queda largo suficiente en la planchuela de ${col.nominalMm} (quedan ${free} mm libres, este sello pide ${Number(stamp.heightMm.toFixed(2))} mm).`,
     };
   }
   const existing = doc.stamps.some((s) => s.instanceId === stamp.instanceId);
@@ -311,9 +320,10 @@ export interface MesaPending { adding: Set<string>; removing: Set<string> }
 
 /** Mantiene el borrador al día con los sellos asignados (otra PC, tablero, realtime). */
 export function reconcileMesa(doc: PreparationDocument, stamps: MesaSource[], pending?: MesaPending): PreparationDocument {
+  const base = ensureFullUsableLength(doc);
   const ids = new Set(stamps.map((s) => s.id));
-  const kept = doc.stamps.filter((s) => ids.has(s.selloId) || pending?.adding.has(s.selloId));
-  const next = kept.length === doc.stamps.length ? doc : reflowMesa({ ...doc, stamps: kept });
+  const kept = base.stamps.filter((s) => ids.has(s.selloId) || pending?.adding.has(s.selloId));
+  const next = kept.length === base.stamps.length ? base : reflowMesa({ ...base, stamps: kept });
   return placeSources(next, pending ? stamps.filter((s) => !pending.removing.has(s.id)) : stamps);
 }
 
@@ -327,15 +337,25 @@ export interface ColumnUsage { columnId: string; nominalMm: number; usedMm: numb
 export function maxAddableHeightMm(doc: PreparationDocument, columnId: string): number {
   const col = doc.columns.find((c) => c.id === columnId);
   if (!col) return 0;
-  const stamps = columnStamps(doc, columnId);
-  const totalMm = col.topY - col.bottomY;
-  const usedMm = stamps.reduce(
-    (sum, s, i) => sum + s.heightMm + (i < stamps.length - 1 ? MESA_GAP_MM : 0),
-    0,
-  );
-  const gapBeforeNext = stamps.length ? MESA_GAP_MM : 0;
-  // Floor: nunca mostrar más libres de los que al soltar se permiten.
-  return Math.max(0, Math.floor((totalMm - usedMm - gapBeforeNext) * 10) / 10);
+  return freeForRow(col, columnStamps(doc, columnId));
+}
+
+/**
+ * Corrige el default legacy de C (`bottomY: -400` con `topY: -8.958` → ~391 mm)
+ * para que el largo útil sea 400 mm desde el origen del primer sello (igual que G/XL).
+ * No toca planchuelas acortadas a mano (otro `bottomY`).
+ */
+export function ensureFullUsableLength(doc: PreparationDocument): PreparationDocument {
+  if (doc.machine !== 'C') return doc;
+  let changed = false;
+  const columns = doc.columns.map((c) => {
+    if (c.bottomY !== -400) return c;
+    const bottomY = c.topY - 400;
+    if (Math.abs(c.bottomY - bottomY) < 0.05) return c;
+    changed = true;
+    return { ...c, bottomY };
+  });
+  return changed ? { ...doc, columns } : doc;
 }
 
 /**
@@ -430,5 +450,5 @@ export function mesaProgress(doc: PreparationDocument, state: { savedRevision: n
 }
 
 export function emptyDocument(programId: string, machine: PreparationMachine): PreparationDocument {
-  return createPreparation(programId, machine, []);
+  return ensureFullUsableLength(createPreparation(programId, machine, []));
 }

@@ -179,7 +179,7 @@ describe('operaciones del frente', () => {
   });
 
   it('planchuela: rebajada hasta 3 mm después del último corte, ranuras de 6 mm a 9 y el resto en bruto', () => {
-    const col = { topY: -8.958, bottomY: -400 };
+    const col = { topY: -8.958, bottomY: -8.958 - 400 };
     const stamps = [{ topY: -8.958, heightMm: 30 }, { topY: -50.958, heightMm: 20 }];
     const seg = barSegments(col, stamps);
     expect(seg[0]).toMatchObject({ kind: 'mecanizado', depthMm: 3.5 });
@@ -190,7 +190,7 @@ describe('operaciones del frente', () => {
     const last = seg[seg.length - 1];
     expect(last).toMatchObject({ kind: 'bruto', depthMm: 0 });
     expect(last.y0).toBeCloseTo(50.958 + 20 + 4 + 3, 6);
-    expect(barSegments(col, [])).toEqual([{ y0: 8.958, y1: 400, depthMm: 0, kind: 'bruto' }]);
+    expect(barSegments(col, [])).toEqual([{ y0: 8.958, y1: 8.958 + 400, depthMm: 0, kind: 'bruto' }]);
     for (let i = 1; i < seg.length; i++) expect(seg[i].y0).toBeCloseTo(seg[i - 1].y1, 6);
   });
 });

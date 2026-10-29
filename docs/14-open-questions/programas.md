@@ -7,7 +7,7 @@
 - **Por qué importa**: con ~79 mm libres un sello de 53 mm parecía caber y al soltar se rechazaba; Fede mecaniza igual si el diseño entra.
 - **Impacto**: alto.
 - **Respuesta (2026-10-29)**: si entra el **diseño**, se acepta. Si falta espacio para el corte/acabado, solo se **avisa** (no bloquea). Los mm libres = alto de diseño que todavía entra.
-- **Documentado en**: POL-097, BR-PROG-019 (ajuste), mesa / `executionPlan`.
+- **Documentado en**: POL-097, BR-PROG-004 / BR-PROG-019 (ajuste), mesa / `validatePlanchuelaDesignFit` / `executionPlan`. La C mide 400 mm útiles desde el origen del primer sello (antes ~391 por `bottomY=-400`).
 
 ### Q-PROG-024
 - **Módulo**: Programas / gadget Aspire · **Estado**: documentada (2026-10-23)
