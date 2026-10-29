@@ -22,11 +22,21 @@ export interface MesaSource extends PreparationSource {
 
 const active = (doc: PreparationDocument) => doc.stamps.filter((s) => !s.excluded);
 
+/**
+ * Misma holgura que el tope de fabricación (`fabricationSize` ±0,05 mm).
+ * Sin esto, un sello a 36,55 en P38 (usable 36,5) “no entra” y además bloquea
+ * soltar cualquier otro en esa planchuela.
+ */
+export const WIDTH_TOLERANCE_MM = 0.05;
+
 /** Ancho del sello sobre la planchuela (lado corto). */
-const shortSide = (s: PreparationSource) => Math.min(s.widthMm, s.heightMm);
+const shortSide = (s: PreparationSource | Pick<StampPlacement, 'widthMm' | 'heightMm'>) =>
+  Math.min(s.widthMm, s.heightMm);
+
+const fitsWidth = (widthMm: number, usableMm: number) => widthMm <= usableMm + WIDTH_TOLERANCE_MM;
 
 export function columnsFor(doc: PreparationDocument, source: PreparationSource): SupportColumn[] {
-  return doc.columns.filter((c) => shortSide(source) <= c.usableMm);
+  return doc.columns.filter((c) => fitsWidth(shortSide(source), c.usableMm));
 }
 
 /** ¿Este sello tiene alguna planchuela posible en la máquina? */
@@ -55,6 +65,7 @@ function packColumn(col: SupportColumn, stamps: StampPlacement[]): StampPlacemen
   let topY = col.topY;
   return stamps.map((s) => {
     const placed = { ...s, columnId: col.id, centerX: col.centerX, topY, pinned: false };
+    // Siempre 8 mm (BR-PROG-019); normaliza gapMm viejos al rearmar.
     topY -= s.heightMm + MESA_GAP_MM;
     return placed;
   });
@@ -89,8 +100,14 @@ function insertStamp(doc: PreparationDocument, stamp: StampPlacement, col: Suppo
   const row = columnStamps(doc, col.id).filter((s) => s.instanceId !== stamp.instanceId);
   row.splice(index, 0, stamp);
   const packed = packColumn(col, row);
-  const wide = packed.find((s) => s.widthMm > col.usableMm);
-  if (wide) return { doc, added: false, reason: `${wide.name} no entra en la planchuela de ${col.nominalMm}: mide ${wide.widthMm} mm de ancho.` };
+  const wide = packed.find((s) => !fitsWidth(s.widthMm, col.usableMm));
+  if (wide) {
+    return {
+      doc,
+      added: false,
+      reason: `${wide.name} no entra en la planchuela de ${col.nominalMm}: mide ${Number(wide.widthMm.toFixed(2))} mm de ancho (entra hasta ${col.usableMm} mm).`,
+    };
+  }
   // Solo el diseño tiene que entrar (POL-097). Si el corte/acabado no caben, es aviso
   // (MACHINING_LENGTH), no rechazo al soltar.
   const last = packed[packed.length - 1];
@@ -99,7 +116,9 @@ function insertStamp(doc: PreparationDocument, stamp: StampPlacement, col: Suppo
   }
   const existing = doc.stamps.some((s) => s.instanceId === stamp.instanceId);
   const origin = existing && doc.columns.find((c) => c.id === stamp.columnId && c.id !== col.id);
-  if (origin) packed.push(...packColumn(origin, columnStamps(doc, origin.id).filter((s) => s.instanceId !== stamp.instanceId)));
+  if (origin) {
+    packed.push(...packColumn(origin, columnStamps(doc, origin.id).filter((s) => s.instanceId !== stamp.instanceId)));
+  }
   const next = replacePlacements(existing ? doc : { ...doc, stamps: [...doc.stamps, stamp] }, packed);
   return { doc: next, added: true, instanceId: stamp.instanceId };
 }
@@ -115,11 +134,21 @@ export function addStamp(doc: PreparationDocument, source: MesaSource, at?: { co
   }
   const cols = columnsFor(doc, source).filter((c) => c.available)
     .sort((a, b) => Number(b.nominalMm === source.tipoPlanchuela) - Number(a.nominalMm === source.tipoPlanchuela) || a.nominalMm - b.nominalMm);
+  if (!cols.length) {
+    const widest = Math.max(0, ...doc.columns.map((c) => c.usableMm));
+    return {
+      doc,
+      added: false,
+      reason: `${source.designName} mide ${Number(shortSide(source).toFixed(2))} mm de ancho; en esta máquina entra hasta ${widest} mm.`,
+    };
+  }
+  let lastReason = `No queda lugar para ${source.designName} en esta máquina.`;
   for (const col of cols) {
     const result = insertStamp(doc, placement, col, columnStamps(doc, col.id).length);
     if (result.added) return result;
+    lastReason = result.reason;
   }
-  return { doc, added: false, reason: `No queda lugar para ${source.designName} en esta máquina.` };
+  return { doc, added: false, reason: lastReason };
 }
 
 /** Cambia el orden y/o la planchuela conservando centrado y separación exacta. */
@@ -295,10 +324,10 @@ export function columnUsage(doc: PreparationDocument): ColumnUsage[] {
     const stamps = columnStamps(doc, c.id);
     const totalMm = c.topY - c.bottomY;
     const usedMm = stamps.reduce(
-      (sum, s, i) => sum + s.heightMm + (i < stamps.length - 1 ? doc.gapMm : 0),
+      (sum, s, i) => sum + s.heightMm + (i < stamps.length - 1 ? MESA_GAP_MM : 0),
       0,
     );
-    const gapBeforeNext = stamps.length ? doc.gapMm : 0;
+    const gapBeforeNext = stamps.length ? MESA_GAP_MM : 0;
     const freeMm = Math.max(0, Math.round((totalMm - usedMm - gapBeforeNext) * 10) / 10);
     return {
       columnId: c.id,

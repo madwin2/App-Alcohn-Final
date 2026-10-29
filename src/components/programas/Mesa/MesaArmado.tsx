@@ -170,7 +170,7 @@ export function MesaArmado({
     const widest = Math.max(...doc.columns.map((c) => c.usableMm));
     return queue.filter((s) => !fitsMachine(doc, s)).map((s) => ({
       source: s,
-      reason: `${Math.min(s.widthMm, s.heightMm)} mm de ancho; acá entra hasta ${widest} mm.`,
+      reason: `${Number(Math.min(s.widthMm, s.heightMm).toFixed(2))} mm de ancho; acá entra hasta ${widest} mm.`,
       machines: machinesFor(s).filter((m) => m !== machine).map((id) => ({ id, label: MACHINE_LABEL[id] })),
     }));
   }, [queue, doc, machinesFor, machine]);
