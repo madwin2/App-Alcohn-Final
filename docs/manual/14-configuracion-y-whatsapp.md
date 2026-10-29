@@ -20,7 +20,7 @@ La tabla **Áreas de usuarios** tiene una fila por **Usuario** y tres áreas: **
 
 ## WhatsApp Bot
 
-Está en el menú lateral como **WhatsApp Bot**. Es para **conectar la cuenta de WhatsApp Business de Alcohn con Meta**.
+La pantalla ya no está en el menú lateral; se abre en `/whatsapp`. Es para **conectar la cuenta de WhatsApp Business de Alcohn con Meta**.
 
 - **Estado**: si la cuenta está conectada.
 - **Diagnóstico**: **Cuenta de WhatsApp**, **Número** y **Negocio**.

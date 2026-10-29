@@ -22,7 +22,7 @@ Módulos funcionales detectados en el código (no solo los del menú). Cada uno 
 | Gastos | `/gastos` | Activo (menú solo dueño) | [economia-gastos](economia-gastos/README.md) |
 | Innovación | `/innovacion` | Activo, poco uso (2 proyectos, 23 tareas) | [innovacion](innovacion/README.md) |
 | Configuración | `/configuracion` (sin ítem en el menú) | Activo (solo áreas de notificación) | [configuracion-usuarios](configuracion-usuarios/README.md) |
-| WhatsApp Bot | `/whatsapp` | Parcial: conecta con Meta pero no persiste ni vincula al bot | [whatsapp-bot](whatsapp-bot/README.md) |
+| WhatsApp Bot | `/whatsapp` (sin ítem en el menú) | Parcial: conecta con Meta pero no persiste ni vincula al bot | [whatsapp-bot](whatsapp-bot/README.md) |
 | Centro Alcohn | `/centro`, `/centro/articulos/:slug` | Activo: botón flotante (libro) arriba de notificaciones; manual, búsqueda y chat; Sobre Alcohn y Actividades aún “próximamente” | [centro-informacion](centro-informacion/README.md) |
 | Mi perfil (página personal) | `/perfil` · `/corcho` | Etapas 1–7 (2026-10-02): encabezado, calendario, tareas, anotaciones, necesidades, crecimiento, feedback, corcho, Mis números + galería. Ver `PLAN_PAGINA_PERSONAL.md` | [perfil](perfil/README.md) |
 | Login / registro | `/login` | Activo | [configuracion-usuarios](configuracion-usuarios/README.md) |

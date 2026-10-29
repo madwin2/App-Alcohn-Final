@@ -13,6 +13,6 @@
 - ✅ El **código de autorización se guarda solo en memoria** del navegador: no se envía a ningún backend ni a la base.
 - ✅ Changelog #6: "Todavía falta vincularla con el servidor del bot".
 - ✅ Existe una cuenta de revisión de Meta (`FBTEST`) que solo puede ver esta pantalla.
-- ✅ La pantalla vuelve a aparecer en el menú lateral como **WhatsApp Bot** (`/whatsapp`).
+- ✅ La pantalla **ya no aparece en el menú lateral**; se abre en `/whatsapp`.
 
 ✅ Confirmado: la cuenta **está vinculada y funcionando** (aunque la app de Meta la muestre como no vinculada). El bot en Hetzner envía con plantillas de Meta (Q-WA-001, Q-WA-002).
