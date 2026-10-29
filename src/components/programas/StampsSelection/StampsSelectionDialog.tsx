@@ -288,8 +288,8 @@ export function StampsSelectionDialog({
               </div>
             ) : filteredStamps.length === 0 ? (
               <div className="flex items-center justify-center h-40 text-muted-foreground text-sm px-4 text-center">
-                No hay sellos elegibles (vectorizados, sin programa, Sin Hacer/Rehacer, máquina{' '}
-                {machine} o sin asignar).
+                No hay sellos elegibles (vectorizados, Sin Hacer/Rehacer, máquina {machine};
+                los rehechos aparecen aunque sigan en el programa donde fallaron).
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -340,6 +340,15 @@ export function StampsSelectionDialog({
                             className="w-4 h-4 flex-shrink-0 opacity-80"
                           />
                         </div>
+
+                        {stamp.failedInProgramName ? (
+                          <div
+                            title={`Falló en ${stamp.failedInProgramName}. Al agregarlo se saca del programa viejo.`}
+                            className="mb-1 text-[11px] font-medium text-amber-700"
+                          >
+                            Falló en {stamp.failedInProgramName}
+                          </div>
+                        ) : null}
 
                         <div className="text-xs text-muted-foreground mb-1">
                           {Math.round(stamp.widthMm)}mm × {Math.round(stamp.heightMm)}mm

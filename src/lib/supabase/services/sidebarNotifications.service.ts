@@ -57,7 +57,8 @@ export const URGENTE_DIAS_FECHA_LIMITE = 3;
 
 /**
  * Sellos elegibles para programa que son prioritarios o tienen fecha límite
- * dentro de URGENTE_DIAS_FECHA_LIMITE días — y todavía no están en ningún programa.
+ * dentro de URGENTE_DIAS_FECHA_LIMITE días — sin programa, o Rehacer aún atado
+ * al programa donde falló (mismo criterio que getEligibleStamps / POL-017).
  */
 export async function fetchProgramasUrgentesSinProgramarBadgeCount(): Promise<number> {
   const limiteFecha = new Date();
@@ -66,16 +67,21 @@ export async function fetchProgramasUrgentesSinProgramarBadgeCount(): Promise<nu
 
   const { data, error } = await supabase
     .from('sellos')
-    .select('id, es_prioritario, fecha_limite')
-    .is('programa_id', null)
+    .select('id, es_prioritario, fecha_limite, programa_id, estado_fabricacion')
     .eq('item_type', 'SELLO')
     .eq('estado_vectorizacion', 'VECTORIZADO')
     .not('archivo_vector_preview', 'is', null)
     .in('estado_fabricacion', ['Sin Hacer', 'Prioridad', 'Rehacer'])
-    .or(`es_prioritario.eq.true,fecha_limite.lte.${limiteFechaStr}`);
+    .or('programa_id.is.null,estado_fabricacion.eq.Rehacer');
 
   if (error) throw new Error(error.message);
-  return data?.length ?? 0;
+
+  return (data ?? []).filter((s) => {
+    if (s.programa_id && s.estado_fabricacion !== 'Rehacer') return false;
+    if (s.es_prioritario) return true;
+    if (!s.fecha_limite) return false;
+    return String(s.fecha_limite).slice(0, 10) <= limiteFechaStr;
+  }).length;
 }
 
 /** IDs de órdenes web con pago pendiente (para badge "nuevos"). */

@@ -85,7 +85,7 @@ La primera vez que entrás aparece un recorrido guiado.
 | **Carga** | Cuánto del largo de cada planchuela ya está ocupado. Cada sello ocupa su **lado largo + 8 mm** de corte |
 | **Gadget** | El script que corre dentro de Aspire y arma el programa solo: importa los vectores, los escala, los ubica en su planchuela y aplica las trayectorias según el tipo de sello |
 
-Qué sellos pueden entrar a un programa: solo **sellos** (no accesorios), **con vector**, en estado **Sin Hacer** o **Rehacer**, que **no estén en otro programa** y cuya planchuela acepte esa máquina.
+Qué sellos pueden entrar a un programa: solo **sellos** (no accesorios), **con vector**, en estado **Sin Hacer** o **Rehacer**, cuya planchuela acepte esa máquina. Los que ya están en otro programa no entran, **salvo** si están en **Rehacer**: esos aparecen en Vectores con “Falló en …” y al agregarlos se mueven solos al programa nuevo.
 
 Criterio para armar: 1) los **prioritarios**, 2) los pedidos **más viejos**, 3) **aprovechar la planchuela** completa. Se pueden mezclar tipos de sello. Lo normal es **un programa por día por máquina**.
 
@@ -96,7 +96,7 @@ Arriba: buscador (**Buscar programas...**), **Filtros**, **Ordenar** y **Nuevo P
 La vista normal es un **tablero**:
 
 - **Tres columnas: Chica, Grande y XL.** En cada una, los programas que todavía no terminaron, como hojas en bolsillos. Un bolsillo vacío dice **Ranura libre**.
-- A la derecha, el panel **Vectores**: los sellos listos para programar que todavía no están en ningún programa. Los prioritarios se marcan en rojo; cada sello indica en qué máquinas entra y si tiene una nota del pedido. Si no hay nada, dice **No hay vectores listos**.
+- A la derecha, el panel **Vectores**: los sellos listos para programar (sin programa, o rehechos que todavía figuran en el programa donde fallaron). Los prioritarios se marcan en rojo; cada sello indica en qué máquinas entra y si tiene una nota del pedido. Si falló en un programa previo, dice **Falló en …**. Si no hay nada, dice **No hay vectores listos**.
 - Abajo del panel: la carpeta **Terminados** y la **Papelera**.
 
 El número rojo de **Programas** en el menú cuenta los sellos listos para programar que son prioritarios o vencen en 3 días o menos.
@@ -209,7 +209,7 @@ En la app:
 
 ⚠️ **Rehacer** desde el menú del programa **no pide motivo** (a diferencia de Pedidos y Producción). Si un solo sello salió mal, conviene marcar el programa como Hecho y hacer el Rehacer de ese sello desde [Pedidos](03-pedidos.md#rehacer-un-sello) o [Producción](06-produccion.md), así queda registrado el motivo.
 
-⚠️ Un sello rehecho sigue asociado a su programa viejo y **no vuelve a aparecer en el panel Vectores**. Es un problema conocido.
+Un sello rehecho sigue figurando un rato en el programa donde falló (trazabilidad), pero **vuelve a aparecer en Vectores**. Cuando lo agregás a un programa nuevo, sale solo del viejo.
 
 ## Quitar sellos, bloquear y borrar
 

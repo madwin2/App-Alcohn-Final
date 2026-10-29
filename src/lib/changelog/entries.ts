@@ -1383,6 +1383,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 75,
+    date: '2026-10-29',
+    title: 'Rehacer vuelve a Programas',
+    version: '1.93',
+    slides: [
+      {
+        heading: 'Un sello en Rehacer vuelve a Vectores',
+        body: 'Aunque siga figurando en el programa donde falló, aparece en el panel Vectores con “Falló en …”. Al agregarlo a un programa nuevo, se mueve solo: queda la traza en el viejo y entra al nuevo.',
+        icon: RefreshCw,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

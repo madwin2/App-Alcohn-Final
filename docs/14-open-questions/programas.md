@@ -73,10 +73,11 @@
 ### Q-PROG-009
 - **Módulo**: Programas/Rehacer · **Estado**: documentada (2026-09-28)
 - **Pregunta**: Un sello que se rehace sigue vinculado a su programa original (`programa_id`). ¿Debería salir del programa al rehacerse, o volver a fabricarse en el mismo?
-- **Evidencia**: `registrar_rehacer` no toca `programa_id`. `getEligibleStamps` solo lista sellos con `programa_id IS NULL`, y `addStampsToProgram` rechaza sellos de otro programa. Resultado probable: el sello rehecho **no aparece** en el panel Vectores y queda dentro de un programa que puede seguir mostrándose como Finalizado (el estado guardado no retrocede). Ver AUD-INC-013.
-- **Por qué importa**: un sello a rehacer podría quedar "invisible" para Programas hasta que alguien lo quite a mano del programa viejo.
+- **Evidencia**: `registrar_rehacer` no toca `programa_id`. Antes: `getEligibleStamps` exigía `programa_id IS NULL` y `addStampsToProgram` rechazaba sellos de otro programa. Ver AUD-INC-013.
+- **Por qué importa**: un sello a rehacer podía quedar "invisible" para Programas hasta que alguien lo quite a mano del programa viejo.
 - **Impacto**: alto.
 - Respuesta: Deberia mantenerse en ese programam (para tener trasabilidad de en que programa fallo) pero deberia permitir asignarse a un nuevo programa.
+- **Implementado (2026-10-29)**: elegibles incluyen Rehacer con `programa_id`; al agregar a un programa nuevo se transfiere (POL-017 / B-07).
 
 ### Q-PROG-010
 - **Módulo**: Programas · **Estado**: documentada (2026-09-28)

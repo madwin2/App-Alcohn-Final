@@ -73,8 +73,9 @@ Hallazgos detectados durante la documentación (2026-09-27). **No se corrigió n
 <a id="aud-inc-013"></a>
 
 ### AUD-INC-013 · Sellos rehechos siguen atados a su programa
-- **Evidencia**: `registrar_rehacer` no limpia `programa_id`; `getEligibleStamps` exige `programa_id IS NULL`.
-- **Impacto**: el sello no vuelve al panel de Vectores; el programa original (quizás Finalizado) lo sigue conteniendo. [Q-PROG-009](../14-open-questions/programas.md#q-prog-009).
+- **Evidencia**: `registrar_rehacer` no limpia `programa_id`; `getEligibleStamps` exigía `programa_id IS NULL`.
+- **Impacto**: el sello no volvía al panel de Vectores; el programa original lo seguía conteniendo. [Q-PROG-009](../14-open-questions/programas.md#q-prog-009).
+- **Estado**: resuelta (2026-10-29) — elegibles incluyen `Rehacer` con `programa_id`; al agregar a un programa nuevo se transfiere y queda `SELLO_QUITADO` con `reason=transfer_rehacer` en el programa viejo (POL-017 / B-07).
 
 <a id="aud-inc-014"></a>
 

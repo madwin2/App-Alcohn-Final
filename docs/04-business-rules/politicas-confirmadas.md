@@ -20,7 +20,7 @@ Reglas que el equipo **confirmó** (respuestas a `14-open-questions`, 2026-09-28
 | POL-014 | Criterio para armar programas: 1) prioritarios, 2) los pedidos más viejos, 3) aprovechar la planchuela completa. Se mezclan tipos de sello; normalmente una sola corrida. | Q-PROG-001, Q-PROG-002 | Sí ("Sugerir" usa prioridad + antigüedad + tope de largo) |
 | POL-015 | **Un programa por día por máquina.** Chica: corrida ideal ~24 h. Grande: 10–12 h o menos. | Q-CNC-003 | No se controla |
 | POL-016 | Rehacer desde un programa **debe pedir motivo** (para asignar el error a los sellos del programa). | Q-PROD-004 | **No** (AUD-INC-012) |
-| POL-017 | Un sello rehecho **queda registrado en el programa donde falló** (trazabilidad) pero **debe poder asignarse a un programa nuevo**. | Q-PROG-009 | **No** (AUD-INC-013) |
+| POL-017 | Un sello rehecho **queda registrado en el programa donde falló** (trazabilidad) pero **debe poder asignarse a un programa nuevo**. | Q-PROG-009 | Sí (`getEligibleStamps` + transferencia en `addStampsToProgram`; AUD-INC-013 resuelta) |
 | POL-018 | Largos máximos de planchuela (C 400 mm, G/XL 250 mm) y pérdida de corte 0,8 cm son correctos. | Q-PROG-012 | Sí |
 | POL-019 | Criterio de revisión de vectores: fidelidad al diseño, líneas rectas bien hechas, sin deformaciones. Revisa quien pidió el vector (normalmente Fede). | Q-VEC-004 | Manual |
 | POL-020 | Tiempos del contacto comercial automático (10 min después de la muestra, cooldown 7 días) y de recompra (2 meses, clientes con 1 compra) son los deseados. | Q-COM-002 | Sí |

@@ -27,7 +27,7 @@
 
 - Stock descontado al enviar **no se devuelve**.
 - `bronce_consumo` del primer intento queda; el segundo `Hecho` registra otro consumo (el trigger dispara cuando pasa de no-Hecho a Hecho).
-- Si el sello seguía asociado a un programa (`programa_id`), sigue asociado. 🔶 → [Q-PROG-009](../14-open-questions/programas.md#q-prog-009).
+- Si el sello seguía asociado a un programa (`programa_id`), sigue asociado hasta que lo agreguen a uno nuevo: entonces se transfiere (POL-017 / Q-PROG-009).
 
 ## Preguntas
 

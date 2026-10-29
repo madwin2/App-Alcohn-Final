@@ -413,6 +413,14 @@ export function HojaInlineStampPicker({
                   <span className="line-clamp-2 w-full text-center text-[9px] font-medium leading-tight text-zinc-700">
                     {stamp.designName}
                   </span>
+                  {stamp.failedInProgramName ? (
+                    <span
+                      title={`Falló en ${stamp.failedInProgramName}. Al agregarlo se saca del programa viejo.`}
+                      className="line-clamp-1 w-full text-center text-[8px] font-medium leading-none text-amber-700"
+                    >
+                      Falló en {stamp.failedInProgramName}
+                    </span>
+                  ) : null}
                   {(orderDate || planchuela) && (
                     <span className="flex w-full flex-col items-center gap-0.5 text-center text-[9px] tabular-nums leading-none text-zinc-400">
                       {orderDate && <span>{orderDate}</span>}

@@ -8,8 +8,8 @@ La implementación devuelve a pendientes mediante la acción existente antes de 
 
 | ID | Regla | Dónde | Hace cumplir |
 |---|---|---|---|
-| BR-PROG-001 | Solo pueden entrar a un programa ítems `SELLO`, `VECTORIZADO`, con vector, en `Sin Hacer`, `Prioridad` o `Rehacer`. | `getEligibleStamps`, `addStampsToProgram`, `ELIGIBLE_FAB_STATES` | Servicio |
-| BR-PROG-002 | Un ítem pertenece a lo sumo a un programa; para moverlo hay que quitarlo primero. | `addStampsToProgram` | Servicio |
+| BR-PROG-001 | Solo pueden entrar a un programa ítems `SELLO`, `VECTORIZADO`, con vector, en `Sin Hacer`, `Prioridad` o `Rehacer` (estos últimos también si aún tienen `programa_id` del fallo). | `getEligibleStamps`, `addStampsToProgram`, `ELIGIBLE_FAB_STATES`, `isAvailableForNewProgram` | Servicio |
+| BR-PROG-002 | Un ítem pertenece a lo sumo a un programa activo. Excepción POL-017: un sello en `Rehacer` aún atado al programa donde falló puede agregarse a uno nuevo; al hacerlo se transfiere (sale del viejo con evento `SELLO_QUITADO` `transfer_rehacer`). Otros estados siguen exigiendo quitarlo a mano. | `addStampsToProgram`, `canAutoTransferRehacerFromOtherProgram` | Servicio |
 | BR-PROG-003 | Planchuelas por máquina: C {12, 19, 25, 38}; G {12, 38}; XL {63}. ABC acepta solo ítems tipo `ABC` (cualquier medida). | `MACHINE_SIZE_ELIGIBILITY`, `isEligibleStampForMachine` | Servicio |
 | BR-PROG-004 | Por cada planchuela, la suma de (lado mayor + pérdida de corte) de los sellos no puede superar el largo máximo de la máquina (C 400 mm, G 250, XL 250; configurable en `fabricacion_parametros`). | `validatePlanchuelaLengthLimit` en `createProgram`/`addStampsToProgram`; `suggestStampSelection` | Servicio |
 | BR-PROG-005 | Nombre automático `"D MMM xN M"`; se actualiza al cambiar cantidad o fecha solo si el nombre actual tiene formato automático. | `programName.ts`, `maybeRenameProgram` | Servicio |

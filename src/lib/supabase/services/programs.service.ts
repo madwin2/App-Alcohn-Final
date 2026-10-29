@@ -23,7 +23,12 @@ import {
 } from '../../programas/material';
 import { deriveLifecycleFromStamps } from '../../programas/lifecycle';
 import { nextAutoProgramName } from '../../programas/programName';
-import { ELIGIBLE_FAB_STATES, isEligibleStampForMachine } from '../../programas/eligibility';
+import {
+  ELIGIBLE_FAB_STATES,
+  canAutoTransferRehacerFromOtherProgram,
+  isAvailableForNewProgram,
+  isEligibleStampForMachine,
+} from '../../programas/eligibility';
 import { fetchLatestFabricacionParams } from './fabricacionParametros.service';
 import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
 import { notifySellosHechos, notifySellosNoImportados } from '@/lib/notificaciones/events';
@@ -952,22 +957,52 @@ export const getEligibleStamps = async (opts: {
 }): Promise<ProgramStamp[]> => {
   const { perdidaCorteCm } = await loadMaterialParams();
 
+  // Sin programa, o Rehacer aún atado al programa donde falló (POL-017 / Q-PROG-009).
   const { data, error } = await supabase
     .from('sellos')
     .select('*')
-    .is('programa_id', null)
     .eq('item_type', 'SELLO')
     .eq('estado_vectorizacion', 'VECTORIZADO')
     .not('archivo_vector_preview', 'is', null)
-    .in('estado_fabricacion', ['Sin Hacer', 'Prioridad', 'Rehacer']);
+    .in('estado_fabricacion', ['Sin Hacer', 'Prioridad', 'Rehacer'])
+    .or('programa_id.is.null,estado_fabricacion.eq.Rehacer');
 
   if (error) throw error;
 
   const exclude = new Set(opts.excludeStampIds || []);
 
-  const filtered = (data || [])
-    .filter((s) => isEligibleStampForMachine(s, opts.machine, exclude))
-    .map((s) => mapSelloToProgramStamp(s, perdidaCorteCm));
+  const rows = (data || []).filter(
+    (s) => isAvailableForNewProgram(s) && isEligibleStampForMachine(s, opts.machine, exclude),
+  );
+
+  const failedProgramIds = [
+    ...new Set(
+      rows
+        .filter((s) => s.estado_fabricacion === 'Rehacer' && s.programa_id)
+        .map((s) => s.programa_id as string),
+    ),
+  ];
+
+  const failedProgramNames = new Map<string, string>();
+  if (failedProgramIds.length > 0) {
+    const { data: programas } = await supabase
+      .from('programa')
+      .select('id, nombre')
+      .in('id', failedProgramIds);
+    for (const p of programas || []) {
+      if (p.nombre) failedProgramNames.set(p.id, p.nombre);
+    }
+  }
+
+  const filtered = rows.map((s) => {
+    const stamp = mapSelloToProgramStamp(s, perdidaCorteCm);
+    if (s.estado_fabricacion === 'Rehacer' && s.programa_id) {
+      stamp.failedInProgramId = s.programa_id;
+      stamp.failedInProgramName = failedProgramNames.get(s.programa_id) ?? null;
+      stamp.isPriority = true;
+    }
+    return stamp;
+  });
 
   filtered.sort((a, b) => {
     if (Boolean(a.isPriority) !== Boolean(b.isPriority)) return a.isPriority ? -1 : 1;
@@ -982,6 +1017,70 @@ export const getEligibleStamps = async (opts: {
 
   return filtered;
 };
+
+/**
+ * Saca un sello en Rehacer del programa donde falló para poder asignarlo a otro.
+ * No exige que el programa viejo sea editable (puede estar bloqueado o "finalizado"
+ * en UI); deja el evento SELLO_QUITADO con reason=transfer_rehacer (POL-017).
+ */
+async function detachRehacerStampFromOldProgram(opts: {
+  stampId: string;
+  fromProgramId: string;
+  toProgramId: string;
+  designName?: string | null;
+}): Promise<void> {
+  const { stampId, fromProgramId, toProgramId, designName } = opts;
+
+  const { error } = await supabase
+    .from('sellos')
+    .update({
+      programa_id: null,
+      maquina: null,
+      estado_aspire: null,
+      updated_at: new Date().toISOString(),
+    } as any)
+    .eq('id', stampId)
+    .eq('programa_id', fromProgramId)
+    .eq('estado_fabricacion', 'Rehacer');
+
+  if (error) throw error;
+
+  const { perdidaCorteCm } = await loadMaterialParams();
+  await recalculateAndPersistLengths(fromProgramId, perdidaCorteCm);
+
+  const { data: programa } = await supabase
+    .from('programa')
+    .select('archivo_zip_url, nombre, cantidad_sellos, fecha, maquina, estado_programa')
+    .eq('id', fromProgramId)
+    .maybeSingle();
+
+  if (programa) {
+    const estado = (programa as any).estado_programa as ProgramLifecycleState;
+    const update: Record<string, unknown> = {
+      dirty: true,
+      updated_at: new Date().toISOString(),
+    };
+    // Igual que releaseStampFromAnyProgram: no bajar BLOQUEADO/FINALIZADO a BORRADOR.
+    if (estado === 'LISTO') update.estado_programa = 'BORRADOR';
+    await supabase.from('programa').update(update as any).eq('id', fromProgramId);
+
+    const remaining = Math.max(0, (programa.cantidad_sellos || 1) - 1);
+    await maybeRenameProgram(
+      fromProgramId,
+      programa.nombre,
+      (programa as any).fecha,
+      (programa as any).maquina,
+      remaining,
+    );
+  }
+
+  await logProgramEvent(fromProgramId, 'SELLO_QUITADO', {
+    stampId,
+    reason: 'transfer_rehacer',
+    toProgramId,
+    designName: designName ?? null,
+  });
+}
 
 export const addStampsToProgram = async (
   programId: string,
@@ -1017,11 +1116,25 @@ export const addStampsToProgram = async (
   if (sellosErr) throw sellosErr;
   if (!newSellos?.length) throw new ProgramServiceError('No se encontraron los sellos');
 
+  const transferredFrom: { stampId: string; fromProgramId: string }[] = [];
+
   for (const sello of newSellos) {
     if (sello.programa_id && sello.programa_id !== programId) {
-      throw new ProgramServiceError(
-        `El sello "${sello.diseno || sello.id}" ya está en otro programa. Quitarlo primero.`,
-      );
+      if (canAutoTransferRehacerFromOtherProgram(sello, programId)) {
+        const fromProgramId = sello.programa_id as string;
+        await detachRehacerStampFromOldProgram({
+          stampId: sello.id,
+          fromProgramId,
+          toProgramId: programId,
+          designName: sello.diseno,
+        });
+        sello.programa_id = null;
+        transferredFrom.push({ stampId: sello.id, fromProgramId });
+      } else {
+        throw new ProgramServiceError(
+          `El sello "${sello.diseno || sello.id}" ya está en otro programa. Quitarlo primero.`,
+        );
+      }
     }
     if (sello.estado_vectorizacion !== 'VECTORIZADO' || !sello.archivo_vector_preview) {
       throw new ProgramServiceError(`Sello sin vectorizar: ${sello.diseno || sello.id}`);
@@ -1077,6 +1190,7 @@ export const addStampsToProgram = async (
   await logProgramEvent(programId, 'SELLO_AGREGADO', {
     count: newSellos.length,
     stampIds,
+    ...(transferredFrom.length ? { transferredFrom } : {}),
   });
 
   const result = await getProgramById(programId);

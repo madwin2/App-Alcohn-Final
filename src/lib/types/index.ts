@@ -365,6 +365,12 @@ export interface ProgramStamp {
   previousFabricationState?: FabricationState | null;
   machine?: ProgramMachineType | null;
   lengthAlongMm?: number;
+  /**
+   * Solo en elegibles: sello en Rehacer que todavía figura en el programa donde falló
+   * (POL-017). Al agregarlo a uno nuevo se transfiere solo.
+   */
+  failedInProgramId?: string | null;
+  failedInProgramName?: string | null;
 }
 
 export type ProgramLengthByPlanchuela = Partial<Record<PlanchuelaSize, number>>;

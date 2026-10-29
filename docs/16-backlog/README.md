@@ -17,7 +17,7 @@ Surgido de la auditoría (2026-09-27) y de las respuestas del equipo (2026-09-28
 | ID | Qué | Evidencia | Esfuerzo |
 |---|---|---|---|
 | B-06 | **Evento Purchase a Meta con valor de menos** (~16 % en promedio, 108 de 638 pedidos de la app): mandar el evento cuando el pedido tiene todos sus ítems | Q-WEB-004, AUD-UND-009 | S–M |
-| B-07 | **Sello rehecho atado a su programa viejo**: que quede registrado en el programa donde falló pero pueda asignarse a uno nuevo | POL-017, AUD-INC-013, Q-PROG-009 | M |
+| B-07 | ~~**Sello rehecho atado a su programa viejo**~~ — **Hecho 2026-10-29** | POL-017, AUD-INC-013, Q-PROG-009 | — |
 | B-08 | **Rehacer desde el menú del programa debe pedir motivo** (mismo diálogo que Pedidos/Producción) | POL-016, AUD-INC-012 | S |
 | B-09 | **Demanda de stock inflada**: excluir pedidos viejos (> 2 meses) salvo deudores | Q-STK-003, AUD-UND-011 | S |
 | B-10 | **WhatsApp marcados como fallidos (30–50 %) y posibles duplicados**: alinear timeouts, que los reintentos pasen por la edge, evitar reenviar si el bot ya lo envió | AUD-UND-003, AUD-UND-008, Q-WA-003 | M |

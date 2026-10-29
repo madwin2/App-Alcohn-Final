@@ -56,7 +56,7 @@ Trigger adicional: `sellos_rehacer_auto_prioridad` pone prioridad cada vez que u
 
 ## Efectos sobre otros módulos
 
-- **Programas**: `estado_aspire` limpio; el sello vuelve a ser elegible (estado `Rehacer`). Si seguía con `programa_id`, sigue asociado a ese programa (el RPC no lo quita) y **no reaparece** en el panel de Vectores. Política confirmada: debe quedar registrado en el programa donde falló pero poder asignarse a uno nuevo (POL-017) → **pendiente de implementar** (AUD-INC-013).
+- **Programas**: `estado_aspire` limpio; el sello vuelve a ser elegible (estado `Rehacer`). Si seguía con `programa_id`, el RPC **no lo quita** (queda registrado en el programa donde falló). Aun así **reaparece en Vectores** y, al agregarlo a un programa nuevo, se transfiere solo (evento `SELLO_QUITADO` con `transfer_rehacer` en el viejo). POL-017 / AUD-INC-013.
 - **Envíos**: la orden vuelve a no despachada; desaparece del historial de despachados.
 - **Stock**: si ya se había descontado stock al enviarse, **no** se devuelve.
 - **Vectorización**: si el motivo es de vector, 🔶 el operario debe re-vectorizar; el sistema no borra el vector.

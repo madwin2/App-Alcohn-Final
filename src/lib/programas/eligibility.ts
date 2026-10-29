@@ -14,6 +14,29 @@ export type EligibleStampRow = {
   tipo_planchuela?: number | string | null;
 };
 
+export type StampProgramAssignment = {
+  programa_id?: string | null;
+  estado_fabricacion?: string | null;
+};
+
+/**
+ * POL-017 / Q-PROG-009: un sello en Rehacer puede seguir atado al programa donde
+ * falló (trazabilidad) y aun así figurar como disponible para un programa nuevo.
+ */
+export function isAvailableForNewProgram(stamp: StampProgramAssignment): boolean {
+  if (!stamp.programa_id) return true;
+  return stamp.estado_fabricacion === 'Rehacer';
+}
+
+/** Rehecho atado a otro programa: se puede transferir al destino sin quitarlo a mano. */
+export function canAutoTransferRehacerFromOtherProgram(
+  stamp: StampProgramAssignment,
+  targetProgramId: string,
+): boolean {
+  if (!stamp.programa_id || stamp.programa_id === targetProgramId) return false;
+  return stamp.estado_fabricacion === 'Rehacer';
+}
+
 export function isEligibleStampForMachine(
   stamp: EligibleStampRow,
   machine: ProgramMachineType,

@@ -48,7 +48,7 @@ El editor del soporte y la sincronización incremental por revisión están impl
 
 ### Vista tablero (por defecto, "tarjetero")
 - **Tres columnas** Chica / Grande / XL con los programas no finalizados de cada máquina como "hojas en bolsillos". Los programas `ABC` quedan fuera de las columnas.
-- **Panel lateral "Vectores"** (`ProgramsSidePanel`): sellos elegibles sin programa, con badges de nota, prioridad (rojo) y máquinas donde entran. Se arrastran:
+- **Panel lateral "Vectores"** (`ProgramsSidePanel`): sellos elegibles sin programa **o rehechos aún atados al programa donde fallaron** (POL-017; chip “Falló en …”), con badges de nota, prioridad (rojo) y máquinas donde entran. Se arrastran:
   - sobre un programa → se agregan;
   - sobre un bolsillo vacío → se crea un programa nuevo con ese sello (fecha de hoy, nombre automático).
 - **Chequeo de fresa** (2026-10-14): botón **Fresa** en el pie de la hoja y **Chequear fresa** en el clic derecho de la tarjeta → `FresaProgramaDialog`: estado de cada sello del programa y corrección por sello (guarda el SVG nuevo en `archivo_vector_preview`). Ver [chequeo-de-fresa](../vectorizacion/chequeo-de-fresa.md).
@@ -96,7 +96,7 @@ Estados que el módulo escribe en el **sello**: `estado_fabricacion` (`Programad
 | Acción | Precondiciones | Cambios | Side effects |
 |---|---|---|---|
 | **Crear programa** (`createProgram`) | Si trae sellos: no superar el largo máximo por planchuela. | INSERT `programa` (`BORRADOR`, `dirty=true`); luego agrega sellos. | Evento `CREADO`. |
-| **Agregar sellos** (`addStampsToProgram`) | Programa sin candado; cada sello: sin otro programa, `VECTORIZADO` con vector, estado `Sin Hacer`/`Prioridad`/`Rehacer`, entra en la máquina por planchuela, no supera el largo máximo. | Sello: `programa_id`, `estado_fabricacion_previo`, `estado_fabricacion='Programado'`, `maquina`, `estado_aspire='Aspire X'`. Programa: `largo_usado_*`, `cantidad_sellos`, `dirty=true`, `LISTO→BORRADOR`, renombre automático. | Evento `SELLO_AGREGADO`. Triggers DB: `sync_programa_nombre`, `update_programa_cantidad`, `mark_programa_dirty…`. |
+| **Agregar sellos** (`addStampsToProgram`) | Programa sin candado; cada sello: sin otro programa **salvo Rehacer transferible** (POL-017), `VECTORIZADO` con vector, estado `Sin Hacer`/`Prioridad`/`Rehacer`, entra en la máquina por planchuela, no supera el largo máximo. | Si venía de otro programa en Rehacer: sale del viejo (evento `SELLO_QUITADO` `transfer_rehacer`). Sello: `programa_id`, `estado_fabricacion_previo`, `estado_fabricacion='Programado'`, `maquina`, `estado_aspire='Aspire X'`. Programa: `largo_usado_*`, `cantidad_sellos`, `dirty=true`, `LISTO→BORRADOR`, renombre automático. | Evento `SELLO_AGREGADO` (detalle puede traer `transferredFrom`). Triggers DB: `sync_programa_nombre`, `update_programa_cantidad`, `mark_programa_dirty…`. |
 | **Quitar sello** (`removeStampFromProgram`) | Sin candado. Elegir: volver al estado previo o a uno nuevo. | Sello: sin programa, estado previo/nuevo, sin Aspire, sin máquina. Programa: recalcula largos, `dirty`, renombre. | Evento `SELLO_QUITADO`. |
 | **Cambiar estado de todo el programa** (`setFabricationStateForProgram`) | Tener sellos. Permitido **aunque esté bloqueado**. | Todos los sellos al estado; `Rehacer` → prioritario. | Notificación v3 "sellos terminados" si `Hecho`. Evento `ESTADO_CAMBIADO`. Triggers de `Hecho` (bronce). |
 | **Estado por sello** (`setStampFabricationStates`, vista lista) | — | Cada sello a Hecho/Retocar/Rehacer. | Igual que arriba. |

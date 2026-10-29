@@ -236,6 +236,14 @@ function DraggableStamp({
       <p className="mt-1 line-clamp-2 text-center text-[9px] font-medium leading-tight text-foreground">
         {entry.stamp.designName}
       </p>
+      {entry.stamp.failedInProgramName ? (
+        <p
+          title={`Falló en ${entry.stamp.failedInProgramName}. Al agregarlo a un programa nuevo se saca del viejo.`}
+          className="mt-0.5 line-clamp-1 text-center text-[8px] font-medium leading-none text-amber-400/90"
+        >
+          Falló en {entry.stamp.failedInProgramName}
+        </p>
+      ) : null}
       {(orderDate || planchuela) && (
         <div className="mt-0.5 flex flex-col items-center gap-0.5 text-center text-[8px] tabular-nums leading-none text-muted-foreground">
           {orderDate && <span>{orderDate}</span>}
