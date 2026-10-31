@@ -4,6 +4,7 @@ import { groupZones, type CheckOutput } from './engine';
 import { REPASO_DEPTH_STEP_MM, REPASO_MIN_GAIN_MM, REPASO_MIN_RELATIVE, cutRadiusAtDepth, primaryProfile, type FresaAnalysisOptions, type FresaProfile, type MachiningRecipe } from './config';
 import { UM, bounds, components, difference, intersect, offset, opening, rect, regionArea, simplify, toPath64, union, type Paths64 } from './geometry';
 import type { Pt } from './pathData';
+import { buildLayout, layoutWords } from './layout';
 
 export type PassOutcome = 'sin_repaso' | 'repaso_sugerido' | 'revisar_rango' | 'revisar_diseno' | 'revisar_principal' | 'sin_receta';
 export interface RepasoCandidate {
@@ -94,6 +95,14 @@ export function repasoSelection(black: Paths64, white: Paths64, primary: FresaPr
     zones.push({ id: `r${zones.length + 1}`, rings: toMm(comp.paths), areaMm2: area / (UM * UM), bounds: b,
       center: { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 }, pieceIds });
   }
+  // Palabras enteras (pedido del equipo, 2026-10-31): repasar letras salteadas
+  // de una palabra deja la marca despareja. Si una letra de la palabra lleva
+  // repaso, lo llevan todas.
+  if (selected.size) {
+    for (const word of layoutWords(buildLayout(black))) {
+      if (word.some((id) => selected.has(id))) word.forEach((id) => selected.add(id));
+    }
+  }
   return { zones, minGainMm, pieces: pieces.map((p, i) => ({ id: i, bounds: boundsMm(p.paths), selected: selected.has(i) })) };
 }
 
@@ -123,8 +132,11 @@ export function runPasses(
   // La referencia de 0,5 mm solo importa si hace falta el repaso (ahorra un análisis entero).
   const preferredFine = recipe === 'ALIMENTO' ? check(black, preferredProfile, options) : null;
   result.preferredFine = preferredFine;
-  const fineMiss = union(fine.zones.filter(serious).flatMap(region));
-  const preferredMiss = union((preferredFine ?? fine).zones.filter(serious).flatMap(region));
+  // Lo que la 0,2 deja «se nota» (se lee igual) no es un problema del diseño:
+  // con límites de marca, solo lo grave pide revisar el diseño.
+  const unresolvedByFine = (z: FresaZone) => (profile.markLimits ? z.severity === 'alta' : serious(z));
+  const fineMiss = union(fine.zones.filter(unresolvedByFine).flatMap(region));
+  const preferredMiss = union((preferredFine ?? fine).zones.filter(unresolvedByFine).flatMap(region));
   const meaningful = options.minZoneAreaMm2 * UM * UM;
   for (const zone of result.repaso.zones) {
     const area = region(zone);

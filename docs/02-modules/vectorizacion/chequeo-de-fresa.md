@@ -1,5 +1,36 @@
 # Chequeo de fresa
 
+> **Límites reales de marca** (placa de prueba sellada en cuero y madera, 2026-10-31): qué se separa, qué se tapa y cuándo es grave → [limites-de-marca.md](limites-de-marca.md).
+
+## Gravedad por cómo marca (2026-10-31, aprobado por el dueño)
+
+✅ `config.ts` (`markLimits`, `MARK_CONTACT_MAX_RATIO`, `MARK_MIN_LETTER_HEIGHT_MM`, `EYE_MAX_COMPACTNESS`) y `analyze.ts` (`gapSeverity`, `pairContact`). Los perfiles general y principal (Clásico/3 mm) llevan **límites de marca** medidos sellando la [placa de prueba](limites-de-marca.md); Alimento no (no se sella en cuero ni madera: sigue con su referencia de profundidad, POL-085).
+
+| | Con repaso (fina) | Solo primera fresa |
+|---|---|---|
+| Espacio entre piezas: OK desde | **0,45 mm** | 0,8 mm |
+| Espacio: «se nota» (rayita) entre | 0,35 y 0,45 | 0,65 y 0,8 |
+| Ojo: OK desde | **0,70 mm** | 0,95 mm |
+| Ojo: «se nota» (puntito) entre | 0,45 y 0,70 | 0,75 y 0,95 |
+
+- **Niveles**: `alta` = **grave** (cambia lo que se lee), `media` = **se nota** (se lee igual), `baja` = OK. Etiquetas en `SEVERITY_LABEL`.
+- **Espacio entre piezas** (`paso_angosto`): se mide el **espacio más angosto** entre las dos piezas (`pairContact`, búsqueda binaria con offsets) y el **largo del tramo** donde quedan a menos del corte de grave. Por debajo de 0,35 mm es grave, salvo que el tramo pegado sea ≤ 50 % de la altura de la pieza más baja y esa pieza mida ≥ 1 mm: ahí se tocan en un punto y se lee igual («se nota»). Los puentes chicos entre dos piezas (el pie de la R contra la a) ya no se descartan como esquina.
+- **Ojos** (`hueco_cerrado` compacto: área ≤ 4 × ancho²): se juzgan por el círculo más grande que entra (`interiorPoint`). Un hueco no compacto (anillo, letra calada) sigue con la regla de antes: grave si entero no llega a la mínima.
+- **Profundidad mínima** de la fina: la de un espacio de 0,45 mm (≈ 0,22 mm, antes 0,3); de la principal: la de 0,8 mm (≈ 0,37). La corrección abre espacios hasta 0,45 mm y agranda ojos hasta 0,70 mm.
+- **Letra demasiado chica** (`groupTitle`): un lugar grave con 3 o más zonas en piezas de menos de 1 mm de alto se titula así, en vez de listar cada par y cada ojo.
+- **Comparación de pasadas**: lo que la 0,2 deja «se nota» no da «Revisar diseño»; solo lo grave.
+- `FRESA_ANALYSIS_VERSION` sigue en 6: la selección del repaso no cambió, y el gadget y los programas guardados usan ese número para saber si `fine.pieces` sigue vigente.
+- Verificado con la placa: el chequeo marca lo mismo que se vio en las impresiones (A5 grave, A6 se nota, A7 OK; ojos C5–C6 se nota; rayado G2 OK; «Rabeg8» se nota; «Rabe» de 1,0 y 1,3 grave). Mismo tiempo de análisis que antes.
+
+## Repaso por palabras enteras (2026-10-31, pedido del equipo)
+
+✅ `passes.ts` (`repasoSelection`) + `layout.ts` (`layoutWords`): si una letra de una palabra lleva repaso, **lo llevan todas las letras de esa palabra**. Repasar letras salteadas dejaba la marca despareja («o todas las letras de una palabra o ninguna»). Las demás palabras del sello siguen sin repaso si no lo necesitan.
+
+- **Palabra**: letras seguidas de un renglón recto o de un tramo de texto en arco (`buildLayout`), cortadas donde el espacio entre letras es más del doble del habitual del renglón y más de 0,3 del alto de letra. Un texto con letras separadas parejo queda como una sola palabra. Dibujos, marcos y renglones que no son texto no se agrupan.
+- Las zonas de repaso no cambian; solo se suman piezas a `fine.pieces`. En Magui Lucero: la I de MAGUI y la L de LUCERO ahora van con su palabra (11 de 16 piezas); la I grande y las patas siguen sin repaso.
+- `FRESA_ANALYSIS_VERSION` sigue en 6 (el gadget la compara). Los programas ya guardados conservan su selección anterior hasta que se vuelvan a guardar y chequear.
+- **Mesa de armado** (`MesaInspector`, `RepasoChoice`): al elegir un sello, la barra lateral muestra las tres opciones (**Parcial automático**, **Repaso completo**, **Sin repaso**) con la elegida marcada en celeste y su nombre en el título. En la automática dice qué resultó: «La 0,2 pasa por N piezas (palabras enteras)», «Resultó repaso de todo el sello» o «La 0,6 alcanza: resultó sin repaso».
+
 ## Selección del repaso 0,2 por ganancia (2026-10-17, POL-090)
 
 ✅ `passes.ts` (`fineGainRegion`, `repasoSelection`): la 0,2 se elige **donde talla al menos `REPASO_MIN_GAIN_MM` (0,10 mm) más hondo que la 0,6**, para cualquier profundidad hasta el final del repaso (0,6 mm), y en zonas de al menos 0,03 mm². No depende del tipo de zona: entran ranuras, pasos entre letras, ojos y ángulos cerrados; un vértice abierto, un borde recto o un cuadrado sólido dan poca o ninguna ganancia y no entran. Se seleccionan las **piezas negras que bordean** cada zona (las dos, si es entre letras).
@@ -36,13 +67,13 @@ Se hace **al vectorizar**, no en Aspire: el error se ve y se corrige antes de qu
 | Fresa más fina | Cónica, física 0,1 mm / **configurada 0,2 mm**, **30° por lado (60° total)** | Q-CNC-008, Q-PROG-020 |
 | Toolpath del detalle | **V-carve** en Aspire: donde el blanco se angosta, la fresa sube sola | Q-VEC-011 |
 | Profundidad final del detalle | 0,6 mm | Q-CNC-008 |
-| Profundidad mínima (entre letras y en ojos) | **0,3 mm** ("lo mínimo mínimo") | Q-VEC-011 |
+| Profundidad mínima (entre letras y en ojos) | ~~0,3 mm~~ → límites de marca (espacio 0,45 mm ≈ 0,22 de profundidad; ojo 0,70 mm), ver arriba | Q-VEC-011, placa 2026-10-31 |
 | Perfil Alimento | Principal: referencia 1 mm, final 3 mm. Fina: referencia 0,4–0,5 mm, final 0,6 mm | Q-PROG-018, Q-VEC-011 |
 | Polaridad | Negro = relieve del sello; blanco = se saca | Q-CNC-008 |
 
 ✅ **Q-VEC-011/POL-085**: Alimento idealmente se resuelve con la primera fresa. Si requiere repaso, buscar unos 0,4–0,5 mm. No exigir 1 mm a la fina ni usar el mínimo general de 0,3 como sustitución. El corte rígido y tratamiento de avisos siguen por calibrar (Q-VEC-007/009).
 
-Con la punta configurada a profundidad *d*, el radio es `r(d) = 0,1 + d · tan 30°`. A 0,3 mm: **r ≈ 0,273 mm → canal mínimo ≈ 0,55 mm**. En Alimento a 0,4 mm: ≈ 0,66 mm; a 0,5 mm: ≈ 0,78 mm. Se modela el margen CAM deliberado, manteniendo el diámetro físico por separado.
+Con la punta configurada a profundidad *d*, el radio es `r(d) = 0,1 + d · tan 30°`. A 0,3 mm: r ≈ 0,273 mm → canal ≈ 0,55 mm (criterio hasta 2026-10-31; ahora el canal mínimo es 0,45 mm, a ≈ 0,22 mm). En Alimento a 0,4 mm: ≈ 0,66 mm; a 0,5 mm: ≈ 0,78 mm. Se modela el margen CAM deliberado, manteniendo el diámetro físico por separado.
 
 **Idea central (2026-10-14):** con V-carve la fresa nunca "deja de pasar": pierde profundidad. Un blanco angosto igual queda marcado, más arriba. Por eso no alcanza con medir distancias: importa **dónde** se pierde profundidad. Entre dos letras distintas y en los ojos de las letras tiene que llegar sí o sí a la mínima (si no, se pegan o se tapan); en rincones, ranuras y ángulos dentro de una misma pieza alcanza con que la punta marque. La versión anterior (0,4 mm y todo lo que no llegaba en gris como problema) marcaba de más: en 12 sellos reales bajó de 116 a 42 lugares.
 
@@ -59,8 +90,8 @@ La medida importa: el chequeo se hace **a la medida de fabricación** (la que us
 
 | Tipo | Qué es | Gravedad |
 |---|---|---|
-| **Letras que se pegan** (`paso_angosto`) | Un **puente** poco hondo que une **dos piezas negras distintas**: el tramo exacto donde el canal se corta. Si el canal es poco hondo en otros lados pero no se corta, no se avisa | **Alta** |
-| **Hueco que se tapa** (`hueco_cerrado`) | Un ojo de letra donde la fresa no llega a la mínima en casi ningún lado (≥ 85 % del ojo) | **Alta** |
+| **Letras que se pegan** (`paso_angosto`) | Un **puente** poco hondo que une **dos piezas negras distintas**: el tramo exacto donde el canal se corta. Si el canal es poco hondo en otros lados pero no se corta, no se avisa | **Alta**; con límites de marca, según el espacio más angosto y el largo pegado (ver arriba) |
+| **Hueco que se tapa** (`hueco_cerrado`) | Un ojo de letra donde la fresa no llega a la mínima en casi ningún lado (≥ 85 % del ojo). Con límites de marca, los ojos compactos se juzgan por su ancho | **Alta**; con límites de marca, alta o media según el ancho |
 | **Rincón o ranura angosta** (`rincon`) | Ranura o rincón dentro de una misma pieza | **Baja** ("marca menos hondo · OK"). **Media** ("se pierde el detalle") solo si la fresa casi no entra (< 0,05 mm) en ≥ 0,15 mm² |
 | **Ángulo** (`angulo`) | Punta que se afina hacia adentro (V entre dos trazos) | **Baja** (igual que rincón) |
 
@@ -194,7 +225,7 @@ Pedido del equipo: Vectorizer.AI borró el punto de algunas «i» y en la revisi
 ## 7. Límites conocidos
 
 - Solo lee **SVG** (EPS/PDF/AI no).
-- Perfiles finos: general (referencia 0,3 mm, final 0,6 mm) y Alimento (referencia inferior 0,4, comparación adicional 0,5, final 0,6). La principal está separada: punta configurada 0,6 mm/15°, final 1,7/3 mm; el ≈1 mm de Alimento se usa como referencia principal. La calibración y certificación del recorte parcial siguen pendientes ([Q-VEC-011](../../14-open-questions/vectorizacion.md#q-vec-011), POL-085). AUD-PROG-005 conserva el hallazgo previo.
+- Perfiles finos: general (límites de marca: espacio 0,45 / ojo 0,70 mm, final 0,6 mm) y Alimento (referencia inferior 0,4, comparación adicional 0,5, final 0,6). La principal está separada: punta configurada 0,6 mm/15°, final 1,7/3 mm; el ≈1 mm de Alimento se usa como referencia principal. La calibración y certificación del recorte parcial siguen pendientes ([Q-VEC-011](../../14-open-questions/vectorizacion.md#q-vec-011), POL-085). AUD-PROG-005 conserva el hallazgo previo.
 - Texto en arco: se mueve entero (radial o a lo largo del arco) o, poco, letra por letra. No se achica ni se gira ninguna letra; una pieza encajada entre dos aros sin lugar de ningún lado (p. ej. las estrellas de "Rockets Butchery") queda para editar a mano.
 - No mira trazos negros demasiado finos (frágiles) ni el desbaste con la fresa grande.
 - La lista puede ser larga en diseños con muchas líneas finas (p. ej. vetas de madera): son problemas reales con este criterio.

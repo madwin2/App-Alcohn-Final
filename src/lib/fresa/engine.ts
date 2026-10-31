@@ -5,6 +5,7 @@
 import {
   DEFAULT_ANALYSIS_OPTIONS,
   FRESA_FINA,
+  MARK_MIN_LETTER_HEIGHT_MM,
   type FresaAnalysisOptions,
   type FresaProfile,
 } from './config';
@@ -32,6 +33,10 @@ export interface FresaGroup {
   reachDepthMm: number;
   /** Hueco más angosto del grupo (mm). */
   gapWidthMm: number;
+  /** Con límites de marca: espacio u ojo más angosto del grupo (mm). */
+  markWidthMm?: number;
+  /** Zonas del grupo en piezas más bajas que `MARK_MIN_LETTER_HEIGHT_MM` (letra chica). */
+  smallLetterZones: number;
 }
 
 export interface CheckOutput extends FresaCoreResult {
@@ -99,6 +104,7 @@ export function groupZones(zones: FresaZone[], padMm = 0.5): FresaGroup[] {
   const groups: FresaGroup[] = [];
   for (const list of byRoot.values()) {
     const severity = list.reduce<ZoneSeverity>((s, z) => (RANK[z.severity] < RANK[s] ? z.severity : s), 'baja');
+    const marks = list.flatMap((z) => (z.markWidthMm != null ? [z.markWidthMm] : []));
     const b = {
       minX: Math.min(...list.map((z) => z.bounds.minX)),
       minY: Math.min(...list.map((z) => z.bounds.minY)),
@@ -114,6 +120,8 @@ export function groupZones(zones: FresaZone[], padMm = 0.5): FresaGroup[] {
       center: { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 },
       reachDepthMm: Math.min(...list.map((z) => z.reachDepthMm)),
       gapWidthMm: Math.min(...list.map((z) => z.gapWidthMm)),
+      ...(marks.length ? { markWidthMm: Math.min(...marks) } : {}),
+      smallLetterZones: list.filter((z) => z.pieceHeightMm != null && z.pieceHeightMm < MARK_MIN_LETTER_HEIGHT_MM).length,
     });
   }
   groups.sort((a, z) =>

@@ -64,11 +64,20 @@ describe('selección automática del repaso 0,2 (caso real: Magui Lucero)', () =
     expect(slots.some((z) => z.center.y / k > 1805)).toBe(true); // ranura de abajo (antes quedaba afuera)
   });
 
-  it('no pasa la 0,2 por piezas donde la 0,6 ya alcanza', () => {
-    for (const [x, y] of [[644, 1795], [780, 1795], [1070, 1450], [116, 1950], [775, 1950], [1260, 1990]]) {
-      expect(pieceAt(x, y).selected).toBe(false); // I, L, I grande y las tres patas
+  it('no pasa la 0,2 por piezas donde la 0,6 ya alcanza, salvo para completar la palabra', () => {
+    for (const [x, y] of [[1070, 1450], [116, 1950], [775, 1950], [1260, 1990]]) {
+      expect(pieceAt(x, y).selected).toBe(false); // I grande y las tres patas
     }
     expect(result.repaso.pieces.filter((p) => p.selected).length).toBeLessThan(result.repaso.pieces.length);
+  });
+
+  it('repasa palabras enteras: la I y la L no llevan zona propia pero van con su palabra', () => {
+    const zonePieces = new Set(result.repaso.zones.flatMap((z) => z.pieceIds));
+    for (const [x, y] of [[644, 1795], [780, 1795]]) {
+      const p = pieceAt(x, y);
+      expect(zonePieces.has(p.id)).toBe(false);
+      expect(p.selected).toBe(true);
+    }
   });
 
   it('con la 0,2 se separa todo: repaso sugerido', () => {
@@ -88,6 +97,16 @@ describe('selección del repaso: formas simples', () => {
     const r = run('<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="20mm" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 5h10v10h-10z M7 9.7h6v0.6h-6z"/></svg>');
     expect(r.repaso.zones.length).toBeGreaterThan(0);
     expect(r.repaso.pieces.every((p) => p.selected)).toBe(true);
+  });
+  it('repasa la palabra entera, no letras salteadas, y deja las otras palabras sin repaso', () => {
+    // Palabra 1: tres letras; solo las dos primeras están a 0,5 mm (la 0,6 no
+    // entra). Palabra 2, a 4 mm: letras a 1 mm, la 0,6 alcanza.
+    const bars = [2, 3.5, 5.5, 10.5, 12.5].map((x) => `M${x} 5h1v3h-1z`).join(' ');
+    const r = run(`<svg xmlns="http://www.w3.org/2000/svg" width="16mm" height="12mm" viewBox="0 0 16 12"><path d="${bars}"/></svg>`);
+    const byX = [...r.repaso.pieces].sort((a, z) => a.bounds.minX - z.bounds.minX);
+    expect(byX.map((p) => p.selected)).toEqual([true, true, true, false, false]);
+    const zonePieces = new Set(r.repaso.zones.flatMap((z) => z.pieceIds));
+    expect(zonePieces.has(byX[2].id)).toBe(false); // la tercera va por ser de la palabra
   });
 });
 

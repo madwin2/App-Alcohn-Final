@@ -75,7 +75,7 @@ Cada vector que se guarda (en Revisión, en Asignar SVG o con «Guardar el corre
 
 Tocá el chip para abrir el **Chequeo de fresa**:
 
-1. A la izquierda, el diseño con los lugares marcados y numerados (rojo = **Hay que corregir**, amarillo = **Se pierde el detalle**). Rueda del mouse para acercar, arrastrá para mover, **Ver todo** para volver.
+1. A la izquierda, el diseño con los lugares marcados y numerados (rojo = **Grave: cambia lo que se lee**, amarillo = **Se nota, pero se lee**; los límites salen de sellar una placa de prueba en cuero y madera: entre letras se separa desde 0,45 mm y un ojo se ve bien desde 0,70 mm; varias letras chicas pegadas se avisan juntas como **Letra demasiado chica**). Rueda del mouse para acercar, arrastrá para mover, **Ver todo** para volver.
 2. A la derecha, la lista: tocá un lugar y la vista va directo ahí. Dice el ancho del hueco y a qué profundidad llega la fresa.
 3. **Profundidad**: un degradé azul muestra lo que se talla menos hondo que la mínima (más oscuro = menos hondo). **Mostrar ángulos y rincones**: lugares donde la fresa sube y marca menos hondo. Están bien así; por eso están ocultos y la corrección no los toca.
 4. **Corregir automáticamente** (en Revisión ya viene hecho; en otras pantallas, el botón; si la fresa ya llega bien, el botón dice **Simplificar nodos**): adapta el diseño para que entre la fresa, como se haría a mano, y después simplifica los nodos sin cambiar el diseño:

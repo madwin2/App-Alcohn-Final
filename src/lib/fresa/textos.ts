@@ -2,6 +2,7 @@ import type { ZoneKind, ZoneSeverity } from './analyze';
 import type { FresaGroup } from './engine';
 import type { FresaReport, FresaSizeSource } from './chequeoFresa';
 import type { FixOperation } from './fix';
+import type { FresaProfile } from './config';
 
 /** 0.334 → "0,33" */
 export function mm(v: number, decimals = 2): string {
@@ -17,18 +18,19 @@ export const KIND_LABEL: Record<ZoneKind, string> = {
 
 export const KIND_HELP: Record<ZoneKind, string> = {
   hueco_cerrado:
-    'Un blanco encerrado (como el ojo de una letra) donde la fresa no baja a la profundidad mínima en ningún lado: en el sello se ve tapado.',
+    'Un blanco encerrado, como el ojo de una letra. Sellando con repaso, un ojo de menos de 0,45 mm se tapa (la e se lee como c) y uno de 0,45–0,70 mm sale como un puntito: se nota, pero la letra se reconoce. Desde 0,70 mm se ve bien.',
   paso_angosto:
-    'Entre dos partes del diseño (por ejemplo, dos letras) hay un tramo donde la fresa sube por encima de la profundidad mínima: ahí se pegan. Que el resto del canal sea poco hondo no importa; importa este tramo.',
+    'Dos partes del diseño (por ejemplo, dos letras) muy juntas. Sellando con repaso, se separan desde 0,45 mm; entre 0,35 y 0,45 queda una rayita, y por debajo se tocan. Que se toquen en un punto en una letra de buen tamaño se lee igual (se nota); si se pegan en un tramo largo o la letra es chica, la palabra se pierde.',
   rincon:
     'Una ranura o rincón dentro de una misma pieza. La fresa sube y lo marca menos hondo, y eso está bien. Se avisa solo si la fresa casi no entra.',
   angulo:
     'Un ángulo que se cierra en punta (el interior de la M, la V). La fresa sube y la punta igual lo marca: no hace falta corregirlo.',
 };
 
+/** Niveles de `docs/02-modules/vectorizacion/limites-de-marca.md` §2. */
 export const SEVERITY_LABEL: Record<ZoneSeverity, string> = {
-  alta: 'Hay que corregir',
-  media: 'Se pierde el detalle',
+  alta: 'Grave: cambia lo que se lee',
+  media: 'Se nota, pero se lee',
   baja: 'Marca menos hondo · OK',
 };
 
@@ -63,6 +65,8 @@ export const SIZE_SOURCE_LABEL: Record<FresaSizeSource, string> = {
 };
 
 export function groupTitle(g: FresaGroup): string {
+  // Varios problemas graves en piezas muy bajas: la causa es el tamaño.
+  if (g.severity === 'alta' && g.smallLetterZones >= 3) return 'Letra demasiado chica';
   if (g.kinds.length === 1) return KIND_LABEL[g.kinds[0]];
   if (g.kinds.includes('hueco_cerrado')) return KIND_LABEL.hueco_cerrado;
   if (g.kinds.includes('paso_angosto')) return KIND_LABEL.paso_angosto;
@@ -70,7 +74,18 @@ export function groupTitle(g: FresaGroup): string {
   return KIND_LABEL.angulo;
 }
 
-export function groupDetail(g: FresaGroup, minDepthMm: number): string {
+export function groupDetail(g: FresaGroup, profile: FresaProfile): string {
+  const ml = profile.markLimits;
+  if (ml && g.markWidthMm != null) {
+    if (g.severity === 'alta' && g.smallLetterZones >= 3) {
+      return `A este tamaño no se lee: letras pegadas y ojos tapados (más angosto ≈${mm(g.markWidthMm)} mm)`;
+    }
+    const title = groupTitle(g);
+    return title === KIND_LABEL.hueco_cerrado
+      ? `Ojo de ≈${mm(g.markWidthMm)} mm (se ve bien desde ${mm(ml.eyeOkMm)}; se tapa por debajo de ${mm(ml.eyeGraveMm)})`
+      : `Espacio de ≈${mm(g.markWidthMm)} mm (se separa desde ${mm(ml.gapOkMm)}; se toca por debajo de ${mm(ml.gapGraveMm)})`;
+  }
+  const minDepthMm = profile.minDepthMm;
   const depth =
     g.reachDepthMm <= 0.01 ? 'la fresa casi no entra' : `baja a ≈${mm(g.reachDepthMm)} mm (mínimo ${mm(minDepthMm)})`;
   return `Hueco ≈${mm(g.gapWidthMm)} mm · ${depth}`;
@@ -121,6 +136,10 @@ export function resumenOperaciones(ops: FixOperation[]): string {
 /** Línea de criterio para mostrar arriba del visor. */
 export function criterioTexto(r: FresaReport): string {
   const p = r.profile;
+  const ml = p.markLimits;
+  if (ml) {
+    return `${p.label} · Límites medidos sellando en cuero y madera: entre letras se separa desde ${mm(ml.gapOkMm)} mm (se toca por debajo de ${mm(ml.gapGraveMm)}); un ojo se ve bien desde ${mm(ml.eyeOkMm)} mm (se tapa por debajo de ${mm(ml.eyeGraveMm)})`;
+  }
   const minGap = r.check?.minGapMm ?? 0;
   return `${p.label} · V-carve: donde se angosta, la fresa sube. Entre letras y en los ojos tiene que bajar al menos ${mm(p.minDepthMm, 1)} mm (blanco de ${mm(minGap)} mm)`;
 }

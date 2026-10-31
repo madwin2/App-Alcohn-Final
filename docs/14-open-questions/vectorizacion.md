@@ -45,6 +45,7 @@
 - **Evidencia**: `DEFAULT_ANALYSIS_OPTIONS` en `src/lib/fresa/config.ts`; [chequeo-de-fresa](../02-modules/vectorizacion/chequeo-de-fresa.md).
 - **Por qué importa**: si marca de más, el equipo deja de mirarlo; si marca de menos, vuelve el trabajo manual en Aspire.
 - **Impacto**: medio.
+- **Avance (2026-10-31)**: la placa de prueba da anchos reales de lo que marca y lo que no, y muestra dónde avisa de más (letras que se tocan en un punto, espacios de 0,45–0,55) y de menos (ojos de 0,55–0,7). Ver [limites-de-marca §6](../02-modules/vectorizacion/limites-de-marca.md) y Q-VEC-017.
 
 ### Q-VEC-008
 - **Módulo**: Vectorización / chequeo de fresa · **Estado**: parcialmente respondida (2026-10-14: Alimento pide 1 mm, ver Q-VEC-011; el resto usa 0,3 mm)
@@ -81,6 +82,7 @@
 - **Aclaración definitiva de profundidad (2026-10-15, Q-PROG-018)**: la primera fresa se llama «0,5», está configurada como 0,6 mm y tiene 15° laterales. El repaso usa punta 0,1 mm, 30° laterales y profundidad final **0,6 mm también en Alimento**. Alimento tiene mecanizado principal a **3 mm** más corte perimetral con fresa de **6 mm**.
 - **Respuesta sobre calidad (2026-10-15)**: el milímetro indicado para Alimento era una referencia de verificación para que quede buen grabado con la **primera fresa, llamada «0,5»**. El objetivo ideal es que los sellos de Alimento **no necesiten la de 0,1 mm**. Si necesitan repaso fino, se busca que esa pasada alcance **al menos unos 0,4–0,5 mm**, dentro de su máximo de 0,6 mm. No exigir 1 mm a la fina ni sustituir ese criterio por el mínimo general de 0,3 mm.
 - **Alcance de la respuesta**: se confirmó una preferencia y un rango operativo; no se eligió entre 0,4 y 0,5 mm como corte rígido de aprobación. Calibrar con casos reales en Q-VEC-007 y definir el tratamiento de advertencias en Q-VEC-009 antes de imponer bloqueos. Análisis v6: `FRESA_ALIMENTO` (repaso) quedó con final 0,6 mm y referencia inferior 0,4 mm (0,5 como preferida); la primera fresa se compara aparte con `primaryProfile` (Alimento 3 mm, referencia 1 mm). Cierra la diferencia de AUD-PROG-005.
+- **Actualización (2026-10-31)**: para el perfil general (y la principal fuera de Alimento), el mínimo de 0,3 mm se reemplazó por los límites de marca medidos sellando la placa de prueba (espacio 0,45 mm ≈ 0,22 de profundidad; ojo 0,70 mm). Alimento sigue igual. Ver [limites-de-marca](../02-modules/vectorizacion/limites-de-marca.md).
 - **Documentado en**: [chequeo-de-fresa §2–3](../02-modules/vectorizacion/chequeo-de-fresa.md), [ADR-024](../13-decisions/ADR-024-chequeo-de-fresa-en-vectorizacion.md).
 
 ### Q-VEC-012
@@ -109,10 +111,12 @@
 - **Documentado en**: [PLAN_CORRECCION_AUTONOMA_VECTORES §4](../../PLAN_CORRECCION_AUTONOMA_VECTORES.md).
 
 ### Q-VEC-015
-- **Módulo**: Vectorización / prueba de mecanizado · **Estado**: abierta (2026-10-21)
+- **Módulo**: Vectorización / prueba de mecanizado · **Estado**: documentada (respondida 2026-10-31)
 - **Pregunta**: ¿Cómo se puede medir la profundidad del corte en la placa de prueba de bronce (comparador, corte de la pieza, molde, otra forma)? ¿O solo se evalúa si se separa y cómo marca?
 - **Por qué importa**: con la profundidad se calibra la simulación directamente; sin ella, solo se sabe el límite (sí/no) de cada celda.
 - **Impacto**: medio.
+- **Respuesta**: lo que importa es **cómo marca**, no cómo queda el bronce: si en el bronce se ve pero en la marca no, no sirve. Se evalúa sobre la impresión en cuero y madera.
+- **Documentado en**: [limites-de-marca](../02-modules/vectorizacion/limites-de-marca.md).
 
 ### Q-VEC-016
 - **Módulo**: Vectorización / corrección automática · **Estado**: documentada (respondida 2026-10-21)
@@ -121,3 +125,24 @@
 - **Impacto**: medio.
 - **Respuesta**: los sellos de **3 mm** no se modifican nunca automáticamente. Ya aplicado en Revisión: la corrección automática se calcula y se puede elegir, pero no queda elegida sola ni se usa al «Confirmar todos». Los demás tipos (Alimento, logos de marca) no se mencionaron: se revisa si aparece un caso.
 - **Documentado en**: [chequeo-de-fresa §4 ter](../02-modules/vectorizacion/chequeo-de-fresa.md), [PLAN_CORRECCION_AUTONOMA_VECTORES §7](../../PLAN_CORRECCION_AUTONOMA_VECTORES.md).
+
+### Q-VEC-017
+- **Módulo**: Vectorización / chequeo de fresa · **Estado**: abierta en parte (2026-10-31: el dueño aprobó aplicar los niveles; siguen abiertas la letra suelta y los clientes)
+- **Pregunta**: Con la placa de prueba se propusieron tres niveles: **grave** (cambia o borra lo que se lee), **se nota** (se lee bien pero no queda perfecto: letras que se tocan en un punto, ojo chico, rayita en vez de espacio) y **OK**. ¿Un sello con solo «se nota» se fabrica sin corregir? ¿Una letra suelta (inicial, monograma) con el ojo tapado es grave aunque se adivine por la silueta? ¿Hay clientes o tipos de sello donde «se nota» tampoco se acepta?
+- **Evidencia**: «Rabeg8» de 2,5 y 3,2 mm con letras que se tocan se lee perfecto; la app hoy lo marca grave. Ojos de 0,6 mm salen como un puntito y la app los da OK.
+- **Por qué importa**: define qué marca la ayuda visual en rojo y qué corrige la automática; sin esto se sigue corrigiendo de más en unos casos y de menos en otros.
+- **Impacto**: alto.
+- **Respuesta parcial (2026-10-31)**: «Sí, aplicalos». Los tres niveles quedan en el chequeo: grave en rojo, «se nota» en ámbar (la corrección automática lo intenta resolver sin deformar, igual que antes), OK sin aviso. Falta decidir la letra suelta con el ojo tapado y si hay clientes o tipos de sello donde «se nota» tampoco se acepta.
+- **Documentado en**: [limites-de-marca §2 y §6](../02-modules/vectorizacion/limites-de-marca.md), [chequeo-de-fresa](../02-modules/vectorizacion/chequeo-de-fresa.md).
+
+### Q-VEC-018
+- **Módulo**: Vectorización / chequeo de fresa · **Estado**: abierta (2026-10-31)
+- **Pregunta**: En la placa, los trazos negros de **0,15 a 0,8 mm** marcan enteros. ¿Cuánto aguanta un trazo fino (0,15–0,3 mm) con el uso (muchas marcas a fuego, golpes, limpieza)? ¿Se hace una prueba de uso, o la corrección sigue sin afinar por debajo de 0,4 mm (Q-VEC-010)?
+- **Por qué importa**: si 0,2–0,3 aguantan, la corrección podría abrir ojos y espacios que hoy deja para editar a mano.
+- **Impacto**: medio.
+
+### Q-VEC-019
+- **Módulo**: Vectorización / prueba de mecanizado · **Estado**: abierta (2026-10-31)
+- **Pregunta**: La placa probó **Times** con un solo modo de sellado. ¿Se hace una segunda placa con letra de palo seco, negrita y cursiva, espacio entre palabras y entre renglones, ojos entre 0,6 y 0,8 mm y espacios entre 0,40 y 0,50 mm? ¿Cómo se selló cada material en esta prueba (madera a fuego, temperatura; cuero con qué presión o rodillo)?
+- **Por qué importa**: los límites de [limites-de-marca](../02-modules/vectorizacion/limites-de-marca.md) valen para esa tipografía y esa forma de sellar. Una negrita tiene ojos más chicos al mismo tamaño.
+- **Impacto**: medio.

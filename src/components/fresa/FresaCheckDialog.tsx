@@ -142,7 +142,9 @@ function StatusSummary({ report, resolvedByRepaso = false }: { report: FresaRepo
       <div className="flex items-start gap-2 rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
         <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
         <span>
-          Todo se separa: entre letras y en los ojos la fresa baja al menos {mm(report.profile.minDepthMm, 1)} mm.
+          {report.profile.markLimits
+            ? `Todo se separa al sellar: espacios de ${mm(report.profile.markLimits.gapOkMm)} mm o más y ojos de ${mm(report.profile.markLimits.eyeOkMm)} mm o más.`
+            : `Todo se separa: entre letras y en los ojos la fresa baja al menos ${mm(report.profile.minDepthMm, 1)} mm.`}
           {g.baja ? ` Hay ${g.baja} ángulo${g.baja === 1 ? '' : 's'} o rincón${g.baja === 1 ? '' : 'es'} donde la fresa sube y marca menos hondo (normal).` : ''}
         </span>
       </div>
@@ -158,14 +160,23 @@ function StatusSummary({ report, resolvedByRepaso = false }: { report: FresaRepo
     );
   }
   return (
-    <div className="flex items-start gap-2 rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 dark:bg-rose-950/40 dark:text-rose-100">
+    <div
+      className={cn(
+        'flex items-start gap-2 rounded-md border p-3 text-sm',
+        g.alta
+          ? 'border-rose-300 bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-100'
+          : 'border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100',
+      )}
+    >
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
       <span>
         <strong>
-          {n} lugar{n === 1 ? '' : 'es'} donde se pierde el diseño
+          {g.alta
+            ? `${n} lugar${n === 1 ? '' : 'es'} donde se pierde el diseño`
+            : `${n} lugar${n === 1 ? '' : 'es'} donde se nota, pero se lee`}
         </strong>
-        {g.alta ? ` · ${g.alta} para corregir` : ''}
-        {g.media ? ` · ${g.media} detalle que se pierde` : ''}
+        {g.alta ? ` · ${g.alta} grave${g.alta === 1 ? '' : 's'}` : ''}
+        {g.alta && g.media ? ` · ${g.media} se nota${g.media === 1 ? '' : 'n'} (se lee${g.media === 1 ? '' : 'n'} igual)` : ''}
       </span>
     </div>
   );
@@ -620,7 +631,7 @@ export function FresaCheckDialog({
                               </span>
                             </span>
                             <span className="block text-xs text-muted-foreground">
-                              {groupDetail(g, active?.profile.minDepthMm ?? 0.4)}
+                              {active ? groupDetail(g, active.profile) : null}
                             </span>
                             {passView === 'primary' && passes?.repaso.zones.length && g.severity !== 'baja' ? (
                               g.zoneIds.every((id) => resolvedZones.has(id))

@@ -482,6 +482,44 @@ function setGlyph(m: PieceShift, ids: number[], t: { dx: number; dy: number }) {
   if (t.dx || t.dy) for (const id of ids) m.set(id, t);
 }
 
+/** Distancia entre dos cajas (0 si se pisan). */
+function boxGap(a: Bounds, b: Bounds): number {
+  const dx = Math.max(0, b.minX - a.maxX, a.minX - b.maxX);
+  const dy = Math.max(0, b.minY - a.maxY, a.minY - b.maxY);
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * Palabras: letras seguidas de un renglón recto o de un tramo de arco, cortadas
+ * donde el espacio entre letras es claramente mayor que el habitual del
+ * renglón (más del doble del espacio típico y más de 0,3 del alto de letra).
+ * Un texto con letras separadas parejo queda como una sola palabra. Devuelve
+ * las piezas de cada palabra; dibujos, marcos y renglones que no son texto no
+ * se agrupan.
+ */
+export function layoutWords(layout: Layout): number[][] {
+  const words: number[][] = [];
+  const split = (glyphs: number[][]) => {
+    if (!glyphs.length) return;
+    const boxes = glyphs.map((g) => unionBounds(g.map((id) => layout.pieces[id].bounds)));
+    const gaps = boxes.slice(1).map((b, i) => boxGap(boxes[i], b));
+    const h = median(boxes.map((b) => b.maxY - b.minY));
+    const limit = Math.max(2 * median(gaps), 0.3 * h);
+    let word: number[] = [...glyphs[0]];
+    gaps.forEach((gap, i) => {
+      if (gap > limit) {
+        words.push(word);
+        word = [];
+      }
+      word.push(...glyphs[i + 1]);
+    });
+    words.push(word);
+  };
+  for (const l of layout.lines) if (l.straight) split(l.glyphs);
+  for (const a of layout.arcs) split(a.glyphs);
+  return words;
+}
+
 /**
  * Abrir el espaciado de todo un tramo de arco por igual: cada letra gira
  * respecto de la anterior lo necesario para que el hueco se abra `t` µm en el

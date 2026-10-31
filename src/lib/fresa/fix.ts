@@ -339,6 +339,8 @@ export function planFix(
   const R = Math.round(cutRadiusAtDepth(profile, profile.minDepthMm) * UM);
   const minGap = minGapWidthMm(profile);
   const minGapUm = Math.round(minGap * UM);
+  // Un ojo se ve bien recién con `eyeOkMm` (más que un espacio): se agranda hasta ahí.
+  const eyeR = profile.markLimits ? Math.round((profile.markLimits.eyeOkMm / 2) * UM) : R;
   const operations: FixOperation[] = [];
   const targetBounds = targets.filter(isSerious).map(zoneBoundsUm);
   // Las zonas se corren cuando se mueven letras: se reconocen por cercanía.
@@ -541,7 +543,7 @@ export function planFix(
       if (touched.some((t) => boundsOverlap(t, zb))) continue;
       const cuts =
         z.kind === 'hueco_cerrado'
-          ? holeCuts(current, z, R)
+          ? holeCuts(current, z, eyeR)
           : [channelCut(toUm(z.rings), R)].filter((c): c is Paths64 => !!c);
       let accepted = false;
       for (const cut of cuts) {

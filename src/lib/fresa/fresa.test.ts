@@ -78,9 +78,10 @@ function analyzeSvgText(text: string) {
 }
 
 describe('perfil de fresa', () => {
-  it('usa la punta configurada de 0,2 mm: hueco ≈ 0,55 para bajar 0,3 (Alimento: ≈ 0,66 para 0,4)', () => {
+  it('usa la punta configurada de 0,2 mm: separa desde 0,45 (límites de marca; Alimento: ≈ 0,66 para 0,4)', () => {
     expect(cutRadiusAtDepth(FRESA_FINA, 0.4)).toBeCloseTo(0.1 + 0.4 * Math.tan(Math.PI / 6), 6);
-    expect(minGapWidthMm(FRESA_FINA)).toBeCloseTo(0.5464, 3);
+    expect(minGapWidthMm(FRESA_FINA)).toBeCloseTo(0.45, 3);
+    expect(FRESA_FINA.minDepthMm).toBeCloseTo(0.2165, 3);
     expect(minGapWidthMm(FRESA_ALIMENTO)).toBeCloseTo(0.6619, 3);
     expect(depthForRadius(FRESA_FINA, cutRadiusAtDepth(FRESA_FINA, 0.25))).toBeCloseTo(0.25, 6);
     expect(depthForRadius(FRESA_FINA, 0.01)).toBe(0);
@@ -149,7 +150,7 @@ describe('análisis', () => {
   });
 
   it('marca un paso angosto entre dos piezas y estima ancho y profundidad', () => {
-    // Dos barras separadas por 0,30 mm: la fresa llega a ≈ 0,17 mm (< 0,2 → alta).
+    // Dos barras separadas por 0,30 mm a lo largo de 5 mm: se pegan (grave).
     const { result } = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.3, 2, 5, 5)}"/>`));
     const pasos = result.zones.filter((z) => z.kind === 'paso_angosto');
     expect(pasos).toHaveLength(1);
@@ -157,14 +158,37 @@ describe('análisis', () => {
     expect(pasos[0].gapWidthMm).toBeGreaterThan(0.25);
     expect(pasos[0].gapWidthMm).toBeLessThan(0.36);
     expect(pasos[0].reachDepthMm).toBeLessThan(0.2);
+    expect(pasos[0].markWidthMm).toBeCloseTo(0.3, 2);
   });
 
-  it('un paso de 0,50 mm no separa y uno de 0,60 mm está bien con la punta configurada', () => {
-    const justo = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.5, 2, 5, 5)}"/>`)).result;
-    expect(justo.zones.map((z) => [z.kind, z.severity])).toEqual([['paso_angosto', 'alta']]);
-    expect(justo.zones[0].reachDepthMm).toBeGreaterThanOrEqual(0.2);
-    const ok = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.6, 2, 5, 5)}"/>`)).result;
+  it('límites de marca: un espacio de 0,40 mm «se nota» (rayita) y uno de 0,50 mm se separa', () => {
+    const rayita = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.4, 2, 5, 5)}"/>`)).result;
+    expect(rayita.zones.map((z) => [z.kind, z.severity])).toEqual([['paso_angosto', 'media']]);
+    const ok = analyzeSvgText(svg(`<path d="${rectD(2, 2, 5, 5)}${rectD(7.5, 2, 5, 5)}"/>`)).result;
     expect(ok.zones.filter((z) => z.kind === 'paso_angosto')).toHaveLength(0);
+  });
+
+  it('límites de marca: dos letras que se tocan en un punto se leen igual (se nota); a lo largo, grave', () => {
+    // Dos bloques de 3 mm de alto que se acercan a 0,2 mm solo en una punta.
+    const punta = analyzeSvgText(
+      svg(`<path d="${rectD(2, 2, 3, 3)}"/><path d="${polyD([[5.2, 3.5], [6, 2], [8, 2], [8, 5], [6, 5]])}"/>`),
+    ).result;
+    const p = punta.zones.filter((z) => z.kind === 'paso_angosto');
+    expect(p.length).toBeGreaterThan(0);
+    expect(p.every((z) => z.severity === 'media')).toBe(true);
+    // Las mismas piezas, enfrentadas a 0,2 mm en todo el alto: se pegan.
+    const largo = analyzeSvgText(svg(`<path d="${rectD(2, 2, 3, 3)}${rectD(5.2, 2, 3, 3)}"/>`)).result;
+    expect(largo.zones.find((z) => z.kind === 'paso_angosto')?.severity).toBe('alta');
+  });
+
+  it('límites de marca: el ojo se juzga por su ancho (0,40 tapado, 0,60 se ve chico, 0,80 bien)', () => {
+    const ojo = (d: number) =>
+      analyzeSvgText(svg(`<path d="${rectD(2, 2, 3, 3)}${circleD(3.5, 3.5, d / 2)}" fill-rule="evenodd"/>`)).result.zones
+        .filter((z) => z.kind === 'hueco_cerrado')
+        .map((z) => z.severity);
+    expect(ojo(0.4)).toEqual(['alta']);
+    expect(ojo(0.6)).toEqual(['media']);
+    expect(ojo(0.8)).toEqual([]);
   });
 
   it('en Alimento un paso de 0,50 mm no alcanza la referencia inferior de 0,4 mm', () => {
@@ -395,8 +419,8 @@ describe('corrección de texto en arco', () => {
 
   it('si el arco entero no tiene lugar, corre solo la letra pegada, poco', () => {
     // La letra del medio está 0,42 mm más afuera (a 0,38 mm del aro); las demás,
-    // a 0,6 mm de un aro de adentro: si baja todo el arco, se pegan a ese aro.
-    const { black, result } = analyzeSvgText(arcSvg({ gapToRing: 0.8, raise: 0.42, innerRing: 10.9 }));
+    // a 0,5 mm de un aro de adentro: si baja todo el arco, se pegan a ese aro.
+    const { black, result } = analyzeSvgText(arcSvg({ gapToRing: 0.8, raise: 0.42, innerRing: 11.0 }));
     expect(serious(result.zones).length).toBeGreaterThan(0);
     const fixed = planFix(black, result.zones);
     expect(serious(analyzeBlackRegion(fixed.black).zones)).toHaveLength(0);
@@ -571,9 +595,9 @@ describe('logo con bloque de texto y medida fija', () => {
   });
 
   it('si no hay forma de corregir sin romper, sugiere agrandar un poco (sin aplicarlo)', async () => {
-    // Ojo de 0,53 mm con paredes de 0,3 mm (ya más finas que el mínimo): no se
-    // pueden afinar. Agrandando ~4 % el ojo llega a 0,55 mm.
-    const text = svg(`<path d="${rectD(2, 2, 1.13, 1.13)}${rectD(2.3, 2.3, 0.53, 0.53)}" fill-rule="evenodd"/>`);
+    // Ojo de 0,67 mm con paredes de 0,3 mm (ya más finas que el mínimo): no se
+    // pueden afinar. Agrandando ~5 % el ojo llega a 0,70 mm.
+    const text = svg(`<path d="${rectD(2, 2, 1.27, 1.27)}${rectD(2.3, 2.3, 0.67, 0.67)}" fill-rule="evenodd"/>`);
     const before = await chequearSvg(text, { mode: 'declarado' });
     expect(before.status).toBe('revisar');
     const ids = before.check!.zones.filter((z) => z.severity !== 'baja').map((z) => z.id);

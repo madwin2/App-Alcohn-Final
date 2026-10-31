@@ -18,6 +18,16 @@
  *   - rincón o ángulo dentro de una misma pieza: la punta lo marca igual → está
  *     bien, salvo que la fresa casi no entre en una superficie notable.
  *
+ * Con límites de marca (`profile.markLimits`, medidos sellando la placa de
+ * prueba) la gravedad sale de cómo marca, no solo de la profundidad:
+ *   - espacio entre piezas: por el espacio más angosto. Desde `gapOkMm` no se
+ *     avisa; entre `gapGraveMm` y `gapOkMm` «se nota» (media); más angosto,
+ *     grave, salvo que se toquen en un tramo corto de una letra de buen tamaño
+ *     (se lee igual: media).
+ *   - ojo (hueco encerrado compacto): por el círculo más grande que entra.
+ *     Desde `eyeOkMm` no se avisa; entre `eyeGraveMm` y `eyeOkMm` media; más
+ *     chico, grave.
+ *
  * Las esquinas (toda esquina interior del blanco queda redondeada por una
  * fresa cónica: es normal) no se informan.
  *
@@ -26,12 +36,16 @@
 import { FillRule, EndType, JoinType, inflatePaths } from 'clipper2-ts';
 import {
   DEFAULT_ANALYSIS_OPTIONS,
+  EYE_MAX_COMPACTNESS,
   FRESA_FINA,
+  MARK_CONTACT_MAX_RATIO,
+  MARK_MIN_LETTER_HEIGHT_MM,
   cutRadiusAtDepth,
   depthForRadius,
   minGapWidthMm,
   type FresaAnalysisOptions,
   type FresaProfile,
+  type MarkLimits,
 } from './config';
 import {
   UM,
@@ -95,6 +109,13 @@ export interface FresaZone {
   reachDepthMm: number;
   /** Contorno de la zona (mm) para dibujarla. */
   rings: Pt[][];
+  /**
+   * Con límites de marca: espacio más angosto entre las dos piezas (paso
+   * angosto) o ancho del ojo (hueco cerrado), en mm. Es lo que decide la gravedad.
+   */
+  markWidthMm?: number;
+  /** Altura de la pieza más baja que toca la zona (mm), para «letra chica». */
+  pieceHeightMm?: number;
 }
 
 /** Franja del mapa de profundidad: lo que se talla entre `fromMm` y `toMm` (mm). */
@@ -209,6 +230,37 @@ function isTapered(comp: Component, mouth: Paths64, thicknessUm: number): boolea
   return farThickness < 0.6 * thicknessUm;
 }
 
+/**
+ * Espacio más angosto entre dos piezas cerca de una zona y largo del tramo
+ * donde quedan a menos de `graveUm` (µm). Se trabaja recortado a `win`.
+ */
+function pairContact(a: Paths64, b: Paths64, win: Bounds, okUm: number, graveUm: number): { gapUm: number; contactUm: number } {
+  const A = clipToBounds(a, win, 0);
+  const B = clipToBounds(b, win, 0);
+  const touch = (h: number) => intersect(offset(A, h), offset(B, h)).length > 0;
+  let lo = 0;
+  let hi = Math.round(okUm / 2) + 20;
+  if (!touch(hi)) return { gapUm: 2 * hi, contactUm: 0 };
+  for (let k = 0; k < 12 && hi - lo > 1; k++) {
+    const m = (lo + hi) / 2;
+    if (touch(m)) hi = m;
+    else lo = m;
+  }
+  const lens = bounds(intersect(offset(A, graveUm / 2), offset(B, graveUm / 2)));
+  const contactUm = lens ? Math.max(lens.maxX - lens.minX, lens.maxY - lens.minY) : 0;
+  return { gapUm: 2 * hi, contactUm };
+}
+
+const heightMm = (c: Component) => (c.bounds.maxY - c.bounds.minY) / UM;
+
+/** Gravedad de un espacio entre dos piezas según cómo marca al sellar (null = no se avisa). */
+function gapSeverity(ml: MarkLimits, gapMm: number, contactMm: number, pieceHeight: number): ZoneSeverity | null {
+  if (gapMm >= ml.gapOkMm) return null;
+  if (gapMm >= ml.gapGraveMm) return 'media';
+  const shortContact = contactMm <= MARK_CONTACT_MAX_RATIO * pieceHeight;
+  return shortContact && pieceHeight >= MARK_MIN_LETTER_HEIGHT_MM ? 'media' : 'alta';
+}
+
 export function analyzeBlackRegion(
   black: Paths64,
   profile: FresaProfile = FRESA_FINA,
@@ -254,19 +306,77 @@ export function analyzeBlackRegion(
   // Piezas negras: un paso angosto separa dos piezas distintas; un rincón queda
   // dentro de una sola.
   const blackComps = components(black);
-
+  const ml = profile.markLimits;
   const minArea = options.minZoneAreaMm2 * UM * UM;
-  const candidates: Array<{ comp: Component; thicknessUm: number; center: { x: number; y: number } }> = [];
+
+  // Ojos (con límites de marca): huecos encerrados compactos, juzgados por el
+  // círculo más grande que entra. Los no compactos (un anillo, una letra
+  // calada) siguen como espacio, por la profundidad mínima.
+  const eyeHoles = new Set<Component>();
+  const eyeZones: Array<{ wc: Component; diamMm: number; center: { x: number; y: number } }> = [];
+  if (ml) {
+    for (const wc of whiteComps) {
+      const minSide = Math.min(wc.bounds.maxX - wc.bounds.minX, wc.bounds.maxY - wc.bounds.minY) / UM;
+      if (minSide >= 1.3 * ml.eyeOkMm) continue;
+      const ip = interiorPoint(wc);
+      const diamUm = 2 * ip.radiusUm;
+      if (wc.areaUm2 > EYE_MAX_COMPACTNESS * diamUm * diamUm) continue;
+      eyeHoles.add(wc);
+      if (diamUm / UM < ml.eyeOkMm && wc.areaUm2 >= minArea) {
+        eyeZones.push({ wc, diamMm: diamUm / UM, center: { x: ip.x, y: ip.y } });
+      }
+    }
+  }
+  /** Altura de la pieza más chica que encierra un hueco (la letra de ese ojo). */
+  const ownerHeight = (wc: Component): number | undefined => {
+    let best: Component | null = null;
+    for (const bc of blackComps) {
+      const bb = bc.bounds;
+      if (bb.minX > wc.bounds.minX || bb.minY > wc.bounds.minY || bb.maxX < wc.bounds.maxX || bb.maxY < wc.bounds.maxY) continue;
+      if (!best || bc.areaUm2 < best.areaUm2) best = bc;
+    }
+    return best ? heightMm(best) : undefined;
+  };
+
+  /** Piezas negras distintas que toca una zona (hasta 2). */
+  const touchingPieces = (comp: Component): Component[] => {
+    const probe = offset(comp.paths, 8);
+    const probeBounds = bounds(probe) ?? comp.bounds;
+    const out: Component[] = [];
+    for (const bc of blackComps) {
+      if (!boundsOverlap(bc.bounds, probeBounds)) continue;
+      if (intersect(clipToBounds(bc.paths, probeBounds), probe).length) {
+        out.push(bc);
+        if (out.length >= 2) break;
+      }
+    }
+    return out;
+  };
+
+  const candidates: Array<{
+    comp: Component;
+    thicknessUm: number;
+    center: { x: number; y: number };
+    /** Piezas que toca, si ya se calcularon. */
+    touching?: Component[];
+    mark?: { gapMm: number; contactMm: number; pieceHeight: number };
+  }> = [];
   let ignoredCorners = 0;
   for (const comp of missComps) {
     // Las esquinas del dominio (afuera del diseño) no son parte del sello.
     if (!boundsOverlap(comp.bounds, b)) continue;
+    let touching: Component[] | undefined;
     if (comp.areaUm2 < minArea) {
-      ignoredCorners++;
-      continue;
+      // Con límites de marca, un puente chico entre dos piezas (el pie de la R
+      // contra la a) no es una esquina: ahí se tocan.
+      touching = ml ? touchingPieces(comp) : undefined;
+      if (!touching || touching.length < 2) {
+        ignoredCorners++;
+        continue;
+      }
     }
     const ip = interiorPoint(comp);
-    candidates.push({ comp, thicknessUm: Math.max(ip.radiusUm, 1), center: { x: ip.x, y: ip.y } });
+    candidates.push({ comp, thicknessUm: Math.max(ip.radiusUm, 1), center: { x: ip.x, y: ip.y }, touching });
   }
 
   // Erosiones del blanco a cada nivel de profundidad (se calculan una vez).
@@ -284,38 +394,49 @@ export function analyzeBlackRegion(
 
     // ¿Es un blanco encerrado que entero no llega?
     let kind: ZoneKind | null = null;
+    let eyeHandled = false;
     for (const wc of whiteComps) {
       if (!boundsOverlap(wc.bounds, comp.bounds)) continue;
       if (comp.areaUm2 >= 0.85 * wc.areaUm2 && pointInRegion(cand.center, wc.paths)) {
         kind = 'hueco_cerrado';
+        eyeHandled = eyeHoles.has(wc);
         break;
       }
     }
+    // Los ojos se informan aparte, por su ancho (más abajo).
+    if (eyeHandled) continue;
 
     if (!kind) {
       // Esquinas: zonas cortas (área / ancho chica). Un canal real es largo.
       const lengthMm = comp.areaUm2 / (2 * cand.thicknessUm) / UM;
       if (lengthMm < options.minChannelLengthMm) {
-        ignoredCorners++;
-        continue;
+        if (ml) cand.touching ??= touchingPieces(comp);
+        if (!cand.touching || cand.touching.length < 2) {
+          ignoredCorners++;
+          continue;
+        }
       }
-      const mouths = zoneMouths(comp, reached);
+      const mouths = cand.touching ? [] : zoneMouths(comp, reached);
       if (mouths.length === 1 && isTapered(comp, mouths[0], cand.thicknessUm)) kind = 'angulo';
     }
 
     if (!kind) {
       // ¿Cuántas piezas negras distintas toca la zona?
-      const probe = offset(comp.paths, 8);
-      const probeBounds = bounds(probe) ?? comp.bounds;
-      let touching = 0;
-      for (const bc of blackComps) {
-        if (!boundsOverlap(bc.bounds, probeBounds)) continue;
-        if (intersect(clipToBounds(bc.paths, probeBounds), probe).length) {
-          touching++;
-          if (touching >= 2) break;
-        }
+      const touching = (cand.touching ??= touchingPieces(comp));
+      kind = touching.length >= 2 ? 'paso_angosto' : 'rincon';
+      if (kind === 'paso_angosto' && ml) {
+        const pad = Math.round(ml.gapOkMm * UM) + 100;
+        const win = { minX: comp.bounds.minX - pad, minY: comp.bounds.minY - pad, maxX: comp.bounds.maxX + pad, maxY: comp.bounds.maxY + pad };
+        const okUm = ml.gapOkMm * UM;
+        const c = pairContact(touching[0].paths, touching[1].paths, win, okUm, ml.gapGraveMm * UM);
+        cand.mark = {
+          gapMm: c.gapUm / UM,
+          contactMm: c.contactUm / UM,
+          pieceHeight: Math.min(heightMm(touching[0]), heightMm(touching[1])),
+        };
+        // Las dos piezas no quedan cerca: es un canal angosto, no un puente.
+        if (c.gapUm >= okUm) kind = 'rincon';
       }
-      kind = touching >= 2 ? 'paso_angosto' : 'rincon';
     }
 
     // Profundidad alcanzada: el nivel más hondo cuya erosión todavía toca la zona.
@@ -334,15 +455,22 @@ export function analyzeBlackRegion(
     }
 
     const areaMm2 = regionArea(comp.paths) / (UM * UM);
+    // Con límites de marca, un espacio entre piezas se juzga por cómo marca.
+    const markSeverity =
+      kind === 'paso_angosto' && ml && cand.mark
+        ? gapSeverity(ml, cand.mark.gapMm, cand.mark.contactMm, cand.mark.pieceHeight)
+        : undefined;
+    if (markSeverity === null) continue;
     totalArea += areaMm2;
     // Lo que separa piezas u ojos tiene que llegar sí o sí. En rincones y
     // ángulos alcanza con que la punta marque.
     const severity: ZoneSeverity =
-      kind === 'hueco_cerrado' || kind === 'paso_angosto'
+      markSeverity ??
+      (kind === 'hueco_cerrado' || kind === 'paso_angosto'
         ? 'alta'
         : reachDepth < options.lostDetailDepthMm && areaMm2 >= options.notableCornerAreaMm2
           ? 'media'
-          : 'baja';
+          : 'baja');
     zones.push({
       id: `z${++idx}`,
       kind,
@@ -353,6 +481,25 @@ export function analyzeBlackRegion(
       gapWidthMm: Math.max(2 * reachRadius, 2 * (cand.thicknessUm / UM)),
       reachDepthMm: Math.min(reachDepth, profile.minDepthMm),
       rings: toMmRings(comp.paths),
+      ...(cand.mark ? { markWidthMm: cand.mark.gapMm, pieceHeightMm: cand.mark.pieceHeight } : {}),
+    });
+  }
+
+  for (const e of eyeZones) {
+    const areaMm2 = e.wc.areaUm2 / (UM * UM);
+    totalArea += areaMm2;
+    zones.push({
+      id: `z${++idx}`,
+      kind: 'hueco_cerrado',
+      severity: e.diamMm < ml!.eyeGraveMm ? 'alta' : 'media',
+      areaMm2,
+      bounds: boundsMm(e.wc.bounds),
+      center: { x: e.center.x / UM, y: e.center.y / UM },
+      gapWidthMm: e.diamMm,
+      reachDepthMm: depthForRadius(profile, e.diamMm / 2),
+      rings: toMmRings(e.wc.paths),
+      markWidthMm: e.diamMm,
+      pieceHeightMm: ownerHeight(e.wc),
     });
   }
 

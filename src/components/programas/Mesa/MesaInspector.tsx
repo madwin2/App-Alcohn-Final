@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowDownToLine, ArrowUp, Minus, Plus, ScanSearch, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowDownToLine, ArrowUp, Check, Minus, Plus, ScanSearch, Trash2, X } from 'lucide-react';
 import type { PreparationDocument, Recipe, StampPlacement } from '@/lib/programas/preparation';
 import { columnStamps, columnUsage, dueText, type StampInfo } from '@/lib/programas/mesa';
 import { PASS_OUTCOME_LABEL, type PassOutcome } from '@/lib/fresa/passes';
@@ -118,15 +118,7 @@ export function MesaInspector({ doc, stamp, sold, info, today, readOnly, grow, s
         <p className="flex items-center gap-1.5 text-[12px] text-zinc-400"><Kbd>←</Kbd><Kbd>→</Kbd> cambia de planchuela</p>
       </div>
 
-      <div className="space-y-2">
-        <Label>repaso fino 0,2</Label>
-        <Segmented className="w-full" value={(stamp.fine?.mode === 'aspire' ? 'auto' : stamp.fine?.mode) ?? 'auto'} onChange={onFine} disabled={readOnly}
-          options={[{ id: 'auto', label: 'Automático' }, { id: 'whole', label: 'Completo' }, { id: 'none', label: 'Sin repaso' }]} />
-        {stamp.fine?.mode === 'aspire' ? <p className="text-[12px] text-zinc-400">Selección hecha en Aspire.</p>
-          : (stamp.fine?.mode ?? 'auto') === 'auto' && stamp.fine?.analysisVersion
-            ? <p className="text-[12px] text-zinc-400">{stamp.fine.pieces?.length ? `La 0,2 pasa solo por ${stamp.fine.pieces.length} ${stamp.fine.pieces.length === 1 ? 'pieza' : 'piezas'}, donde la 0,6 no llega.` : stamp.fine.needsFine ? 'La 0,2 pasa por todo el sello.' : 'La 0,6 alcanza: sin repaso.'}</p>
-            : null}
-      </div>
+      <RepasoChoice stamp={stamp} readOnly={readOnly} onFine={onFine} />
 
       <div className="space-y-2">
         <Label>orden en la planchuela {col?.nominalMm} · {index + 1} de {row.length}</Label>
@@ -141,5 +133,55 @@ export function MesaInspector({ doc, stamp, sold, info, today, readOnly, grow, s
         <Trash2 className="size-4" />Quitar del programa
       </button>
     </section>
+  );
+}
+
+/**
+ * Repaso fino del sello: las tres opciones a la vista, con la elegida bien
+ * marcada y, en la automática, qué resultó (parcial, todo o nada).
+ */
+function RepasoChoice({ stamp, readOnly, onFine }: { stamp: StampPlacement; readOnly: boolean; onFine: (mode: FineMode) => void }) {
+  const fine = stamp.fine;
+  const mode: FineMode = fine?.mode === 'aspire' ? 'auto' : fine?.mode ?? 'auto';
+  const pieces = fine?.pieces?.length ?? 0;
+  const autoResult = !fine?.analysisVersion
+    ? 'Se calcula al chequear el sello.'
+    : pieces
+      ? `La 0,2 pasa por ${pieces} ${pieces === 1 ? 'pieza' : 'piezas'} (palabras enteras), donde la 0,6 no llega.`
+      : fine.needsFine
+        ? 'Resultó repaso de todo el sello.'
+        : 'La 0,6 alcanza: resultó sin repaso.';
+  const options: { id: FineMode; title: string; detail: string }[] = [
+    { id: 'auto', title: 'Parcial automático', detail: autoResult },
+    { id: 'whole', title: 'Repaso completo', detail: 'La 0,2 pasa por todo el sello.' },
+    { id: 'none', title: 'Sin repaso', detail: 'Solo la primera fresa (0,6).' },
+  ];
+  const current = options.find((o) => o.id === mode)!;
+  return (
+    <div className="space-y-2">
+      <Label>
+        repaso fino 0,2 · <span className="font-medium text-sky-300">{current.title}</span>
+      </Label>
+      <div role="radiogroup" aria-label="Repaso fino 0,2" className="space-y-1.5">
+        {options.map((o) => {
+          const on = o.id === mode;
+          return (
+            <button key={o.id} type="button" role="radio" aria-checked={on} disabled={readOnly} onClick={() => onFine(o.id)}
+              className={cn(FOCUS, 'flex w-full items-start gap-2.5 rounded-2xl border px-3 py-2 text-left transition-colors disabled:opacity-60',
+                on ? 'border-sky-400/80 bg-sky-400/15' : 'border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.07]')}>
+              <span aria-hidden className={cn('mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2',
+                on ? 'border-sky-300 bg-sky-300' : 'border-zinc-500')}>
+                {on ? <Check className="size-3 text-zinc-950" strokeWidth={3} /> : null}
+              </span>
+              <span className="min-w-0">
+                <span className={cn('block text-[13px]', on ? 'font-medium text-foreground' : 'text-zinc-300')}>{o.title}</span>
+                <span className={cn('block text-[12px]', on ? 'text-sky-100/80' : 'text-zinc-500')}>{o.detail}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {fine?.mode === 'aspire' ? <p className="text-[12px] text-zinc-400">Selección hecha en Aspire.</p> : null}
+    </div>
   );
 }

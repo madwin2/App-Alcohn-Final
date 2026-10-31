@@ -82,9 +82,11 @@ export function FresaChip({ report, idle = false, onClick, size = 'sm', classNam
         <AlertTriangle className={icon} /> Fresa: {n} {n === 1 ? 'lugar' : 'lugares'}
       </>
     );
-    title = `${n} lugar${n === 1 ? '' : 'es'} donde se pierde el diseño${
-      g.alta ? ` (${g.alta} no separa)` : ''
-    }. Clic para ver y corregir.`;
+    title = grave
+      ? `${n} lugar${n === 1 ? '' : 'es'} para revisar: ${g.alta} grave${g.alta === 1 ? '' : 's'} (cambia lo que se lee)${
+          g.media ? `, ${g.media} que se nota${g.media === 1 ? '' : 'n'} pero se lee${g.media === 1 ? '' : 'n'}` : ''
+        }. Clic para ver y corregir.`
+      : `${n} lugar${n === 1 ? '' : 'es'} donde se nota, pero se lee (letras que se tocan apenas, ojos chicos). Clic para ver.`;
   }
 
   if (onClick) {

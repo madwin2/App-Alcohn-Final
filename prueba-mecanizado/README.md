@@ -1,5 +1,7 @@
 # Placa de prueba de mecanizado
 
+> **Resultados (2026-10-31)**: sellada en cuero (con repaso 0,2 y solo con la 0,6) y en madera (con repaso). Análisis celda por celda y letra por letra, y guía de cuándo es grave: [docs/02-modules/vectorizacion/limites-de-marca.md](../docs/02-modules/vectorizacion/limites-de-marca.md). Fotos en [`fotos/`](fotos/). Criterio: cuenta cómo marca, no cómo queda el bronce.
+
 Un sello más, en bronce, con filas de pruebas para encontrar dos límites:
 
 - **Límite de mecanizado**: qué llega a cortar la fresa (se mira el bronce con lupa).

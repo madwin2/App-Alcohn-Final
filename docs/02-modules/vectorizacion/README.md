@@ -1,7 +1,7 @@
 # Vectorización
 
 > Ruta: `/vectorizacion` · Página: `src/app/vectorizacion/index.tsx` · Lógica: `src/lib/vectorizacion/*` · Store: `src/lib/state/vectorizacion.store.ts` · API: `api/vectorize.js`, `api/vectorizer-account.js`
-> Workflow: [WF-03](../../03-workflows/WF-03-diseno-y-vectorizacion.md) · Medida: [medida-de-fabricacion.md](medida-de-fabricacion.md) · Chequeo de fresa: [chequeo-de-fresa.md](chequeo-de-fresa.md) · Integración: [07-integrations/vectorizer-ai.md](../../07-integrations/vectorizer-ai.md)
+> Workflow: [WF-03](../../03-workflows/WF-03-diseno-y-vectorizacion.md) · Medida: [medida-de-fabricacion.md](medida-de-fabricacion.md) · Chequeo de fresa: [chequeo-de-fresa.md](chequeo-de-fresa.md) · Límites de marca: [limites-de-marca.md](limites-de-marca.md) · Integración: [07-integrations/vectorizer-ai.md](../../07-integrations/vectorizer-ai.md)
 > Página nueva (changelog #4, 2026-09-15): "generar el SVG ahí mismo, sin el programa de escritorio".
 
 ## Propósito

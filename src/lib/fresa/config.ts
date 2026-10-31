@@ -6,7 +6,10 @@
  *   dejar juego favorable ante desgaste (Q-PROG-020). 30° por lado (60° total).
  * - El detalle se hace con V-carve en Aspire: donde el blanco se angosta, la
  *   fresa sube sola y pasa más arriba. No "deja de pasar": pierde profundidad.
- * - Profundidad final 0,6 mm. Lo mínimo mínimo para que se separe bien: 0,3 mm.
+ * - Profundidad final 0,6 mm. El equipo dio 0,3 mm como mínimo para que se
+ *   separe; la placa de prueba sellada (2026-10-31) mostró que se separa desde
+ *   un espacio de 0,45 mm (≈ 0,22 mm) y que un ojo necesita 0,7 mm: ver
+ *   `markLimits`.
  * - Alimento: principal de 1 mm como referencia; repaso entre 0,4 y 0,5 mm,
  *   con tope 0,6 mm (Q-PROG-018 / Q-VEC-011, 2026-10-15).
  * - Lo negro del vector es el relieve (positivo); lo blanco es lo que se saca.
@@ -28,7 +31,65 @@ export interface FresaProfile {
    * con que la punta marque.
    */
   minDepthMm: number;
+  /**
+   * Límites de marca medidos sellando (placa de prueba, 2026-10-31; ver
+   * `docs/02-modules/vectorizacion/limites-de-marca.md`). Si están, mandan sobre
+   * `minDepthMm` para decidir la gravedad. Alimento no los tiene: no se sella
+   * en cuero ni madera y sigue con su referencia de profundidad (POL-085).
+   */
+  markLimits?: MarkLimits;
 }
+
+/** Anchos (mm, en el sello) donde cambia cómo marca un espacio o un ojo. */
+export interface MarkLimits {
+  /** Espacio entre piezas: desde acá se separan (OK). */
+  gapOkMm: number;
+  /** Por debajo de esto se tocan siempre. Entre los dos: «se nota» (rayita). */
+  gapGraveMm: number;
+  /** Ojo (círculo más grande que entra en el hueco): desde acá se ve bien. */
+  eyeOkMm: number;
+  /** Por debajo de esto se tapa. Entre los dos: se ve chico («se nota»). */
+  eyeGraveMm: number;
+}
+
+/**
+ * Letras que se tocan (espacio por debajo de `gapGraveMm`): siguen siendo «se
+ * nota» si el tramo pegado es a lo sumo esta parte de la altura de la letra más
+ * baja y esa letra mide al menos `MARK_MIN_LETTER_HEIGHT_MM`. En la placa,
+ * «Rabeg8» de 2,5 y 3,2 mm (12–22 %) se lee perfecto y «Rabe» de 2,0 (27–44 %)
+ * se lee bien; por encima de ~50 % la palabra se pierde.
+ */
+export const MARK_CONTACT_MAX_RATIO = 0.5;
+/**
+ * Altura mínima de la pieza (≈ alto de minúscula) para que letras pegadas o con
+ * ojos chicos se sigan leyendo. Por debajo es «letra demasiado chica»: en la
+ * placa, Times de 1,3 mm de mayúscula (minúscula ≈ 0,9 mm) ya no se lee.
+ */
+export const MARK_MIN_LETTER_HEIGHT_MM = 1.0;
+/**
+ * Un hueco encerrado cuenta como «ojo» si es compacto: área ≤ esto × ancho².
+ * Los de letras dan 0,8–2 (redondo 0,79, la g 1,95); un canal en anillo o una
+ * letra calada da 8 o más, y se juzga como espacio.
+ */
+export const EYE_MAX_COMPACTNESS = 4;
+
+/** Profundidad a la que baja una fresa en un hueco de `widthMm` (V-carve). */
+function depthAtWidth(tipDiameterMm: number, halfAngleDeg: number, widthMm: number): number {
+  return Math.max(0, (widthMm / 2 - tipDiameterMm / 2) / Math.tan((halfAngleDeg * Math.PI) / 180));
+}
+
+/**
+ * Con repaso (fresa fina), sellado en cuero y madera: espacios se separan
+ * desde 0,45 mm (0,35–0,45 dejan una rayita; 0,30 ya se pega), ojos se ven bien desde 0,70 mm
+ * (0,45–0,70 quedan como un puntito).
+ */
+const MARK_FINA: MarkLimits = { gapOkMm: 0.45, gapGraveMm: 0.35, eyeOkMm: 0.7, eyeGraveMm: 0.45 };
+/**
+ * Solo la primera fresa: espacio separado a 0,8 mm (0,55 pegado), ojo bien a
+ * 1,0 mm (0,8 puntito, 0,6 tapado; 0,95 por el redondeo del dibujo). Los cortes de grave (0,65 y 0,75) siguen el
+ * corrimiento de ~0,35 mm medido; entre celdas no hay dato.
+ */
+const MARK_PRINCIPAL: MarkLimits = { gapOkMm: 0.8, gapGraveMm: 0.65, eyeOkMm: 0.95, eyeGraveMm: 0.75 };
 
 export const FRESA_FINA: FresaProfile = {
   id: 'general',
@@ -37,7 +98,10 @@ export const FRESA_FINA: FresaProfile = {
   physicalTipDiameterMm: 0.1,
   halfAngleDeg: 30,
   finalDepthMm: 0.6,
-  minDepthMm: 0.3,
+  // Profundidad a la que se separa un espacio de 0,45 mm (≈ 0,22). Antes 0,3
+  // (Q-VEC-011); la placa mostró que 0,45–0,55 ya se separa al sellar.
+  minDepthMm: depthAtWidth(0.2, 30, MARK_FINA.gapOkMm),
+  markLimits: MARK_FINA,
 };
 
 /**
@@ -51,6 +115,7 @@ export const FRESA_ALIMENTO: FresaProfile = {
   label: 'Alimento · fresa «0,1» · configurada 0,2 mm',
   finalDepthMm: 0.6,
   minDepthMm: 0.4,
+  markLimits: undefined,
 };
 
 export type MachiningRecipe = 'CLASICO' | '3MM' | 'ALIMENTO';
@@ -69,9 +134,10 @@ export function primaryProfile(recipe: MachiningRecipe): FresaProfile {
     tipDiameterMm: 0.6,
     halfAngleDeg: 15,
     finalDepthMm: recipe === 'CLASICO' ? 1.7 : 3,
-    // Fuera de Alimento se compara contra la referencia general ya existente
-    // de separación (0,3); no es un nuevo mínimo aprobado para la principal.
-    minDepthMm: recipe === 'ALIMENTO' ? 1 : FRESA_FINA.minDepthMm,
+    // Fuera de Alimento, los límites de marca medidos con la placa solo con la
+    // primera fresa; la mínima es la profundidad de un espacio de 0,8 mm.
+    minDepthMm: recipe === 'ALIMENTO' ? 1 : depthAtWidth(0.6, 15, MARK_PRINCIPAL.gapOkMm),
+    markLimits: recipe === 'ALIMENTO' ? undefined : MARK_PRINCIPAL,
   };
 }
 
@@ -162,4 +228,7 @@ export const REPASO_DEPTH_STEP_MM = 0.1;
  */
 export const REPASO_MIN_RELATIVE = 0.08;
 
+// Los límites de marca (2026-10-31) cambian la gravedad de los avisos pero no
+// la selección del repaso: la versión queda en 6, porque el gadget y los
+// programas guardados la usan para saber si `fine.pieces` sigue vigente.
 export const FRESA_ANALYSIS_VERSION = 6;
