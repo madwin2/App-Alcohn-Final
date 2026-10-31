@@ -25,7 +25,7 @@ flowchart LR
 ## FR-01 · Venta y acuerdo con el cliente
 
 - **Dentro** ✅: registro del cliente, ítems, valor, seña, canal; WhatsApp `pedido_registrado`; cotización sugerida; generador de mockups.
-- **Externo** 👥: la venta se conversa por **WhatsApp** (casi todo), Instagram, Facebook o la web. La **seña es obligatoria** para tomar un trabajo: $20.000 (WhatsApp), $30.000 en sellos XL y en la web. El cliente manda el comprobante por WhatsApp. Ventas: Cachi y Juli B (a veces Julián).
+- **Externo** 👥: la venta se conversa por **WhatsApp** (casi todo), Instagram, Facebook o la web. La **seña es obligatoria** para tomar un trabajo: $30.000 (WhatsApp), $50.000 en sellos XL y $30.000 en la web. El cliente manda el comprobante por WhatsApp. Ventas: Cachi y Juli B (a veces Julián).
 - Para mostrar el diseño rápido, Ventas usa el **generador de mockups** en lugar de Photoshop y le manda la muestra con medidas y precios al cliente cuando se confirma.
 - **Pendiente** ❓: cómo se verifica que la seña ingresó (¿quién mira la cuenta?).
 

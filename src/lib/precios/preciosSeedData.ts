@@ -128,16 +128,16 @@ export const SEED_ACCESORIOS = [
 ] as const;
 
 export const SEED_ABECEDARIOS = [
-  { categoria: 'Números 0 al 9 solos', detalle: 'de 3 a 10 mm', precio_transferencia: 55000, orden: 1 },
-  { categoria: 'Números 0 al 9', detalle: 'de 3 a 10 mm', precio_transferencia: 95000, orden: 2 },
-  { categoria: 'Simple', detalle: 'Abc 6 mm', precio_transferencia: 206500, orden: 3 },
-  { categoria: 'Simple', detalle: 'Abc 10 mm', precio_transferencia: 238000, orden: 4 },
-  { categoria: 'Min y May', detalle: 'Abc 6 mm', precio_transferencia: 336500, orden: 5 },
-  { categoria: 'Min y May', detalle: 'Abc 10 mm', precio_transferencia: 396000, orden: 6 },
-  { categoria: 'Min ×2 y May', detalle: 'Abc 6 mm', precio_transferencia: 491500, orden: 7 },
-  { categoria: 'Min ×2 y May', detalle: 'Abc 10 mm', precio_transferencia: 549500, orden: 8 },
-  { categoria: 'Letras extras', detalle: '6 mm', precio_transferencia: 6000, orden: 9 },
-  { categoria: 'Letras extras', detalle: '10 mm', precio_transferencia: 6300, orden: 10 },
+  { categoria: 'Números 0 al 9 solos', detalle: 'de 3 a 10 mm', precio_transferencia: 63250, orden: 1 },
+  { categoria: 'Números 0 al 9', detalle: 'de 3 a 10 mm', precio_transferencia: 109250, orden: 2 },
+  { categoria: 'Simple', detalle: 'Abc 6 mm', precio_transferencia: 237475, orden: 3 },
+  { categoria: 'Simple', detalle: 'Abc 10 mm', precio_transferencia: 273700, orden: 4 },
+  { categoria: 'Min y May', detalle: 'Abc 6 mm', precio_transferencia: 386975, orden: 5 },
+  { categoria: 'Min y May', detalle: 'Abc 10 mm', precio_transferencia: 455400, orden: 6 },
+  { categoria: 'Min ×2 y May', detalle: 'Abc 6 mm', precio_transferencia: 565225, orden: 7 },
+  { categoria: 'Min ×2 y May', detalle: 'Abc 10 mm', precio_transferencia: 631925, orden: 8 },
+  { categoria: 'Letras extras', detalle: '6 mm', precio_transferencia: 6900, orden: 9 },
+  { categoria: 'Letras extras', detalle: '10 mm', precio_transferencia: 7245, orden: 10 },
 ] as const;
 
 export const SEED_REDONDOS = [

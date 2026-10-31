@@ -172,7 +172,8 @@ const orderTypeOptions: { value: CreatableOrderType; label: string; hint: string
   { value: 'PRUEBA', label: 'Prueba interna', hint: 'Se fabrica pero no es venta ni se envía.' },
 ];
 
-const DEFAULT_DEPOSIT_ARS = 20000;
+// Seña de una venta por WhatsApp (30/10/2026: $30.000; XL $50.000, se corrige a mano).
+const DEFAULT_DEPOSIT_ARS = 30000;
 
 const buildEmptyDesignFormValues = (
   pais: PaisInternacional | null,
@@ -500,7 +501,7 @@ export function NewOrderStepForm({
       },
       values: {
         totalValue: 0,
-        depositValue: paisInternacional ? 0 : 20000,
+        depositValue: paisInternacional ? 0 : DEFAULT_DEPOSIT_ARS,
         ...initialData.values,
       },
       shipping: {
@@ -966,7 +967,11 @@ export function NewOrderStepForm({
             </div>
             <div className="space-y-2 col-span-2">
               <Label htmlFor="channel">Canal de contacto</Label>
-              <Select onValueChange={(value) => customerForm.setValue('customer.channel', value as any)}>
+              {/* Controlado: si no, el canal precargado (WhatsApp desde la extensión) no se veía. */}
+              <Select
+                value={customerForm.watch('customer.channel') ?? ''}
+                onValueChange={(value) => customerForm.setValue('customer.channel', value as any)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar canal" />
                 </SelectTrigger>

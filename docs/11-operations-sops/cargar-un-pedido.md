@@ -2,7 +2,7 @@
 
 > Workflow: [WF-01](../03-workflows/WF-01-alta-manual-de-pedido.md)
 
-1. Requisito único obligatorio: **seña cobrada** ($20.000; $30.000 si es XL). Diseño y medida pueden completarse después (no es lo ideal).
+1. Requisito único obligatorio: **seña cobrada** ($30.000; $50.000 si es XL). El formulario propone $30.000: si es XL, corregilo. Diseño y medida pueden completarse después (no es lo ideal).
 2. Alcohn AI → Pedidos → **Nuevo pedido**.
 3. Cliente: nombre, apellido, teléfono (con código de área), email si lo hay. Tildar "no enviar confirmación" cuando no conviene el mensaje fijo de "acabamos de subir tu pedido" (p. ej. el cliente lo pidió hace días).
 4. Diseños: por cada ítem, tipo, nombre, medida (largo × corto), valor y seña (se sugiere el precio de lista), empresa/servicio de envío si ya se sabe, prioridad y fecha límite si corresponde, archivo base del cliente (y vector si ya existe, preferentemente **SVG**).

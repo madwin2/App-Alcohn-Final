@@ -5,7 +5,7 @@ Reglas que el equipo **confirmó** (respuestas a `14-open-questions`, 2026-09-28
 | ID | Política | Fuente | ¿Implementada? |
 |---|---|---|---|
 | POL-001 | **Sin seña no se toma un trabajo.** El resto de requisitos del alta (diseño, medida) pueden completarse después. | Q-PED-001 | Parcial: el sistema no exige seña > 0 |
-| POL-002 | Seña estándar **$20.000** en ventas por WhatsApp; **$30.000** para sellos XL; **$30.000** en la tienda web. El comprobante llega por WhatsApp. | Q-VEN-001, Q-WEB-003 | Parcial: `confirm-web-order` usa $20.000 por defecto si la web no informa la seña ([Q-WEB-006](../14-open-questions/comercial-web.md#q-web-006)) |
+| POL-002 | Seña estándar **$30.000** en ventas por WhatsApp (chicos, medianos y grandes); **$50.000** para sellos XL (5x5, 6x6…) — desde el 30/10/2026, antes $20.000 / $30.000; **$30.000** en la tienda web. El comprobante llega por WhatsApp. | Q-VEN-001, Q-WEB-003 | Parcial: `confirm-web-order` usa $20.000 por defecto si la web no informa la seña ([Q-WEB-006](../14-open-questions/comercial-web.md#q-web-006)) |
 | POL-003 | Pago con link/tarjeta = precio transferencia **+15 %**. | Q-WEB-003 | Sí (BR-PRE-002) |
 | POL-004 | **Un envío por pedido.** Si hacen falta envíos distintos, son órdenes distintas. | Q-PED-003 | Sí (implícito) |
 | POL-005 | La **fecha límite** es la fecha en que el pedido tiene que estar **listo y despachado**; la usa todo el equipo. | Q-PED-004 | Sí (avisos p4 y l2) |

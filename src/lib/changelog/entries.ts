@@ -1422,6 +1422,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 78,
+    date: '2026-10-30',
+    title: 'Pedido desde WhatsApp y seña nueva',
+    version: '1.96',
+    slides: [
+      {
+        heading: 'El canal de contacto ya viene cargado',
+        body: 'Al crear un pedido desde la extensión de WhatsApp, “Canal de contacto” aparece como WhatsApp. Antes se guardaba igual, pero el campo se veía vacío.',
+        icon: MessageCircle,
+      },
+      {
+        heading: 'La seña propuesta ahora es $30.000',
+        body: 'Es la seña nueva para sellos chicos, medianos y grandes. Si el sello es XL (5x5, 6x6…), la seña es $50.000: cambiala antes de guardar.',
+        icon: WalletCards,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

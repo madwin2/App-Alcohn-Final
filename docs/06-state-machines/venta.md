@@ -18,7 +18,7 @@ stateDiagram-v2
 
 | Estado | Significa | Entrada | Efectos / habilita |
 |---|---|---|---|
-| `Señado` | El cliente pagó la seña ($20.000; $30.000 XL/web) | ✅ Alta; Rehacer | Cola "Enviar foto" (si Hecho) |
+| `Señado` | El cliente pagó la seña ($30.000; $50.000 XL; $30.000 web) | ✅ Alta; Rehacer | Cola "Enviar foto" (si Hecho) |
 | `Foto` ("Foto enviada") | Se le mandó la foto del sello terminado y se espera el pago | ✅ Subir foto | ✅ WhatsApp con restante; cola "Esperando pago"; pasa a Envíos → "Pendientes de datos"; reloj de 10 días para Deudor |
 | `Transferido` | El cliente pagó todo (incluye envío salvo Andreani) | ✅ Ver arriba | Estado de envío editable; cola "Para enviar"; descarga de etiqueta Andreani; recompra a 2 meses |
 | `Deudor` | No pagó 10 días después de la foto | ✅ Cron | ✅ Notificación v4; **sale de Envíos**; cola "Deudores" |
