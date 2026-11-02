@@ -26,6 +26,7 @@ import {
 import { ClienteDetailDialog } from '@/components/comercial/ClienteDetailDialog';
 import { ComercialConfirmPagoDialog } from '@/components/comercial/ComercialConfirmPagoDialog';
 import { ComercialExcludeDialog } from '@/components/comercial/ComercialExcludeDialog';
+import { VentasOrigenWebPanel } from '@/components/comercial/VentasOrigenWebPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -463,6 +464,8 @@ export default function ComercialPage() {
               </TabsContent>
 
               <TabsContent value="resumen" className="mt-4 flex flex-col gap-4">
+                <VentasOrigenWebPanel />
+
                 <div className="grid gap-4 xl:grid-cols-3">
                   <Card className="xl:col-span-2">
                     <CardHeader>
