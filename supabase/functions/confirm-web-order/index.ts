@@ -22,6 +22,7 @@ type WebCartItem = {
   variantSize?: string;
   collection?: string;
   material?: string;
+  process?: string;
 };
 
 type SelloInsert = {
@@ -237,6 +238,15 @@ const mockupBaseUrl = (mockup: Record<string, unknown> | null): string | null =>
   return optimizadaPath || basePath || null;
 };
 
+/** Tipo de sello según `process` del carrito web (misma regla que src/lib/comercial/webCart.ts). */
+const resolveWebSelloTipo = (item: WebCartItem): string => {
+  const p = (item.process ?? "").toLowerCase();
+  if (p.includes("alimento")) return "Alimento";
+  if (p.includes("lacre")) return "Lacre";
+  if (p.includes("3mm")) return "3mm";
+  return "Clasico";
+};
+
 const buildSellosFromWebCheckout = (params: {
   ordenId: string;
   carritoJson: unknown;
@@ -297,7 +307,7 @@ const buildSellosFromWebCheckout = (params: {
     return {
       orden_id: params.ordenId,
       item_type: "SELLO",
-      tipo: "Clasico",
+      tipo: resolveWebSelloTipo(item),
       diseno: designName,
       valor: unitPrice,
       senia: senias[index] ?? 0,
@@ -313,6 +323,7 @@ const buildSellosFromWebCheckout = (params: {
         collection: item.collection ?? null,
         variant_size: item.variantSize ?? null,
         material_web: item.material ?? null,
+        process: item.process ?? null,
         cart_item_id: item.id ?? null,
       },
       nota: null,

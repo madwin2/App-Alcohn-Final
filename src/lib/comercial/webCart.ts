@@ -14,6 +14,7 @@ export type WebCartItem = {
   variantSize?: string;
   collection?: string;
   material?: string;
+  process?: string;
 };
 
 /** Mismo markup que la web: precio_link = redondear(precio_transferencia × 1.15) */
@@ -214,6 +215,15 @@ function mockupBaseUrl(mockup: MockupRow | null): string | null {
   return path?.trim() || null;
 }
 
+/** Tipo de sello según `process` del carrito web (Alimento / Lacre / Clasico). */
+export function resolveWebSelloTipo(item: WebCartItem): NonNullable<SelloInsert['tipo']> {
+  const p = (item.process ?? '').toLowerCase();
+  if (p.includes('alimento')) return 'Alimento';
+  if (p.includes('lacre')) return 'Lacre';
+  if (p.includes('3mm')) return '3mm';
+  return 'Clasico';
+}
+
 export function buildSellosFromWebCheckout(params: {
   ordenId: string;
   carritoJson: unknown;
@@ -276,7 +286,7 @@ export function buildSellosFromWebCheckout(params: {
     return {
       orden_id: params.ordenId,
       item_type: 'SELLO',
-      tipo: 'Clasico',
+      tipo: resolveWebSelloTipo(item),
       diseno: designName,
       valor: unitPrice,
       senia: senias[index] ?? 0,
@@ -292,6 +302,7 @@ export function buildSellosFromWebCheckout(params: {
         collection: item.collection ?? null,
         variant_size: item.variantSize ?? null,
         material_web: item.material ?? null,
+        process: item.process ?? null,
         cart_item_id: item.id ?? null,
       },
       nota: null,
