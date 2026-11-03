@@ -430,7 +430,10 @@ const buildOrdersFromOrdenes = async (ordenes: OrdenRowWithCliente[]): Promise<O
 
 export interface GetOrdersOptions {
   scope?: GetOrdersScope;
-  /** Solo últimos 6 meses. Por defecto true en operativa (un solo pase, sin carga extra). */
+  /**
+   * Solo últimos 6 meses. En `OrdersProvider` la operativa pide recent y después
+   * completa con `getOrdersOlderOpenOperational` (BR-PED-008).
+   */
   recentOnly?: boolean;
 }
 

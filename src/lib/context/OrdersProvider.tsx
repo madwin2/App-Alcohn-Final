@@ -114,7 +114,10 @@ interface OrdersActionsContextValue {
   fetchOrders: (options?: {
     silent?: boolean;
     scope?: 'operational' | 'full';
-    /** Incluye pedidos viejos abiertos (más lento). Por defecto false. */
+    /**
+     * Incluye pedidos >6 meses con envío abierto (Sin envio, Hacer Etiqueta, etc.).
+     * Por defecto true en operativa (BR-PED-008). Pasá false solo para un refresh liviano.
+     */
     includeOlderOpen?: boolean;
   }) => Promise<void>;
   ensureFullCatalog: () => Promise<void>;
@@ -131,6 +134,15 @@ interface OrdersActionsContextValue {
   ) => Promise<OrderItem>;
   deleteStamp: (stampId: string) => Promise<void>;
 }
+
+const mergeOperationalRecentAndOlder = (recent: Order[], older: Order[]): Order[] => {
+  const byId = new Map<string, Order>();
+  for (const order of recent) byId.set(order.id, order);
+  for (const order of older) {
+    if (!byId.has(order.id)) byId.set(order.id, order);
+  }
+  return sortOrdersByDateDesc([...byId.values()]);
+};
 
 export type OrdersContextValue = OrdersStateContextValue & OrdersActionsContextValue;
 
@@ -200,6 +212,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }) => {
       const silent = options?.silent ?? false;
       const scope = options?.scope ?? 'operational';
+      /** Operativa siempre trae viejos abiertos salvo opt-out explícito. */
+      const includeOlderOpen = options?.includeOlderOpen ?? scope === 'operational';
       const genRef = scope === 'full' ? fullFetchGenRef : operationalFetchGenRef;
       const gen = ++genRef.current;
 
@@ -208,12 +222,48 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         if (!silent && scope === 'full') setLoadingFullCatalog(true);
         if (scope === 'full') setError(null);
 
-        const data = await ordersService.getOrders({
-          scope,
-          recentOnly: scope === 'operational' && !options?.includeOlderOpen,
+        if (scope === 'full') {
+          const data = await ordersService.getOrders({ scope: 'full' });
+          if (gen !== genRef.current) return;
+          applyOrdersState('full', data);
+          return;
+        }
+
+        // 1) Últimos 6 meses (rápido).
+        const recent = await ordersService.getOrders({
+          scope: 'operational',
+          recentOnly: true,
         });
         if (gen !== genRef.current) return;
-        applyOrdersState(scope, data);
+
+        if (!includeOlderOpen) {
+          applyOrdersState('operational', recent);
+          return;
+        }
+
+        // Refresh silencioso: un solo apply con recent∪older para no parpadear
+        // pedidos viejos que ya estaban en pantalla (p. ej. Envíos).
+        if (silent) {
+          const older = await ordersService.getOrdersOlderOpenOperational(recent);
+          if (gen !== genRef.current) return;
+          applyOrdersState('operational', mergeOperationalRecentAndOlder(recent, older));
+          return;
+        }
+
+        // Carga inicial: pintar recientes ya; viejos abiertos en segundo plano.
+        applyOrdersState('operational', recent);
+        setLoading(false);
+
+        try {
+          const older = await ordersService.getOrdersOlderOpenOperational(recent);
+          if (gen !== genRef.current) return;
+          if (!older.length) return;
+          startTransition(() => {
+            setOperationalOrders(mergeOperationalRecentAndOlder(recent, older));
+          });
+        } catch (olderErr) {
+          console.error('Error fetching older open orders:', olderErr);
+        }
       } catch (err) {
         if (gen !== genRef.current) return;
         setError(err instanceof Error ? err : new Error('Error al cargar órdenes'));

@@ -47,7 +47,7 @@ Qué hacer cuando algo no sale como se espera. Si el problema no está acá, avi
 | Etiqueta **Generada** pero no **Pagada** | El pago quedó pendiente en MiCorreo: pagala ahí |
 | La etiqueta quedó "subiendo" para siempre | Probablemente se cerró la pestaña durante la subida. Volvé a confirmar los datos del pedido |
 | Cambié la dirección con la etiqueta ya pagada | Cancelá la etiqueta vieja en MiCorreo (reintegran el dinero) |
-| El pedido no aparece en Envíos | Tiene que tener **todos** los ítems Hecho, no ser Retiro en Persona ni Deudor. En **Pendientes de cargar datos** solo aparecen los que tienen venta **Foto Enviada** o **Transferido** |
+| El pedido no aparece en Envíos | Tiene que tener **todos** los ítems Hecho, no ser Retiro en Persona ni Deudor. En **Pendientes de cargar datos** solo aparecen los que tienen venta **Foto Enviada** o **Transferido**. Los pedidos **viejos** (más de 6 meses) con envío todavía abierto también entran |
 | **Subir seguimientos** no emparejó un pedido | Elegilo a mano en **Sin match en pedidos**. Si el nombre del destinatario es distinto al del cliente, pasa seguido |
 
 ## Vectorización y Programas

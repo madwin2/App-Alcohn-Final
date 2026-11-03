@@ -1440,6 +1440,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 79,
+    date: '2026-11-03',
+    title: 'Envíos: pedidos viejos vuelven a la cola',
+    version: '1.97',
+    slides: [
+      {
+        heading: 'Pedidos viejos sin despachar vuelven a Envíos',
+        body: 'Si un cliente de hace más de 6 meses paga hoy, el pedido vuelve a aparecer en Correo Argentino (y Andreani) para cargar datos o seguir la etiqueta. Antes solo se veían los de los últimos 6 meses.',
+        icon: Truck,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */
