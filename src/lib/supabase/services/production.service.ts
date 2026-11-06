@@ -7,6 +7,8 @@ import { getOrderItemDisplayName } from '../../utils/itemDisplayName';
 import { ORDER_TYPE_FROM_DB } from '../../pedidos/tipoPedido';
 import { selloEnCurso, valuesEqual } from '@/lib/notificaciones/format';
 import { notifyPrioridad, notifySelloModificado, notifySellosHechos } from '@/lib/notificaciones/events';
+import { vectorizationStateAfterBaseUpload } from '@/lib/config/vectorAuto';
+import { enqueueVectorization } from '@/lib/utils/vectorizeWorker';
 
 type SelloRow = Database['public']['Tables']['sellos']['Row'];
 type ClienteRow = Database['public']['Tables']['clientes']['Row'];
@@ -333,6 +335,8 @@ export const updateProductionItem = async (
     };
 
     const updateData: Partial<SelloRow> = {};
+    let replacedBaseUrl: string | null = null;
+    let replacedBaseReason: 'BASE_UPLOADED' | 'BASE_REPLACED' = 'BASE_REPLACED';
 
     if (updates.productionState) {
       updateData.estado_fabricacion = mapToFabricationState(updates.productionState) as any;
@@ -356,8 +360,36 @@ export const updateProductionItem = async (
     }
 
     if (updates.files) {
-      if (updates.files.baseUrl !== undefined) {
-        updateData.archivo_base = updates.files.baseUrl || null;
+      const touchesVector =
+        'vectorPreviewUrl' in updates.files || 'vectorUrl' in updates.files;
+
+      if ('baseUrl' in updates.files) {
+        const nextBase = updates.files.baseUrl || null;
+        const previousBase = currentSello?.archivo_base ?? null;
+        const baseChanged = !valuesEqual(previousBase, nextBase);
+        updateData.archivo_base = nextBase;
+
+        // Otro cambio (por ejemplo el vector) puede reenviar la URL que ya se muestra:
+        // eso no es subir ni borrar el base. Sí lo es un archivo nuevo o un borrado
+        // explícito. Reemplazar limpia la versión mejorada (si no, seguiría tapando
+        // el archivo nuevo) y el vector (BR-VEC-002). Borrar también saca la mejorada,
+        // aunque el original ya estuviera vacío: es lo que se ve en la celda.
+        const replacingBase = Boolean(nextBase) && baseChanged;
+        const deletingBase = !nextBase;
+        if (!touchesVector && (replacingBase || deletingBase)) {
+          (updateData as { archivo_base_mejorado?: string | null }).archivo_base_mejorado = null;
+          (updateData as { archivo_base_mejorado_at?: string | null }).archivo_base_mejorado_at = null;
+          if (replacingBase && nextBase) {
+            (updateData as { archivo_vector_preview?: string | null }).archivo_vector_preview = null;
+            (updateData as { error_vectorizacion_mensaje?: string | null }).error_vectorizacion_mensaje = null;
+            if (updates.vectorizationState === undefined) {
+              (updateData as { estado_vectorizacion?: string }).estado_vectorizacion =
+                vectorizationStateAfterBaseUpload();
+            }
+            replacedBaseUrl = nextBase;
+            replacedBaseReason = previousBase ? 'BASE_REPLACED' : 'BASE_UPLOADED';
+          }
+        }
       }
       if (updates.files.photoUrl !== undefined) {
         updateData.foto_sello = updates.files.photoUrl || null;
@@ -422,6 +454,19 @@ export const updateProductionItem = async (
       .eq('id', itemId);
 
     if (error) throw error;
+
+    if (replacedBaseUrl) {
+      try {
+        await enqueueVectorization({
+          selloId: itemId,
+          orderId: currentSello?.orden_id ?? '',
+          baseUrl: replacedBaseUrl,
+          reason: replacedBaseReason,
+        });
+      } catch (enqueueError) {
+        console.warn('No se pudo encolar vectorización automática:', enqueueError);
+      }
+    }
 
     // Obtener el sello actualizado con sus relaciones
     const { data: updatedSello, error: fetchError } = await supabase
@@ -568,10 +613,15 @@ export const updateProductionItem = async (
       notes: updatedSello.nota || undefined,
       deadline: updatedSello.fecha_limite ? `${updatedSello.fecha_limite}T00:00:00Z` : null,
       takenBy,
+      mockupSolicitudId: (updatedSello as { mockup_solicitud_id?: string | null }).mockup_solicitud_id ?? null,
       orderType: ORDER_TYPE_FROM_DB[(orden as { tipo_pedido?: string | null }).tipo_pedido ?? 'Venta'] ?? 'VENTA',
       isGift: (updatedSello as { es_regalo?: boolean | null }).es_regalo === true,
       files: {
-        baseUrl: updatedSello.archivo_base || undefined,
+        baseUrl:
+          baseFileUtil({
+            archivoBase: updatedSello.archivo_base || '',
+            archivoBaseMejorado: (updatedSello as { archivo_base_mejorado?: string | null }).archivo_base_mejorado,
+          }) || undefined,
         vectorUrl: vectorUrlFromPreview((updatedSello as any).archivo_vector_preview),
         vectorPreviewUrl: (updatedSello as any).archivo_vector_preview || undefined,
         photoUrl: updatedSello.foto_sello || undefined,

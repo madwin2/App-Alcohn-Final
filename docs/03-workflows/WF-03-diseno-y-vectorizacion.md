@@ -31,7 +31,7 @@ Al subir el base se encolaría un job en el vector-worker (`vector_jobs`) y el s
 
 ## Cambios de estado
 
-`estado_vectorizacion`: `BASE` → `VECTORIZADO` (o `EN_PROCESO` → `VECTORIZADO`/`ERROR` en el camino C). Reemplazar el base limpia el vector y vuelve a `BASE`. Ver [06-state-machines/vectorizacion.md](../06-state-machines/vectorizacion.md).
+`estado_vectorizacion`: `BASE` → `VECTORIZADO` (o `EN_PROCESO` → `VECTORIZADO`/`ERROR` en el camino C). Reemplazar el base desde Pedidos o Producción limpia el vector y vuelve a `BASE`. En Producción, ese reemplazo también deja de mostrar la base mejorada. Ver [06-state-machines/vectorizacion.md](../06-state-machines/vectorizacion.md).
 
 ## Efectos en otros módulos
 

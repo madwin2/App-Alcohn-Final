@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -33,6 +33,11 @@ import { RehacerDialog } from '@/components/shared/RehacerDialog';
 import { phoneMatchesSearch } from '@/lib/utils/phoneNormalization';
 import { isAbecedarioItem } from '@/lib/abecedario/abecedarioConfig';
 import { downloadAbecedarioHojaFabricacion } from '@/lib/abecedario/abecedarioFabricacionPdf';
+import {
+  BASE_FILE_ACCEPT,
+  baseFileRejection,
+  uploadProductionBase,
+} from './baseFileActions';
 
 interface ProductionTableProps {
   items: ProductionItem[];
@@ -402,6 +407,51 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
       toast({
         title: 'Error al descargar',
         description: error instanceof Error ? error.message : 'No se pudo descargar el archivo base',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const baseFileInputRef = useRef<HTMLInputElement>(null);
+  const baseUploadTargetRef = useRef<ProductionItem | null>(null);
+
+  const openBaseFilePicker = (item: ProductionItem) => {
+    baseUploadTargetRef.current = item;
+    window.setTimeout(() => baseFileInputRef.current?.click(), 0);
+  };
+
+  const handleBaseFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    const item = baseUploadTargetRef.current;
+    baseUploadTargetRef.current = null;
+    if (!file || !item) return;
+
+    const rejection = baseFileRejection(file);
+    if (rejection) {
+      toast({
+        title: 'Tipo de archivo no válido',
+        description: rejection,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const hadVector = Boolean(item.files?.vectorUrl);
+    try {
+      const fileUrl = await uploadProductionBase(item, file);
+      await updateItem(item.id, { files: { baseUrl: fileUrl } });
+      toast({
+        title: hadVector ? 'Archivo base actualizado' : 'Archivo subido',
+        description: hadVector
+          ? 'Se guardó el archivo nuevo y se borró el vector anterior. Hay que vectorizar de nuevo.'
+          : 'El archivo base se subió correctamente',
+      });
+    } catch (error) {
+      console.error('Error uploading base file:', error);
+      toast({
+        title: 'Error al subir archivo',
+        description: error instanceof Error ? error.message : 'No se pudo subir el archivo base',
         variant: 'destructive',
       });
     }
@@ -787,6 +837,9 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
                         Descargar hoja de fabricación
                       </ContextMenuItem>
                     ) : null}
+                    <ContextMenuItem onSelect={() => openBaseFilePicker(row.original)}>
+                      {row.original.files?.baseUrl ? 'Reemplazar archivo base' : 'Subir archivo base'}
+                    </ContextMenuItem>
                     <ContextMenuItem 
                       onSelect={() => handleDownloadBase(row.original)}
                       disabled={!row.original.files?.baseUrl}
@@ -815,6 +868,13 @@ export function ProductionTable({ items, onUpdateItem, onRefreshItems, itemCount
         </table>
       </div>
       </DndTableContainer>
+      <input
+        ref={baseFileInputRef}
+        type="file"
+        accept={BASE_FILE_ACCEPT}
+        onChange={(event) => void handleBaseFileSelected(event)}
+        className="hidden"
+      />
       <OrderInfoDialog
         open={Boolean(orderInfoItem?.clienteId)}
         onOpenChange={(open) => {

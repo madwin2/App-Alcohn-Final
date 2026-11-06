@@ -190,7 +190,7 @@ export const createProductionColumns = ({
   {
     id: 'archivoBase',
     header: 'ARCHIVO BASE',
-    cell: ({ row }) => <CellArchivoBase item={row.original} />,
+    cell: ({ row }) => <CellArchivoBase item={row.original} onUpdateItem={onUpdateItem} />,
     size: 60,
     meta: { align: 'center' }
   },

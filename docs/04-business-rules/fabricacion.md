@@ -13,7 +13,7 @@
 | BR-PROD-003 | El programa de un ítem solo se asigna/quita desde Programas (en Producción es solo lectura). | `CellPrograma`, `production.service.ts` | UI/Servicio |
 | BR-PROD-004 | Cambios de tipo, archivo base, vector o medida en un ítem "en curso" notifican a Producción (p1). | `selloEnCurso`, `notifySelloModificado` | Servicio |
 | BR-VEC-001 | Subir un vector no SVG requiere confirmación explícita ("es importante subir los vectores en SVG"). | `NonSvgVectorConfirmDialog`, `NewOrderDialog` | UI |
-| BR-VEC-002 | Reemplazar el archivo base borra el vector y el error, y vuelve la vectorización a `BASE` (o `EN_PROCESO` con auto-vector). | `updateOrder` | Servicio |
+| BR-VEC-002 | Reemplazar el archivo base borra el vector y el error, y vuelve la vectorización a `BASE` (o `EN_PROCESO` con auto-vector). Desde Producción también se limpia la base mejorada, para que el archivo nuevo sea el que se ve. | `updateOrder`, `updateProductionItem` | Servicio |
 | BR-VEC-003 | La base mejorada reemplaza al original para vectorizar y descargar, sin borrar el original. | `baseFileUtil`, `setArchivoBaseMejorado` | Servicio |
 | BR-VEC-004 | Solo los vectores generados en modo `production` pueden guardarse en un ítem. | `saveSelloVector` | Servicio |
 | BR-VEC-005 | Medida de fabricación: si el lado menor **pedido** supera el tope de su planchuela (12→11,5; 19→18; 25→24; 38→36,5 mm), el lado menor del vector se lleva al tope y el otro por proporción; se guarda sin popup salvo que el lado largo se desvíe ≥6 mm de lo pedido (decisión 2026-10-01). Si lo pedido ya entra en el tope, se guarda lo medido si no hay desvío ≥6 mm; si no, se pide confirmación conservando proporción. | `resolveFabricationSize`, `scaleMinorSideToTope` | Servicio |

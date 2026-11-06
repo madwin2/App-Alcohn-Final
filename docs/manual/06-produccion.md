@@ -41,7 +41,7 @@ Esta pantalla agrupa los estados de fabricación así:
 | **VECTORIZADO** | Estado del vector: Base, En Proceso, Vectorizado, Descargado, Error | Cambiarlo a mano |
 | Programa | En qué programa está | Clic: **Ver en Programas** |
 | Máquina | Máquina del programa, o **Sin programa** | — |
-| **ARCHIVO BASE** | Diseño del cliente (o la versión mejorada) | Descargar |
+| **ARCHIVO BASE** | Diseño del cliente (o la versión mejorada) | Subir, reemplazar, descargar, eliminar |
 | **VECTOR** | Vector del sello | Subir, reemplazar, descargar, eliminar |
 
 Como en Pedidos, las columnas se pueden achicar, agrandar y mover, y la configuración queda guardada.
@@ -67,6 +67,16 @@ En la columna **FABRICACIÓN** elegí: **Sin Hacer**, **Programado**, **Haciendo
 
 La columna también permite elegir a mano un estado **Aspire** (Aspire C, G, XL y su versión Check). Es de antes de que existiera la pantalla Programas: **ya no hace falta usarlo**, porque Programas lo completa solo.
 
+## Subir o reemplazar el archivo base
+
+En la columna **ARCHIVO BASE** (JPG, PNG o PDF):
+
+- Clic en una celda vacía para subir el diseño.
+- Clic en la miniatura para verla. Clic derecho: **Reemplazar archivo**, **Descargar archivo**, **Eliminar archivo**.
+- En el clic derecho de la fila: **Subir archivo base** o **Reemplazar archivo base**.
+
+⚠️ Reemplazar el archivo base **borra el vector** de ese sello. Hay que vectorizarlo de nuevo. Si había una versión retocada, queda reemplazada por el archivo nuevo.
+
 ## Subir o corregir un vector
 
 En la columna **VECTOR**:
@@ -82,6 +92,7 @@ En la columna **VECTOR**:
 |---|---|
 | **Editar item** | Editar los datos del sello |
 | **Seleccionar fila** / **Deseleccionar fila** | Para cambios en bloque |
+| **Subir archivo base** / **Reemplazar archivo base** | Carga o cambia el diseño del cliente (JPG, PNG o PDF). Reemplazar borra el vector |
 | **Descargar archivo base** | Baja el diseño del cliente |
 | **Descargar hoja de fabricación** | Solo abecedarios |
 | **Eliminar item** | Borra el sello. ⚠️ No se puede deshacer |

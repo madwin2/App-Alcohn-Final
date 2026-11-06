@@ -1472,6 +1472,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 81,
+    date: '2026-11-06',
+    title: 'Producción: actualizar el archivo base',
+    version: '1.99',
+    slides: [
+      {
+        heading: 'El archivo base se actualiza desde Producción',
+        body: 'En la columna Archivo base podés subir el diseño, o con clic derecho reemplazarlo, descargarlo o eliminarlo. También está en el clic derecho de la fila.',
+        icon: Upload,
+      },
+      {
+        heading: 'Si lo reemplazás, el vector se borra',
+        body: 'El diseño nuevo deja sin efecto el vector anterior. Hay que vectorizar ese sello de nuevo.',
+        icon: ImageIcon,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

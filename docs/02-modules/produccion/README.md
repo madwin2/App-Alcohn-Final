@@ -45,7 +45,7 @@ Diferencia con Pedidos: Pedidos agrupa por orden y mira venta/envío; Producció
 | Vectorizado | Cambiar `estado_vectorizacion` a mano | — |
 | Programa | **Solo lectura**; chip navega a Programas si hay `programa_id`; texto gris = programa histórico sin vínculo | — |
 | Máquina | Ver | — |
-| Archivo base | Descargar (usa base mejorada si existe) | — |
+| Archivo base | Subir, reemplazar, descargar, eliminar (muestra la base mejorada si existe) | Reemplazar escribe `archivo_base`, limpia `archivo_base_mejorado` y aplica [BR-VEC-002](../../04-business-rules/fabricacion.md) |
 | Vector | Subir (advertencia si no es SVG; EPS genera preview), descargar, borrar | SVG → cálculo de medida de fabricación ([medida-de-fabricacion.md](../vectorizacion/medida-de-fabricacion.md)) |
 
 Alertas en la fila del diseño: `motivo_salida_programa` (p. ej. salió por falta de material) y `no_importado_motivo` (no entró al Aspire).
@@ -71,4 +71,4 @@ Ver [04-business-rules/fabricacion.md](../../04-business-rules/fabricacion.md).
 
 ## Implementación relacionada
 
-`src/app/produccion/index.tsx`, `src/components/produccion/Table/ProductionTable.tsx`, `columns.tsx`, `cells/CellFabricacionAspire.tsx`, `cells/CellVector.tsx`, `cells/CellPrograma.tsx`, `src/lib/supabase/services/production.service.ts`.
+`src/app/produccion/index.tsx`, `src/components/produccion/Table/ProductionTable.tsx`, `columns.tsx`, `cells/CellArchivoBase.tsx`, `cells/CellFabricacionAspire.tsx`, `cells/CellVector.tsx`, `cells/CellPrograma.tsx`, `src/lib/supabase/services/production.service.ts`.
