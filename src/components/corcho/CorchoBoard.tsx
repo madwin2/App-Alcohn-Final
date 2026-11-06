@@ -25,9 +25,11 @@ import { useEquipoRol } from '@/lib/hooks/useEquipoRol';
 import {
   esIdeaNuevaParaMi,
   filtrarIdeasCorcho,
+  MAX_IMAGENES_CORCHO,
   mergeNuevasSesion,
   ordenarIdeasCorcho,
   siguienteVoto,
+  validarArchivoImagenCorcho,
   type FiltroEstadoCorcho,
   type OrdenCorcho,
   type ValorVotoCorcho,
@@ -40,15 +42,23 @@ import {
   actualizarIdeaCorcho,
   borrarComentarioIdeaCorcho,
   borrarIdeaCorcho,
+  borrarImagenIdeaCorcho,
   cambiarEstadoIdeaCorcho,
   crearComentarioIdeaCorcho,
   crearIdeaCorcho,
   getIdeasCorcho,
   marcarIdeaCorchoVista,
   setVotoIdeaCorcho,
+  subirImagenIdeaCorcho,
   type EstadoIdeaCorcho,
   type IdeaCorcho,
+  type ImagenIdeaCorcho,
 } from '@/lib/supabase/services/equipoCorcho.service';
+import { achicarImagenCorcho } from '@/lib/equipo/achicarImagen';
+import {
+  SelectorImagenesNuevas,
+  imagenesDelPortapapeles,
+} from '@/components/corcho/IdeaCorchoImagenes';
 import {
   notifyIdeaComentario,
   notifyIdeaEstado,
@@ -153,6 +163,10 @@ export function CorchoBoard({ onNuevasChange, demo: demoProp }: CorchoBoardProps
   const [ideaAbiertaId, setIdeaAbiertaId] = useState<string | null>(null);
   const [ideaABorrar, setIdeaABorrar] = useState<IdeaCorcho | null>(null);
   const [comentarioABorrar, setComentarioABorrar] = useState<string | null>(null);
+  /** Fotos elegidas en "Pinchar una idea" (se suben después de crearla). */
+  const [archivosNuevos, setArchivosNuevos] = useState<File[]>([]);
+  const [subiendoPorIdea, setSubiendoPorIdea] = useState<Record<string, number>>({});
+  const [imagenAQuitar, setImagenAQuitar] = useState<ImagenIdeaCorcho | null>(null);
 
   const quitarParams = useCallback(
     (claves: string[]) => {
@@ -290,6 +304,11 @@ export function CorchoBoard({ onNuevasChange, demo: demoProp }: CorchoBoardProps
         { event: '*', schema: 'public', table: 'ideas_corcho_comentarios' },
         schedule,
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ideas_corcho_imagenes' },
+        schedule,
+      )
       .subscribe();
 
     return () => {
@@ -353,6 +372,7 @@ export function CorchoBoard({ onNuevasChange, demo: demoProp }: CorchoBoardProps
     if (editId) {
       setTitulo('');
       setDescripcion('');
+      setArchivosNuevos([]);
     }
     setEditId(null);
     setDialogOpen(true);
@@ -368,6 +388,88 @@ export function CorchoBoard({ onNuevasChange, demo: demoProp }: CorchoBoardProps
 
   const avisarDemo = () =>
     toast({ title: 'Vista de ejemplo', description: 'En el modo demo no se guarda nada.' });
+
+  /**
+   * Sube fotos a una idea, una por una, respetando el tope (POL-098).
+   * Devuelve cuántas se subieron.
+   */
+  const subirImagenes = async (ideaId: string, files: File[], yaTiene: number): Promise<number> => {
+    const libres = Math.max(0, MAX_IMAGENES_CORCHO - yaTiene - (subiendoPorIdea[ideaId] ?? 0));
+    if (files.length > libres) {
+      toast({
+        title: `Hasta ${MAX_IMAGENES_CORCHO} fotos por idea`,
+        description: libres ? `Se suben las primeras ${libres}.` : 'Esta idea ya está completa.',
+      });
+    }
+    const aSubir = files.slice(0, libres);
+    if (!aSubir.length) return 0;
+
+    const ajustarSubiendo = (delta: number) =>
+      setSubiendoPorIdea((prev) => ({ ...prev, [ideaId]: Math.max(0, (prev[ideaId] ?? 0) + delta) }));
+    ajustarSubiendo(aSubir.length);
+
+    let subidas = 0;
+    for (const original of aSubir) {
+      try {
+        const tipoInvalido = validarArchivoImagenCorcho({ type: original.type, size: 0 });
+        if (tipoInvalido) throw new Error(tipoInvalido);
+        const file = await achicarImagenCorcho(original);
+        const invalido = validarArchivoImagenCorcho(file);
+        if (invalido) throw new Error(invalido);
+
+        const nueva: ImagenIdeaCorcho = demo
+          ? {
+              id: `demo-img-${Date.now()}-${subidas}`,
+              ideaId,
+              autorUserId: viewerUserId,
+              path: '',
+              url: URL.createObjectURL(file),
+              createdAt: new Date().toISOString(),
+            }
+          : await subirImagenIdeaCorcho({ ideaId, file });
+        setIdeas((prev) =>
+          prev.map((i) =>
+            i.id === ideaId && !i.imagenes.some((x) => x.id === nueva.id)
+              ? { ...i, imagenes: [...i.imagenes, nueva] }
+              : i,
+          ),
+        );
+        subidas += 1;
+      } catch (err) {
+        toast({
+          title: `No se pudo subir “${original.name}”`,
+          description: err instanceof Error ? err.message : 'Error',
+          variant: 'destructive',
+        });
+      } finally {
+        ajustarSubiendo(-1);
+      }
+    }
+    return subidas;
+  };
+
+  const confirmarQuitarImagen = () => {
+    const imagen = imagenAQuitar;
+    if (!imagen) return;
+    void (async () => {
+      try {
+        if (!demo) await borrarImagenIdeaCorcho(imagen);
+        setIdeas((prev) =>
+          prev.map((i) =>
+            i.id === imagen.ideaId
+              ? { ...i, imagenes: i.imagenes.filter((x) => x.id !== imagen.id) }
+              : i,
+          ),
+        );
+      } catch (err) {
+        toast({
+          title: 'No se pudo sacar la imagen',
+          description: err instanceof Error ? err.message : 'Error',
+          variant: 'destructive',
+        });
+      }
+    })();
+  };
 
   const guardarIdea = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -405,12 +507,14 @@ export function CorchoBoard({ onNuevasChange, demo: demoProp }: CorchoBoardProps
           ideaId: created.id,
           destinatarioUserIds: destinatarios,
         });
+        if (archivosNuevos.length) await subirImagenes(created.id, archivosNuevos, 0);
         toast({ title: 'Idea pinchada en el corcho' });
       }
       setDialogOpen(false);
       setEditId(null);
       setTitulo('');
       setDescripcion('');
+      setArchivosNuevos([]);
       await load({ silent: true, preserveNuevasSesion: true });
     } catch (err) {
       toast({
@@ -800,6 +904,11 @@ export function CorchoBoard({ onNuevasChange, demo: demoProp }: CorchoBoardProps
           ideaAbierta ? comentar(ideaAbierta, texto) : Promise.resolve(false)
         }
         onBorrarComentario={setComentarioABorrar}
+        subiendoImagenes={ideaAbierta ? (subiendoPorIdea[ideaAbierta.id] ?? 0) : 0}
+        onSubirImagenes={(files) =>
+          ideaAbierta && void subirImagenes(ideaAbierta.id, files, ideaAbierta.imagenes.length)
+        }
+        onSacarImagen={setImagenAQuitar}
       />
 
       {/* Formulario como una nota en blanco, del color de quien escribe. */}
@@ -852,11 +961,26 @@ export function CorchoBoard({ onNuevasChange, demo: demoProp }: CorchoBoardProps
                   id="corcho-desc"
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
+                  onPaste={(e) => {
+                    if (editId) return;
+                    const files = imagenesDelPortapapeles(e.clipboardData);
+                    if (!files.length) return;
+                    e.preventDefault();
+                    setArchivosNuevos((prev) => [...prev, ...files].slice(0, MAX_IMAGENES_CORCHO));
+                  }}
                   rows={4}
                   placeholder="Contá un poco más: qué problema resuelve, cómo se haría…"
                   className={cn(CAMPO_PAPEL, 'resize-none text-sm leading-relaxed')}
                 />
               </div>
+              {editId ? null : (
+                <div className="space-y-1.5">
+                  <Label className="text-[13px] text-zinc-700">
+                    Fotos <span className="font-normal text-zinc-400">(opcional, hasta {MAX_IMAGENES_CORCHO})</span>
+                  </Label>
+                  <SelectorImagenesNuevas archivos={archivosNuevos} onChange={setArchivosNuevos} />
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2">
@@ -906,6 +1030,17 @@ export function CorchoBoard({ onNuevasChange, demo: demoProp }: CorchoBoardProps
         description="No se puede recuperar."
         confirmLabel="Borrar"
         onConfirm={confirmarBorrarComentario}
+      />
+
+      <ConfirmPapel
+        open={!!imagenAQuitar}
+        onOpenChange={(open) => {
+          if (!open) setImagenAQuitar(null);
+        }}
+        title="¿Sacar la imagen?"
+        description="Se saca de la idea para todos. No se puede recuperar."
+        confirmLabel="Sacar"
+        onConfirm={confirmarQuitarImagen}
       />
     </div>
   );

@@ -25,6 +25,8 @@ import {
   fechaRelativaCorcho,
   puedeBorrarIdea,
   puedeEditarIdea,
+  puedeSacarImagenIdea,
+  puedeSubirImagenIdea,
   puedeVotarIdea,
   type EstadoIdeaCorcho,
   type ValorVotoCorcho,
@@ -32,7 +34,9 @@ import {
 import {
   MAX_COMENTARIO_CORCHO,
   type IdeaCorcho,
+  type ImagenIdeaCorcho,
 } from '@/lib/supabase/services/equipoCorcho.service';
+import { GaleriaIdea, imagenesDelPortapapeles } from '@/components/corcho/IdeaCorchoImagenes';
 import {
   AvatarPersona,
   BOTON_PAPEL,
@@ -59,6 +63,10 @@ export interface IdeaCorchoDialogProps {
   onCambiarEstado: (estado: EstadoIdeaCorcho, comentario: string) => Promise<boolean>;
   onComentar: (texto: string) => Promise<boolean>;
   onBorrarComentario: (comentarioId: string) => void;
+  /** Cuántas imágenes de esta idea se están subiendo. */
+  subiendoImagenes: number;
+  onSubirImagenes: (files: File[]) => void;
+  onSacarImagen: (imagen: ImagenIdeaCorcho) => void;
 }
 
 const TEXTO_ESTADO: Record<
@@ -98,6 +106,9 @@ export function IdeaCorchoDialog({
   onCambiarEstado,
   onComentar,
   onBorrarComentario,
+  subiendoImagenes,
+  onSubirImagenes,
+  onSacarImagen,
 }: IdeaCorchoDialogProps) {
   const [comentario, setComentario] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -126,6 +137,7 @@ export function IdeaCorchoDialog({
   const puedeBorrar = puedeBorrarIdea(idea, viewerUserId);
   const upVoters = idea.votos.filter((v) => v.valor === 1).map((v) => nombre(v.userId));
   const downVoters = idea.votos.filter((v) => v.valor === -1).map((v) => nombre(v.userId));
+  const puedeSubir = puedeSubirImagenIdea(idea.imagenes.length + subiendoImagenes, viewerUserId);
 
   const abrirCambioEstado = (estado: EstadoIdeaCorcho) => {
     // Se precarga el comentario actual: así no se pierde sin querer el "por qué".
@@ -163,6 +175,12 @@ export function IdeaCorchoDialog({
       <DialogContent
         className={cn(DIALOGO_PAPEL, 'gap-0 overflow-visible p-0 sm:max-w-xl')}
         style={{ background: colorPapel(autorColor, 14) }}
+        onPaste={(e) => {
+          const files = imagenesDelPortapapeles(e.clipboardData);
+          if (!files.length || !puedeSubir) return;
+          e.preventDefault();
+          onSubirImagenes(files);
+        }}
       >
         <Chinche className="!-top-2 scale-125" />
 
@@ -197,6 +215,15 @@ export function IdeaCorchoDialog({
                 </DialogDescription>
               )}
             </div>
+
+            <GaleriaIdea
+              imagenes={idea.imagenes}
+              subiendo={subiendoImagenes}
+              puedeSubir={puedeSubir}
+              puedeSacar={(img) => puedeSacarImagenIdea(img, idea, viewerUserId, esAdmin)}
+              onSubir={onSubirImagenes}
+              onSacar={onSacarImagen}
+            />
 
             {idea.estado !== 'propuesta' || idea.comentarioEstado ? (
               <div className="border-l-2 border-zinc-900/15 pl-3.5 text-sm">

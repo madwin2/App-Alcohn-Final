@@ -8,7 +8,8 @@ Es un tablero compartido para pinchar **ideas para mejorar la empresa**. Lo ve t
 
 1. Tocá **Pinchar una idea**.
 2. Escribí un **título** (hasta 120 letras) y, si querés, una **descripción**.
-3. Tocá **Pinchar** (o Enter). Al resto del equipo le llega un aviso.
+3. Si querés, sumá **fotos** (hasta 4) con **Agregar fotos**, o pegá una captura con Ctrl + V mientras escribís la descripción.
+4. Tocá **Pinchar** (o Enter). Al resto del equipo le llega un aviso.
 
 Si cerrás el formulario sin querer, lo que escribiste sigue ahí la próxima vez que lo abras.
 
@@ -19,6 +20,7 @@ Cada nota es del color de quien la pinchó, lleva su foto (o sus iniciales si no
 **Tocá una idea para abrirla en grande.** Ahí ves:
 
 - El texto completo.
+- Las **fotos** (tocá una para verla en grande; con las flechas pasás a la siguiente).
 - Quién votó **a favor** y quién **en contra**.
 - Si Julián la aprobó o la descartó, cuándo y por qué.
 - Los **comentarios**.
@@ -31,12 +33,19 @@ Las notificaciones del corcho te llevan directo a la idea.
 - Tu propia idea no se vota, y las descartadas tampoco.
 - **Comentar es opcional**: podés comentar o solo votar. Escribí abajo de todo en la idea abierta y tocá **Comentar** (o Ctrl + Enter). A quien pinchó la idea le llega un aviso. Podés borrar tus comentarios con la ✕.
 
+## Fotos
+
+- **Cualquiera del equipo** puede sumar fotos a **cualquier idea**, hasta 4 por idea. Abrí la idea y tocá **Agregar foto**, o pegá una captura con Ctrl + V.
+- Las fotos solo las ve el equipo.
+- Podés **sacar una foto que subiste vos** (con la ✕) mientras nadie votó la idea. Cuando la idea ya tiene votos, se pueden **agregar** fotos pero **no sacar**. Julián puede sacar cualquiera.
+- Si la foto es muy grande, la app la achica sola antes de subirla.
+
 ## Editar o borrar tu idea
 
 Abrí tu idea y usá **Editar** o **Borrar**.
 
 - **Solo se edita mientras nadie la votó.** Si ya tiene votos, ya no se puede cambiar: así nadie termina votando algo distinto de lo que leyó.
-- Se puede borrar mientras está como propuesta (se borran también sus votos y comentarios).
+- Se puede borrar mientras está como propuesta (se borran también sus votos, comentarios y fotos).
 
 ## Filtros
 

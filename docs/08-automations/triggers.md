@@ -53,7 +53,7 @@
 
 ## Otros
 
-`mockup_solicitudes`: `trg_mockup_schedule_contacto_comercial` (contacto a +10 min, web), `updated_at`. `innovation_tasks/subtasks`: progreso automático. `clientes`, `direcciones`, `costos_de_envio`, `correo_sucursales`, `economia_*`, `precios_config`, `stock_items`, `vector_jobs`, `vistas_tabla`, `innovation_*`: `updated_at`.
+`mockup_solicitudes`: `trg_mockup_schedule_contacto_comercial` (contacto a +10 min, web), `updated_at`. `innovation_tasks/subtasks`: progreso automático. `ideas_corcho_imagenes`: `trg_ideas_corcho_imagenes_tope` rechaza la quinta foto de una idea (POL-098; **pendiente de aplicar**, `migration_equipo_corcho_imagenes.sql`). `clientes`, `direcciones`, `costos_de_envio`, `correo_sucursales`, `economia_*`, `precios_config`, `stock_items`, `vector_jobs`, `vistas_tabla`, `innovation_*`: `updated_at`.
 
 ## Funciones RPC llamadas desde la app
 

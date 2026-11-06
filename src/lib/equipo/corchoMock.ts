@@ -54,6 +54,7 @@ function idea(
     votos: votos.map(([userId, valor]) => ({ userId, valor })),
     vistaPorMi: true,
     comentarios: [],
+    imagenes: [],
     ...extra,
   };
 }

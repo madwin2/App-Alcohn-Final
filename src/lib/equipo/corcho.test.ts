@@ -7,13 +7,18 @@ import {
   filtrarIdeasCorcho,
   fraseEstadoIdeaNotificacion,
   labelEstadoIdea,
+  MAX_BYTES_IMAGEN_CORCHO,
+  MAX_IMAGENES_CORCHO,
   mergeNuevasSesion,
   ordenarIdeasCorcho,
   puedeBorrarIdea,
   puedeEditarIdea,
+  puedeSacarImagenIdea,
+  puedeSubirImagenIdea,
   puedeVotarIdea,
   puntajeIdea,
   siguienteVoto,
+  validarArchivoImagenCorcho,
   type IdeaCorchoBase,
 } from './corcho';
 
@@ -169,6 +174,29 @@ describe('corcho', () => {
     expect(puedeEditarIdea({ ...base, estado: 'aprobada' }, 'yo')).toBe(false);
     expect(puedeBorrarIdea({ autorUserId: 'yo', estado: 'propuesta' }, 'yo')).toBe(true);
     expect(puedeBorrarIdea({ autorUserId: 'yo', estado: 'aprobada' }, 'yo')).toBe(false);
+  });
+
+  it('imágenes: cualquiera sube hasta 4; con votos solo el admin saca (POL-098)', () => {
+    expect(puedeSubirImagenIdea(0, 'yo')).toBe(true);
+    expect(puedeSubirImagenIdea(MAX_IMAGENES_CORCHO - 1, 'yo')).toBe(true);
+    expect(puedeSubirImagenIdea(MAX_IMAGENES_CORCHO, 'yo')).toBe(false);
+    expect(puedeSubirImagenIdea(0, '')).toBe(false);
+
+    const mia = { autorUserId: 'yo' };
+    const sinVotos = { votos: [] };
+    const conVotos = { votos: [{ userId: 'x', valor: 1 as const }] };
+    expect(puedeSacarImagenIdea(mia, sinVotos, 'yo', false)).toBe(true);
+    expect(puedeSacarImagenIdea(mia, conVotos, 'yo', false)).toBe(false);
+    expect(puedeSacarImagenIdea(mia, sinVotos, 'otro', false)).toBe(false);
+    expect(puedeSacarImagenIdea(mia, conVotos, 'admin', true)).toBe(true);
+  });
+
+  it('valida tipo y peso de la imagen', () => {
+    expect(validarArchivoImagenCorcho({ type: 'image/jpeg', size: 1000 })).toBeNull();
+    expect(validarArchivoImagenCorcho({ type: 'application/pdf', size: 1000 })).toMatch(/JPG/);
+    expect(
+      validarArchivoImagenCorcho({ type: 'image/png', size: MAX_BYTES_IMAGEN_CORCHO + 1 }),
+    ).toMatch(/5 MB/);
   });
 
   it('fecha relativa', () => {

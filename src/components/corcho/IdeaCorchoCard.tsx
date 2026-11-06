@@ -15,6 +15,7 @@ import {
 } from '@/lib/equipo/corcho';
 import type { IdeaCorcho } from '@/lib/supabase/services/equipoCorcho.service';
 import { AvatarPersona, Chinche, SelloEstado, colorPapel } from '@/components/corcho/corchoUi';
+import { MiniaturasIdea } from '@/components/corcho/IdeaCorchoImagenes';
 
 const VISTA_MS = 1000;
 
@@ -159,6 +160,8 @@ export function IdeaCorchoCard({
           </p>
         ) : null}
       </button>
+
+      <MiniaturasIdea imagenes={idea.imagenes} onAbrir={abrir} />
 
       {idea.estado !== 'propuesta' ? (
         <div className="space-y-2">

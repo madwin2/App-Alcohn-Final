@@ -19,6 +19,18 @@ export interface IdeaCorcho {
   vistaPorMi: boolean;
   /** Más viejo primero. Vacío si la tabla de comentarios todavía no existe. */
   comentarios: ComentarioIdeaCorcho[];
+  /** Más vieja primero. Vacío si la tabla de imágenes todavía no existe. */
+  imagenes: ImagenIdeaCorcho[];
+}
+
+export interface ImagenIdeaCorcho {
+  id: string;
+  ideaId: string;
+  autorUserId: string;
+  path: string;
+  /** URL firmada (bucket privado); vence a las `HORAS_URL_IMAGEN` horas. */
+  url: string;
+  createdAt: string;
 }
 
 export interface ComentarioIdeaCorcho {
@@ -71,6 +83,20 @@ function esTablaInexistente(error: { code?: string } | null): boolean {
 const MSG_SIN_COMENTARIOS =
   'Los comentarios todavía no están activos (falta aplicar migration_equipo_corcho_v2.sql).';
 
+const MSG_SIN_IMAGENES =
+  'Las imágenes todavía no están activas (falta aplicar migration_equipo_corcho_imagenes.sql).';
+
+const BUCKET_IMAGENES = 'corcho-ideas';
+const HORAS_URL_IMAGEN = 6;
+
+type ImagenRow = {
+  id: string;
+  idea_id: string;
+  autor_user_id: string;
+  path: string;
+  created_at: string;
+};
+
 const SELECT_IDEA =
   'id, autor_user_id, titulo, descripcion, estado, estado_cambiado_por, estado_cambiado_at, comentario_estado, created_at, updated_at';
 
@@ -79,6 +105,7 @@ function mapIdea(
   votos: VotoCorcho[],
   vistaPorMi: boolean,
   comentarios: ComentarioIdeaCorcho[] = [],
+  imagenes: ImagenIdeaCorcho[] = [],
 ): IdeaCorcho {
   return {
     id: row.id,
@@ -94,6 +121,7 @@ function mapIdea(
     votos,
     vistaPorMi,
     comentarios,
+    imagenes,
   };
 }
 
@@ -126,6 +154,54 @@ async function fetchComentariosPorIdea(
     const list = map.get(row.idea_id) ?? [];
     list.push(mapComentario(row));
     map.set(row.idea_id, list);
+  }
+  return map;
+}
+
+async function firmarImagenes(rows: ImagenRow[]): Promise<ImagenIdeaCorcho[]> {
+  if (rows.length === 0) return [];
+  const { data, error } = await supabase.storage
+    .from(BUCKET_IMAGENES)
+    .createSignedUrls(
+      rows.map((r) => r.path),
+      HORAS_URL_IMAGEN * 3600,
+    );
+  if (error) throw error;
+  const urlPorPath = new Map<string, string>();
+  for (const s of data ?? []) {
+    if (s.path && s.signedUrl) urlPorPath.set(s.path, s.signedUrl);
+  }
+  return rows
+    .filter((r) => urlPorPath.has(r.path))
+    .map((r) => ({
+      id: r.id,
+      ideaId: r.idea_id,
+      autorUserId: r.autor_user_id,
+      path: r.path,
+      url: urlPorPath.get(r.path)!,
+      createdAt: r.created_at,
+    }));
+}
+
+async function fetchImagenesPorIdea(
+  ideaIds: string[],
+): Promise<Map<string, ImagenIdeaCorcho[]>> {
+  const map = new Map<string, ImagenIdeaCorcho[]>();
+  if (ideaIds.length === 0) return map;
+  const { data, error } = await supabase
+    .from('ideas_corcho_imagenes')
+    .select('id, idea_id, autor_user_id, path, created_at')
+    .in('idea_id', ideaIds)
+    .order('created_at', { ascending: true });
+  if (error) {
+    // Sin la migración de imágenes el corcho sigue andando, sin fotos.
+    if (esTablaInexistente(error)) return map;
+    throw error;
+  }
+  for (const img of await firmarImagenes((data as ImagenRow[] | null) ?? [])) {
+    const list = map.get(img.ideaId) ?? [];
+    list.push(img);
+    map.set(img.ideaId, list);
   }
   return map;
 }
@@ -171,10 +247,11 @@ async function fetchMisVistas(ideaIds: string[], userId: string): Promise<Set<st
 async function hydrateIdeas(rows: IdeaRow[]): Promise<IdeaCorcho[]> {
   const userId = await userIdSesion();
   const ids = rows.map((r) => r.id);
-  const [votosMap, vistas, comentariosMap] = await Promise.all([
+  const [votosMap, vistas, comentariosMap, imagenesMap] = await Promise.all([
     fetchVotosPorIdea(ids),
     fetchMisVistas(ids, userId),
     fetchComentariosPorIdea(ids),
+    fetchImagenesPorIdea(ids),
   ]);
   return rows.map((row) =>
     mapIdea(
@@ -182,6 +259,7 @@ async function hydrateIdeas(rows: IdeaRow[]): Promise<IdeaCorcho[]> {
       votosMap.get(row.id) ?? [],
       vistas.has(row.id),
       comentariosMap.get(row.id) ?? [],
+      imagenesMap.get(row.id) ?? [],
     ),
   );
 }
@@ -288,9 +366,70 @@ export async function actualizarIdeaCorcho(input: {
 }
 
 export async function borrarIdeaCorcho(id: string): Promise<void> {
+  const { data: imagenes } = await supabase
+    .from('ideas_corcho_imagenes')
+    .select('path')
+    .eq('idea_id', id);
+
   const { data, error } = await supabase.from('ideas_corcho').delete().eq('id', id).select('id');
   if (error) throw mapPostgrestError(error);
   asegurarFilaAfectada(data);
+
+  // Las filas se borran en cascada; los archivos quedan sin fila y se pueden sacar.
+  const paths = ((imagenes as { path: string }[] | null) ?? []).map((i) => i.path);
+  if (paths.length) {
+    const { error: storageError } = await supabase.storage.from(BUCKET_IMAGENES).remove(paths);
+    if (storageError) console.warn('No se pudieron borrar las imágenes de la idea:', storageError.message);
+  }
+}
+
+/**
+ * Sube una imagen a la idea (POL-098). Primero el archivo y después la fila:
+ * si la fila falla (p. ej. ya hay 4), se borra el archivo.
+ */
+export async function subirImagenIdeaCorcho(input: {
+  ideaId: string;
+  file: File;
+}): Promise<ImagenIdeaCorcho> {
+  const ext = (input.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const path = `${input.ideaId}/${crypto.randomUUID()}.${ext || 'jpg'}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET_IMAGENES)
+    .upload(path, input.file, { contentType: input.file.type, upsert: false });
+  if (uploadError) {
+    if (/bucket not found/i.test(uploadError.message)) throw new Error(MSG_SIN_IMAGENES);
+    throw new Error(uploadError.message);
+  }
+
+  const { data, error } = await supabase
+    .from('ideas_corcho_imagenes')
+    .insert({ idea_id: input.ideaId, path })
+    .select('id, idea_id, autor_user_id, path, created_at')
+    .single();
+  if (error) {
+    await supabase.storage.from(BUCKET_IMAGENES).remove([path]);
+    if (esTablaInexistente(error)) throw new Error(MSG_SIN_IMAGENES);
+    throw mapPostgrestError(error);
+  }
+
+  const [firmada] = await firmarImagenes([data as ImagenRow]);
+  if (!firmada) throw new Error('La imagen se subió pero no se pudo abrir. Recargá.');
+  return firmada;
+}
+
+/** Saca una imagen: la propia mientras la idea no tiene votos, o cualquiera si es admin (RLS). */
+export async function borrarImagenIdeaCorcho(imagen: Pick<ImagenIdeaCorcho, 'id' | 'path'>): Promise<void> {
+  const { data, error } = await supabase
+    .from('ideas_corcho_imagenes')
+    .delete()
+    .eq('id', imagen.id)
+    .select('id');
+  if (error) throw mapPostgrestError(error);
+  asegurarFilaAfectada(data, 'No se pudo sacar: la idea ya tiene votos o no es tu imagen.');
+
+  const { error: storageError } = await supabase.storage.from(BUCKET_IMAGENES).remove([imagen.path]);
+  if (storageError) console.warn('No se pudo borrar el archivo de la imagen:', storageError.message);
 }
 
 /** Admin: cambia estado (propuesta / aprobada / descartada) con comentario opcional. */

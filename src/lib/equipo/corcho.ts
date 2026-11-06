@@ -99,6 +99,46 @@ export function puedeBorrarIdea(
   return idea.estado === 'propuesta';
 }
 
+/** Tope de imágenes por idea (trigger `ideas_corcho_imagenes_tope`). */
+export const MAX_IMAGENES_CORCHO = 4;
+/** Límite del bucket `corcho-ideas` (se achican antes de subir). */
+export const MAX_BYTES_IMAGEN_CORCHO = 5 * 1024 * 1024;
+export const TIPOS_IMAGEN_CORCHO = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
+
+/** POL-098: cualquiera del equipo agrega imágenes a cualquier idea, hasta el tope. */
+export function puedeSubirImagenIdea(
+  cantidadActual: number,
+  viewerUserId: string,
+): boolean {
+  return !!viewerUserId && cantidadActual < MAX_IMAGENES_CORCHO;
+}
+
+/**
+ * POL-098: quien subió la imagen la saca mientras la idea no tenga votos
+ * (con votos solo se agregan). El admin saca cualquiera.
+ */
+export function puedeSacarImagenIdea(
+  imagen: { autorUserId: string },
+  idea: Pick<IdeaCorchoBase, 'votos'>,
+  viewerUserId: string,
+  esAdmin: boolean,
+): boolean {
+  if (!viewerUserId) return false;
+  if (esAdmin) return true;
+  return imagen.autorUserId === viewerUserId && idea.votos.length === 0;
+}
+
+/** Mensaje de error si el archivo no sirve, o null si está bien. */
+export function validarArchivoImagenCorcho(file: { type: string; size: number }): string | null {
+  if (!(TIPOS_IMAGEN_CORCHO as readonly string[]).includes(file.type)) {
+    return 'Solo fotos JPG, PNG, WebP o GIF.';
+  }
+  if (file.size > MAX_BYTES_IMAGEN_CORCHO) {
+    return 'La imagen pesa más de 5 MB.';
+  }
+  return null;
+}
+
 /**
  * Toggle de voto: mismo valor → saca; otro valor → cambia; sin voto → setea.
  * Devuelve el valor resultante o null si se saca.

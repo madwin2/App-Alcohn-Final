@@ -37,6 +37,7 @@ import {
   PencilRuler,
   Keyboard,
   Spline,
+  Image as ImageIcon,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -1450,6 +1451,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Pedidos viejos sin despachar vuelven a Envíos',
         body: 'Si un cliente de hace más de 6 meses paga hoy, el pedido vuelve a aparecer en Correo Argentino (y Andreani) para cargar datos o seguir la etiqueta. Antes solo se veían los de los últimos 6 meses.',
         icon: Truck,
+      },
+    ],
+  },
+  {
+    id: 80,
+    date: '2026-11-05',
+    title: 'Corcho: fotos en las ideas',
+    version: '1.98',
+    slides: [
+      {
+        heading: 'Las ideas del corcho ahora llevan fotos',
+        body: 'Al pinchar una idea, o después al abrirla, sumá hasta 4 fotos con «Agregar foto» o pegando una captura con Ctrl + V. Cualquiera del equipo puede sumar fotos a cualquier idea.',
+        icon: ImageIcon,
+      },
+      {
+        heading: 'Con votos, las fotos se quedan',
+        body: 'Podés sacar una foto que subiste mientras nadie votó la idea. Cuando ya tiene votos se pueden agregar más, pero no sacar.',
+        icon: Lock,
       },
     ],
   },
