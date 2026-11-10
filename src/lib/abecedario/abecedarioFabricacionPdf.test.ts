@@ -18,6 +18,7 @@ const abcItem: OrderItem = {
     abecedarioAlturaMm: 25,
     abecedarioMayusculas: 2,
     abecedarioMinusculas: 1,
+    abecedarioNumeros: 1,
     abecedarioExtraLetterCounts: { A: 2, E: 1, Z: 1 },
     abecedarioSpecialCharsCount: 3,
     abecedarioSpecialCharsDescription: 'ñ, ü y @',

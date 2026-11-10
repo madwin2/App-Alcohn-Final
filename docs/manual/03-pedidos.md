@@ -121,7 +121,7 @@ Si el cliente ya existía y cambiaste su nombre, teléfono o email, la app **act
    - **Tipo de Sello**: Clásico, Alimento, Lacre o ABC. (El tipo **3MM** no está en el alta: se cambia después en la columna **Tipo**).
    - **Personalizado**: para un mecanizado a medida. Se abre una ventana con **Rosca** (M6, M5, M4 o sin rosca), profundidad del **Exterior** (fresa de 6; vacío = como Clásico), profundidad del **Grabado** (una sola para las cónicas de 1 y 0,6) y **Perfilado recto con fresa de 1 mm**. Arranca con los valores de Clásico. Debajo del tipo queda el resumen y «Editar».
    - Con la medida cargada, la app **sugiere el valor** según la lista de precios (precio con transferencia). Si hacés un descuento, cambialo.
-3. Para un **soldador**, elegí la **Potencia** (100 W o 200 W). Para un **abecedario**, completá tipografía, altura de letra, mayúsculas/minúsculas y letras extras. En soldadores, mangos y bases el valor lo pone la lista de precios.
+3. Para un **soldador**, elegí la **Potencia** (100 W o 200 W). Para un **abecedario**, completá tipografía, altura de letra, juegos de mayúsculas/minúsculas, **Números (0-9)** si lleva set de números (se suman de a uno, no van como letras extras) y letras extras. En soldadores, mangos y bases el valor lo pone la lista de precios.
 4. **Notas**: cualquier aclaración para Producción.
 5. **Valores**: **Valor Total** y **Seña**. El **Restante** se calcula solo.
 6. **Transportista y Estado**:
@@ -348,7 +348,7 @@ Si no hay links disponibles, aparece **Sin links Andreani disponibles — gener�
 
 ## Abecedarios: hoja de fabricación
 
-En un ítem **Abecedario**, clic derecho → **Descargar hoja de fabricación**. Baja un PDF con los datos del abecedario para Producción.
+En un ítem **Abecedario**, clic derecho → **Descargar hoja de fabricación**. Baja un PDF con los datos del abecedario para Producción. Si lleva sets de números, aparecen al principio del renglón de letras extra («Set de números (0-9)»).
 
 ## Exportar ventas
 

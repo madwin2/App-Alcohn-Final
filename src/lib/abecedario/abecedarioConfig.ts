@@ -22,6 +22,7 @@ export type AbecedarioFormFields = {
   abecedarioAlturaMm?: number;
   abecedarioMayusculas?: number;
   abecedarioMinusculas?: number;
+  abecedarioNumeros?: number;
   abecedarioExtraLetterCounts?: AbecedarioExtraLetterCounts;
   abecedarioSpecialCharsCount?: number;
   abecedarioSpecialCharsDescription?: string;
@@ -49,12 +50,14 @@ export function compactExtraLetterCounts(
 export function deriveAbecedarioCase(
   mayusculas: number | undefined,
   minusculas: number | undefined,
-): AbecedarioCase {
+): AbecedarioCase | undefined {
   const mayus = normalizeCount(mayusculas);
   const minus = normalizeCount(minusculas);
   if (mayus > 0 && minus > 0) return 'AMBAS';
   if (minus > 0) return 'MINUSCULA';
-  return 'MAYUSCULA';
+  if (mayus > 0) return 'MAYUSCULA';
+  // Sin juegos de letras (p. ej. solo set de números): no forzar MAYUSCULA.
+  return undefined;
 }
 
 export function formatAbecedarioExtras(fields: {
@@ -111,6 +114,7 @@ export function applyAbecedarioPatch(
   };
   next.abecedarioMayusculas = normalizeCount(next.abecedarioMayusculas);
   next.abecedarioMinusculas = normalizeCount(next.abecedarioMinusculas);
+  next.abecedarioNumeros = normalizeCount(next.abecedarioNumeros);
   next.abecedarioSpecialCharsCount = normalizeCount(next.abecedarioSpecialCharsCount);
   next.abecedarioCase = deriveAbecedarioCase(next.abecedarioMayusculas, next.abecedarioMinusculas);
   next.abecedarioExtraLetters = formatAbecedarioExtras(next) || undefined;
@@ -129,6 +133,7 @@ export function buildAbecedarioItemConfig(
     abecedarioAlturaMm: next.abecedarioAlturaMm || undefined,
     abecedarioMayusculas: next.abecedarioMayusculas || undefined,
     abecedarioMinusculas: next.abecedarioMinusculas || undefined,
+    abecedarioNumeros: next.abecedarioNumeros || undefined,
     abecedarioExtraLetterCounts:
       extraCounts && Object.keys(extraCounts).length > 0 ? extraCounts : undefined,
     abecedarioSpecialCharsCount: next.abecedarioSpecialCharsCount || undefined,
@@ -180,14 +185,27 @@ export function resolveAbecedarioSets(config: ItemConfig | undefined): {
   }
 }
 
+export function resolveAbecedarioNumeros(config: ItemConfig | undefined): number {
+  return normalizeCount(config?.abecedarioNumeros);
+}
+
+/** "Set de números (0-9)" o "2 sets de números (0-9)"; vacío si no lleva. */
+export function formatAbecedarioNumeros(numeros: number): string {
+  const n = normalizeCount(numeros);
+  if (n === 0) return '';
+  return n === 1 ? 'Set de números (0-9)' : `${n} sets de números (0-9)`;
+}
+
 export function formatAbecedarioSummary(config: ItemConfig | undefined): string | undefined {
   if (!config) return undefined;
   const { mayusculas, minusculas } = resolveAbecedarioSets(config);
+  const numeros = resolveAbecedarioNumeros(config);
   const parts = [
     config.abecedarioTipografia?.trim() || undefined,
     config.abecedarioAlturaMm ? `${config.abecedarioAlturaMm}mm` : undefined,
     mayusculas > 0 ? `${mayusculas} may.` : undefined,
     minusculas > 0 ? `${minusculas} min.` : undefined,
+    numeros > 0 ? `${numeros} núm.` : undefined,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(' • ') : undefined;
 }

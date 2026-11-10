@@ -1,6 +1,6 @@
 # Bot de WhatsApp
 
-> ⚠️ El bot **no está en este repositorio**: corre en el VPS de Hetzner y envía usando **plantillas de Meta** (utilidad y marketing) cargadas por Julián. Hoy solo envía lo que dispara la app; hay un agente conversacional ("Francisco") **desactivado**. La conexión con Meta funciona aunque la app de Meta la muestre como no vinculada. Alcohn AI solo le envía webhooks. Edge: `supabase/functions/webhook-bot/index.ts` (v28, `verify_jwt=false`). SQL: `enviar_webhook_pedido`, `confirmar_webhooks_pendientes`, `reintentar_webhooks_fallidos`. Docs previas (raíz): `webhook.md`, `webhook_implementation_guide.md`, `bot_webhook_implementation.md`, `SOLUCION_WEBHOOKS_COMPLETA.md`.
+> ⚠️ El bot **no está en este repositorio**: corre en el VPS de Hetzner y envía usando **plantillas de Meta** (utilidad y marketing) cargadas por Julián. Hoy solo envía lo que dispara la app; hay un agente conversacional ("Francisco") **desactivado**. La conexión con Meta funciona aunque la app de Meta la muestre como no vinculada. Alcohn AI solo le envía webhooks. Edge: `supabase/functions/webhook-bot/index.ts` (producción ~v42+, `verify_jwt=true` en el listado actual). SQL: `enviar_webhook_pedido`, `confirmar_webhooks_pendientes`, `reintentar_webhooks_fallidos`. Docs previas (raíz): `webhook.md`, `webhook_implementation_guide.md`, `bot_webhook_implementation.md`, `SOLUCION_WEBHOOKS_COMPLETA.md`.
 
 ## Para qué existe
 
@@ -29,6 +29,8 @@ flowchart LR
 ## Entrada (contrato hacia la edge)
 
 `{ numero_telefono, nombre, tipo_actualizacion, datos }`. Si `datos.numero_pedido` existe, la edge **enriquece**: ítems (nombre, tipo, medidas, valor, seña, saldo), totales de la orden, cliente, tipo de envío con etiqueta legible, imagen del ítem actual, ítems sin foto, reglas de cobro (ver abajo).
+
+Ítems `ABECEDARIO` (desde 2026-11-10): `diseno` llega como `ABC`, `ABC + set de números`, `ABC + N sets de números` o `Set de números` (solo números), y se suma `abecedario: { mayusculas, minusculas, numeros, incluye_numeros, tipografia, altura_mm, letras_extra }` leído de `item_config`. Las plantillas del bot que ya usan `diseno` muestran el set sin cambios en el bot.
 
 ## Reglas de cobro (`pedido_listo`)
 

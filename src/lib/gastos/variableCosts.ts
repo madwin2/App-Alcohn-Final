@@ -19,6 +19,8 @@ export type VariableCostsState = {
   soporteAbc: number;
   abcCmSimple: number;
   abcCmAmbas: number;
+  /** cm de planchuela 12.7 por set de números 0-9. */
+  abcCmNumeros: number;
   selloPerdidaCorteCm: number;
 };
 
@@ -41,6 +43,7 @@ export const DEFAULT_VARIABLE_COSTS: VariableCostsState = {
   soporteAbc: 12000,
   abcCmSimple: 40,
   abcCmAmbas: 80,
+  abcCmNumeros: 15,
   selloPerdidaCorteCm: 0.8,
 };
 

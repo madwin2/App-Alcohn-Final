@@ -1490,6 +1490,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 82,
+    date: '2026-11-10',
+    title: 'Abecedarios con set de números',
+    version: '2.00',
+    slides: [
+      {
+        heading: 'Abecedario con set de números',
+        body: 'Al cargar un abecedario, al lado de Mayúscula y Minúscula está «Números (0-9)». Sumás los sets de a uno y ya no hay que cargar cada número como carácter extra.',
+        icon: Type,
+      },
+      {
+        heading: 'El cliente lo ve en WhatsApp',
+        body: 'En los mensajes del pedido el abecedario aparece como «ABC + set de números», y el set también sale en la hoja de fabricación.',
+        icon: MessageCircle,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

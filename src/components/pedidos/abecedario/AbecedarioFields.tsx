@@ -70,7 +70,15 @@ export function AbecedarioFields({ values, onChange, labeled = false }: Abecedar
               onChange={(value) => onChange({ abecedarioMinusculas: value })}
             />
           </div>
-          <div className="col-span-2">
+          <div>
+            <Label>Números (0-9)</Label>
+            <AbecedarioQuantityStepper
+              ariaLabel="Sets de números"
+              value={values.abecedarioNumeros ?? 0}
+              onChange={(value) => onChange({ abecedarioNumeros: value })}
+            />
+          </div>
+          <div>
             <Label>Letras extras</Label>
             {extraButton}
           </div>
@@ -101,7 +109,15 @@ export function AbecedarioFields({ values, onChange, labeled = false }: Abecedar
             />
             <p className="mt-1 text-[11px] text-muted-foreground">Minúscula</p>
           </div>
-          <div className="col-span-2">{extraButton}</div>
+          <div className="col-span-2">
+            <AbecedarioQuantityStepper
+              ariaLabel="Sets de números"
+              value={values.abecedarioNumeros ?? 0}
+              onChange={(value) => onChange({ abecedarioNumeros: value })}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">Números (0-9)</p>
+          </div>
+          <div className="col-span-4">{extraButton}</div>
         </>
       )}
       </div>

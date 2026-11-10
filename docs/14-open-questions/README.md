@@ -13,7 +13,7 @@ Al responder: agregar `- Respuesta: …`, cambiar el estado y actualizar los mó
 
 ## Estado general (2026-10-02)
 
-121 preguntas: **105 documentadas**, 2 parciales, **14 pendientes**.
+122 preguntas: **106 documentadas**, 2 parciales, **14 pendientes**.
 
 ## Pendientes
 

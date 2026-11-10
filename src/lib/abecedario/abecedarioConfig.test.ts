@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyAbecedarioPatch,
+  buildAbecedarioItemConfig,
   deriveAbecedarioCase,
   formatAbecedarioExtras,
+  formatAbecedarioNumeros,
+  formatAbecedarioSummary,
   formatElementoExtraLine,
   resolveAbecedarioSets,
 } from './abecedarioConfig';
@@ -12,6 +15,7 @@ describe('abecedarioConfig', () => {
     expect(deriveAbecedarioCase(1, 0)).toBe('MAYUSCULA');
     expect(deriveAbecedarioCase(0, 2)).toBe('MINUSCULA');
     expect(deriveAbecedarioCase(1, 1)).toBe('AMBAS');
+    expect(deriveAbecedarioCase(0, 0)).toBeUndefined();
   });
 
   it('formatea letras extra y caracteres especiales', () => {
@@ -43,6 +47,24 @@ describe('abecedarioConfig', () => {
       mayusculas: 3,
       minusculas: 0,
     });
+  });
+
+  it('guarda los sets de números y los muestra en el resumen', () => {
+    const config = buildAbecedarioItemConfig({
+      abecedarioMayusculas: 1,
+      abecedarioNumeros: 2,
+      abecedarioAlturaMm: 6,
+    });
+    expect(config.abecedarioNumeros).toBe(2);
+    expect(config.abecedarioExtraLetters).toBeUndefined();
+    expect(formatAbecedarioSummary(config)).toBe('6mm • 1 may. • 2 núm.');
+    expect(buildAbecedarioItemConfig({ abecedarioNumeros: 0 }).abecedarioNumeros).toBeUndefined();
+  });
+
+  it('formatea los sets de números', () => {
+    expect(formatAbecedarioNumeros(0)).toBe('');
+    expect(formatAbecedarioNumeros(1)).toBe('Set de números (0-9)');
+    expect(formatAbecedarioNumeros(3)).toBe('3 sets de números (0-9)');
   });
 
   it('describe elementos extra del pedido', () => {

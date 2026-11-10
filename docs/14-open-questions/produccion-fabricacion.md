@@ -87,6 +87,14 @@
 - **Pregunta**: Los abecedarios se fabrican en la **Grande** en un programa especial armado a mano, pero en el sistema existe una "máquina" `ABC` separada (sin paquete ni gadget) y los ítems ABECEDARIO no pueden entrar a programas. ¿Se usa esa máquina `ABC` en la app o el programa del abecedario no se registra en Alcohn AI?
 - **Impacto**: bajo.
 
+### Q-PROD-008
+- **Módulo**: Abecedarios / Economía · **Estado**: documentada (2026-11-10)
+- **Pregunta**: Desde 2026-11-10 un abecedario puede llevar sets de números (`item_config.abecedarioNumeros`). 🔶 Se asumió que un set son los 10 dígitos del 0 al 9. ¿Es así, o incluye otros signos? ¿Cuántos cm de planchuela de 12 consume un set de números, para sumarlo al costo de fabricación?
+- **Evidencia**: el trigger de `costo_fabricacion` (`migration_fabricacion_parametros_por_fecha.sql`) solo mira `abecedarioCase` (`abcCmSimple` / `abcCmAmbas`): hoy los números **no suman costo**. Tampoco cambian el stock (un soporte y una caja por abecedario).
+- **Por qué importa**: sin el dato, el margen de un abecedario con números aparece más alto de lo real en Economía.
+- **Impacto**: bajo.
+- Respuesta: Sí, un set son los números del 0 al 9. Precio de venta $63.250 (fila «Números 0 al 9 solos» en `precios_abecedario`). Material ≈ 15 cm de planchuela de 12,7 → param `abcCmNumeros` (default 15) en `calc_sello_fabrication_cost` (`migration_abecedario_set_numeros_costo.sql`). Stock (soporte/caja) no cambia.
+
 ### Q-CNC-008
 - **Módulo**: CNC / Vectorización · **Estado**: documentada (2026-10-14)
 - **Pregunta**: ¿Cuál es la fresa más fina, a qué profundidad trabaja y qué hace hoy el operario cuando un detalle no llega a mecanizarse (por ejemplo, texto muy junto)?

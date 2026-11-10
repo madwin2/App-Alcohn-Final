@@ -38,6 +38,8 @@ export interface ItemConfig {
   abecedarioAlturaMm?: number;
   abecedarioMayusculas?: number;
   abecedarioMinusculas?: number;
+  /** Sets de números del 0 al 9. */
+  abecedarioNumeros?: number;
   abecedarioExtraLetterCounts?: AbecedarioExtraLetterCounts;
   abecedarioSpecialCharsCount?: number;
   abecedarioSpecialCharsDescription?: string;
@@ -456,6 +458,7 @@ export interface NewOrderFormData {
     abecedarioAlturaMm?: number;
     abecedarioMayusculas?: number;
     abecedarioMinusculas?: number;
+    abecedarioNumeros?: number;
     abecedarioExtraLetterCounts?: AbecedarioExtraLetterCounts;
     abecedarioSpecialCharsCount?: number;
     abecedarioSpecialCharsDescription?: string;

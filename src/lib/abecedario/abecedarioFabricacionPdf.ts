@@ -5,7 +5,9 @@ import { sanitizeDownloadFilename } from '@/lib/supabase/services/storage.servic
 import {
   abecedarioPreviewUrl,
   formatAbecedarioExtras,
+  formatAbecedarioNumeros,
   formatElementosExtraLines,
+  resolveAbecedarioNumeros,
   resolveAbecedarioSets,
 } from './abecedarioConfig';
 
@@ -115,12 +117,15 @@ function fillHoja(
 ) {
   const config = item.itemConfig;
   const { mayusculas, minusculas } = resolveAbecedarioSets(config);
-  const extras =
+  const letrasExtra =
     formatAbecedarioExtras({
       abecedarioExtraLetterCounts: config?.abecedarioExtraLetterCounts,
       abecedarioSpecialCharsCount: config?.abecedarioSpecialCharsCount,
       abecedarioSpecialCharsDescription: config?.abecedarioSpecialCharsDescription,
     }) || config?.abecedarioExtraLetters || '';
+  const extras = [formatAbecedarioNumeros(resolveAbecedarioNumeros(config)), letrasExtra]
+    .filter(Boolean)
+    .join(', ');
 
   drawLineText(page, font, `${order.customer.firstName} ${order.customer.lastName}`.trim(), POS.nombre);
   drawLineText(page, font, order.orderDate ? formatDate(order.orderDate) : '', POS.fecha);

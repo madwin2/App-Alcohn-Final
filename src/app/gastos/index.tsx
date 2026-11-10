@@ -112,6 +112,7 @@ const GRUPOS_FABRICACION: Array<{ titulo: string; campos: CampoFabricacion[] }> 
       { key: 'selloPerdidaCorteCm', label: 'Pérdida de corte por sello', hint: 'Se suma al largo (0,8 cm = 8 mm)', unidad: 'cm' },
       { key: 'abcCmSimple', label: 'Abecedario: mayúsculas o minúsculas', unidad: 'cm' },
       { key: 'abcCmAmbas', label: 'Abecedario: mayúsculas y minúsculas', unidad: 'cm' },
+      { key: 'abcCmNumeros', label: 'Abecedario: set de números (0-9)', unidad: 'cm' },
     ],
   },
 ];

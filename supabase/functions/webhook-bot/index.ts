@@ -63,6 +63,62 @@ const resolveItemDisplayName = (diseno: unknown, itemType: unknown): string => {
   return getItemTypeLabel(itemType);
 };
 
+const toCount = (value: unknown): number => {
+  const n = Math.floor(toNumber(value));
+  return n > 0 ? n : 0;
+};
+
+/** Misma lectura que resolveAbecedarioSets / resolveAbecedarioNumeros en la app. */
+const buildAbecedarioDetalle = (config: unknown) => {
+  const c = (config && typeof config === "object" ? config : {}) as Record<
+    string,
+    unknown
+  >;
+  const hasCounts =
+    c.abecedarioMayusculas != null || c.abecedarioMinusculas != null;
+  const caseRaw = String(c.abecedarioCase || "").toUpperCase();
+  const mayusculas = hasCounts
+    ? toCount(c.abecedarioMayusculas)
+    : caseRaw === "MAYUSCULA" || caseRaw === "AMBAS"
+    ? 1
+    : 0;
+  const minusculas = hasCounts
+    ? toCount(c.abecedarioMinusculas)
+    : caseRaw === "MINUSCULA" || caseRaw === "AMBAS"
+    ? 1
+    : 0;
+  const numeros = toCount(c.abecedarioNumeros);
+  const tipografia = typeof c.abecedarioTipografia === "string"
+    ? c.abecedarioTipografia.trim() || null
+    : null;
+  const alturaMm = toNumber(c.abecedarioAlturaMm) || null;
+  const letrasExtra = typeof c.abecedarioExtraLetters === "string"
+    ? c.abecedarioExtraLetters.trim() || null
+    : null;
+  return {
+    mayusculas,
+    minusculas,
+    numeros,
+    incluye_numeros: numeros > 0,
+    tipografia,
+    altura_mm: alturaMm,
+    letras_extra: letrasExtra,
+  };
+};
+
+/** "ABC", "ABC + set de números", "ABC + 2 sets de números" o solo "Set de números". */
+const abecedarioDisplayName = (
+  detalle: ReturnType<typeof buildAbecedarioDetalle>,
+): string => {
+  const { numeros, mayusculas, minusculas } = detalle;
+  if (numeros === 0) return getItemTypeLabel("ABECEDARIO");
+  const sets = numeros === 1 ? "set de números" : `${numeros} sets de números`;
+  if (mayusculas === 0 && minusculas === 0) {
+    return sets.charAt(0).toUpperCase() + sets.slice(1);
+  }
+  return `${getItemTypeLabel("ABECEDARIO")} + ${sets}`;
+};
+
 const esEmpresaAndreani = (
   empresaRaw: unknown,
   datos?: Record<string, unknown> | null,
@@ -356,12 +412,22 @@ Deno.serve(async (req: Request) => {
           const esRegalo = s.es_regalo === true;
           const valorItem = esRegalo ? 0 : toNumber(s.valor);
           const seniaItem = esRegalo ? 0 : toNumber(s.senia);
-          const nombreItem = resolveItemDisplayName(s.diseno, s.item_type);
+          const esAbecedario =
+            String(s.item_type || "").toUpperCase() === "ABECEDARIO";
+          const abecedario = esAbecedario
+            ? buildAbecedarioDetalle(s.item_config)
+            : null;
+          const disenoGuardado =
+            typeof s.diseno === "string" ? s.diseno.trim() : "";
+          const nombreItem = abecedario && !disenoGuardado
+            ? abecedarioDisplayName(abecedario)
+            : resolveItemDisplayName(s.diseno, s.item_type);
 
           return {
             item_id: s.id,
             item_type: s.item_type || "SELLO",
             diseno: nombreItem,
+            ...(abecedario ? { abecedario } : {}),
             tipo: s.tipo || null,
             ancho_cm: anchoCm,
             largo_cm: largoCm,
