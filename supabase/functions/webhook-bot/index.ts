@@ -215,6 +215,64 @@ const itemRequiereFotoCliente = (row: { item_type?: unknown }): boolean => {
   return !ACCESORIO_ITEM_TYPES.has(t);
 };
 
+/** Todos los ítems (sello, ABC, soldador, mango, base…) en Hecho. */
+const todosItemsHecho = (
+  rows: { estado_fabricacion?: unknown }[],
+): boolean => {
+  if (!rows.length) return false;
+  return rows.every(
+    (s) => String(s?.estado_fabricacion || "").trim() === "Hecho",
+  );
+};
+
+/** Asigna link Andreani del pool y lo pone en datos.link_andreani. */
+const asignarLinkAndreaniSiFalta = async (args: {
+  // deno-lint-ignore no-explicit-any
+  supabase: any;
+  numeroPedido: string;
+  // deno-lint-ignore no-explicit-any
+  datos: Record<string, any>;
+  motivo: string;
+}): Promise<void> => {
+  const linkYaEnPayload =
+    typeof args.datos.link_andreani === "string"
+      ? args.datos.link_andreani.trim()
+      : "";
+  if (linkYaEnPayload) return;
+
+  try {
+    const { data: assignedUrl, error: assignErr } = await args.supabase.rpc(
+      "asignar_link_andreani",
+      { p_orden_id: args.numeroPedido },
+    );
+
+    if (assignErr) {
+      console.error(
+        `Error asignando link Andreani (${args.motivo})`,
+        assignErr,
+      );
+      return;
+    }
+    if (typeof assignedUrl === "string" && assignedUrl.trim()) {
+      const url = assignedUrl.trim();
+      args.datos.link_andreani = url;
+      console.log(`link_andreani asignado del pool (${args.motivo})`, {
+        numero_pedido: args.numeroPedido,
+        link_len: url.length,
+      });
+      return;
+    }
+    console.warn(`${args.motivo} Andreani: pool vacío, sin link fresco`, {
+      numero_pedido: args.numeroPedido,
+    });
+  } catch (linkAssignErr) {
+    console.error(
+      `Excepción asignando link Andreani (${args.motivo})`,
+      linkAssignErr,
+    );
+  }
+};
+
 /** URL pública de Storage (misma lógica que trigger_foto_sello_subida en SQL). */
 const resolveFotoSelloUrl = (fotoSello: unknown): string | null => {
   const f = typeof fotoSello === "string" ? fotoSello.trim() : "";
@@ -359,11 +417,11 @@ Deno.serve(async (req: Request) => {
       }
 
       if (!ordenError && orden) {
-        // Traer items incluyendo foto_sello para inferir "orden completa" sin depender solo del payload
+        // Traer items: foto_sello (último con foto) + estado_fabricacion (link Andreani = todos Hecho)
         const { data: sellos, error: sellosError } = await supabase
           .from("sellos")
           .select(
-            "id, diseno, tipo, item_type, item_config, valor, senia, ancho_real, largo_real, foto_sello, es_regalo",
+            "id, diseno, tipo, item_type, item_config, valor, senia, ancho_real, largo_real, foto_sello, es_regalo, estado_fabricacion",
           )
           .eq("orden_id", numeroPedido);
 
@@ -527,8 +585,21 @@ Deno.serve(async (req: Request) => {
           tipoActualizacion.includes("finalizado");
 
         const esPedidoListo = tipoActualizacion.includes("pedido_listo");
+        const esAccesorioListo = tipoActualizacion.includes("accesorio_listo");
         const esPedidoActualizado = tipoActualizacion.includes("pedido_actualizado");
         const esSelloRehacer = tipoActualizacion.includes("rehacer");
+        const ordenTodosHecho = todosItemsHecho(rawSellos);
+        body.datos.todos_items_hecho = ordenTodosHecho;
+
+        // Accesorio que cierra el pedido → plantilla de cobro (no la de “falta el resto”).
+        const esAccesorioCierraPedido = esAccesorioListo && ordenTodosHecho;
+        if (esAccesorioCierraPedido) {
+          body.tipo_actualizacion = "accesorio_pedido_completo";
+          body.datos.es_ultimo_sello = true;
+          console.log("accesorio_listo → accesorio_pedido_completo (todos Hecho)", {
+            numero_pedido: numeroPedido,
+          });
+        }
 
         if (esPedidoActualizado) {
           body.datos.es_actualizacion = true;
@@ -620,7 +691,7 @@ Deno.serve(async (req: Request) => {
         body.datos.tiene_envio_seleccionado = tieneEmpresaEnvio || esRetiro;
         body.datos.pedir_empresa_envio = !tieneEmpresaEnvio && !esRetiro && !esAndreani;
 
-        if (esUltimoSello || esPedidoCompletado) {
+        if (esUltimoSello || esPedidoCompletado || esAccesorioCierraPedido) {
           body.datos.es_ultimo_sello = true;
           body.datos.valor_item = valorTotalOrden;
           body.datos.senia_item = seniaTotalOrden;
@@ -634,46 +705,20 @@ Deno.serve(async (req: Request) => {
             body.datos.saldo_total = restanteProducto;
             body.datos.pedir_empresa_envio = false;
 
-            // Link Andreani: se asigna del pool acá (al enviar la foto), no al
-            // crear el pedido — así no caduca mientras el sello se fabrica.
-            const linkYaEnPayload =
-              typeof body.datos.link_andreani === "string"
-                ? body.datos.link_andreani.trim()
-                : "";
-            if (!linkYaEnPayload && esPedidoListo) {
-              try {
-                const { data: assignedUrl, error: assignErr } = await supabase
-                  .rpc("asignar_link_andreani", { p_orden_id: numeroPedido });
-
-                if (assignErr) {
-                  console.error(
-                    "Error asignando link Andreani para pedido_listo",
-                    assignErr,
-                  );
-                } else if (
-                  typeof assignedUrl === "string" && assignedUrl.trim()
-                ) {
-                  const url = assignedUrl.trim();
-                  body.datos.link_andreani = url;
-                  console.log(
-                    "link_andreani asignado del pool al enviar foto",
-                    {
-                      numero_pedido: numeroPedido,
-                      link_len: url.length,
-                    },
-                  );
-                } else {
-                  console.warn(
-                    "pedido_listo Andreani: pool vacío, sin link fresco",
-                    { numero_pedido: numeroPedido },
-                  );
-                }
-              } catch (linkAssignErr) {
-                console.error(
-                  "Excepción asignando link Andreani",
-                  linkAssignErr,
-                );
-              }
+            // Link Andreani: solo si TODOS los ítems están Hecho (sello, soldador, etc.).
+            // En pedido_listo va en el mismo payload; si cerró un accesorio, follow-up aparte.
+            if (esPedidoListo && ordenTodosHecho) {
+              await asignarLinkAndreaniSiFalta({
+                supabase,
+                numeroPedido,
+                datos: body.datos,
+                motivo: "pedido_listo",
+              });
+            } else if (esPedidoListo && !ordenTodosHecho) {
+              console.log(
+                "pedido_listo Andreani: sin link, faltan ítems Hecho",
+                { numero_pedido: numeroPedido },
+              );
             }
           } else if (!tieneEmpresaEnvio && !esRetiro) {
             // Sin empresa: restante del producto y preguntar Andreani vs Correo.
@@ -712,7 +757,7 @@ Deno.serve(async (req: Request) => {
             body.datos.restante_sello = saldoTotalOrdenPreferido;
             body.datos.saldo_item = saldoTotalOrdenPreferido;
 
-            if (esPedidoListo || esPedidoCompletado) {
+            if (esPedidoListo || esPedidoCompletado || esAccesorioCierraPedido) {
               body.datos.restante_opcion_sucursal = restanteOpcionSucursal;
               body.datos.restante_opcion_domicilio = restanteOpcionDomicilio;
               body.datos.envio_gratis = envioGratisPorCantidad;
@@ -737,10 +782,49 @@ Deno.serve(async (req: Request) => {
           delete body.datos.es_andreani;
           delete body.datos.pedir_empresa_envio;
         }
+
+        // Accesorio que cierra pedido + Andreani → plantilla link_andreani después del cobro.
+        if (esAccesorioCierraPedido && esAndreani) {
+          body.datos.es_andreani = true;
+          const linkHolder: Record<string, unknown> = {};
+          await asignarLinkAndreaniSiFalta({
+            supabase,
+            numeroPedido,
+            datos: linkHolder,
+            motivo: "accesorio_pedido_completo→link_andreani",
+          });
+          const url =
+            typeof linkHolder.link_andreani === "string"
+              ? linkHolder.link_andreani.trim()
+              : "";
+          if (url) {
+            (body as Record<string, unknown>)._followup_link_andreani = {
+              numero_telefono: body.numero_telefono,
+              nombre: body.nombre,
+              tipo_actualizacion: "link_andreani",
+              datos: {
+                ...(body.datos || {}),
+                link_andreani: url,
+                numero_pedido: numeroPedido,
+              },
+            };
+          }
+        }
       }
     } else if (!numeroPedido) {
       console.log("Request sin datos.numero_pedido, se envía payload original.");
     }
+
+    const followupLinkAndreani = (body as Record<string, unknown>)
+      ._followup_link_andreani as
+      | {
+        numero_telefono: string;
+        nombre: string;
+        tipo_actualizacion: string;
+        datos: Record<string, unknown>;
+      }
+      | undefined;
+    delete (body as Record<string, unknown>)._followup_link_andreani;
 
     // Enviar webhook al bot con timeout
     const controller = new AbortController();
@@ -782,6 +866,39 @@ Deno.serve(async (req: Request) => {
         botSuccess,
         botResponse,
       });
+
+      // Tras accesorio_pedido_completo OK: plantilla aparte link_andreani.
+      if (botSuccess && followupLinkAndreani) {
+        try {
+          const followController = new AbortController();
+          const followTimeout = setTimeout(
+            () => followController.abort(),
+            BOT_WEBHOOK_TIMEOUT,
+          );
+          console.log("payload followup link_andreani", followupLinkAndreani);
+          const followRes = await fetch(BOT_WEBHOOK_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-webhook-token": WEBHOOK_TOKEN,
+            },
+            body: JSON.stringify(followupLinkAndreani),
+            signal: followController.signal,
+          });
+          clearTimeout(followTimeout);
+          const followText = await followRes.text();
+          console.log("bot response link_andreani followup", {
+            status: followRes.status,
+            ok: followRes.ok,
+            body: followText.slice(0, 500),
+          });
+        } catch (followErr) {
+          console.error(
+            "Error enviando followup link_andreani tras accesorio_listo",
+            followErr,
+          );
+        }
+      }
 
       // Si el bot respondió exitosamente y es envío de seguimiento, actualizar estado
       if (

@@ -1508,6 +1508,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 83,
+    date: '2026-11-10',
+    title: 'Andreani solo con pedido completo',
+    version: '2.01',
+    slides: [
+      {
+        heading: 'Link Andreani cuando está todo Hecho',
+        body: 'El link de envío sale recién cuando sello, soldador, mango y lo que haya están Hecho. Si lo último fue un accesorio, primero el cobro del restante y después el mensaje del link.',
+        icon: Link2,
+      },
+      {
+        heading: 'Etiqueta solo con todo listo',
+        body: 'En Envíos → Andreani, el PDF se puede bajar cuando la venta está Transferido y además todos los ítems están Hecho.',
+        icon: Package,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

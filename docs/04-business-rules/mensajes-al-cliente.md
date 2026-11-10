@@ -12,6 +12,10 @@ Todos pasan por la edge `webhook-bot` hacia el **bot externo** (ver [07-integrat
 | BR-WA-006 | `mockups_listos` | Mockup completado en la app | `MockupSlotCard` → `notifyMockupsReadyWhatsApp` | UI/Servicio |
 | BR-WA-007 | `generador_muestras_contacto` | 10 min después de un mockup web sin compra (cooldown 7 días por teléfono, no excluido); o manual desde Comercial | trigger + cron `procesar_contactos_comerciales_pendientes` | DB |
 | BR-WA-008 | `seguimiento_cliente_recompra` | Cliente con 1 orden cerrada hace ≥2 meses, una vez | cron `procesar_seguimientos_clientes_pendientes` | DB |
+| BR-WA-009 | `accesorio_listo` | Accesorio (soldador/mango/base) pasa a `Hecho` y **todavía falta** otro ítem | trigger `trigger_accesorio_listo` → edge deja el tipo | DB / Edge |
+| BR-WA-010 | `accesorio_pedido_completo` | Accesorio pasa a `Hecho` y **cierra** el pedido (todos Hecho): cobro del restante (mismas reglas que último `pedido_listo`) | edge `webhook-bot` reescribe el tipo | Edge |
+| BR-WA-011 | `link_andreani` | Tras `accesorio_pedido_completo` si la empresa es Andreani (plantilla Meta aparte) | edge `webhook-bot` (follow-up) | Edge |
+
 
 <a id="reglas-monto-pedido-listo"></a>
 
@@ -21,7 +25,7 @@ Solo cuando es el **último ítem que lleva foto en la app** (sellos/abecedarios
 
 | Empresa de la orden | Mensaje | Monto |
 |---|---|---|
-| Andreani | `restante_producto` + **link de envío** (asignado del pool) | saldo de productos (el envío lo paga en Andreani) |
+| Andreani | `restante_producto` + **link de envío** solo si **todos** los ítems están `Hecho` (si falta un soldador/mango/base, cobro sin link; cuando el accesorio completa el pedido se manda aparte `link_andreani`) | saldo de productos (el envío lo paga en Andreani) |
 | Sin empresa | `restante_sin_empresa`, `pedir_empresa_envio=true` | saldo de productos; se le pregunta Andreani o Correo |
 | Retiro | `restante_producto` | saldo de productos |
 | Correo / otra | `total_orden` + opciones | `ordenes.restante` y alternativas sucursal/domicilio (costos por variable de entorno, por defecto 6.000/9.000; **0 si ≥3 sellos**) |

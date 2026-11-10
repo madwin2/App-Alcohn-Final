@@ -16,9 +16,9 @@
 | BR-COR-002 | Medidas/peso declarados: con soldador 40×15×20 cm 1 kg; con abecedario o base 25×13×13 cm 1 kg; si no 25×8×8 cm 0,5 kg (1 kg con ≥2 sellos). Valor declarado 40.000, producto `CP`. | `correoCsvPackageFromOrder.ts`, `correoArgentinoCsv.ts` | Servicio |
 | BR-COR-003 | El CSV manual incluye solo órdenes Correo con dirección en `Hacer Etiqueta`; las que no generan una fila válida pasan a `Error de Etiqueta`. | `handleGenerateCsv` | UI |
 | BR-AND-001 | Un link de Andreani sirve 30 h desde su creación; se asigna el disponible más antiguo; los vencidos se purgan/descartan. | `asignar_link_andreani`, `purgar_links_andreani_viejos` | DB |
-| BR-AND-002 | El link se asigna al enviar la foto del último ítem (o al confirmar un pedido web), no al crear el pedido. | edge `webhook-bot`, `confirm-web-order` | Edge |
+| BR-AND-002 | El link se asigna solo cuando **todos** los ítems están `Hecho`: en `pedido_listo` (último con foto) o, si un accesorio cierra el pedido, tras `accesorio_pedido_completo` en un WhatsApp `link_andreani`. No al crear el pedido. | edge `webhook-bot` | Edge |
 | BR-AND-003 | Dejar de ser Andreani o borrar la orden devuelve el link al pool (o lo elimina si tiene >30 h). | `updateOrder`, `deleteOrder`, `liberar_link_andreani` | Servicio + DB |
-| BR-AND-004 | La etiqueta Andreani solo se descarga si la venta de la orden está `Transferido`. | `AndreaniLabelsPanel` (`downloadable`) | UI |
+| BR-AND-004 | La etiqueta Andreani solo se descarga si la venta está `Transferido` **y** todos los ítems están `Hecho`. | `AndreaniLabelsPanel` (`downloadable`) | UI |
 | BR-AND-005 | Asignar una etiqueta exige que la orden tenga link asignado, que no tenga otro seguimiento y que el tracking no esté en otra orden; deja la orden en `Etiqueta Lista`. | `asignar_etiqueta_andreani` | DB |
 | BR-AND-006 | Una etiqueta asignada no puede marcarse errónea sin liberarla antes; solo las erróneas se restauran a huérfano. | `marcar_etiqueta_andreani_erronea`, `restaurar_etiqueta_andreani_huerfano` | DB |
 | BR-AND-007 | Al liberar/eliminar una etiqueta asignada se elige qué pasa con la orden: `Sin envio` o `Seguimiento Enviado` (con seguimiento manual). | `liberar_etiqueta_andreani`, `eliminar_etiqueta_andreani` | DB |

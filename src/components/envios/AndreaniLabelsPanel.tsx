@@ -235,7 +235,10 @@ export function AndreaniLabelsPanel({
   );
 
   const downloadable = useMemo(
-    () => assigned.filter((r) => Boolean(r.pdfPath) && r.saleTransferred),
+    () =>
+      assigned.filter(
+        (r) => Boolean(r.pdfPath) && r.saleTransferred && r.allItemsHecho,
+      ),
     [assigned],
   );
   const pendingCount = assigned.length - downloadable.length;
@@ -488,10 +491,12 @@ export function AndreaniLabelsPanel({
       toast({ title: 'Sin PDF', description: 'Esta etiqueta no tiene archivo guardado.', variant: 'destructive' });
       return;
     }
-    if (row.estado !== 'asignada' || !row.saleTransferred) {
+    if (row.estado !== 'asignada' || !row.saleTransferred || !row.allItemsHecho) {
       toast({
         title: 'Todavía no se puede descargar',
-        description: 'Pasá la venta a Transferido cuando el cliente pague el restante.',
+        description: !row.allItemsHecho
+          ? 'Falta terminar algún ítem (soldador, mango, etc.). Todo tiene que estar Hecho.'
+          : 'Pasá la venta a Transferido cuando el cliente pague el restante.',
         variant: 'destructive',
       });
       return;
@@ -520,7 +525,7 @@ export function AndreaniLabelsPanel({
     if (ready.length === 0) {
       toast({
         title: 'Nada para descargar',
-        description: 'No hay etiquetas con venta Transferido y PDF listo.',
+        description: 'No hay etiquetas con todo Hecho, venta Transferido y PDF listo.',
         variant: 'destructive',
       });
       return;
@@ -980,7 +985,7 @@ export function AndreaniLabelsPanel({
           </button>
           {isExpanded ? (
             <p className="mt-0.5 text-xs text-muted-foreground pl-5">
-              Traé las etiquetas pagadas del portal. El PDF de despacho se habilita cuando la venta está Transferido.
+              Traé las etiquetas pagadas del portal. El PDF de despacho se habilita cuando todo está Hecho y la venta Transferido.
             </p>
           ) : null}
         </div>
@@ -1084,7 +1089,7 @@ export function AndreaniLabelsPanel({
                 variant="outline"
                 size="sm"
                 disabled={downloadable.length === 0 || downloadingAll || syncing || updatingTracking}
-                title="Descarga todas las etiquetas Transferido en un PDF (hojas 100×152)"
+                title="Descarga todas las etiquetas con todo Hecho y Transferido (hojas 100×152)"
                 onClick={() => void handleDownloadAll()}
               >
                 {downloadingAll ? (
@@ -1128,7 +1133,8 @@ export function AndreaniLabelsPanel({
               </thead>
               <tbody>
                 {assigned.map((row) => {
-                    const canDownload = Boolean(row.pdfPath) && row.saleTransferred;
+                    const canDownload =
+                      Boolean(row.pdfPath) && row.saleTransferred && row.allItemsHecho;
                     const phoneDigits = resolvePhoneDigits(row);
                     const order = row.ordenId ? ordersById.get(row.ordenId) : undefined;
                     const designLabel = orderItemsDesignLabel(order, row.disenoNombre);
@@ -1203,9 +1209,11 @@ export function AndreaniLabelsPanel({
                             className="h-7 w-7 px-0"
                             disabled={!canDownload || downloadingId === row.id || downloadingAll}
                             title={
-                              row.saleTransferred
-                                ? 'Descargar etiqueta 100×152'
-                                : 'Disponible cuando la venta esté Transferido'
+                              !row.allItemsHecho
+                                ? 'Disponible cuando todos los ítems estén Hecho'
+                                : row.saleTransferred
+                                  ? 'Descargar etiqueta 100×152'
+                                  : 'Disponible cuando la venta esté Transferido'
                             }
                             onClick={() => void handleDownload(row)}
                           >

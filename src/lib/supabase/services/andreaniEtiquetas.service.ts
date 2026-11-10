@@ -25,6 +25,8 @@ export interface AndreaniEtiquetaRow {
   clienteTelefono: string | null;
   disenoNombre: string | null;
   saleTransferred: boolean;
+  /** Todos los ítems de la orden en fabricación Hecho (sello, soldador, etc.). */
+  allItemsHecho: boolean;
   estadoEnvio: string | null;
 }
 
@@ -61,6 +63,7 @@ const mapListRow = (row: {
           | {
               diseno: string | null;
               estado_venta: string | null;
+              estado_fabricacion: string | null;
               item_type: string | null;
               item_config: Record<string, unknown> | null;
             }[]
@@ -74,6 +77,7 @@ const mapListRow = (row: {
           | {
               diseno: string | null;
               estado_venta: string | null;
+              estado_fabricacion: string | null;
               item_type: string | null;
               item_config: Record<string, unknown> | null;
             }[]
@@ -90,6 +94,8 @@ const mapListRow = (row: {
     sellos.length > 0
       ? sellos.every((s) => s.estado_venta === 'Transferido')
       : orden?.estado_orden === 'Transferido';
+  const allItemsHecho =
+    sellos.length > 0 ? sellos.every((s) => s.estado_fabricacion === 'Hecho') : false;
   const designNames = sellos
     .map((s) =>
       getOrderItemDisplayName({
@@ -120,6 +126,7 @@ const mapListRow = (row: {
     clienteTelefono: cliente?.telefono?.trim() || null,
     disenoNombre,
     saleTransferred: Boolean(allTransferred),
+    allItemsHecho,
     estadoEnvio: orden?.estado_envio ?? null,
   };
 };
@@ -131,7 +138,7 @@ const ETIQUETA_LIST_SELECT = `
         estado_orden,
         estado_envio,
         clientes ( nombre, apellido, telefono ),
-        sellos ( diseno, estado_venta, item_type, item_config )
+        sellos ( diseno, estado_venta, estado_fabricacion, item_type, item_config )
       )
     `;
 

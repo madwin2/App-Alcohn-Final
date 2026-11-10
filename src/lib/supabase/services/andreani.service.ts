@@ -3,6 +3,7 @@ import type { AndreaniLinkRevision } from '@/lib/types';
 import {
   andreaniLinkFreshSinceIso,
   isEmpresaAndreani,
+  itemRequiresClientPhoto,
   orderIdsNeedingAndreaniLink,
 } from '@/lib/utils/andreaniPhotoLinks';
 
@@ -207,8 +208,9 @@ const emptyAndreaniPhotoLinkCheck = (): AndreaniPhotoLinkCheck => ({
 });
 
 /**
- * Cuántos links del pool harían falta al asignar estas fotos (último sello de
- * pedidos Andreani sin link fresco). `missing > 0` si el pool no alcanza.
+ * Cuántos links del pool harían falta al asignar estas fotos (último ítem con
+ * foto + todos Hecho, pedidos Andreani sin link fresco). `missing > 0` si el
+ * pool no alcanza.
  */
 export const checkAndreaniLinksForPhotoAssignment = async (
   stampIds: string[],
@@ -240,7 +242,7 @@ export const checkAndreaniLinksForPhotoAssignment = async (
 
   const { data: allStamps, error: allStampsErr } = await supabase
     .from('sellos')
-    .select('id, orden_id, foto_sello')
+    .select('id, orden_id, foto_sello, item_type, estado_fabricacion')
     .in('orden_id', andreaniOrderIds);
   if (allStampsErr) throw allStampsErr;
 
@@ -258,6 +260,8 @@ export const checkAndreaniLinksForPhotoAssignment = async (
       id: row.id,
       ordenId: row.orden_id,
       hasPhoto: Boolean(row.foto_sello && row.foto_sello !== ''),
+      requiresPhoto: itemRequiresClientPhoto(row.item_type),
+      isHecho: row.estado_fabricacion === 'Hecho',
     })),
     andreaniOrderIds,
     orderIdsWithFreshLink: (freshLinks ?? [])

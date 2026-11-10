@@ -1,18 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
   isEmpresaAndreani,
+  itemRequiresClientPhoto,
   orderIdsNeedingAndreaniLink,
   type StampForAndreaniPhotoCheck,
 } from './andreaniPhotoLinks';
 
 const stamps = (
   orderId: string,
-  items: Array<{ id: string; hasPhoto?: boolean }>,
+  items: Array<{
+    id: string;
+    hasPhoto?: boolean;
+    requiresPhoto?: boolean;
+    isHecho?: boolean;
+  }>,
 ): StampForAndreaniPhotoCheck[] =>
   items.map((item) => ({
     id: item.id,
     ordenId: orderId,
     hasPhoto: Boolean(item.hasPhoto),
+    requiresPhoto: item.requiresPhoto !== false,
+    isHecho: item.isHecho !== false,
   }));
 
 describe('isEmpresaAndreani', () => {
@@ -29,6 +37,20 @@ describe('isEmpresaAndreani', () => {
   });
 });
 
+describe('itemRequiresClientPhoto', () => {
+  it('sellos y abecedarios requieren foto', () => {
+    expect(itemRequiresClientPhoto('SELLO')).toBe(true);
+    expect(itemRequiresClientPhoto('ABECEDARIO')).toBe(true);
+    expect(itemRequiresClientPhoto(null)).toBe(true);
+  });
+
+  it('accesorios no requieren foto en la app', () => {
+    expect(itemRequiresClientPhoto('SOLDADOR')).toBe(false);
+    expect(itemRequiresClientPhoto('MANGO_GOLPE')).toBe(false);
+    expect(itemRequiresClientPhoto('BASE_REMACHADORA')).toBe(false);
+  });
+});
+
 describe('orderIdsNeedingAndreaniLink', () => {
   it('no pide link si el pedido no es Andreani', () => {
     const ids = orderIdsNeedingAndreaniLink({
@@ -40,7 +62,7 @@ describe('orderIdsNeedingAndreaniLink', () => {
     expect(ids).toEqual([]);
   });
 
-  it('pide un link cuando se completa el último sello de un pedido Andreani', () => {
+  it('pide un link cuando se completa el último sello de un pedido Andreani todo Hecho', () => {
     const ids = orderIdsNeedingAndreaniLink({
       assigningStampIds: ['s2'],
       stamps: stamps('o1', [{ id: 's1', hasPhoto: true }, { id: 's2' }]),
@@ -92,5 +114,31 @@ describe('orderIdsNeedingAndreaniLink', () => {
       orderIdsWithFreshLink: [],
     });
     expect(ids).toEqual(['oa', 'ob']);
+  });
+
+  it('no pide link si hay un accesorio todavía sin Hecho', () => {
+    const ids = orderIdsNeedingAndreaniLink({
+      assigningStampIds: ['s1'],
+      stamps: stamps('o1', [
+        { id: 's1' },
+        { id: 'acc1', requiresPhoto: false, isHecho: false, hasPhoto: false },
+      ]),
+      andreaniOrderIds: ['o1'],
+      orderIdsWithFreshLink: [],
+    });
+    expect(ids).toEqual([]);
+  });
+
+  it('pide link si el accesorio ya está Hecho aunque no tenga foto', () => {
+    const ids = orderIdsNeedingAndreaniLink({
+      assigningStampIds: ['s1'],
+      stamps: stamps('o1', [
+        { id: 's1' },
+        { id: 'acc1', requiresPhoto: false, isHecho: true, hasPhoto: false },
+      ]),
+      andreaniOrderIds: ['o1'],
+      orderIdsWithFreshLink: [],
+    });
+    expect(ids).toEqual(['o1']);
   });
 });

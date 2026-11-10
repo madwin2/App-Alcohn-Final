@@ -143,7 +143,7 @@ Acciones sobre una etiqueta (menú **Más acciones**): **Liberar a huérfano**, 
 
 ### 3. Cobrar y descargar
 
-⚠️ El PDF de una etiqueta **solo se puede bajar cuando la venta está Transferido** (el cliente pagó el restante del sello). Cambiá la venta desde el panel (Pendiente / Transferido) cuando pague.
+⚠️ El PDF de una etiqueta **solo se puede bajar cuando la venta está Transferido** (el cliente pagó el restante) **y todos los ítems del pedido están Hecho** (sello, soldador, mango, etc.). Cambiá la venta desde el panel (Pendiente / Transferido) cuando pague.
 
 Después: **Descargar todas**, imprimir, pegar y entregar a Andreani.
 

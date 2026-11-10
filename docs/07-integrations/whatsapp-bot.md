@@ -34,7 +34,7 @@ flowchart LR
 
 ## Reglas de cobro (`pedido_listo`)
 
-Ver [mensajes-al-cliente.md](../04-business-rules/mensajes-al-cliente.md#reglas-monto-pedido-listo). Incluye la **asignación del link de Andreani** del pool y la regla de **envío gratis con ≥3 sellos**.
+Ver [mensajes-al-cliente.md](../04-business-rules/mensajes-al-cliente.md#reglas-monto-pedido-listo). Incluye la **asignación del link de Andreani** del pool (solo con **todos** los ítems `Hecho`). Si el que completa es un accesorio: la edge reescribe a `accesorio_pedido_completo` (cobro) y luego follow-up `link_andreani`. Si aún faltan ítems, deja `accesorio_listo`. También la regla de **envío gratis con ≥3 sellos**.
 
 ## Salida y efectos
 
