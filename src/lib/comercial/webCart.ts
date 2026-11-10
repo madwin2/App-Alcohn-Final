@@ -15,7 +15,95 @@ export type WebCartItem = {
   collection?: string;
   material?: string;
   process?: string;
+  /** La web lo anota en cada línea de `carrito_json` (enrichCartItemsWithItemType). */
+  item_type?: string;
 };
+
+export type WebItemType = NonNullable<SelloInsert['item_type']>;
+
+const VALID_WEB_ITEM_TYPES = new Set<WebItemType>([
+  'SELLO',
+  'ABECEDARIO',
+  'SOLDADOR',
+  'MANGO_GOLPE',
+  'BASE_REMACHADORA',
+]);
+
+type WebAccessoryItemType = 'SOLDADOR' | 'MANGO_GOLPE' | 'BASE_REMACHADORA';
+
+/**
+ * Catálogo de accesorios de la web (copia de `Alcohn Web/src/data/accessories.ts`;
+ * no se importa entre repos). Mantener sincronizado con
+ * `supabase/functions/confirm-web-order/index.ts`.
+ */
+const WEB_ACCESSORIES: Record<WebAccessoryItemType, { slug: string; code: string; title: string }> = {
+  SOLDADOR: { slug: 'calentador-electrico', code: 'soldador', title: 'Calentador Eléctrico' },
+  MANGO_GOLPE: { slug: 'mango-de-golpe', code: 'mango_golpe', title: 'Mango Metálico' },
+  BASE_REMACHADORA: {
+    slug: 'base-aluminio-remachadora',
+    code: 'base_remachadora',
+    title: 'Base de Aluminio para Remachadora',
+  },
+};
+
+/** Potencia del soldador que vende la web (igual que sellosFromCart de la web). */
+export const WEB_SOLDADOR_POWER = '200W' as const;
+
+export function isWebAccessoryItemType(itemType: WebItemType): itemType is WebAccessoryItemType {
+  return itemType === 'SOLDADOR' || itemType === 'MANGO_GOLPE' || itemType === 'BASE_REMACHADORA';
+}
+
+function accessoryItemTypeBySlug(slug: string): WebAccessoryItemType | null {
+  for (const [itemType, accessory] of Object.entries(WEB_ACCESSORIES) as Array<
+    [WebAccessoryItemType, (typeof WEB_ACCESSORIES)[WebAccessoryItemType]]
+  >) {
+    if (accessory.slug === slug) return itemType;
+  }
+  return null;
+}
+
+/**
+ * Clasifica una línea del carrito web al `item_type` de `sellos`
+ * (misma regla que `resolveItemType` de la web): primero `item.item_type` válido,
+ * luego catálogo de accesorios por slug, luego heurísticas por colección/título.
+ */
+export function resolveWebItemType(item: WebCartItem): WebItemType {
+  const explicit = typeof item.item_type === 'string' ? item.item_type.trim().toUpperCase() : '';
+  if (explicit && VALID_WEB_ITEM_TYPES.has(explicit as WebItemType)) {
+    return explicit as WebItemType;
+  }
+
+  const slug = (item.designSlug ?? '').toLowerCase();
+  const collection = (item.collection ?? '').toLowerCase();
+  const title = (item.title ?? '').toLowerCase();
+
+  if (slug.includes('abecedario') || collection.includes('abecedario')) return 'ABECEDARIO';
+
+  const bySlug = accessoryItemTypeBySlug(slug);
+  if (bySlug) return bySlug;
+
+  if (collection.includes('accesorio') || (item.material ?? '').toLowerCase().includes('accesorio')) {
+    if (
+      slug.includes('calentador') ||
+      slug.includes('soldador') ||
+      title.includes('calentador') ||
+      title.includes('soldador')
+    ) {
+      return 'SOLDADOR';
+    }
+    if (slug.includes('mango') || title.includes('mango')) return 'MANGO_GOLPE';
+    if (
+      slug.includes('base') ||
+      slug.includes('remachadora') ||
+      title.includes('remachadora') ||
+      title.includes('base de aluminio')
+    ) {
+      return 'BASE_REMACHADORA';
+    }
+  }
+
+  return 'SELLO';
+}
 
 /** Mismo markup que la web: precio_link = redondear(precio_transferencia × 1.15) */
 export const WEB_PRECIO_LINK_MARKUP = 1.15;
@@ -265,6 +353,69 @@ export function buildSellosFromWebCheckout(params: {
     : null;
 
   return expanded.map(({ item, unitPrice }, index) => {
+    const itemType = resolveWebItemType(item);
+    const baseConfig = {
+      origen: 'web',
+      item_type: itemType,
+      design_slug: item.designSlug ?? null,
+      collection: item.collection ?? null,
+      variant_size: item.variantSize ?? null,
+      material_web: item.material ?? null,
+      process: item.process ?? null,
+      cart_item_id: item.id ?? null,
+    };
+
+    if (isWebAccessoryItemType(itemType)) {
+      // Accesorio: no es un sello personalizado (sin medidas, base ni mockup).
+      const accessory = WEB_ACCESSORIES[itemType];
+      return {
+        orden_id: params.ordenId,
+        item_type: itemType,
+        // El check de la base exige un tipo; igual que la web y la carga manual.
+        tipo: 'Clasico' as const,
+        // Igual que la web: título del catálogo si el slug es del catálogo; si no, el del ítem.
+        diseno:
+          accessoryItemTypeBySlug((item.designSlug ?? '').toLowerCase()) === itemType
+            ? accessory.title
+            : item.title?.trim() || accessory.title,
+        valor: unitPrice,
+        senia: senias[index] ?? 0,
+        estado_fabricacion: 'Sin Hacer' as const,
+        estado_venta: 'Señado' as const,
+        archivo_base: null,
+        ancho_real: null,
+        largo_real: null,
+        mockup_solicitud_id: null,
+        item_config: {
+          ...baseConfig,
+          accessory_code: accessory.code,
+          accessory_slug: accessory.slug,
+          ...(itemType === 'SOLDADOR' ? { soldadorPower: WEB_SOLDADOR_POWER } : {}),
+        },
+        nota: null,
+      };
+    }
+
+    if (itemType === 'ABECEDARIO') {
+      const abcSize = parseVariantSizeCm(item.variantSize);
+      return {
+        orden_id: params.ordenId,
+        item_type: itemType,
+        tipo: 'ABC' as const,
+        diseno: item.title?.trim() || item.designSlug?.trim() || 'Abecedario',
+        valor: unitPrice,
+        senia: senias[index] ?? 0,
+        estado_fabricacion: 'Sin Hacer' as const,
+        estado_venta: 'Señado' as const,
+        archivo_base: null,
+        ancho_real: abcSize?.ancho ?? null,
+        largo_real: abcSize?.largo ?? null,
+        mockup_solicitud_id: null,
+        item_config: baseConfig,
+        nota: null,
+      };
+    }
+
     const size =
       parseVariantSizeCm(item.variantSize) ??
       (parsedFromMockup
@@ -285,7 +436,7 @@ export function buildSellosFromWebCheckout(params: {
 
     return {
       orden_id: params.ordenId,
-      item_type: 'SELLO',
+      item_type: 'SELLO' as const,
       tipo: resolveWebSelloTipo(item),
       diseno: designName,
       valor: unitPrice,
@@ -296,15 +447,7 @@ export function buildSellosFromWebCheckout(params: {
       ancho_real: size?.ancho ?? null,
       largo_real: size?.largo ?? null,
       mockup_solicitud_id: mockupId,
-      item_config: {
-        origen: 'web',
-        design_slug: item.designSlug ?? null,
-        collection: item.collection ?? null,
-        variant_size: item.variantSize ?? null,
-        material_web: item.material ?? null,
-        process: item.process ?? null,
-        cart_item_id: item.id ?? null,
-      },
+      item_config: baseConfig,
       nota: null,
     };
   });
