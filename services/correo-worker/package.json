@@ -1,0 +1,29 @@
+{
+  "name": "@alcohn/correo-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Cliente y CLI local para la API Paq.ar v2 de Correo Argentino (Fase 1: sin servidor HTTP)",
+  "scripts": {
+    "auth:check": "tsx src/scripts/cli-auth.ts",
+    "agencies:list": "tsx src/scripts/cli-agencies.ts",
+    "order:create": "tsx src/scripts/cli-create-order.ts",
+    "order:cancel": "tsx src/scripts/cli-cancel.ts",
+    "label:get": "tsx src/scripts/cli-label.ts",
+    "tracking:get": "tsx src/scripts/cli-tracking.ts",
+    "cleanup": "tsx src/scripts/cli-cleanup.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
