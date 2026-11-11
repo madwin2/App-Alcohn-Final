@@ -1,6 +1,18 @@
 # Meta
 
-## Conversions API (edge `meta-conversion`, v15)
+## Conversions API (edge `meta-conversion`, v26)
+
+> **Cambio 2026-11-11 (v26): un solo dataset por venta.**
+> - Orden **web** pagada → Purchase `website` **solo** a `META_WEB_PIXEL_ID` (**Alcohn Web Sale**, default `1322492025954445`), con `event_id` = id de orden. Deduplica contra el Purchase del navegador (Openpay), que usa el mismo `eventID`. Si Meta rechaza ese dataset, respaldo automático a `META_PIXEL_ID` (queda en `_debug.web_fallback`).
+> - Orden **no web** (WhatsApp/app) → igual que antes, a `META_PIXEL_ID` (**Ventas WhatsApp**) como `physical_store`.
+> - CTWA sin cambios.
+> - Motivo: hasta v25 las ventas web iban a Ventas WhatsApp; desde el 2/11 la web dejó de mandar Purchase en transferencias (lo cubría la CAPI), así que Alcohn Web Sale se quedó sin compras. La deduplicación por `event_id` solo funciona dentro del mismo dataset.
+> - `META_EVENT_SOURCE_URL` default `https://www.alcohnsellos.com`.
+> - **Modo prueba:** `POST { "orden_id": "...", "test_event_code": "TEST12345" }` → manda como evento de prueba, ignora/no escribe `meta_conversion_log`.
+>
+> **v27 (2026-11-11): también GA4.** Transferencias web de Argentina (`origen=Web`, `metodo_pago=Transferencia`, sin `notas_web.international`) → además `purchase` a GA4 por Measurement Protocol (`GA4_MEASUREMENT_ID` default `G-6KPY518GPC`, `GA4_API_SECRET` obligatorio; sin secret se saltea con `reason: missing_ga4_api_secret`). Usa `notas_web.ga_client_id` / `ga_session_id` que guarda la web al crear la orden (cookies `_ga` / `_ga_6KPY518GPC`); si faltan, `client_id` derivado del id de orden (venta sin canal). Tarjeta e internacionales no: ya las manda el navegador. En GTM, la etiqueta `GA4 - purchase` tiene excepción en `/checkout/transferencia` para no contarlas dos veces. En modo prueba usa `/debug/mp/collect`. Resultado en `_debug.ga4`.
+>
+> Las filas de abajo describen v15; donde dice "Siempre Purchase a `META_PIXEL_ID`" ahora aplica solo a órdenes no web.
 
 | | |
 |---|---|

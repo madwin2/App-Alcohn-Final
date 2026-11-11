@@ -3,7 +3,15 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 /** Leer secrets en cada request (no al cargar el módulo). */
 const getMetaEnv = () => ({
+  /** Dataset de ventas WhatsApp / app (Ventas WhatsApp – Alcohn). */
   pixelId: (Deno.env.get("META_PIXEL_ID") ?? "").trim(),
+  /**
+   * Dataset del píxel de la web (Alcohn Web Sale). Las órdenes web van SOLO acá,
+   * con el mismo event_id que el Purchase del navegador, así Meta deduplica.
+   */
+  webPixelId: (
+    Deno.env.get("META_WEB_PIXEL_ID") ?? "1322492025954445"
+  ).trim(),
   /** Dataset CAPI del WABA (POST /{waba-id}/dataset). Destino de eventos CTWA. */
   waDatasetId: (
     Deno.env.get("META_WA_DATASET_ID") ?? "1590689962745150"
@@ -14,12 +22,125 @@ const getMetaEnv = () => ({
   apiVersion: (Deno.env.get("META_API_VERSION") ?? "v21.0").trim(),
   testEventCode: (Deno.env.get("META_TEST_EVENT_CODE") ?? "").trim(),
   eventSourceUrl: (
-    Deno.env.get("META_EVENT_SOURCE_URL") ?? "https://www.alcohncnc.com"
+    Deno.env.get("META_EVENT_SOURCE_URL") ?? "https://www.alcohnsellos.com"
   ).trim(),
   currency: (Deno.env.get("META_CURRENCY") ?? "ARS").trim(),
   attrSupabaseUrl: (Deno.env.get("META_ATTR_SUPABASE_URL") ?? "").trim(),
   attrSupabaseKey: (Deno.env.get("META_ATTR_SUPABASE_KEY") ?? "").trim(),
+  /** GA4 Measurement Protocol (stream web Alcohn Sellos). Sin secret, se saltea. */
+  ga4MeasurementId: (
+    Deno.env.get("GA4_MEASUREMENT_ID") ?? "G-6KPY518GPC"
+  ).trim(),
+  ga4ApiSecret: (Deno.env.get("GA4_API_SECRET") ?? "").trim(),
 });
+
+type CarritoLinea = {
+  id?: unknown;
+  title?: unknown;
+  price?: unknown;
+  qty?: unknown;
+  designSlug?: unknown;
+};
+
+type Ga4Result = {
+  sent: boolean;
+  status?: number;
+  reason?: string;
+  client_id_source?: "cookie" | "fallback";
+  validation?: unknown;
+};
+
+/**
+ * Purchase a GA4 por Measurement Protocol para transferencias web de Argentina.
+ * Tarjeta (Openpay) e internacionales ya mandan el purchase desde el navegador
+ * al confirmarse el pago; las transferencias se confirman acá (el comprobante
+ * puede llegar por WhatsApp), así que el servidor es la única fuente.
+ * En modo prueba usa el endpoint de validación (no registra nada).
+ */
+const sendGa4Purchase = async (
+  metaEnv: ReturnType<typeof getMetaEnv>,
+  params: {
+    ordenId: string;
+    value: number;
+    notasWeb: Record<string, unknown> | null;
+    carrito: unknown;
+    isTestRun: boolean;
+  },
+): Promise<Ga4Result> => {
+  if (!metaEnv.ga4ApiSecret || !metaEnv.ga4MeasurementId) {
+    return { sent: false, reason: "missing_ga4_api_secret" };
+  }
+
+  const notas = params.notasWeb ?? {};
+  const cookieClientId =
+    typeof notas.ga_client_id === "string" ? notas.ga_client_id.trim() : "";
+  const sessionIdRaw =
+    typeof notas.ga_session_id === "string" ? notas.ga_session_id.trim() : "";
+  // Sin cookie (orden vieja o bloqueador): id estable derivado de la orden.
+  const fallbackClientId = `${
+    parseInt((await sha256Hex(params.ordenId)).slice(0, 8), 16)
+  }.${Math.floor(Date.now() / 1000)}`;
+  const clientId = cookieClientId || fallbackClientId;
+
+  const lineas = Array.isArray(params.carrito)
+    ? (params.carrito as CarritoLinea[])
+    : [];
+  const items = lineas
+    .map((l) => ({
+      item_id: String(l.designSlug ?? l.id ?? "").slice(0, 100) || undefined,
+      item_name: String(l.title ?? "").slice(0, 100) || undefined,
+      price: toNumber(l.price),
+      quantity: Math.max(1, Math.round(toNumber(l.qty) || 1)),
+    }))
+    .filter((i) => i.item_id || i.item_name);
+
+  const eventParams: Record<string, unknown> = {
+    transaction_id: params.ordenId,
+    value: params.value,
+    currency: "ARS",
+    payment_type: "Transferencia",
+    engagement_time_msec: 1,
+  };
+  if (items.length) eventParams.items = items;
+  if (/^\d+$/.test(sessionIdRaw)) eventParams.session_id = Number(sessionIdRaw);
+
+  const base = params.isTestRun
+    ? "https://www.google-analytics.com/debug/mp/collect"
+    : "https://www.google-analytics.com/mp/collect";
+  const url = `${base}?measurement_id=${
+    encodeURIComponent(metaEnv.ga4MeasurementId)
+  }&api_secret=${encodeURIComponent(metaEnv.ga4ApiSecret)}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: clientId,
+        events: [{ name: "purchase", params: eventParams }],
+      }),
+    });
+    const text = await res.text();
+    let validation: unknown = undefined;
+    if (params.isTestRun) {
+      try {
+        validation = JSON.parse(text);
+      } catch {
+        validation = { raw: text };
+      }
+    }
+    return {
+      sent: res.ok,
+      status: res.status,
+      client_id_source: cookieClientId ? "cookie" : "fallback",
+      ...(validation !== undefined ? { validation } : {}),
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "unknown";
+    console.error("meta-conversion GA4 error", message);
+    return { sent: false, reason: message };
+  }
+};
 
 const ATTR_LOOKUP_TIMEOUT_MS = 2000;
 
@@ -118,6 +239,9 @@ type OrdenRow = {
   created_at: string | null;
   pago_confirmado_at: string | null;
   fecha: string | null;
+  metodo_pago: string | null;
+  notas_web: Record<string, unknown> | null;
+  carrito_json: unknown;
   clientes: {
     nombre: string | null;
     apellido: string | null;
@@ -293,7 +417,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const metaEnv = getMetaEnv();
+  let metaEnv = getMetaEnv();
 
   if (!metaEnv.pixelId || !metaEnv.accessToken) {
     return new Response(
@@ -310,6 +434,14 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const ordenId = String(body?.orden_id ?? "").trim();
+
+    // Modo prueba: con el código de "Probar eventos" de Meta se manda como evento
+    // de prueba (no cuenta en campañas), se ignora el log y no se registra nada.
+    const bodyTestCode = String(body?.test_event_code ?? "").trim();
+    const isTestRun = /^TEST\d+$/.test(bodyTestCode);
+    if (isTestRun) {
+      metaEnv = { ...metaEnv, testEventCode: bodyTestCode };
+    }
 
     if (!ordenId) {
       return new Response(JSON.stringify({ error: "orden_id requerido" }), {
@@ -342,7 +474,7 @@ Deno.serve(async (req: Request) => {
       .eq("orden_id", ordenId)
       .maybeSingle();
 
-    if (existing) {
+    if (existing && !isTestRun) {
       return new Response(
         JSON.stringify({
           success: true,
@@ -368,6 +500,9 @@ Deno.serve(async (req: Request) => {
         created_at,
         pago_confirmado_at,
         fecha,
+        metodo_pago,
+        notas_web,
+        carrito_json,
         clientes (
           nombre,
           apellido,
@@ -481,12 +616,36 @@ Deno.serve(async (req: Request) => {
       offlinePayload.event_source_url = metaEnv.eventSourceUrl;
     }
 
-    // 1) Siempre al dataset de campañas (Ventas WhatsApp / META_PIXEL_ID).
-    const offlineResult = await postMetaPurchase(
+    // 1) Un solo dataset por venta, para no contarla dos veces:
+    //    - web  → Alcohn Web Sale (mismo event_id que el Purchase del navegador)
+    //    - resto → Ventas WhatsApp (META_PIXEL_ID)
+    //    Si Meta rechaza el dataset web (p. ej. permisos del token), se manda a
+    //    Ventas WhatsApp como antes para no perder la venta.
+    const primaryDestination =
+      esWeb && metaEnv.webPixelId ? metaEnv.webPixelId : metaEnv.pixelId;
+    let offlineResult = await postMetaPurchase(
       metaEnv,
-      metaEnv.pixelId,
+      primaryDestination,
       offlinePayload,
     );
+    let webFallback: { from: string; status: number; response: unknown } | null =
+      null;
+    if (!offlineResult.ok && primaryDestination !== metaEnv.pixelId) {
+      console.error(
+        "meta-conversion: dataset web rechazó el Purchase; respaldo a META_PIXEL_ID",
+        offlineResult.status,
+      );
+      webFallback = {
+        from: primaryDestination,
+        status: offlineResult.status,
+        response: offlineResult.json,
+      };
+      offlineResult = await postMetaPurchase(
+        metaEnv,
+        metaEnv.pixelId,
+        offlinePayload,
+      );
+    }
 
     // 2) Si hay match CTWA, además al dataset del WABA (atribución anuncio WA).
     let ctwaResult: MetaPostResult | null = null;
@@ -527,6 +686,22 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // 3) GA4: solo transferencias web de Argentina (ver sendGa4Purchase).
+    const esInternacional = Boolean(
+      row.notas_web && typeof row.notas_web === "object" &&
+        (row.notas_web as Record<string, unknown>).international,
+    );
+    const ga4Result: Ga4Result | null =
+      esWeb && row.metodo_pago === "Transferencia" && !esInternacional
+        ? await sendGa4Purchase(metaEnv, {
+          ordenId,
+          value: toNumber(row.valor_total),
+          notasWeb: row.notas_web,
+          carrito: row.carrito_json,
+          isTestRun,
+        })
+        : null;
+
     // success = offline OK (es lo que alimenta las campañas actuales).
     const success = offlineResult.ok;
     const offlineJson =
@@ -538,6 +713,8 @@ Deno.serve(async (req: Request) => {
       ...offlineJson,
       _debug: {
         pixel_id: metaEnv.pixelId,
+        web_pixel_id: metaEnv.webPixelId || null,
+        web_fallback: webFallback,
         wa_dataset_id: metaEnv.waDatasetId || null,
         destination_id: offlineResult.destinationId,
         offline: {
@@ -558,6 +735,7 @@ Deno.serve(async (req: Request) => {
           ? { ok: false, skipped: true, reason: "missing_wa_dataset_id" }
           : null,
         test_event_code: metaEnv.testEventCode || null,
+        ga4: ga4Result,
         action_source: offlineActionSource,
         wa_attribution: {
           status: attrLookup.status,
@@ -575,7 +753,7 @@ Deno.serve(async (req: Request) => {
       },
     };
 
-    await supabase.from("meta_conversion_log").insert({
+    if (!isTestRun) await supabase.from("meta_conversion_log").insert({
       orden_id: ordenId,
       event_id: ordenId,
       event_time: eventTime,
@@ -589,12 +767,14 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success,
+        test_run: isTestRun,
         orden_id: ordenId,
         event_time: eventTime,
         purchase_at: purchaseAt,
         meta_status: offlineResult.status,
         offline_ok: offlineResult.ok,
         ctwa_ok: ctwaResult?.ok ?? null,
+        ga4: ga4Result,
         wa_attribution_status: attrLookup.status,
         meta_response: metaResponseWithDebug,
       }),
