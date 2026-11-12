@@ -350,13 +350,29 @@ export type AndreaniAssignCandidate = {
   linkTracking: string | null;
 };
 
-export const andreaniAssignCandidatesFromOrders = (orders: Order[]): AndreaniAssignCandidate[] =>
+/**
+ * Pedidos a los que se puede asignar una huérfana.
+ * - `con_link` (default): solo pedidos con link Andreani asignado.
+ * - `todos_andreani`: los de link más cualquier pedido por Andreani (sin importar fabricación), aunque no se haya mandado el link.
+ * En ambos: sin seguimiento cargado y sin Despachado / Seguimiento enviado.
+ */
+export const andreaniAssignCandidatesFromOrders = (
+  orders: Order[],
+  scope: 'con_link' | 'todos_andreani' = 'con_link',
+): AndreaniAssignCandidate[] =>
   orders
     .filter((order) => {
-      if (!order.andreaniLinkUrl) return false;
+      const esAndreani = Boolean(order.andreaniLinkUrl) || order.shipping?.carrier === 'ANDREANI';
+      if (scope === 'con_link' ? !order.andreaniLinkUrl : !esAndreani) return false;
       if (order.shipping?.trackingNumber) return false;
       // Ya cerrados: no ofrecerlos para asignar huérfanos (aunque falte el TN en el pedido).
-      if (order.items.some((item) => item.shippingState === 'SEGUIMIENTO_ENVIADO')) return false;
+      if (
+        order.items.some(
+          (item) => item.shippingState === 'SEGUIMIENTO_ENVIADO' || item.shippingState === 'DESPACHADO',
+        )
+      ) {
+        return false;
+      }
       return true;
     })
     .map((order) => {
@@ -365,9 +381,10 @@ export const andreaniAssignCandidatesFromOrders = (orders: Order[]): AndreaniAss
           ? order.items.map((item) => getOrderItemDisplayName(item)).join(', ')
           : order.id.slice(0, 8);
       const linkName = order.andreaniLinkRevision?.destinatario?.trim();
+      const sinLink = scope === 'todos_andreani' && !order.andreaniLinkUrl;
       return {
         id: order.id,
-        label: `${order.customer.firstName} ${order.customer.lastName}${linkName ? ` (link: ${linkName})` : ''} · ${itemsLabel}`,
+        label: `${order.customer.firstName} ${order.customer.lastName}${linkName ? ` (link: ${linkName})` : ''}${sinLink ? ' (sin link)' : ''} · ${itemsLabel}`,
         linkTracking: order.andreaniLinkRevision?.tracking?.trim() || null,
       };
     })

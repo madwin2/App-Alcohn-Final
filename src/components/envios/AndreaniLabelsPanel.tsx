@@ -58,6 +58,7 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  ListFilter,
   Loader2,
   MoreHorizontal,
   RefreshCw,
@@ -129,6 +130,7 @@ export function AndreaniLabelsPanel({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [erroneasExpanded, setErroneasExpanded] = useState(false);
   const [orphansOpen, setOrphansOpen] = useState<boolean | null>(null);
+  const [candidateScope, setCandidateScope] = useState<'con_link' | 'todos_andreani'>('con_link');
   const [uploadingPdfs, setUploadingPdfs] = useState(false);
   const [manualUploadFiles, setManualUploadFiles] = useState<File[] | null>(null);
   const [manualMissing, setManualMissing] = useState<
@@ -192,14 +194,19 @@ export function AndreaniLabelsPanel({
     return map;
   }, [orders]);
 
-  const candidates = useMemo(() => andreaniAssignCandidatesFromOrders(orders), [orders]);
+  const candidates = useMemo(
+    () => andreaniAssignCandidatesFromOrders(orders, candidateScope),
+    [orders, candidateScope],
+  );
 
   /** Seguimiento → pedido, según lo que mostró el link del cliente (revisión de links). */
   const suggestedOrderByTracking = useMemo(() => {
     const map = new Map<string, string>();
-    for (const c of candidates) if (c.linkTracking) map.set(c.linkTracking, c.id);
+    for (const c of andreaniAssignCandidatesFromOrders(orders)) {
+      if (c.linkTracking) map.set(c.linkTracking, c.id);
+    }
     return map;
-  }, [candidates]);
+  }, [orders]);
 
   const pickFor = (row: AndreaniEtiquetaRow): string =>
     assignPick[row.id] || suggestedOrderByTracking.get(row.tracking) || '';
@@ -1251,25 +1258,49 @@ export function AndreaniLabelsPanel({
           )}
 
           <div>
-            <button
-              type="button"
-              onClick={() => setOrphansOpen((prev) => !(prev ?? orphans.length > 0))}
-              className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-            >
-              {orphansExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-              )}
-              Huérfanos ({orphans.length})
-            </button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setOrphansOpen((prev) => !(prev ?? orphans.length > 0))}
+                className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                {orphansExpanded ? (
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                )}
+                Huérfanos ({orphans.length})
+              </button>
+              {orphansExpanded || erroneasExpanded ? (
+                <Button
+                  type="button"
+                  variant={candidateScope === 'todos_andreani' ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="h-7 text-xs"
+                  title={
+                    candidateScope === 'con_link'
+                      ? 'Mostrar en "Elegir pedido" todos los pedidos por Andreani sin despachar, aunque no se les haya mandado el link'
+                      : 'Volver a mostrar solo pedidos con link Andreani asignado'
+                  }
+                  onClick={() =>
+                    setCandidateScope((prev) => (prev === 'con_link' ? 'todos_andreani' : 'con_link'))
+                  }
+                >
+                  <ListFilter className="mr-1.5 h-3.5 w-3.5" />
+                  {candidateScope === 'con_link'
+                    ? 'Ver todos los Andreani'
+                    : 'Solo con link'}
+                </Button>
+              ) : null}
+            </div>
             {orphansExpanded ? (
               orphans.length > 0 ? (
                 <>
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     Envíos pagados en Andreani sin un único pedido con link asignado. Asignalos a mano, marcalos como
                     erróneos o eliminá el PDF. Si el sync falla, bajá el PDF en Andreani y usá{' '}
-                    <span className="font-medium">Cargar PDF</span>.
+                    <span className="font-medium">Cargar PDF</span>. Si el pedido no aparece porque no se le mandó
+                    el link, tocá <span className="font-medium">Ver todos los Andreani</span>.
                   </p>
                   <div className="mt-2">
                     {renderUnassignedTable(orphans, 'No hay huérfanos.', {

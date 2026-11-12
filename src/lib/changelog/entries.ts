@@ -1526,6 +1526,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 84,
+    date: '2026-11-12',
+    title: 'Huérfanos Andreani sin link',
+    version: '2.02',
+    slides: [
+      {
+        heading: 'Asignar huérfanos a pedidos sin link',
+        body: 'En Envíos → Andreani → Huérfanos, tocá «Ver todos los Andreani» y en «Elegir pedido» aparecen todos los pedidos por Andreani que todavía no se despacharon, aunque no se les haya mandado el link.',
+        icon: Filter,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */
