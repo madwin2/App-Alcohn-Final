@@ -1,3 +1,4 @@
+import { applyMatrix, parseTransform } from '@/lib/fresa/svgShapes';
 import type { PackedCell, PackedSheet } from './types';
 
 export interface Box {
@@ -120,7 +121,7 @@ function hostSvg(svgEl: SVGSVGElement): HTMLDivElement {
   return host;
 }
 
-function elementBBox(el: SVGGraphicsElement): Box | null {
+function localBBox(el: SVGGraphicsElement): Box | null {
   try {
     const bbox = el.getBBox();
     if (bbox && bbox.width > 0 && bbox.height > 0) {
@@ -130,6 +131,30 @@ function elementBBox(el: SVGGraphicsElement): Box | null {
     // jsdom / SVG no montado
   }
   return geometricBBox(el);
+}
+
+/**
+ * Caja en coordenadas de la hoja. getBBox no incluye el `transform` del propio
+ * elemento, y Vectorizer.AI exporta las formas que reconoce como elipses (los
+ * dedos de una pata) como `<ellipse>` giradas con `transform`: sin esto, su
+ * caja caía cerca del origen y se iban al logo de arriba a la izquierda.
+ */
+export function elementBBox(el: Element): Box | null {
+  const local = localBBox(el as SVGGraphicsElement);
+  const raw = el.getAttribute('transform');
+  if (!local || !raw) return local;
+  const m = parseTransform(raw);
+  const corners = [
+    { x: local.x, y: local.y },
+    { x: local.x + local.w, y: local.y },
+    { x: local.x, y: local.y + local.h },
+    { x: local.x + local.w, y: local.y + local.h },
+  ].map((p) => applyMatrix(m, p));
+  const xs = corners.map((p) => p.x);
+  const ys = corners.map((p) => p.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }
 
 function serializeCellSvg(original: SVGSVGElement, nodes: Element[], box: Box): string {
@@ -169,7 +194,7 @@ export function splitSheetSvg(svgText: string, placement: PackedSheet): Map<stri
       const tag = child.tagName.toLowerCase();
       if (tag === 'defs' || tag === 'style' || tag === 'title' || tag === 'desc' || tag === 'metadata') continue;
       if (!DRAWABLE.has(tag)) continue;
-      const box = elementBBox(child as unknown as SVGGraphicsElement);
+      const box = elementBBox(child);
       if (!box) continue;
       const cell = cellContainingPoint(aligned, box.x + box.w / 2, box.y + box.h / 2);
       if (!cell) continue;

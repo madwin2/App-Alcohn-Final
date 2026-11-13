@@ -91,6 +91,22 @@ describe('svgSplit', () => {
     expect(split.size).toBe(5);
   });
 
+  it('elipses giradas (dedos de una pata) van a su celda, no a la de arriba a la izquierda', () => {
+    // Así exporta Vectorizer.AI las formas que reconoce como elipses: centro en 0,0 y el lugar en `transform`.
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+        <rect x="20" y="20" width="60" height="60" fill="#000"/>
+        <rect x="120" y="120" width="60" height="60" fill="#000"/>
+        <ellipse cx="0" cy="0" rx="4" ry="6" fill="#000" transform="translate(140 130) rotate(-20)"/>
+        <ellipse cx="0" cy="0" rx="4" ry="6" fill="#000" transform="matrix(0.94 0.34 -0.34 0.94 160 130)"/>
+      </svg>
+    `;
+    const split = splitSheetSvg(svg, placement);
+    expect(split.get('a')).not.toContain('ellipse');
+    expect((split.get('d')?.match(/<ellipse/g) ?? []).length).toBe(2);
+    expect(split.get('a')).toContain('viewBox="20 20 60 60"');
+  });
+
   it('sigue abortando si el viewBox es de otra hoja', () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><rect x="5" y="5" width="10" height="10" fill="#000"/></svg>`;
     expect(() => splitSheetSvg(svg, placement)).toThrow(/no coincide con la hoja/);
