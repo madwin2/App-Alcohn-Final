@@ -3,7 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { useVectorizacionStore } from '@/lib/state/vectorizacion.store';
-import { saveSelloVector } from '@/lib/vectorizacion/saveVector';
+import { medirVectorParaGuardar, saveSelloVector } from '@/lib/vectorizacion/saveVector';
+import { fitViewBoxToDesign } from '@/lib/vectorizacion/svgSize';
+import { detectarPuntosSueltos } from '@/lib/vectorizacion/puntosSueltos';
+import { pedirMedidaFabricacion } from '@/lib/state/fabricationSizeDialog.store';
 import { registrarEdicion } from '@/lib/supabase/services/vectorEdiciones.service';
 import type { FixOperation } from '@/lib/fresa/fix';
 import { downloadSvg, downloadBlob, zipDownloadName, zipVectorResults } from '@/lib/vectorizacion/zipResults';
@@ -219,9 +222,13 @@ function ReviewCard({
   onReject,
   onChangeSvg,
   onChoose,
+  onQuitarSueltos,
+  onMantenerSueltos,
 }: {
   item: ReviewItem;
   confirming: boolean;
+  onQuitarSueltos: () => void;
+  onMantenerSueltos: () => void;
   /** Chequeo de fresa del SVG actual (null = analizando). */
   fresa: FresaReport | null;
   /** Corrección automática del original (null = corrigiendo). */
@@ -253,7 +260,15 @@ function ReviewCard({
   };
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const svgUrl = `data:image/svg+xml;utf8,${encodeURIComponent(item.svg)}`;
+  // Con el lienzo ajustado al dibujo, igual que al guardar: un punto suelto lejos se nota acá.
+  const svgUrl = useMemo(
+    () => `data:image/svg+xml;utf8,${encodeURIComponent(fitViewBoxToDesign(item.svg))}`,
+    [item.svg],
+  );
+  const sueltos = useMemo(
+    () => (item.mantenerSueltos ? null : detectarPuntosSueltos(item.svg)),
+    [item.svg, item.mantenerSueltos],
+  );
 
   const pickSvg = async (file: File | undefined) => {
     if (!file) return;
@@ -317,6 +332,24 @@ function ReviewCard({
           </label>
         </div>
         <VersionPicker item={item} auto={auto} onChoose={onChoose} onOpen={() => openFresa()} />
+        {sueltos ? (
+          <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            <p>
+              {sueltos.cantidad === 1
+                ? 'Hay un punto suelto lejos del diseño.'
+                : `Hay ${sueltos.cantidad} puntos sueltos lejos del diseño.`}{' '}
+              Agranda la medida y el logo queda corrido. Se quita al confirmar.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={onQuitarSueltos}>
+                Quitar ahora
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={onMantenerSueltos}>
+                Es parte del diseño
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {item.mode !== 'production' ? (
           <p className="text-xs text-amber-600">Modo prueba: no se puede confirmar en pedidos.</p>
         ) : null}
@@ -493,16 +526,47 @@ export function RevisionTab() {
     try {
       const item = await itemParaGuardar(id);
       if (!item || item.mode !== 'production') return;
-      const saved = await saveSelloVector({
+      // Mismo criterio que el aviso de la tarjeta: lo que se avisó, se quita.
+      const sueltos = item.mantenerSueltos ? null : detectarPuntosSueltos(item.svg);
+      const svgText = sueltos?.limpio ?? item.svg;
+      let fabricationOverrideMm = item.fabricationOverrideMm;
+      if (!fabricationOverrideMm) {
+        // La medida se pregunta antes de guardar: «Volver a revisión» no deja nada guardado.
+        const medida = medirVectorParaGuardar({
+          svgText,
+          requestedWidthMm: item.requestedWidthMm,
+          requestedHeightMm: item.requestedHeightMm,
+        });
+        if (medida.resolution.needsReview) {
+          const elegida = await pedirMedidaFabricacion({
+            fileName: `${item.designName} — ${item.clienteNombre}`,
+            previewUrl: `data:image/svg+xml;utf8,${encodeURIComponent(medida.sized)}`,
+            requestedWidthMm: item.requestedWidthMm,
+            requestedHeightMm: item.requestedHeightMm,
+            resolution: medida.resolution,
+            svgAspectRatio: medida.svgAspectRatio,
+            cancelLabel: 'Volver a revisión',
+          });
+          if (!elegida) return;
+          fabricationOverrideMm = elegida;
+        }
+      }
+      await saveSelloVector({
         selloId: item.selloId,
         orderId: item.orderId,
         designName: item.designName,
-        svgText: item.svg,
+        svgText,
         requestedWidthMm: item.requestedWidthMm,
         requestedHeightMm: item.requestedHeightMm,
         mode: item.mode,
-        fabricationOverrideMm: item.fabricationOverrideMm,
+        fabricationOverrideMm,
       });
+      if (sueltos) {
+        toast({
+          title: sueltos.cantidad === 1 ? 'Se quitó un punto suelto' : `Se quitaron ${sueltos.cantidad} puntos sueltos`,
+          description: item.designName,
+        });
+      }
       store.removeReview(item.id);
       store.removeLocal(item.selloId);
       // Registro para aprender de las ediciones (en segundo plano, no frena nada).
@@ -511,29 +575,15 @@ export function RevisionTab() {
         selloId: item.selloId,
         ordenId: item.orderId,
         original: originalOf(item),
-        final: item.svg,
+        final: svgText,
         eleccion: item.fresaChoice ?? 'original',
         operaciones: item.fresaChoice === 'original' ? null : item.fresaOps,
         propuestaVista: true,
         target: autoTarget(item),
-        targetFinal: reviewTarget(item),
+        targetFinal: reviewTarget({ ...item, fabricationOverrideMm }),
         tipoSello: item.stampType,
         alimento: item.alimento,
       });
-      if (saved.needsReview) {
-        store.setFabricationReviews([
-          ...useVectorizacionStore.getState().fabricationReviews,
-          {
-            selloId: item.selloId,
-            fileName: saved.fileName,
-            previewUrl: saved.url,
-            requestedWidthMm: item.requestedWidthMm,
-            requestedHeightMm: item.requestedHeightMm,
-            resolution: saved.resolution,
-            svgAspectRatio: saved.svgAspectRatio,
-          },
-        ]);
-      }
     } catch (error) {
       toast({
         title: 'No se pudo confirmar',
@@ -643,6 +693,10 @@ export function RevisionTab() {
             }}
             onChangeSvg={(svg) => store.updateReviewSvg(item.id, svg)}
             onChoose={(choice, svg, override, ops) => store.chooseReviewSvg(item.id, choice, svg, override, ops)}
+            onQuitarSueltos={() =>
+              store.quitarSueltosReview(item.id, (svg) => detectarPuntosSueltos(svg)?.limpio ?? svg)
+            }
+            onMantenerSueltos={() => store.setReviewMantenerSueltos(item.id, true)}
           />
         ))}
       </div>

@@ -146,4 +146,9 @@ export interface ReviewItem {
     /** Medida si se cambió en el editor (mm). */
     fabricationOverrideMm?: { widthMm: number; heightMm: number };
   };
+  /**
+   * Quien revisa dijo que los puntos lejos del diseño van (no son restos):
+   * no se quitan al confirmar. Ver `detectarPuntosSueltos`.
+   */
+  mantenerSueltos?: boolean;
 }

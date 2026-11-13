@@ -101,6 +101,17 @@ export type AddStampOptions = {
 const isVentaEquivalentToSenadoForPhoto = (estado: string | null | undefined): boolean =>
   estado == null || estado === '' || estado === 'Señado';
 
+/**
+ * Valor/seña: NULL en BD se muestra como 0 (mapSelloToOrderItem). Las celdas de
+ * archivos reenvían el ítem entero; sin esto, subir una base o un vector a un
+ * sello sin seña contaba como «cambió la seña» y le mandaba WhatsApp al cliente.
+ */
+const montoIgual = (db: unknown, ui: unknown): boolean => valuesEqual(db ?? 0, ui ?? 0);
+
+/** Igual que montoIgual: `diseno` NULL se muestra como «Sin diseño». */
+const disenoIgual = (db: unknown, ui: unknown): boolean =>
+  valuesEqual(db || 'Sin diseño', ui || 'Sin diseño');
+
 const enqueueVectorizationSafely = async (input: {
   selloId: string;
   orderId: string;
@@ -1140,7 +1151,7 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
         }
         if (item.designName !== undefined) {
           selloData.diseno = item.designName;
-          if (currentSello && !valuesEqual(currentSello.diseno, item.designName)) {
+          if (currentSello && !disenoIgual(currentSello.diseno, item.designName)) {
             shouldNotifyPedidoActualizado = true;
           }
         }
@@ -1149,13 +1160,13 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
         }
         if (item.itemValue !== undefined) {
           selloData.valor = item.itemValue;
-          if (currentSello && !valuesEqual(currentSello.valor, item.itemValue)) {
+          if (currentSello && !montoIgual(currentSello.valor, item.itemValue)) {
             shouldNotifyPedidoActualizado = true;
           }
         }
         if (item.depositValueItem !== undefined) {
           selloData.senia = item.depositValueItem;
-          if (currentSello && !valuesEqual(currentSello.senia, item.depositValueItem)) {
+          if (currentSello && !montoIgual(currentSello.senia, item.depositValueItem)) {
             shouldNotifyPedidoActualizado = true;
           }
         }

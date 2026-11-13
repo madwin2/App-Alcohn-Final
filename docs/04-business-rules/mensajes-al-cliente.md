@@ -5,7 +5,7 @@ Todos pasan por la edge `webhook-bot` hacia el **bot externo** (ver [07-integrat
 | ID | `tipo_actualizacion` | Cuándo se envía | Disparador | Hace cumplir |
 |---|---|---|---|---|
 | BR-WA-001 | `pedido_registrado` | Alta manual (salvo "no enviar"); confirmación de pedido web | `NewOrderDialog` → `notifyOrderRegistered`; edge `confirm-web-order` | UI / Edge |
-| BR-WA-002 | `pedido_actualizado` | Se agrega o borra un ítem de una orden (no en el alta) | `OrdersProvider.addStampToOrder/deleteStamp` | Servicio |
+| BR-WA-002 | `pedido_actualizado` | Se agrega o borra un ítem de una orden (no en el alta), o al editar cambia de verdad el diseño, el valor o la seña de un ítem. Cambiar el archivo base o el vector **no** manda mensaje (2026-11-13): valor/seña vacíos en BD cuentan como 0 y diseño vacío como «Sin diseño», que es como los muestra la app | `OrdersProvider.addStampToOrder/deleteStamp`; `updateOrder` (`montoIgual`/`disenoIgual`) | Servicio |
 | BR-WA-003 | `pedido_listo` | Se carga/cambia la foto de un ítem | trigger `trigger_foto_sello_subida` | DB |
 | BR-WA-004 | `pedido_enviado` | La orden pasa a `Despachado` con seguimiento | trigger `trigger_envio_despachado` | DB |
 | BR-WA-005 | `sello_rehacer` | Se registra un Rehacer (cualquier motivo) | `registrarRehacer` | Servicio |

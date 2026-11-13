@@ -8,6 +8,15 @@ import { useOrdersState } from '@/lib/hooks/useOrders';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils/cn';
 import type { Order, OrderItem } from '@/lib/types';
@@ -333,6 +342,9 @@ export default function HomePage() {
   const [isPersonalNote, setIsPersonalNote] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastPosRef = useRef({ x: 0, y: 0 });
+  /** Dónde se apretó: si se suelta sin moverse, es un click (abre la nota en grande). */
+  const pressRef = useRef({ x: 0, y: 0, moved: false });
+  const [openNote, setOpenNote] = useState<{ id: string; personal: boolean } | null>(null);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, id: string, currentX: number, currentY: number, personal: boolean) => {
@@ -344,6 +356,7 @@ export default function HomePage() {
         y: e.clientY - currentY,
       });
       lastPosRef.current = { x: currentX, y: currentY };
+      pressRef.current = { x: e.clientX, y: e.clientY, moved: false };
     },
     []
   );
@@ -352,6 +365,9 @@ export default function HomePage() {
     if (!draggingId || !containerRef.current) return;
 
     const handlePointerMove = (e: PointerEvent) => {
+      const press = pressRef.current;
+      if (!press.moved && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 4) return;
+      press.moved = true;
       const rect = containerRef.current!.getBoundingClientRect();
       const x = Math.max(0, Math.min(rect.width - NOTE_SIZE, e.clientX - rect.left - dragOffset.x));
       const y = Math.max(0, Math.min(rect.height - NOTE_SIZE, e.clientY - rect.top - dragOffset.y));
@@ -370,7 +386,9 @@ export default function HomePage() {
     };
 
     const handlePointerUp = () => {
-      if (!isPersonalNote && draggingId) {
+      if (!pressRef.current.moved) {
+        setOpenNote({ id: draggingId, personal: isPersonalNote });
+      } else if (!isPersonalNote) {
         const { x, y } = lastPosRef.current;
         handleColleagueTaskMove(draggingId, x, y);
       }
@@ -684,9 +702,11 @@ export default function HomePage() {
                 <div className="absolute inset-0 flex items-center justify-center p-2 text-[10px] text-foreground text-center leading-tight overflow-hidden pointer-events-none">
                   <span className="whitespace-pre-wrap line-clamp-3">{note.text}</span>
                 </div>
-                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-lg flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-lg flex flex-col items-center justify-center gap-1">
+                  <span className="text-[10px] text-white/60">Tocá para leer</span>
                   <button
                     type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleMarkDone(note.id);
@@ -726,17 +746,19 @@ export default function HomePage() {
                   alt=""
                   className="w-full h-full object-contain drop-shadow-[0_4px_20px_rgba(0,0,0,0.4)] pointer-events-none"
                 />
-                <div className="absolute inset-0 flex items-center justify-center p-2 text-[10px] text-foreground text-center leading-tight overflow-hidden pointer-events-none">
-                  <span
-                    className="whitespace-pre-wrap line-clamp-3"
-                    title={task.creadoPorNombre ? `De ${task.creadoPorNombre}` : undefined}
-                  >
-                    {task.texto}
-                  </span>
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-[10px] text-foreground text-center leading-tight overflow-hidden pointer-events-none">
+                  <span className="whitespace-pre-wrap line-clamp-3">{task.texto}</span>
+                  {task.creadoPorNombre ? (
+                    <span className="mt-0.5 max-w-full truncate text-[8px] text-foreground/60">
+                      {task.creadoPorNombre.split(' ')[0]}
+                    </span>
+                  ) : null}
                 </div>
-                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-lg flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/50 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-lg flex flex-col items-center justify-center gap-1">
+                  <span className="text-[10px] text-white/60">Tocá para leer</span>
                   <button
                     type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleColleagueTaskDone(task.id);
@@ -812,6 +834,47 @@ export default function HomePage() {
           currentUserId={user?.id || ''}
           onTaskCreated={fetchColleagueTasks}
         />
+
+        {(() => {
+          const personal = openNote?.personal ? notes.find((n) => n.id === openNote.id) : undefined;
+          const task = openNote && !openNote.personal ? stickyColleagueTasks.find((t) => t.id === openNote.id) : undefined;
+          const texto = personal?.text ?? task?.texto ?? '';
+          const close = () => setOpenNote(null);
+          return (
+            <Dialog open={Boolean(personal || task)} onOpenChange={(o) => !o && close()}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{task ? `Nota de ${task.creadoPorNombre ?? 'un compañero'}` : 'Tu nota'}</DialogTitle>
+                  {task ? (
+                    <DialogDescription>
+                      {new Date(task.createdAt).toLocaleString('es-AR', {
+                        day: 'numeric',
+                        month: 'long',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </DialogDescription>
+                  ) : null}
+                </DialogHeader>
+                <p className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words text-sm leading-relaxed">{texto}</p>
+                <DialogFooter>
+                  <Button variant="outline" onClick={close}>
+                    Cerrar
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (personal) handleMarkDone(personal.id);
+                      if (task) void handleColleagueTaskDone(task.id);
+                      close();
+                    }}
+                  >
+                    Hecho
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          );
+        })()}
 
         {/* 3 columnas dentro del hero: Stock | Personaje | Espacio.
             Las laterales se contraen verticalmente cuando tanda > 0. */}

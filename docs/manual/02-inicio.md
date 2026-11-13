@@ -32,7 +32,8 @@ Las fotos del equipo. Pasá el mouse por encima para ver el video de cada uno. S
 ### Notas y tareas
 
 - **Notas personales**: tocá **+** (**Agregar nota**), escribí y tocá **Listo**. Se pueden arrastrar. ⚠️ Quedan guardadas solo en esa computadora y ese navegador.
-- **Tareas de compañeros**: las que te asignaron otros. Muestran quién te la mandó. Cuando la terminás, tocá **Hecho** y desaparece.
+- **Tareas de compañeros**: las que te asignaron otros. Abajo del texto figura el nombre de quién te la mandó. Cuando la terminás, tocá **Hecho** y desaparece.
+- **Leer una nota completa**: en la nota chica solo entran unas pocas palabras. Tocala (sin arrastrar) y se abre en grande con todo el texto, quién la escribió y cuándo. Desde ahí también podés tocar **Hecho**.
 - **Asignar tarea a compañero**: elegí el **Compañero**, escribí la **Tarea** y tocá **Asignar**. Le aparece en su Inicio y le llega un aviso. No te podés asignar tareas a vos mismo.
 
 ### Stock pendiente

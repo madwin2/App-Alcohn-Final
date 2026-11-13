@@ -9,6 +9,10 @@ export interface FabricationSizeDialogPayload {
   resolution: FabricationSizeResolution;
   svgAspectRatio: number | null;
   onConfirm: (result: { widthMm: number; heightMm: number }) => void | Promise<void>;
+  /** Se cierra sin confirmar (Cancelar, Escape o la cruz). */
+  onCancel?: () => void;
+  /** Texto del botón de cancelar (por defecto «Cancelar»). */
+  cancelLabel?: string;
 }
 
 interface FabricationSizeDialogStore {
@@ -23,3 +27,19 @@ export const useFabricationSizeDialogStore = create<FabricationSizeDialogStore>(
   open: (payload) => set({ payload }),
   close: () => set({ payload: null }),
 }));
+
+/**
+ * Abre el popup y espera la decisión: la medida elegida, o null si se cerró
+ * sin confirmar.
+ */
+export function pedirMedidaFabricacion(
+  payload: Omit<FabricationSizeDialogPayload, 'onConfirm' | 'onCancel'>,
+): Promise<{ widthMm: number; heightMm: number } | null> {
+  return new Promise((resolve) => {
+    useFabricationSizeDialogStore.getState().open({
+      ...payload,
+      onConfirm: (result) => resolve(result),
+      onCancel: () => resolve(null),
+    });
+  });
+}

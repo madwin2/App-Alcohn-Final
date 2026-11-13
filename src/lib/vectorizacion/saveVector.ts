@@ -14,6 +14,47 @@ export interface SavedVector {
   needsReview: boolean;
 }
 
+export interface VectorSizing {
+  /** El SVG tal como se va a subir (lienzo ajustado al dibujo, medida en mm). */
+  sized: string;
+  resolution: FabricationSizeResolution;
+  svgAspectRatio: number | null;
+}
+
+/**
+ * La medida con la que se guardaría el vector, sin subir nada. Sirve para
+ * preguntar la medida ANTES de guardar (y poder volver atrás).
+ */
+export function medirVectorParaGuardar(params: {
+  svgText: string;
+  requestedWidthMm: number;
+  requestedHeightMm: number;
+  fabricationOverrideMm?: { widthMm: number; heightMm: number };
+}): VectorSizing {
+  const override = params.fabricationOverrideMm;
+  // Con medida elegida a mano, el archivo queda a esa medida (si no, a lo pedido).
+  const sized = override
+    ? applyPhysicalSize(params.svgText, override.widthMm, override.heightMm)
+    : applyPhysicalSize(params.svgText, params.requestedWidthMm, params.requestedHeightMm);
+
+  // El lienzo ya quedó ajustado al dibujo: su medida es la del dibujo. Medir
+  // el bbox en el navegador queda de respaldo (SVG que no se pudo leer).
+  const declared = declaredSizeMm(sized);
+  const fallback = declared ? null : measureSvgString(sized);
+  const measurement = declared
+    ? { ...declared, aspectRatio: declared.widthMm / declared.heightMm }
+    : fallback;
+  const measured = resolveFabricationSize(
+    params.requestedWidthMm,
+    params.requestedHeightMm,
+    measurement ? { widthMm: measurement.widthMm, heightMm: measurement.heightMm } : null,
+  );
+  const resolution = override
+    ? { ...measured, widthMm: override.widthMm, heightMm: override.heightMm, needsReview: false, reviewReason: null }
+    : measured;
+  return { sized, resolution, svgAspectRatio: measurement?.aspectRatio ?? parseViewBoxAspect(sized) };
+}
+
 export async function saveSelloVector(params: {
   selloId: string;
   orderId: string;
@@ -32,31 +73,11 @@ export async function saveSelloVector(params: {
     throw new Error('No se puede guardar un vector generado en modo test/preview.');
   }
 
-  const override = params.fabricationOverrideMm;
-  // Con medida elegida a mano, el archivo queda a esa medida (si no, a lo pedido).
-  const sized = override
-    ? applyPhysicalSize(params.svgText, override.widthMm, override.heightMm)
-    : applyPhysicalSize(params.svgText, params.requestedWidthMm, params.requestedHeightMm);
+  const { sized, resolution, svgAspectRatio } = medirVectorParaGuardar(params);
   const fileName = `${slugify(params.designName || 'vector')}.svg`;
   const path = generateFilePath(params.orderId, 'vector', fileName, params.selloId);
   const file = new File([sized], fileName, { type: 'image/svg+xml' });
   const url = await uploadFile('vector', file, path);
-
-  // El lienzo ya quedó ajustado al dibujo: su medida es la del dibujo. Medir
-  // el bbox en el navegador queda de respaldo (SVG que no se pudo leer).
-  const declared = declaredSizeMm(sized);
-  const fallback = declared ? null : measureSvgString(sized);
-  const measurement = declared
-    ? { ...declared, aspectRatio: declared.widthMm / declared.heightMm }
-    : fallback;
-  const measured = resolveFabricationSize(
-    params.requestedWidthMm,
-    params.requestedHeightMm,
-    measurement ? { widthMm: measurement.widthMm, heightMm: measurement.heightMm } : null,
-  );
-  const resolution = override
-    ? { ...measured, widthMm: override.widthMm, heightMm: override.heightMm, needsReview: false, reviewReason: null }
-    : measured;
 
   await setSelloVectorState(params.selloId, 'VECTORIZADO', {
     vectorUrl: url,
@@ -69,7 +90,7 @@ export async function saveSelloVector(params: {
     url,
     fileName,
     resolution,
-    svgAspectRatio: measurement?.aspectRatio ?? parseViewBoxAspect(sized),
+    svgAspectRatio,
     needsReview: resolution.needsReview,
   };
 }

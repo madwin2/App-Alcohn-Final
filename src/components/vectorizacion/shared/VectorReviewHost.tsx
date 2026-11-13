@@ -25,6 +25,9 @@ export function VectorReviewHost() {
         await saveFabricationSize(current.selloId, widthMm, heightMm);
         setReviews(useVectorizacionStore.getState().fabricationReviews.slice(1));
       },
+      // El vector ya quedó guardado: saltear deja el sello sin medida de fabricación confirmada.
+      onCancel: () => setReviews(useVectorizacionStore.getState().fabricationReviews.slice(1)),
+      cancelLabel: 'Saltear',
     });
   }, [open, payload, reviews, setReviews]);
 

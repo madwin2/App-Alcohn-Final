@@ -123,9 +123,14 @@ Tocalo y se abre el editor con la **imagen original debajo, en violeta**: todo l
 
 Si confirmás un vector con lugares donde la fresa no llega o con algo que puede faltar del original, la app pregunta antes (**Revisar** o **Confirmar igual**). **Confirmar todos** ofrece **Confirmar solo los OK**.
 
+La vista del vector en cada tarjeta muestra el lienzo ajustado al dibujo, igual que como se guarda. Si un **punto suelto** quedó colgado lejos del diseño (un resto de la vectorización), la tarjeta lo avisa: ese punto agranda la medida y el logo queda corrido con blanco al costado.
+- **Quitar ahora**: lo borra y vuelve a calcular la corrección automática con la medida real del diseño.
+- **Es parte del diseño**: lo deja como está.
+- Si no tocás nada, se quita solo al confirmar.
+
 🤖 Al confirmar, la app escala el vector a la medida pedida y lo mide:
 - Si entra bien en la planchuela y no se desvía más de 6 mm de lo pedido, se guarda directo.
-- Si no, aparece **Confirmar medida de fabricación** (ver abajo).
+- Si no, aparece **Confirmar medida de fabricación** (ver abajo) **antes de guardar**. **Volver a revisión** lo cierra sin guardar nada y el vector queda en la tarjeta para corregirlo.
 
 ## Pestaña Asignar SVG: subir vectores hechos a mano
 
@@ -157,6 +162,7 @@ Casi siempre son iguales. Cuando el logo tiene otra proporción, o no entra en l
 - **Usar vector medido**: usa la medida real del vector.
 - También podés **escribir Ancho (mm) y Alto (mm)** a mano (coma o punto decimal). Al hacer click se selecciona todo; Enter confirma. El candado bloquea o libera la proporción.
 - Tocá **Confirmar medida**.
+- Desde **Revisión**, **Volver a revisión** cierra sin guardar. Desde **Asignar SVG** el vector ya quedó guardado: **Saltear** lo deja sin medida de fabricación confirmada y pasa al siguiente.
 
 Si pediste el sello al máximo de la planchuela (ej. 40×40), el lado chico del vector se lleva solo al tope (36,5 mm) y el otro sale por proporción, sin aviso — salvo que el lado largo se aleje 6 mm o más.
 

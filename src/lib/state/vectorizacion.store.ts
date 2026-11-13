@@ -68,6 +68,12 @@ interface VectorizacionStore {
     fabricationOverrideMm?: { widthMm: number; heightMm: number },
     ops?: ReviewItem['fresaOps'],
   ) => void;
+  /**
+   * Quita los puntos sueltos del original (y de la edición a mano): la
+   * corrección automática se vuelve a calcular con la medida real del diseño.
+   */
+  quitarSueltosReview: (id: string, limpiar: (svg: string) => string) => void;
+  setReviewMantenerSueltos: (id: string, value: boolean) => void;
   removeReview: (id: string) => void;
   /** Carga inicial desde IndexedDB; fusiona con la cola en memoria (la sesión gana en conflictos). */
   hydrateReviewQueue: (items: ReviewItem[]) => void;
@@ -225,6 +231,34 @@ export const useVectorizacionStore = create<VectorizacionStore>((set, get) => ({
             }
           : item,
       ),
+    });
+    schedulePersistReviewQueue(() => get().reviewQueue);
+  },
+  quitarSueltosReview: (id, limpiar) => {
+    set({
+      reviewQueue: get().reviewQueue.map((item) => {
+        if (item.id !== id) return item;
+        const original = limpiar(item.originalSvg ?? item.svg);
+        const manual = item.manual ? { ...item.manual, svg: limpiar(item.manual.svg) } : undefined;
+        if (item.fresaChoice === 'manual' && manual) {
+          return { ...item, originalSvg: original, manual, svg: manual.svg };
+        }
+        return {
+          ...item,
+          originalSvg: original,
+          svg: original,
+          manual,
+          fresaChoice: undefined,
+          fresaOps: undefined,
+          fabricationOverrideMm: undefined,
+        };
+      }),
+    });
+    schedulePersistReviewQueue(() => get().reviewQueue);
+  },
+  setReviewMantenerSueltos: (id, value) => {
+    set({
+      reviewQueue: get().reviewQueue.map((item) => (item.id === id ? { ...item, mantenerSueltos: value } : item)),
     });
     schedulePersistReviewQueue(() => get().reviewQueue);
   },

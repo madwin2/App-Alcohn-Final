@@ -36,6 +36,7 @@ interface VectorSizeConfirmDialogProps {
   resolution: FabricationSizeResolution; // ya viene con needsReview: true
   svgAspectRatio: number | null;
   onConfirm: (result: { widthMm: number; heightMm: number }) => void | Promise<void>;
+  cancelLabel?: string;
 }
 
 export function VectorSizeConfirmDialog({
@@ -48,6 +49,7 @@ export function VectorSizeConfirmDialog({
   resolution,
   svgAspectRatio,
   onConfirm,
+  cancelLabel = 'Cancelar',
 }: VectorSizeConfirmDialogProps) {
   const [widthMm, setWidthMm] = useState(resolution.widthMm);
   const [heightMm, setHeightMm] = useState(resolution.heightMm);
@@ -257,7 +259,7 @@ export function VectorSizeConfirmDialog({
           </div>
 
           <div className="flex flex-wrap justify-between items-center gap-2 pt-2">
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
               <Button type="button" variant="link" size="sm" className="px-0" onClick={handleUseRequested}>
                 Acercar a lo pedido
               </Button>
@@ -269,7 +271,7 @@ export function VectorSizeConfirmDialog({
             </div>
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-                Cancelar
+                {cancelLabel}
               </Button>
               <Button type="button" onClick={handleConfirm} disabled={saving || !measureValid}>
                 {saving ? 'Guardando…' : 'Confirmar medida'}

@@ -10,8 +10,14 @@ export function FabricationSizeDialogHost() {
     <VectorSizeConfirmDialog
       open={payload != null}
       onOpenChange={(next) => {
-        if (!next) close();
+        if (next) return;
+        // Después de confirmar el payload ya se limpió: esto es un cierre sin confirmar.
+        const current = useFabricationSizeDialogStore.getState().payload;
+        if (!current) return;
+        close();
+        current.onCancel?.();
       }}
+      cancelLabel={payload?.cancelLabel}
       fileName={payload?.fileName ?? ''}
       previewUrl={payload?.previewUrl}
       requestedWidthMm={payload?.requestedWidthMm ?? 0}
@@ -32,6 +38,7 @@ export function FabricationSizeDialogHost() {
       onConfirm={async (result) => {
         if (!payload) return;
         await payload.onConfirm(result);
+        if (useFabricationSizeDialogStore.getState().payload === payload) close();
       }}
     />
   );

@@ -1539,6 +1539,34 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 85,
+    date: '2026-11-13',
+    title: 'Puntos sueltos, medida y notas',
+    version: '2.03',
+    slides: [
+      {
+        heading: 'Revisión avisa los puntos sueltos',
+        body: 'Si quedó un punto colgado lejos del logo, la tarjeta lo avisa y lo podés quitar. Si no lo tocás, se quita solo al confirmar, y el logo ya no queda corrido.',
+        icon: ScanSearch,
+      },
+      {
+        heading: 'Podés volver atrás desde la medida',
+        body: 'Si al confirmar aparece «Confirmar medida de fabricación», ahora sale antes de guardar: «Volver a revisión» lo cierra y el vector sigue en su tarjeta.',
+        icon: Ruler,
+      },
+      {
+        heading: 'Notas del Inicio en grande',
+        body: 'Tocá una nota y se abre con todo el texto, quién la escribió y cuándo.',
+        icon: Pin,
+      },
+      {
+        heading: 'Cambiar archivos no avisa al cliente',
+        body: 'Subir o cambiar la base o el vector de un pedido ya no le manda WhatsApp al cliente.',
+        icon: MessageCircle,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */
