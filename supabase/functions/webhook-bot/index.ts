@@ -591,8 +591,16 @@ Deno.serve(async (req: Request) => {
         const ordenTodosHecho = todosItemsHecho(rawSellos);
         body.datos.todos_items_hecho = ordenTodosHecho;
 
+        // Pedido terminado = sellos/ABC con foto y accesorios Hecho. Si falta algo,
+        // nunca se cobra: es_ultimo_sello=false → el bot manda “en proceso”.
+        const accesorios = rawSellos.filter((s: { item_type?: unknown }) =>
+          !itemRequiereFotoCliente(s)
+        );
+        const accesoriosHecho = accesorios.length === 0 || todosItemsHecho(accesorios);
+        const pedidoTerminado = todosLosItemsTienenFoto && accesoriosHecho;
+
         // Accesorio que cierra el pedido → plantilla de cobro (no la de “falta el resto”).
-        const esAccesorioCierraPedido = esAccesorioListo && ordenTodosHecho;
+        const esAccesorioCierraPedido = esAccesorioListo && ordenTodosHecho && pedidoTerminado;
         if (esAccesorioCierraPedido) {
           body.tipo_actualizacion = "accesorio_pedido_completo";
           body.datos.es_ultimo_sello = true;
@@ -620,15 +628,15 @@ Deno.serve(async (req: Request) => {
         }
 
         const esUltimoSelloPayload = parseBoolean(body?.datos?.es_ultimo_sello);
-        // Solo en pedido_listo: si el payload pierde `es_ultimo_sello`, inferimos desde DB
-        // (todas las fotos presentes). Así no alteramos otros tipos de webhook.
-        const esUltimoSello =
-          esUltimoSelloPayload || (esPedidoListo && todosLosItemsTienenFoto);
+        // En pedido_listo manda la DB, no el payload.
+        const esUltimoSello = esPedidoListo ? pedidoTerminado : esUltimoSelloPayload;
 
-        if (esPedidoListo && todosLosItemsTienenFoto && !esUltimoSelloPayload) {
-          console.log("es_ultimo_sello inferido por DB (todas las fotos presentes)", {
+        if (esPedidoListo && esUltimoSelloPayload !== pedidoTerminado) {
+          console.log("pedido_listo: es_ultimo_sello corregido por DB", {
             numero_pedido: numeroPedido,
-            total_items_con_foto_app: itemsConFotoEnApp.length,
+            payload: esUltimoSelloPayload,
+            pedido_terminado: pedidoTerminado,
+            accesorios_hecho: accesoriosHecho,
           });
         }
 
@@ -706,13 +714,13 @@ Deno.serve(async (req: Request) => {
             body.datos.pedir_empresa_envio = false;
 
             // Link Andreani: solo si TODOS los ítems están Hecho (sello, soldador, etc.).
-            // En pedido_listo va en el mismo payload; si cerró un accesorio, follow-up aparte.
-            if (esPedidoListo && ordenTodosHecho) {
+            // Va en el mismo payload; el bot lo manda después del cobro con la plantilla link_andreani.
+            if ((esPedidoListo || esAccesorioCierraPedido) && ordenTodosHecho) {
               await asignarLinkAndreaniSiFalta({
                 supabase,
                 numeroPedido,
                 datos: body.datos,
-                motivo: "pedido_listo",
+                motivo: esAccesorioCierraPedido ? "accesorio_pedido_completo" : "pedido_listo",
               });
             } else if (esPedidoListo && !ordenTodosHecho) {
               console.log(
@@ -782,49 +790,10 @@ Deno.serve(async (req: Request) => {
           delete body.datos.es_andreani;
           delete body.datos.pedir_empresa_envio;
         }
-
-        // Accesorio que cierra pedido + Andreani → plantilla link_andreani después del cobro.
-        if (esAccesorioCierraPedido && esAndreani) {
-          body.datos.es_andreani = true;
-          const linkHolder: Record<string, unknown> = {};
-          await asignarLinkAndreaniSiFalta({
-            supabase,
-            numeroPedido,
-            datos: linkHolder,
-            motivo: "accesorio_pedido_completo→link_andreani",
-          });
-          const url =
-            typeof linkHolder.link_andreani === "string"
-              ? linkHolder.link_andreani.trim()
-              : "";
-          if (url) {
-            (body as Record<string, unknown>)._followup_link_andreani = {
-              numero_telefono: body.numero_telefono,
-              nombre: body.nombre,
-              tipo_actualizacion: "link_andreani",
-              datos: {
-                ...(body.datos || {}),
-                link_andreani: url,
-                numero_pedido: numeroPedido,
-              },
-            };
-          }
-        }
       }
     } else if (!numeroPedido) {
       console.log("Request sin datos.numero_pedido, se envía payload original.");
     }
-
-    const followupLinkAndreani = (body as Record<string, unknown>)
-      ._followup_link_andreani as
-      | {
-        numero_telefono: string;
-        nombre: string;
-        tipo_actualizacion: string;
-        datos: Record<string, unknown>;
-      }
-      | undefined;
-    delete (body as Record<string, unknown>)._followup_link_andreani;
 
     // Enviar webhook al bot con timeout
     const controller = new AbortController();
@@ -866,39 +835,6 @@ Deno.serve(async (req: Request) => {
         botSuccess,
         botResponse,
       });
-
-      // Tras accesorio_pedido_completo OK: plantilla aparte link_andreani.
-      if (botSuccess && followupLinkAndreani) {
-        try {
-          const followController = new AbortController();
-          const followTimeout = setTimeout(
-            () => followController.abort(),
-            BOT_WEBHOOK_TIMEOUT,
-          );
-          console.log("payload followup link_andreani", followupLinkAndreani);
-          const followRes = await fetch(BOT_WEBHOOK_URL, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-webhook-token": WEBHOOK_TOKEN,
-            },
-            body: JSON.stringify(followupLinkAndreani),
-            signal: followController.signal,
-          });
-          clearTimeout(followTimeout);
-          const followText = await followRes.text();
-          console.log("bot response link_andreani followup", {
-            status: followRes.status,
-            ok: followRes.ok,
-            body: followText.slice(0, 500),
-          });
-        } catch (followErr) {
-          console.error(
-            "Error enviando followup link_andreani tras accesorio_listo",
-            followErr,
-          );
-        }
-      }
 
       // Si el bot respondió exitosamente y es envío de seguimiento, actualizar estado
       if (

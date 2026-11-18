@@ -34,7 +34,7 @@ flowchart LR
 
 ## Reglas de cobro (`pedido_listo`)
 
-Ver [mensajes-al-cliente.md](../04-business-rules/mensajes-al-cliente.md#reglas-monto-pedido-listo). Incluye la **asignación del link de Andreani** del pool (solo con **todos** los ítems `Hecho`). Si el que completa es un accesorio: la edge reescribe a `accesorio_pedido_completo` (cobro) y luego follow-up `link_andreani`. Si aún faltan ítems, deja `accesorio_listo`. También la regla de **envío gratis con ≥3 sellos**.
+Ver [mensajes-al-cliente.md](../04-business-rules/mensajes-al-cliente.md#reglas-monto-pedido-listo). En `pedido_listo` la edge recalcula `es_ultimo_sello` desde la DB (sellos/ABC con foto **y** accesorios `Hecho`); si falta algo va en `false` y el bot usa la plantilla `pedido_listo_en_proceso`, sin cobro. Incluye la **asignación del link de Andreani** del pool (solo con **todos** los ítems `Hecho`). Si el que completa es un accesorio: la edge reescribe a `accesorio_pedido_completo` (cobro) y pone el link de Andreani en el mismo payload; el bot lo manda después del cobro con la plantilla `link_andreani` (la edge ya no hace un segundo envío; verificado contra lo desplegado 2026-11-16). Si aún faltan ítems, deja `accesorio_listo`. También la regla de **envío gratis con ≥3 sellos**.
 
 ## Salida y efectos
 
@@ -55,6 +55,14 @@ Ver [mensajes-al-cliente.md](../04-business-rules/mensajes-al-cliente.md#reglas-
 ## Configuración
 
 Secretos de la edge: `BOT_WEBHOOK_URL`, `WEBHOOK_TOKEN`, `BOT_WEBHOOK_TIMEOUT_MS`, `COSTO_ENVIO_SUCURSAL`, `COSTO_ENVIO_DOMICILIO`, `SUPABASE_SERVICE_ROLE_KEY`. Frontend: `VITE_ORDER_WEBHOOK_FUNCTION_NAME` (default `webhook-bot`).
+
+## Datos de envío cargados por Francisco (18/11/2026)
+
+- Solo Correo Argentino y Vía Cargo, en la etapa posterior a la foto del sello listo.
+- El bot (`agente-ventas/envio_datos.js` en el repo del bot) normaliza y revisa los datos (provincia, DNI, CP, teléfono, mail, localidad contra georef), le manda al cliente un resumen con títulos y, cuando el cliente confirma, inserta una fila en `direcciones` y actualiza `ordenes.direccion_id`, `tipo_envio` y `notas_web.envio_francisco`. **No** completa `envio_datos_cargado_at`: en Envíos aparece «Francisco — sin confirmar» hasta que el equipo toca Confirmar.
+- No pisa datos ya cargados o confirmados por el equipo ni pedidos con etiqueta; en esos casos deja un pendiente en Revisión del bot.
+- Correo a sucursal: el código MiCorreo sale de `correo_sucursales`.
+- Al confirmar desde la app se conserva el DNI de la dirección anterior.
 
 ## Riesgos observados
 

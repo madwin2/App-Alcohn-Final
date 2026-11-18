@@ -1567,6 +1567,19 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 86,
+    date: '2026-11-18',
+    title: 'Datos de envío cargados por Francisco',
+    version: '2.04',
+    slides: [
+      {
+        heading: 'Francisco carga los datos de envío',
+        body: 'En Correo Argentino y Vía Cargo, Francisco le pide los datos al cliente por WhatsApp, se los muestra para que los confirme y los deja en el pedido. En Envíos aparecen como «Francisco — sin confirmar»: revisalos y tocá Confirmar.',
+        icon: Truck,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

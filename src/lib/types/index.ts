@@ -191,6 +191,8 @@ export interface Order {
   internationalShipping?: number | null;
   /** Datos de destino DHL (notas_web.international.shippingForm). */
   internationalAddress?: Record<string, string> | null;
+  /** Datos de envío que cargó Francisco (bot) tras confirmarlos con el cliente: falta que el equipo los confirme. */
+  shippingLoadedByBot?: boolean;
 }
 
 export type LabelState = 'pendiente' | 'generando' | 'generada' | 'pagando' | 'pagada' | 'error';

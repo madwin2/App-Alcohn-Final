@@ -375,6 +375,7 @@ export const mapOrdenToOrder = (
     },
     international: paisDesdeNotasWeb(orden.notas_web),
     internationalShipping: Number((orden.notas_web as { international?: { shipping?: number } } | null)?.international?.shipping ?? 0) || null,
+    shippingLoadedByBot: Boolean((orden.notas_web as { envio_francisco?: unknown } | null)?.envio_francisco),
     internationalAddress: ((orden.notas_web as { international?: { shippingForm?: Record<string, string> } } | null)?.international?.shippingForm as Record<string, string>) ?? null,
     items,
     tasks: tareas.map(mapTareaToTask),

@@ -163,9 +163,15 @@ const isSaleReadyForShippingData = (order: Order): boolean => {
 
 const isWebOrder = (order: Order): boolean => order.origen === 'Web';
 
-/** Datos del checkout web aún no confirmados por operaciones (`envio_datos_cargado_at`). */
+/** Datos cargados por Francisco (bot) tras confirmarlos con el cliente. */
+const isBotShippingData = (order: Order): boolean => order.shippingLoadedByBot === true;
+
+/**
+ * Datos del checkout web, o cargados por Francisco, aún no confirmados por
+ * operaciones (`envio_datos_cargado_at`).
+ */
 const isWebPendingShippingConfirmation = (order: Order): boolean =>
-  isWebOrder(order) && Boolean(order.direccionId) && !order.shippingDataLoadedAt;
+  (isWebOrder(order) || isBotShippingData(order)) && Boolean(order.direccionId) && !order.shippingDataLoadedAt;
 
 /** Andreani usa links/etiquetas propias; no entra en el flujo de datos MiCorreo. */
 const isAndreaniShipping = (order: Order): boolean => order.shipping?.carrier === 'ANDREANI';
@@ -1008,6 +1014,18 @@ export default function EnviosPage() {
           ? manualSucursalCode.trim()
           : null;
 
+      // El formulario no tiene DNI: se conserva el de la dirección anterior
+      // (ej. el que cargó Francisco por WhatsApp), así no se pierde al confirmar.
+      let dniAnterior: string | null = null;
+      if (selectedOrder.direccionId) {
+        const { data: dirAnterior } = await supabase
+          .from('direcciones')
+          .select('dni')
+          .eq('id', selectedOrder.direccionId)
+          .maybeSingle();
+        dniAnterior = (dirAnterior as { dni?: string | null } | null)?.dni ?? null;
+      }
+
       const { data: addressRow, error: addressError } = await supabase
         .from('direcciones')
         .insert({
@@ -1022,7 +1040,7 @@ export default function EnviosPage() {
           nombre: firstName,
           apellido: lastName,
           telefono: normalizePhoneDigitsForEnvios(normalizedForm.phone) || null,
-          dni: null,
+          dni: dniAnterior,
         })
         .select('id')
         .single();
@@ -1481,7 +1499,7 @@ export default function EnviosPage() {
             </span>
             {isWebPendingShippingConfirmation(order) ? (
               <Badge variant="outline" className="w-fit px-1.5 py-0 text-[10px] font-normal">
-                Web — sin confirmar
+                {isBotShippingData(order) ? 'Francisco — sin confirmar' : 'Web — sin confirmar'}
               </Badge>
             ) : null}
           </div>
@@ -1826,12 +1844,16 @@ export default function EnviosPage() {
           <DialogHeader>
             <DialogTitle>
               {selectedOrder && isWebPendingShippingConfirmation(selectedOrder)
-                ? 'Confirmar datos de envío (web)'
+                ? isBotShippingData(selectedOrder)
+                  ? 'Confirmar datos de envío (cargados por Francisco)'
+                  : 'Confirmar datos de envío (web)'
                 : 'Cargar datos de envío'}
             </DialogTitle>
             <DialogDescription>
               {selectedOrder && isWebPendingShippingConfirmation(selectedOrder)
-                ? 'Revisá los datos del checkout, corregí si hace falta y confirmá antes de generar etiqueta.'
+                ? isBotShippingData(selectedOrder)
+                  ? 'Francisco los pidió por WhatsApp y el cliente los confirmó. Revisalos, corregí si hace falta y confirmá antes de generar etiqueta.'
+                  : 'Revisá los datos del checkout, corregí si hace falta y confirmá antes de generar etiqueta.'
                 : 'Pegá el mensaje del cliente, revisá el parseo y confirmá antes de guardar.'}
             </DialogDescription>
           </DialogHeader>
