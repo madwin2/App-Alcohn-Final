@@ -72,19 +72,36 @@ async function latestPreparation(machine: PreparationDocument['machine'], except
 }
 
 /**
- * Grande y XL usan las mismas fresas y trayectorias que la Chica (usuario,
- * 2026-10-20): si todavía no tienen plantillas propias, se reciclan las de la
- * Chica. El soporte nunca se recicla: es de cada máquina.
+ * Grande y XL usan siempre las trayectorias de la Chica (usuario, 2026-10-20 y
+ * 2026-11-20): las capas que arma el gadget son las mismas en las tres
+ * máquinas, así que las plantillas sirven tal cual. Lo que se suba en un
+ * programa Grande o XL queda solo en ese programa. El soporte nunca se
+ * comparte: es de cada máquina.
  */
-const SHARES_CHICA_TEMPLATES: PreparationDocument['machine'][] = ['G', 'XL'];
+const USES_CHICA_TEMPLATES: PreparationDocument['machine'][] = ['G', 'XL'];
+
+/** De dónde salen el soporte (de la máquina) y las plantillas (Chica para G/XL). */
+async function setupSources(machine: PreparationDocument['machine'], exceptProgramId?: string) {
+  const own = await latestPreparation(machine, exceptProgramId);
+  const templatesRow = USES_CHICA_TEMPLATES.includes(machine) ? await latestPreparation('C', exceptProgramId) : own;
+  if (!templatesRow) return null;
+  const nameOf = (row: NonNullable<typeof own>) => (row.programa as unknown as { nombre?: string } | null)?.nombre ?? 'otro programa';
+  const support = own?.documento as PreparationDocument | undefined;
+  const templates = templatesRow.documento as PreparationDocument;
+  return {
+    templatesFrom: templatesRow.programa_id as string, templates,
+    support: support
+      ? { columns: support.columns.map((c) => ({ ...c, available: true })), gapMm: support.gapMm, supportVerified: support.supportVerified }
+      : { columns: defaultColumns(machine), gapMm: templates.gapMm, supportVerified: false },
+    fromProgramName: templatesRow === own ? nameOf(templatesRow) : `${nameOf(templatesRow)} (Chica)`,
+  };
+}
 
 export async function inheritMachineSetup(programId: string, machine: PreparationDocument['machine']): Promise<MachineSetup | null> {
-  const own = await latestPreparation(machine, programId);
-  const row = own ?? (SHARES_CHICA_TEMPLATES.includes(machine) ? await latestPreparation('C', programId) : null);
-  if (!row) return null;
-  const borrowed = !own;
-  const source = row.documento as PreparationDocument;
-  const from = row.programa_id as string;
+  const src = await setupSources(machine, programId);
+  if (!src) return null;
+  const from = src.templatesFrom;
+  const source = src.templates;
   const copy = async (path: string) => {
     if (!path.startsWith(`${from}/`)) throw new Error('Ruta de plantilla ajena.');
     const rest = path.slice(from.length + 1);
@@ -103,38 +120,25 @@ export async function inheritMachineSetup(programId: string, machine: Preparatio
       for (const [kind, file] of Object.entries(r.fineTemplates ?? {}) as ['full' | 'internal', { name: string; path: string }][])
         fineTemplates[kind] = { name: file.name, path: await copy(file.path) };
       recipes[recipe] = {
-        // Prestadas de la Chica: se confirman en esta máquina antes de usarlas.
-        templates: r.templates, verified: borrowed ? false : r.verified,
+        templates: r.templates, verified: r.verified,
         ...(r.templatePaths ? { templatePaths: await Promise.all(r.templatePaths.map(copy)) } : {}),
         ...(r.fineTemplates ? { fineTemplates } : {}),
         ...(r.perimeterTemplate ? { perimeterTemplate: { name: r.perimeterTemplate.name, path: await copy(r.perimeterTemplate.path) } } : {}),
       };
     }
-    const nombre = (row.programa as unknown as { nombre?: string } | null)?.nombre ?? 'otro programa';
-    if (borrowed) return { columns: defaultColumns(machine), gapMm: source.gapMm, supportVerified: false, recipes, fromProgramName: `${nombre} (Chica)` };
-    return { columns: source.columns.map((c) => ({ ...c, available: true })), gapMm: source.gapMm,
-      supportVerified: source.supportVerified, recipes, fromProgramName: nombre };
+    return { ...src.support, recipes, fromProgramName: src.fromProgramName };
   } catch {
     return null;
   }
 }
 
 /**
- * Soporte y plantillas de la última preparación de la máquina, solo para
- * mostrar (no copia plantillas). Al guardar por primera vez se usa
- * `inheritMachineSetup`, que sí las copia a la carpeta del programa.
+ * Soporte y plantillas de la máquina, solo para mostrar (no copia
+ * plantillas). Al guardar por primera vez se usa `inheritMachineSetup`, que
+ * sí las copia a la carpeta del programa.
  */
 export async function peekMachineSetup(machine: PreparationDocument['machine']): Promise<MachineSetup | null> {
-  const own = await latestPreparation(machine);
-  const row = own ?? (SHARES_CHICA_TEMPLATES.includes(machine) ? await latestPreparation('C') : null);
-  if (!row) return null;
-  const source = row.documento as PreparationDocument;
-  const nombre = (row.programa as unknown as { nombre?: string } | null)?.nombre ?? 'otro programa';
-  if (!own) {
-    const recipes = { ...source.recipes };
-    for (const r of ['CLASICO', '3MM', 'ALIMENTO'] as const) recipes[r] = { ...recipes[r], verified: false };
-    return { columns: defaultColumns(machine), gapMm: source.gapMm, supportVerified: false, recipes, fromProgramName: `${nombre} (Chica)` };
-  }
-  return { columns: source.columns.map((c) => ({ ...c, available: true })), gapMm: source.gapMm,
-    supportVerified: source.supportVerified, recipes: source.recipes, fromProgramName: nombre };
+  const src = await setupSources(machine);
+  if (!src) return null;
+  return { ...src.support, recipes: src.templates.recipes, fromProgramName: src.fromProgramName };
 }
