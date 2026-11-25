@@ -497,7 +497,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       if (updatedOrder) {
         syncBothLists(orderId, updatedOrder);
         if (options?.notifyCustomer !== false) {
-          void ordersService.notifyOrderUpdated(updatedOrder);
+          ordersService.requestNotifyOrderUpdated(updatedOrder);
         }
       }
       return newStamp;
@@ -516,7 +516,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         const updatedOrder = await ordersService.getOrderById(orderWithStamp.id);
         if (updatedOrder) {
           syncBothLists(orderWithStamp.id, updatedOrder);
-          void ordersService.notifyOrderUpdated(updatedOrder);
+          ordersService.requestNotifyOrderUpdated(updatedOrder);
         }
       }
     },

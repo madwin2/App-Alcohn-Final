@@ -38,7 +38,7 @@ Cada usuario aprobado entra **solo a su** página (`/perfil`, sin parámetro de 
 - Carga directa de vacaciones y cambios de día (sin aprobación). Aviso si el saldo queda negativo (no bloquea). Editar/borrar futuros (admin: también pasados).
 - Notificaciones `e1_vacaciones_cargadas`, `e1_vacaciones_cambiadas` y `e1_vacaciones_canceladas` al resto del equipo (POL-058).
 - Aviso en el **encabezado** (admin) si faltan feriados nacionales del año en curso o del siguiente (EQ-R09).
-- Quien no es admin solo elige fechas **futuras** al cargar vacaciones o cambio de día; el admin corrige cualquier fecha desde **Equipo** → **Ver ausencias** (POL-056).
+- Quien no es admin puede cargar **vacaciones ya tomadas** (fechas pasadas) además de futuras; el **cambio de día** sigue siendo solo a futuro. Lo que tiene fecha de inicio hoy o pasada ya no lo edita ni lo borra la persona: lo corrige el admin desde **Equipo** → **Ver ausencias** (POL-056, revisada 2026-11-25).
 - Feriados: importación desde ArgentinaDatos (`api.argentinadatos.com`) + días de la empresa (admin).
 - **Tareas recurrentes** (`tareas_recurrentes`): diaria / semanal / quincenal / mensual / **unica** (un solo día concreto; la fecha va en `fecha` o legacy `semana_inicio`). Pestaña **Tareas** = gestión (crear, reordenar, pausar); **Mi día** = marcar ocurrencias (`AccionesTarea`). Cada uno crea y edita **sus** tareas; el admin también puede sumarles (badge “Sumada por…”, notificación `e2_tarea_recurrente_asignada`).
 - **Anotaciones** (`notas_personales`, D3): solo las ve quien las escribe; ni el admin. Lista + editor Markdown con vista previa, autoguardado (~800 ms), fijar y buscar. Los post-its del Inicio **no** se migran.

@@ -93,7 +93,7 @@ Clic derecho sobre un pedido o un ítem:
 | **Eliminar sello** | Borra ese ítem (solo en el renglón de un ítem) |
 | **Quitar link Andreani** / **Reasignar link Andreani** | Ver [Links de Andreani](#links-de-andreani) |
 | **Descargar hoja de fabricación** | Solo en abecedarios |
-| **Eliminar pedido** | Borra el pedido entero con todos sus ítems. ⚠️ No se puede deshacer |
+| **Eliminar pedido** | Pregunta «¿Estás seguro de que querés eliminar?» y, solo si apretás **Sí**, borra el pedido entero con todos sus ítems. ⚠️ No se puede deshacer |
 
 ## Cargar un pedido nuevo
 

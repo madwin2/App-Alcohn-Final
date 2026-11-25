@@ -1580,6 +1580,29 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
       },
     ],
   },
+  {
+    id: 87,
+    date: '2026-11-25',
+    title: 'Confirmaciones y vacaciones pasadas',
+    version: '2.05',
+    slides: [
+      {
+        heading: 'Eliminar un pedido pide confirmación',
+        body: 'Al tocar «Eliminar pedido» aparece un cartel preguntando si estás seguro. Solo se borra si apretás «Sí».',
+        icon: Trash2,
+      },
+      {
+        heading: 'Vos decidís si sale el WhatsApp al editar',
+        body: 'Cuando cambiás valor, seña, diseño o sellos de un pedido, la app te pregunta si le manda el WhatsApp al cliente. Solo se manda con «Sí, enviar».',
+        icon: MessageCircle,
+      },
+      {
+        heading: 'Cargá las vacaciones que ya te tomaste',
+        body: 'En tu perfil ya podés elegir días pasados al cargar vacaciones. Una vez cargadas, para cambiarlas o borrarlas pedíselo al admin.',
+        icon: CalendarDays,
+      },
+    ],
+  },
 ];
 
 /** La tanda de novedades más reciente publicada, o null si todavía no hay ninguna. */

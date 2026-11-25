@@ -49,6 +49,7 @@ La pantalla usa todo el ancho: a la izquierda lo de hoy, a la derecha un resumen
 5. Clic en un chip → detalle; en tareas, las mismas acciones de marcado.
 6. Filtrá por persona con **Todos** / **Solo yo** / nombres con su color (aplica a lo público; tus tareas tienen su interruptor).
 7. A la derecha del calendario, **Mis vacaciones y cambios**: cuántos días te quedan, lo **próximo** y lo **pasado** (los pasados se ven de a 4, con **Ver todos**). Editás o borrás lo que **todavía no empezó**. Para corregir algo que ya empezó, pedíselo a Julián.
+8. **Vacaciones que ya te tomaste**: al cargar vacaciones podés elegir días pasados (la app te avisa que, una vez cargadas, cambiarlas o borrarlas queda para Julián). El **cambio de día** sigue siendo solo para días futuros.
 
 Cuando alguien carga, **cambia fechas** o **cancela** vacaciones, el resto del equipo recibe una notificación.
 

@@ -1,5 +1,6 @@
 import { supabase } from '../client';
 import { Order, OrderItem, Customer, NewOrderFormData, Task, ShippingCarrier, ShippingServiceDest, ShippingState, ReworkCharge, AndreaniLinkRevision } from '../../types/index';
+import { pedirConfirmacionWhatsappActualizado } from '@/lib/state/whatsappActualizadoConfirm.store';
 import { 
   mapOrdenToOrder, 
   mapSelloToOrderItem, 
@@ -201,10 +202,22 @@ export const notifyOrderRegistered = async (order: Order): Promise<void> => {
   }
 };
 
+/** true si notifyOrderUpdated le mandaría el WhatsApp a este cliente. */
+export const seMandariaWhatsappActualizado = (order: Order): boolean =>
+  order.orderType !== 'PRUEBA' && !order.customer.isInternal && !!order.customer.phoneE164?.trim();
+
+/**
+ * Al editar un pedido no se manda directo: sale un cartel «¿Enviar WhatsApp?» y
+ * solo se manda con «Sí» (ConfirmarWhatsappActualizadoHost).
+ */
+export const requestNotifyOrderUpdated = (order: Order): void => {
+  if (!seMandariaWhatsappActualizado(order)) return;
+  pedirConfirmacionWhatsappActualizado(order);
+};
+
 export const notifyOrderUpdated = async (order: Order): Promise<void> => {
   try {
-    if (order.orderType === 'PRUEBA' || order.customer.isInternal) return;
-    if (!order.customer.phoneE164?.trim()) return;
+    if (!seMandariaWhatsappActualizado(order)) return;
 
     await invokeBotWebhook({
       numeroTelefono: order.customer.phoneE164,
@@ -1472,7 +1485,7 @@ export const updateOrder = async (orderId: string, updates: Partial<Order>): Pro
     }
 
     if (shouldNotifyPedidoActualizado) {
-      void notifyOrderUpdated(finalOrder);
+      requestNotifyOrderUpdated(finalOrder);
     }
 
     return finalOrder;

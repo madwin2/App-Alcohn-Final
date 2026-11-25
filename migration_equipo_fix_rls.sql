@@ -48,7 +48,9 @@ CREATE POLICY ausencias_select ON public.ausencias_equipo
   FOR SELECT TO authenticated
   USING (public.es_miembro_equipo());
 
--- EQ-R05: no admin solo inserta/actualiza con fecha_desde > hoy (AR)
+-- EQ-R05: no admin solo inserta/actualiza con fecha_desde > hoy (AR).
+-- Excepción (POL-056 revisada 2026-11-25): las vacaciones ya tomadas se pueden
+-- cargar con fecha pasada; editarlas o borrarlas después queda para el admin.
 DROP POLICY IF EXISTS ausencias_insert ON public.ausencias_equipo;
 CREATE POLICY ausencias_insert ON public.ausencias_equipo
   FOR INSERT TO authenticated
@@ -58,7 +60,10 @@ CREATE POLICY ausencias_insert ON public.ausencias_equipo
       public.es_admin_equipo()
       OR (
         user_id = auth.uid()
-        AND fecha_desde > (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+        AND (
+          tipo = 'vacaciones'
+          OR fecha_desde > (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+        )
       )
     )
   );

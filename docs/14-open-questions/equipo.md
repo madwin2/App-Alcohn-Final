@@ -50,6 +50,7 @@ Preguntas del plan [`PLAN_PAGINA_PERSONAL.md`](../../PLAN_PAGINA_PERSONAL.md) (Q
 - **Por qué importa**: hoy se permite y la persona queda sin poder editarlo ni borrarlo.
 - **Impacto**: alto (EQ-R05).
 - **Respuesta**: No. La persona solo carga ausencias **futuras**; lo de hoy o retroactivo lo carga el admin (UI + RLS). → [POL-056](../04-business-rules/politicas-confirmadas.md)
+- **Actualización 2026-11-25**: el dueño pidió habilitar cargar las **vacaciones ya tomadas**. Las vacaciones se pueden cargar con fechas pasadas; el cambio de día sigue solo a futuro. Una vez cargadas, editar/borrar lo pasado sigue siendo del admin.
 
 ### Q-EQ-008
 - **Módulo**: perfil · **Estado**: documentada (2026-10-05)

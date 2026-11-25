@@ -182,10 +182,13 @@ export function CargarVacacionesDialog({
     [ausencias, perfil.userId, initial]
   )
 
-  const fechaPasadaBloqueada =
-    !esAdmin &&
-    ((!!desdeKey && fechaNoPermitidaParaNoAdmin(desdeKey, hoy)) ||
-      (!!hastaKey && fechaNoPermitidaParaNoAdmin(hastaKey, hoy)))
+  /**
+   * POL-056 (revisada 2026-11-25): las vacaciones que ya te tomaste se pueden
+   * cargar igual. Solo avisamos que después no las vas a poder editar ni borrar
+   * (RLS de update/delete sigue exigiendo fecha futura para no admin).
+   */
+  const incluyeDiasPasados =
+    !esAdmin && !!desdeKey && fechaNoPermitidaParaNoAdmin(desdeKey, hoy)
 
   const superposicionPropia = useMemo(() => {
     if (!desdeKey || !hastaKey || hastaKey < desdeKey) return false
@@ -205,14 +208,6 @@ export function CargarVacacionesDialog({
       ).length > 0
     )
   }, [desdeKey, hastaKey, ausencias, perfil.userId, initial?.id])
-
-  const bloquearFechaPasada = useMemo(() => {
-    if (esAdmin) return undefined
-    return (d: Date) => {
-      const k = dateToKey(d)
-      return !!k && fechaNoPermitidaParaNoAdmin(k, hoy)
-    }
-  }, [esAdmin, hoy])
 
   const preview = useMemo(() => {
     if (!desdeKey || !hastaKey || hastaKey < desdeKey) return null
@@ -275,7 +270,6 @@ export function CargarVacacionesDialog({
     !desdeKey ||
     !hastaKey ||
     rangoInvalido ||
-    fechaPasadaBloqueada ||
     superposicionPropia ||
     (preview != null && preview.diasHabiles === 0)
 
@@ -319,7 +313,6 @@ export function CargarVacacionesDialog({
                   date={desde}
                   onDateChange={handleDesdeChange}
                   placeholder="Desde"
-                  isDateDisabled={bloquearFechaPasada}
                 />
               </div>
             </div>
@@ -330,7 +323,6 @@ export function CargarVacacionesDialog({
                   date={hasta}
                   onDateChange={setHasta}
                   placeholder="Hasta"
-                  isDateDisabled={bloquearFechaPasada}
                 />
               </div>
             </div>
@@ -343,8 +335,11 @@ export function CargarVacacionesDialog({
             </Aviso>
           ) : null}
 
-          {fechaPasadaBloqueada ? (
-            <Aviso>Para hoy o días que ya pasaron, pedíselo a {adminNombre}.</Aviso>
+          {incluyeDiasPasados ? (
+            <Aviso tono="neutro" className="text-muted-foreground">
+              Estás cargando días que ya pasaron. Una vez cargados, para
+              cambiarlos o borrarlos pedíselo a {adminNombre}.
+            </Aviso>
           ) : null}
 
           {superposicionPropia ? (

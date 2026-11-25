@@ -26,6 +26,7 @@ import './expand-animations.css';
 import { AddStampDialog } from '../AddStamp/AddStampDialog';
 import { ClienteProfileDialog } from '../ClienteProfile/ClienteProfileDialog';
 import { RehacerDialog } from '@/components/shared/RehacerDialog';
+import { ConfirmDialog } from '@/components/programas/ConfirmDialog';
 import { useOrdersActions } from '@/lib/hooks/useOrders';
 import {
   createOrderStickyTask,
@@ -71,6 +72,8 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
   const { playSound } = useSound();
   const { toggleRow, isExpanded, isCollapsing, isExpanding } = useExpandableRows();
   const [addStampDialogOpen, setAddStampDialogOpen] = useState(false);
+  /** Pedido esperando el «Sí» del cartel de confirmación antes de eliminarse. */
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
   const [selectedOrderForStamp, setSelectedOrderForStamp] = useState<Order | null>(null);
   /** true = diálogo abierto como "Sumar regalo" (fuerza isGift). */
   const [addStampAsGift, setAddStampAsGift] = useState(false);
@@ -673,7 +676,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                         </>
                       ) : null}
                     <ContextMenuSeparator />
-                      <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(order.id)}>Eliminar pedido</ContextMenuItem>
+                      <ContextMenuItem className="text-red-500" onSelect={() => setOrderToDelete(order)}>Eliminar pedido</ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
                 );
@@ -741,7 +744,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                       </ContextMenuItem>
                     )}
                     <ContextMenuSeparator />
-                    <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(order.id)}>Eliminar pedido</ContextMenuItem>
+                    <ContextMenuItem className="text-red-500" onSelect={() => setOrderToDelete(order)}>Eliminar pedido</ContextMenuItem>
                   </ContextMenuContent>
                   </ContextMenu>
                   
@@ -857,7 +860,7 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
                           </>
                         ) : null}
                         <ContextMenuSeparator />
-                        <ContextMenuItem className="text-red-500" onSelect={() => handleDelete(order.id)}>Eliminar pedido</ContextMenuItem>
+                        <ContextMenuItem className="text-red-500" onSelect={() => setOrderToDelete(order)}>Eliminar pedido</ContextMenuItem>
                       </ContextMenuContent>
                     </ContextMenu>
                   );
@@ -917,6 +920,30 @@ function OrdersTableInner({ orders, onUpdate, onDelete, onAddStamp, onDeleteStam
           .filter(Boolean)
           .join(' ')
           .trim()}
+      />
+
+      <ConfirmDialog
+        open={orderToDelete != null}
+        onOpenChange={(open) => {
+          if (!open) setOrderToDelete(null);
+        }}
+        title="¿Estás seguro de que querés eliminar?"
+        description={
+          orderToDelete
+            ? `Se va a eliminar el pedido de ${
+                [orderToDelete.customer.firstName, orderToDelete.customer.lastName]
+                  .filter(Boolean)
+                  .join(' ')
+                  .trim() || 'este cliente'
+              } con todos sus sellos. No se puede deshacer.`
+            : ''
+        }
+        confirmLabel="Sí"
+        cancelLabel="No"
+        variant="destructive"
+        onConfirm={() => {
+          if (orderToDelete) void handleDelete(orderToDelete.id);
+        }}
       />
 
       <RehacerDialog

@@ -41,6 +41,7 @@ import { AppUpdatesHost } from './components/global/AppUpdatesHost'
 import { OrderTasksOverlay } from './components/global/OrderTasksOverlay'
 import { OrdersScopeLayout } from './components/orders/OrdersScope'
 import { FabricationSizeDialogHost } from './components/shared/FabricationSizeDialogHost'
+import { ConfirmarWhatsappActualizadoHost } from './components/global/ConfirmarWhatsappActualizadoHost'
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
       <div className="min-h-screen bg-background">
         <OrderTasksOverlay />
         <FabricationSizeDialogHost />
+        <ConfirmarWhatsappActualizadoHost />
         <AppUpdatesHost />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
