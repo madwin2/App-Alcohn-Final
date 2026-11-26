@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { Aviso, CAMPO, DIALOGO } from '@/components/perfil/perfilUi'
@@ -99,6 +99,13 @@ export function CargarVacacionesDialog({
   const [feriadosKeys, setFeriadosKeys] = useState<string[]>(feriadosProp)
   const [calculando, setCalculando] = useState(false)
   const [aniosSinFeriados, setAniosSinFeriados] = useState<number[]>([])
+  /**
+   * Los fallbacks llegan como arrays nuevos en cada render (default `[]`,
+   * `feriados.map(...)`). Si fueran dependencias del efecto de cálculo, cada
+   * setState lo relanzaba y «Calculando días…» no terminaba nunca.
+   */
+  const fallbackRef = useRef({ ausencias: ausenciasProp, feriados: feriadosProp })
+  fallbackRef.current = { ausencias: ausenciasProp, feriados: feriadosProp }
 
   useEffect(() => {
     if (!open) return
@@ -160,8 +167,8 @@ export function CargarVacacionesDialog({
           )
         } catch {
           if (!cancelled) {
-            setAusencias(ausenciasProp)
-            setFeriadosKeys(feriadosProp)
+            setAusencias(fallbackRef.current.ausencias)
+            setFeriadosKeys(fallbackRef.current.feriados)
           }
         } finally {
           if (!cancelled) setCalculando(false)
@@ -172,7 +179,7 @@ export function CargarVacacionesDialog({
       cancelled = true
       clearTimeout(timer)
     }
-  }, [open, desdeKey, hastaKey, perfil.userId, ausenciasProp, feriadosProp])
+  }, [open, desdeKey, hastaKey, perfil.userId])
 
   const ausenciasParaPreview = useMemo(
     () =>
