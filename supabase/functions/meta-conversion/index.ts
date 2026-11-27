@@ -231,8 +231,30 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/**
+ * Lo que la web guarda en `notas_web` al crear la orden (src/lib/analytics/metaRequestIds.ts):
+ * meta_fbc, meta_fbp, meta_ip, meta_ua → campos de user_data de la API de Conversiones.
+ */
+const metaWebIdsFromNotas = (
+  notas: Record<string, unknown> | null,
+): Record<string, string> => {
+  const n = notas ?? {};
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const out: Record<string, string> = {};
+  const fbc = str(n.meta_fbc);
+  const fbp = str(n.meta_fbp);
+  const ip = str(n.meta_ip);
+  const ua = str(n.meta_ua);
+  if (/^fb\.\d+\.\d+\..+/.test(fbc)) out.fbc = fbc;
+  if (/^fb\.\d+\.\d+\..+/.test(fbp)) out.fbp = fbp;
+  if (ip) out.client_ip_address = ip;
+  if (ua) out.client_user_agent = ua;
+  return out;
+};
+
 type OrdenRow = {
   id: string;
+  cliente_id: string | null;
   origen: string | null;
   estado_pago_web: string | null;
   valor_total: number | string | null;
@@ -494,6 +516,7 @@ Deno.serve(async (req: Request) => {
       .from("ordenes")
       .select(`
         id,
+        cliente_id,
         origen,
         estado_pago_web,
         valor_total,
@@ -599,6 +622,16 @@ Deno.serve(async (req: Request) => {
     if (phHash) userDataOffline.ph = [phHash];
     if (fnHash) userDataOffline.fn = [fnHash];
     if (lnHash) userDataOffline.ln = [lnHash];
+    // Solo para el evento offline/website (el de CTWA, business_messaging, no los lleva):
+    // - external_id: id estable del cliente (hasheado), mejora la coincidencia entre compras.
+    // - web: clic del anuncio (fbc), navegador (fbp), IP y UA que la web guardó en la orden
+    //   al hacer el pedido (respetando el rechazo de cookies de marketing).
+    const userDataWebExtra: Record<string, unknown> = {
+      ...(row.cliente_id
+        ? { external_id: [await sha256Hex(String(row.cliente_id))] }
+        : {}),
+      ...(esWeb ? metaWebIdsFromNotas(row.notas_web) : {}),
+    };
 
     const offlineActionSource = esWeb ? "website" : "physical_store";
     const offlinePayload: Record<string, unknown> = {
@@ -606,7 +639,7 @@ Deno.serve(async (req: Request) => {
       event_time: eventTime,
       event_id: ordenId,
       action_source: offlineActionSource,
-      user_data: userDataOffline,
+      user_data: { ...userDataOffline, ...userDataWebExtra },
       custom_data: {
         currency: metaEnv.currency,
         value: toNumber(row.valor_total),
@@ -715,6 +748,10 @@ Deno.serve(async (req: Request) => {
         pixel_id: metaEnv.pixelId,
         web_pixel_id: metaEnv.webPixelId || null,
         web_fallback: webFallback,
+        // Qué datos de la persona viajaron (sin valores): para ver la cobertura de fbc.
+        user_data_keys: Object.keys(
+          (offlinePayload.user_data ?? {}) as Record<string, unknown>,
+        ),
         wa_dataset_id: metaEnv.waDatasetId || null,
         destination_id: offlineResult.destinationId,
         offline: {
