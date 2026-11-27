@@ -29,7 +29,7 @@ Fuente: las órdenes del `OrdersProvider` (últimos 6 meses + viejas con envío 
 | **Correo Argentino – Con datos** | Empresa ≠ Andreani/Vía Cargo (incluye **sin empresa**) y tiene `direccion_id` | Revisar/editar datos, estado de etiqueta MiCorreo, reintentar, CSV manual |
 | **Correo Argentino – Pendientes de datos** | Ídem, sin dirección, y **todos** los ítems en `Foto` o `Transferido` | Cargar datos de envío |
 | **Andreani** | Empresa Andreani | Pool de links + panel de etiquetas ([andreani](../../07-integrations/andreani.md)) |
-| **Vía Cargo** | Empresa Vía Cargo | Solo listado (sin automatización) ❓ [Q-ENV-004](../../14-open-questions/envios.md#q-env-004) |
+| **Vía Cargo** | Empresa Vía Cargo | Formulario propio de datos (`ViaCargoDatosDialog`) + etiqueta PDF 100×152 con remitente/destinatario (`viaCargoLabelPdf.ts`). Sin integración con Vía Cargo; estado manual ([Q-ENV-004](../../14-open-questions/envios.md#q-env-004)) |
 
 Contadores por empresa en el header (`EnviosHeader`, `EnviosHub`). Changelog #5: se elige la cola al entrar; secciones vacías plegadas.
 
@@ -42,7 +42,9 @@ Contadores por empresa en el header (`EnviosHeader`, `EnviosHub`). Changelog #5:
 | **Cargar/editar datos de envío** | INSERT `direcciones` (nunca actualiza la anterior), `ordenes.direccion_id`, `tipo_envio`, auditoría (`envio_datos_cargado_por/at`, `envio_datos_editado`), email en `clientes.mail`. **Pasa la orden y todos los ítems a `Transferido`**. Dispara la subida a MiCorreo. | [padron-y-datos-de-envio.md](padron-y-datos-de-envio.md) |
 | **Subida a MiCorreo** (automática, en segundo plano) | Cola **en la pestaña del navegador**; marca `micorreo_subiendo_at`; `etiqueta_estado` `generando` → `generada`/`pagada`/`error`; `estado_envio` `Hacer Etiqueta` → `Etiqueta Lista` / `Error de Etiqueta`. | [WF-06](../../03-workflows/WF-06-envio-correo-argentino.md) |
 | **Generar CSV** (manual, respaldo) | Solo órdenes Correo con dirección en `Hacer Etiqueta`. Descarga `carga_correo_AAAA-MM-DD.csv` (formato de carga masiva MiCorreo, separador `;`). Las que no generan fila válida pasan a `Error de Etiqueta`. Evento `csv_generado`. | `correoArgentinoCsv.ts` |
-| **Cambiar Domicilio/Sucursal** | `tipo_envio`. | — |
+| **Cambiar Domicilio/Sucursal** | `tipo_envio`. Conserva la empresa si es Vía Cargo; si no, la deja en Correo Argentino. | — |
+| **Vía Cargo: cargar/confirmar datos** | INSERT `direcciones` (con `dni`), `ordenes.direccion_id`, `tipo_envio`, auditoría, email en `clientes.mail` si no tenía. **No** pasa a `Transferido`, **no** valida contra el padrón de Correo y **no** sube a MiCorreo. | `ViaCargoDatosDialog.tsx` |
+| **Vía Cargo: imprimir etiquetas** | Descarga un PDF (una página 100×152 por pedido con `direccion_id` y datos confirmados): remitente fijo (`VIA_CARGO_REMITENTE`) arriba, destinatario abajo. Evento `etiqueta_descargada` con `meta.empresa = 'Via Cargo'`. No cambia estados. | `viaCargoLabelPdf.ts` |
 | **Cambiar estado de envío** | `estado_envio` manual. | Mismos efectos en cadena que en Pedidos. |
 | **Quitar datos de envío** | `direccion_id = NULL`. | — |
 | **Reiniciar "Sin envío"** (masivo) | Todas las órdenes de la tabla vuelven a `Sin envio` ("si hubo error en el CSV"). | — |
@@ -67,4 +69,4 @@ Ver [04-business-rules/envios.md](../../04-business-rules/envios.md): elegibilid
 
 ## Implementación relacionada
 
-`src/app/envios/index.tsx`, `src/components/envios/{EnviosHub,EnviosHeader,AndreaniPoolCard,AndreaniLabelsPanel,EnviosHistorialTable,EnviosHistorialDetailDialog}.tsx`, `src/lib/utils/{micorreoBackgroundUpload,micorreoUpload,correoArgentinoCsv,correoCsvPackageFromOrder,correoSucursalesPadron,correoSucursalesCatalogCache,enviosAddressCatalog,enviosSucursalSnap,shippingNormalization,parseShippingText,enviosEmail}.ts`, `api/parse-shipping.js`, `api/micorreo-upload.js`, `src/lib/supabase/services/{andreani,andreaniEtiquetas,enviosHistorial,enviosHistorialTabla}.service.ts`. Documentos previos: `PROPUESTA_PAGINA_ENVIOS_CORREO.md`, `PLAN_MEJORAS_ENVIOS_PEDIDOS_PRODUCCION.md`, `PLAN_TABLA_HISTORIAL_ENVIOS.md`, `GUIA_CURSOR_ANDREANI_LINKS.md`, `PROPUESTA_AUTOMATIZACION_ANDREANI.md`.
+`src/app/envios/index.tsx`, `src/components/envios/{EnviosHub,EnviosHeader,AndreaniPoolCard,AndreaniLabelsPanel,EnviosHistorialTable,EnviosHistorialDetailDialog,ViaCargoDatosDialog}.tsx`, `src/lib/utils/{viaCargoLabelPdf,micorreoBackgroundUpload,micorreoUpload,correoArgentinoCsv,correoCsvPackageFromOrder,correoSucursalesPadron,correoSucursalesCatalogCache,enviosAddressCatalog,enviosSucursalSnap,shippingNormalization,parseShippingText,enviosEmail}.ts`, `api/parse-shipping.js`, `api/micorreo-upload.js`, `src/lib/supabase/services/{andreani,andreaniEtiquetas,enviosHistorial,enviosHistorialTabla}.service.ts`. Documentos previos: `PROPUESTA_PAGINA_ENVIOS_CORREO.md`, `PLAN_MEJORAS_ENVIOS_PEDIDOS_PRODUCCION.md`, `PLAN_TABLA_HISTORIAL_ENVIOS.md`, `GUIA_CURSOR_ANDREANI_LINKS.md`, `PROPUESTA_AUTOMATIZACION_ANDREANI.md`.

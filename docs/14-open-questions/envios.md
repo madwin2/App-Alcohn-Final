@@ -26,6 +26,7 @@
 - **Pregunta**: ¿Cómo funcionan "Retiro en persona" y "Vía Cargo" en la práctica y cómo se registra que se entregaron? Hoy no llegan solos a "Seguimiento Enviado" (sin descuento de stock ni recompra).
 - **Impacto**: medio.
 - Respuesta: Se marcan manuales, ya que los vienen a buscar o se envian como enconienta (se copian los datos a mano, no tienen sistema los de via cargo).
+- Actualización 2026-11-27 (Julian): la etiqueta de Vía Cargo se imprime desde la app en la Zebra (100×152), con remitente (datos de Julian Moreno) arriba y destinatario abajo (nombre, DNI, dirección o sucursal, localidad, provincia, CP, teléfono, email). Los datos se cargan con un formulario propio, sin padrón de Correo ni MiCorreo. El estado sigue siendo manual.
 
 ### Q-ENV-005
 - **Módulo**: Envíos · **Estado**: documentada (2026-09-28)

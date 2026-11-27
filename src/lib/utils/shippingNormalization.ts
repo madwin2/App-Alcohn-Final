@@ -1,4 +1,4 @@
-const PROVINCES = [
+export const PROVINCES = [
   'Buenos Aires',
   'Capital Federal',
   'Catamarca',

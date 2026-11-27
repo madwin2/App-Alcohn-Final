@@ -27,6 +27,7 @@ import { AndreaniLabelsPanel } from '@/components/envios/AndreaniLabelsPanel';
 import { EnviosCollapsibleSection } from '@/components/envios/EnviosCollapsibleSection';
 import { EnviosHeader } from '@/components/envios/EnviosHeader';
 import { EnviosHub } from '@/components/envios/EnviosHub';
+import { ViaCargoDatosDialog } from '@/components/envios/ViaCargoDatosDialog';
 import { enviosFilterFromSlug } from '@/components/envios/enviosRoutes';
 import {
   enviosTable,
@@ -47,6 +48,11 @@ import { supabase } from '@/lib/supabase/client';
 import { insertEnvioEventos } from '@/lib/supabase/services/enviosHistorial.service';
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { downloadCorreoCsv } from '@/lib/utils/micorreoUpload';
+import {
+  buildViaCargoLabelsPdf,
+  downloadViaCargoLabelsPdf,
+  type ViaCargoLabelData,
+} from '@/lib/utils/viaCargoLabelPdf';
 import {
   getMicorreoUploadQueueSize,
   isOrderMicorreoUploading,
@@ -81,7 +87,7 @@ import {
   normalizePhoneDigitsForEnvios,
   stripAccents,
 } from '@/lib/utils/shippingNormalization';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, Printer } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { StorageUrlImage } from '@/components/shared/StorageUrlImage';
 import { SvgIcon } from '@/components/ui/SvgIcon';
@@ -268,6 +274,8 @@ export default function EnviosPage() {
   const [conDatosOpen, setConDatosOpen] = useState<boolean | null>(null);
   const [pendientesOpen, setPendientesOpen] = useState<boolean | null>(null);
   const [viaCargoOpen, setViaCargoOpen] = useState<boolean | null>(null);
+  const [viaCargoDatosOrder, setViaCargoDatosOrder] = useState<Order | null>(null);
+  const [printingViaCargoIds, setPrintingViaCargoIds] = useState<Set<string>>(new Set());
   const [correoGroupOpen, setCorreoGroupOpen] = useState<boolean | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [manualSucursalCode, setManualSucursalCode] = useState('');
@@ -452,6 +460,10 @@ export default function EnviosPage() {
     () => eligibleOrders.filter((order) => isViaCargoShipping(order)),
     [eligibleOrders],
   );
+  const viaCargoPrintableOrders = useMemo(
+    () => ordersViaCargo.filter((order) => order.direccionId && !isWebPendingShippingConfirmation(order)),
+    [ordersViaCargo],
+  );
   const ordersAndreaniEligible = useMemo(
     () => eligibleOrders.filter((order) => isAndreaniShipping(order)),
     [eligibleOrders],
@@ -485,7 +497,9 @@ export default function EnviosPage() {
   const [shippingAddressById, setShippingAddressById] = useState<Map<string, ShippingAddressRow>>(new Map());
 
   useEffect(() => {
-    const addressIds = [...new Set(ordersConDatosEnvio.map((order) => order.direccionId).filter(Boolean))] as string[];
+    const addressIds = [
+      ...new Set([...ordersConDatosEnvio, ...ordersViaCargo].map((order) => order.direccionId).filter(Boolean)),
+    ] as string[];
     if (!addressIds.length) {
       setShippingAddressById(new Map());
       return;
@@ -508,7 +522,7 @@ export default function EnviosPage() {
     return () => {
       cancelled = true;
     };
-  }, [ordersConDatosEnvio]);
+  }, [ordersConDatosEnvio, ordersViaCargo]);
 
   const duplicateDestRecipientNames = useMemo(() => {
     const counts = new Map<string, number>();
@@ -533,17 +547,20 @@ export default function EnviosPage() {
   const [isBulkResettingEnvio, setIsBulkResettingEnvio] = useState(false);
 
   const handleToggleShippingType = async (order: Order, type: 'DOMICILIO' | 'SUCURSAL') => {
+    const isViaCargo = isViaCargoShipping(order);
     try {
       await updateOrder(order.id, {
         shipping: {
           ...order.shipping,
-          carrier: 'CORREO_ARGENTINO',
+          carrier: isViaCargo ? 'VIA_CARGO' : 'CORREO_ARGENTINO',
           service: type,
         },
       });
       toast({
         title: 'Tipo de envío actualizado',
-        description: `La orden quedó en ${type === 'DOMICILIO' ? 'Domicilio' : 'Sucursal'} con Correo Argentino.`,
+        description: `La orden quedó en ${type === 'DOMICILIO' ? 'Domicilio' : 'Sucursal'} con ${
+          isViaCargo ? 'Via Cargo' : 'Correo Argentino'
+        }.`,
       });
     } catch (toggleError) {
       toast({
@@ -617,6 +634,74 @@ export default function EnviosPage() {
         title: 'No se pudo actualizar el estado',
         description: stateError instanceof Error ? stateError.message : 'Hubo un error cambiando el estado de envío.',
         variant: 'destructive',
+      });
+    }
+  };
+
+  const handlePrintViaCargoLabels = async (targetOrders: Order[]) => {
+    const printable = targetOrders.filter((order) => order.direccionId);
+    if (!printable.length) return;
+    const ids = printable.map((order) => order.id);
+    setPrintingViaCargoIds((prev) => new Set([...prev, ...ids]));
+    try {
+      const { data: addresses, error: addressesError } = await supabase
+        .from('direcciones')
+        .select('id,nombre,apellido,dni,domicilio,localidad,provincia,codigo_postal,telefono')
+        .in('id', printable.map((order) => order.direccionId!));
+      if (addressesError) throw addressesError;
+      const addressById = new Map((addresses ?? []).map((row) => [row.id, row]));
+
+      const labels: ViaCargoLabelData[] = [];
+      for (const order of printable) {
+        const address = addressById.get(order.direccionId!);
+        if (!address) continue;
+        labels.push({
+          orderId: order.id,
+          tipoEnvio:
+            order.shipping.service === 'SUCURSAL'
+              ? 'Sucursal'
+              : order.shipping.service === 'DOMICILIO'
+                ? 'Domicilio'
+                : null,
+          nombre: `${address.nombre || ''} ${address.apellido && address.apellido !== '-' ? address.apellido : ''}`.trim(),
+          dni: address.dni || '',
+          domicilio: address.domicilio || '',
+          localidad: address.localidad || '',
+          provincia: address.provincia || '',
+          codigoPostal: address.codigo_postal && address.codigo_postal !== '0000' ? address.codigo_postal : '',
+          telefono: address.telefono || normalizePhoneDigitsForEnvios(order.customer.phoneE164 || ''),
+          email: order.customer.email?.trim() || '',
+        });
+      }
+      if (!labels.length) throw new Error('No se encontraron las direcciones de esos pedidos.');
+
+      const bytes = await buildViaCargoLabelsPdf(labels);
+      const stamp = new Date().toISOString().slice(0, 10);
+      const filename =
+        labels.length === 1
+          ? `etiqueta-via-cargo-${labels[0].nombre.replace(/[^\w-]+/g, '-').toLowerCase() || 'pedido'}.pdf`
+          : `etiquetas-via-cargo-${stamp}.pdf`;
+      downloadViaCargoLabelsPdf(bytes, filename);
+      await insertEnvioEventos(
+        labels.map((label) => label.orderId),
+        'etiqueta_descargada',
+        { empresa: 'Via Cargo', filename },
+      );
+      toast({
+        title: labels.length === 1 ? 'Etiqueta descargada' : `${labels.length} etiquetas descargadas`,
+        description: 'Imprimila en la Zebra (papel 100×152).',
+      });
+    } catch (printError) {
+      toast({
+        title: 'No se pudo generar la etiqueta',
+        description: printError instanceof Error ? printError.message : 'Error desconocido.',
+        variant: 'destructive',
+      });
+    } finally {
+      setPrintingViaCargoIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
       });
     }
   };
@@ -1422,6 +1507,7 @@ export default function EnviosPage() {
       showWhatsapp?: boolean;
       showShippingDetails?: boolean;
       confirmWebShipping?: boolean;
+      viaCargo?: boolean;
     },
   ) => {
     const item = getRepresentativeItem(order);
@@ -1583,6 +1669,39 @@ export default function EnviosPage() {
           </td>
         ) : null}
         <td className={cell}>
+          {opts?.viaCargo ? (
+            <div className="flex items-center justify-end gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 w-7 p-0"
+                disabled={!order.direccionId || isWebPendingShippingConfirmation(order) || printingViaCargoIds.has(order.id)}
+                title={
+                  !order.direccionId
+                    ? 'Cargá los datos de envío primero'
+                    : isWebPendingShippingConfirmation(order)
+                      ? 'Confirmá los datos de envío primero'
+                      : 'Imprimir etiqueta'
+                }
+                aria-label="Imprimir etiqueta"
+                onClick={() => void handlePrintViaCargoLabels([order])}
+              >
+                {printingViaCargoIds.has(order.id) ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Printer className="h-3.5 w-3.5" />
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => setViaCargoDatosOrder(order)}
+              >
+                {isWebPendingShippingConfirmation(order) ? 'Confirmar' : order.direccionId ? 'Editar' : 'Cargar'}
+              </Button>
+            </div>
+          ) : (
           <Button
             size="sm"
             variant="outline"
@@ -1605,6 +1724,7 @@ export default function EnviosPage() {
                 ? 'Editar'
                 : 'Cargar'}
           </Button>
+          )}
         </td>
       </tr>
         </ContextMenuTrigger>
@@ -1804,6 +1924,24 @@ export default function EnviosPage() {
                     open={isViaCargoExpanded}
                     onOpenChange={(open) => setViaCargoOpen(open)}
                     empty="No hay pedidos de Via Cargo listos para envío."
+                    actions={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
+                        disabled={!viaCargoPrintableOrders.length || printingViaCargoIds.size > 0}
+                        title="Una etiqueta 100×152 por cada pedido con datos confirmados"
+                        onClick={() => void handlePrintViaCargoLabels(viaCargoPrintableOrders)}
+                      >
+                        {printingViaCargoIds.size > 0 ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Printer className="h-3.5 w-3.5" />
+                        )}
+                        Imprimir etiquetas ({viaCargoPrintableOrders.length})
+                      </Button>
+                    }
                   >
                     <div className="overflow-auto max-h-[min(50vh,420px)]">
                       <table className={getTableClass(true)}>
@@ -1813,6 +1951,7 @@ export default function EnviosPage() {
                             renderOrderRow(o, {
                               showShippingDetails: true,
                               showWhatsapp: true,
+                              viaCargo: true,
                             }),
                           )}
                         </tbody>
@@ -2220,6 +2359,13 @@ export default function EnviosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ViaCargoDatosDialog
+        order={viaCargoDatosOrder}
+        userId={user?.id}
+        onClose={() => setViaCargoDatosOrder(null)}
+        onSaved={() => void fetchOrders({ silent: true })}
+      />
 
       <Dialog open={!!previewImageUrl} onOpenChange={(open) => !open && setPreviewImageUrl(null)}>
         <DialogContent className="max-w-4xl">

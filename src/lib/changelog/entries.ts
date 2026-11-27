@@ -38,6 +38,7 @@ import {
   Keyboard,
   Spline,
   Image as ImageIcon,
+  Printer,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -1600,6 +1601,24 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         heading: 'Cargá las vacaciones que ya te tomaste',
         body: 'En tu perfil ya podés elegir días pasados al cargar vacaciones. Una vez cargadas, para cambiarlas o borrarlas pedíselo al admin.',
         icon: CalendarDays,
+      },
+    ],
+  },
+  {
+    id: 88,
+    date: '2026-11-27',
+    title: 'Etiquetas de Vía Cargo',
+    version: '2.06',
+    slides: [
+      {
+        heading: 'Imprimí las etiquetas de Vía Cargo',
+        body: 'En Envíos → Via Cargo, «Imprimir etiquetas» baja un PDF de 100×152 para la Zebra: arriba nuestros datos de remitente y abajo los del destinatario. También podés imprimir una sola con el botón de la impresora en cada fila.',
+        icon: Printer,
+      },
+      {
+        heading: 'Datos de Vía Cargo con su propio formulario',
+        body: 'Cargar o Confirmar en Vía Cargo abre un formulario con nombre, DNI, dirección o sucursal, CP, teléfono y email. Ya no pasa el pedido a Correo ni sube nada a MiCorreo.',
+        icon: Truck,
       },
     ],
   },
