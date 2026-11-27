@@ -154,7 +154,7 @@ Después: **Descargar todas**, imprimir, pegar y entregar a Andreani.
 - **Vía Cargo**: la sección lista los pedidos listos para despachar por Vía Cargo. Vía Cargo no tiene sistema: la etiqueta se imprime desde la app y el estado se cambia a mano.
   1. **Cargar** (o **Confirmar**, si los trajo Francisco) abre el formulario de Vía Cargo: Domicilio o Sucursal, nombre, DNI, provincia, localidad, domicilio o sucursal, CP, teléfono y email. Podés pegar el texto del cliente y tocar **Interpretar texto**. No usa el padrón de Correo ni sube nada a MiCorreo.
   2. **Imprimir etiquetas (N)**, arriba de la tabla, baja un PDF con una etiqueta de **100 × 152 mm** por cada pedido con datos confirmados. El botón de la **impresora** en cada fila baja solo esa. Imprimilo en la Zebra.
-  3. La etiqueta lleva arriba el **Remitente** (nuestros datos) y abajo el **Destinatario**. Si falta el DNI o el email, queda una raya para completarlo a mano.
+  3. La etiqueta lleva arriba el **Remitente** (nuestros datos), el **Destinatario** y abajo el **Contenido**: los logos de los sellos del pedido y, si hay, los accesorios o el abecedario en texto. Si falta el DNI o el email, queda una raya para completarlo a mano.
   4. Cada descarga queda anotada en el historial del pedido como "etiqueta descargada".
 - **Retiro en Persona**: no aparece en Envíos. Cuando el cliente lo retira, marcá el estado a mano en Pedidos.
 

@@ -4,9 +4,16 @@ import {
   VIA_CARGO_LABEL_H_PT,
   VIA_CARGO_LABEL_W_PT,
   buildViaCargoLabelsPdf,
+  isViaCargoAccessoryItemType,
   toWinAnsiText,
   type ViaCargoLabelData,
 } from './viaCargoLabelPdf';
+
+/** PNG 1×1 negro válido. */
+const PNG_1X1 = Uint8Array.from(
+  atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='),
+  (c) => c.charCodeAt(0),
+);
 
 const label = (overrides: Partial<ViaCargoLabelData> = {}): ViaCargoLabelData => ({
   orderId: '0b7c1f3e-1111-2222-3333-444455556666',
@@ -43,11 +50,37 @@ describe('buildViaCargoLabelsPdf', () => {
     ]);
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(2);
   });
+
+  it('incluye logos de sellos y texto de accesorios sin romper el PDF', async () => {
+    const bytes = await buildViaCargoLabelsPdf([
+      label({
+        tipoEnvio: 'Sucursal',
+        items: [
+          { name: 'DIJON', isAccessory: false, imagePng: PNG_1X1 },
+          { name: 'Superflag', isAccessory: false, imagePng: PNG_1X1 },
+          { name: 'Narrow', isAccessory: false },
+          { name: 'Mango de golpe', isAccessory: true },
+          { name: 'Soldador 60W', isAccessory: true },
+        ],
+      }),
+    ]);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
+  });
 });
 
 describe('toWinAnsiText', () => {
   it('conserva tildes y eñes y descarta lo que Helvetica no puede dibujar', () => {
     expect(toWinAnsiText('  Peña   Ñandú ')).toBe('Peña Ñandú');
     expect(toWinAnsiText('Hola 🙂 Ştefan')).toBe('Hola Stefan');
+  });
+});
+
+describe('isViaCargoAccessoryItemType', () => {
+  it('marca accesorios y abecedario, no sellos', () => {
+    expect(isViaCargoAccessoryItemType('SELLO')).toBe(false);
+    expect(isViaCargoAccessoryItemType('MANGO_GOLPE')).toBe(true);
+    expect(isViaCargoAccessoryItemType('SOLDADOR')).toBe(true);
+    expect(isViaCargoAccessoryItemType('BASE_REMACHADORA')).toBe(true);
+    expect(isViaCargoAccessoryItemType('ABECEDARIO')).toBe(true);
   });
 });

@@ -1612,7 +1612,7 @@ export const CHANGELOG_ENTRIES: ChangelogEntry[] = [
     slides: [
       {
         heading: 'Imprimí las etiquetas de Vía Cargo',
-        body: 'En Envíos → Via Cargo, «Imprimir etiquetas» baja un PDF de 100×152 para la Zebra: arriba nuestros datos de remitente y abajo los del destinatario. También podés imprimir una sola con el botón de la impresora en cada fila.',
+        body: 'En Envíos → Via Cargo, «Imprimir etiquetas» baja un PDF de 100×152 para la Zebra: arriba nuestros datos, abajo el destinatario, y el contenido del pedido con los logos de los sellos y los accesorios. También podés imprimir una sola con el botón de la impresora en cada fila.',
         icon: Printer,
       },
       {

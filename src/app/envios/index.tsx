@@ -49,6 +49,7 @@ import { insertEnvioEventos } from '@/lib/supabase/services/enviosHistorial.serv
 import { CSV_FIELDS, createCorreoCsvRow } from '@/lib/utils/correoArgentinoCsv';
 import { downloadCorreoCsv } from '@/lib/utils/micorreoUpload';
 import {
+  buildViaCargoLabelItems,
   buildViaCargoLabelsPdf,
   downloadViaCargoLabelsPdf,
   type ViaCargoLabelData,
@@ -655,6 +656,7 @@ export default function EnviosPage() {
       for (const order of printable) {
         const address = addressById.get(order.direccionId!);
         if (!address) continue;
+        const items = await buildViaCargoLabelItems(order.items, resolveStorageDisplayUrl);
         labels.push({
           orderId: order.id,
           tipoEnvio:
@@ -671,6 +673,7 @@ export default function EnviosPage() {
           codigoPostal: address.codigo_postal && address.codigo_postal !== '0000' ? address.codigo_postal : '',
           telefono: address.telefono || normalizePhoneDigitsForEnvios(order.customer.phoneE164 || ''),
           email: order.customer.email?.trim() || '',
+          items,
         });
       }
       if (!labels.length) throw new Error('No se encontraron las direcciones de esos pedidos.');
